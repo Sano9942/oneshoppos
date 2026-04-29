@@ -1373,7 +1373,156 @@ This means a real tenant who buys a second monitor for their counter has **no wa
 
 ---
 
-## (legacy) Resume tomorrow at 3.8 — superseded by 3.12 closure above
+# Phase 5 — Worker-Driven Flows + Super-Admin Audit (started 2026-04-29 → 2026-04-30)
+
+Phase 5 began as a 12-worker walkthrough but expanded into a **full super-admin panel audit** when the empty Worker Status panel surfaced a class of dashboard-rendering bugs. All 8 admin nav pages walked end-to-end against production (livetest1, single tenant) while authenticated as super-admin Hassan. Every claim below verified against actual source files, never CLAUDE.md.
+
+**Workers state (verified via `/api/admin/worker-status` + direct pg-boss query 2026-04-29 19:00 UTC):**
+- Healthy / heartbeat updating: email, reservation, marketplace_sync, hold_expiry (4 workers, all sub-hourly cron).
+- Healthy / null heartbeat (cron last fired pre-Railway-restart at 14:25 UTC): fbr, cleanup, rental_overdue, room_overdue, treatment_plan, abc, anomaly, retail_digest. pg-boss confirms all 8 ran on schedule today (e.g. `abc-daily` completed 02:00 UTC). Heartbeat globals are wiped on Railway restart and only repopulate when the next scheduled fire happens — for daily/weekly cron, that's 0–24h after every restart.
+- Env-enabled but **invisible** in worker-status response: `subscription-grace-check` (hourly, ran at 19:00 UTC) and the scheduled-catalog poll. Their heartbeat globals (`__subscriptionGraceWorkerStatus`, `__catalogSchedulerStatus`) are set by their workers but never read in [system.js:8-72](backend/routes/admin/system.js).
+- Env-disabled (intentional or accidental?): booking_reminder, course_release, kds_snapshot, reservation_reminder, shift_auto_close. Plan doc Phase 5 scope expected several of these to be on. Defer wave decision.
+
+**Failed-jobs (all historical residue):**
+- 4 `fbr-invoice` jobs (invoiceIds 1–4) + 1 `email` job, all created 2026-04-28 before commit `fb280fe` ("fix(workers): pg-boss v12 work handlers receive Job<T>[], not single Job"). Same root cause: pre-fix handlers destructured `job.data` from a non-Job-wrapped payload. After `fb280fe` deploy, all 21 subsequent fbr-invoice + 5 subsequent emails completed cleanly. **Not a current bug** — but the underlying `fbr_invoices` rows 1–4 are now stuck `failed` in DB with no admin retry tooling. Would benefit from a "resurrect failed-from-pre-fix" sweep script.
+
+---
+
+## 5.1 Critical findings (P-tier — to fix in this phase)
+
+### 🔴 P15 — AdminDashboard "Worker Status" panel renders empty header with no rows
+
+[AdminDashboard.jsx:494](frontend/src/pages/admin/AdminDashboard.jsx) maps `(workers.workers || []).map(...)` — but `/api/admin/worker-status` returns a **flat object** keyed by worker name (`{ email: {...}, fbr: {...}, ... }`), never a `.workers` array. So the dashboard renders the heading "Worker Status" with literally nothing below it. Field-shape mismatches on `w.status`, `w.last_poll`, `w.queue_depth`, `w.processed_today` (UI) vs API `running:bool`, `last_poll_at`, `queue_depth`, `processed_today` compound the bug — even if the array were correct, `w.status === "running"` would never be true.
+
+This is the same class of bug as Phase 4 P12 (storefront field-name mismatch). The super-admin has been deploying the system for weeks without the panel ever working.
+
+**Fix**: rewrite the render block to iterate `Object.entries(workers)`, map fields to the actual API shape (`running`, `last_poll_at`, `queue_depth`, `processed_today`), and label each worker by its key.
+
+### 🔴 P16 — `/api/admin/migrate-all` and `/api/admin/tenants/:id/migrate` are stubs
+
+[tenants.js:507](backend/routes/admin/tenants.js) and [tenants.js:526](backend/routes/admin/tenants.js) both return literal `"Postgres tenant migration not yet implemented"`. Despite the codebase being Postgres-only since the Phase-5 cleanup, the admin "Run Migrations" button (per-tenant) and "Migrate All" button (dashboard) do nothing. They claim success (200 OK), log `tenant_migrated`/`migrate_all` to admin_activity_log, but never invoke `migrate-pg.js`. Schema-version drift across tenants is undetectable from the admin UI.
+
+The actual `migrate-pg.js` module is correct and runs on Railway boot (`start.sh`). Wiring is the gap.
+
+**Fix**: import `{ migrate, MIGRATIONS }` from `../../migrate-pg`. Per-tenant: build a tenant-scoped DB proxy via `tenantDbManager.getDb(tenant.id)` and call `migrate(scopedDb)`. migrate-all: iterate `tenants WHERE status='active'`, run sequentially, return `{ slug, applied, error? }` per tenant.
+
+### 🔴 P17 — Tenant Detail API drops `billing_cycle`, `plan_expires_at`, `payment_status`
+
+[tenants.js:103-107](backend/routes/admin/tenants.js) SELECT is missing all three columns despite them existing in the `tenants` table (added in migration v6). [AdminTenantDetail.jsx:467-480](frontend/src/pages/admin/AdminTenantDetail.jsx) reads `tenant.billing_cycle`, `tenant.plan_expires_at`, `tenant.payment_status` and falls back to "—" / hardcoded "active". On livetest1 the Billing card shows "Billing Cycle: —", "Expires: —", "Payment Status: active" even though the tenant has 3 sandbox payments of pro/annual recorded today (visible in Payment History below).
+
+The "active" fallback is **especially misleading** — it's hardcoded, not derived. If a tenant's `payment_status` were `expired` or `grace`, the UI would still render "active".
+
+**Fix**: add the three columns to the SELECT in `routes/admin/tenants.js:103-107`. Also add `payment_due_at` if Phase 4 surfaces that field. No frontend change required.
+
+### 🔴 P18 — AdminEmails page reads `email_queue` table that gets zero new writes
+
+[email-worker-boss.js](backend/workers/email-worker-boss.js) was the migration target — `enqueueEmail()` in [services/email.js:87-103](backend/services/email.js) writes only to pg-boss (`boss.send("email", ...)`), never to `public.email_queue`. The legacy `email-worker.js` is no longer wired up in [boot/workers.js](backend/boot/workers.js). **The `email_queue` table is abandoned.**
+
+But [AdminEmails.jsx](frontend/src/pages/admin/AdminEmails.jsx) reads `GET /api/admin/email-queue` and renders the count cards "PENDING / SENT / FAILED" from those rows. On livetest1 the page shows "Pending: 1" — which is residue from before the migration that nobody will ever process. All 5 successful pg-boss emails today are **invisible** in the admin UI.
+
+**Fix (option A)**: rewrite `routes/admin/messaging.js` to query `pgboss.job WHERE name = 'email'` instead of `email_queue`. Map columns: `data->>'to'` → recipient, `data->>'type'` → email_type, `state` → status (created/active/retry → pending; completed → sent; failed → failed). **Option B**: keep both — write the page as a union view. Option A is correct since `email_queue` is dead.
+
+---
+
+## 5.2 Medium findings (M-tier — log only, polish bundle)
+
+### 🟡 M39 — Worker heartbeat globals are process-memory; lost on every Railway restart
+
+After any `git push` deploy or Railway-induced restart, all 17 `__xxxWorkerStatus.lastPollAt` globals reset to `null`. Daily/weekly cron workers (FBR, cleanup, ABC, anomaly, retail_digest, etc.) appear "stopped" in `/api/admin/worker-status` for 0–24h until their next scheduled fire. The endpoint's `running` calculation (`lastPollAgo < pollIntervalMs * 2.5` per [system.js:42](backend/routes/admin/system.js)) returns `false` when `lastPollAt = null` → endpoint reports `running: false` for healthy workers.
+
+**Recommendation**: change `running` calc to fall back to "the last completed_on from `pgboss.job` for this worker's job name" when in-memory heartbeat is null. Keeps in-memory hot path, falls through to durable state on restart. Same class as M36 (customer-display in-memory state).
+
+### 🟡 M40 — `subscription_grace` and `catalog_scheduler` heartbeats not surfaced in worker-status
+
+`__subscriptionGraceWorkerStatus` is set by [subscription-grace-worker-boss.js](backend/workers/subscription-grace-worker-boss.js) and `__catalogSchedulerStatus` is set by [boot/workers.js:237](backend/boot/workers.js), but [system.js:8-72](backend/routes/admin/system.js) never reads them. Effect: the admin endpoint reports 17 workers, missing 2. Same class as M40 (4.7 customer-display global mismatch).
+
+**Recommendation**: bundle into the P15 fix — when reworking the panel, also surface these two workers.
+
+### 🟡 M41 — Tenant Detail renders `max_employees: 0` literally; "0" looks like quota=zero
+
+Pro plan defaults to `max_employees=0, max_products=0` (per [middleware/plan-limits.js:18](backend/middleware/plan-limits.js): `0 = unlimited`). The [AdminTenantDetail.jsx:397,400](frontend/src/pages/admin/AdminTenantDetail.jsx) Details card renders this as the literal string "0" — looks like the tenant is capped at zero employees. The Health Dashboard sidebar in the same page already does it correctly: "4 / ∞ (0%)".
+
+**Fix**: render `value === 0 ? "Unlimited" : value` for max_employees and max_products in the Details card. Trivial.
+
+### 🟡 M42 — Plan Pricing UI shows `starter / *` rows that shouldn't exist
+
+[Historical notes memory](memory/historical_notes.md) records that the Starter tier was removed. But `public.plan_pricing` still has `starter/annual` and `starter/monthly` rows (PKR 30k and PKR 3k). They render in the Plan Pricing card of every tenant detail page. Editing them would have no effect (no Starter plan in the codebase) but they confuse the admin into thinking Starter is still offered.
+
+**Fix**: `DELETE FROM plan_pricing WHERE plan = 'starter'` on prod. Or filter in [GET /api/admin/plan-pricing](backend/routes/admin/billing.js) to only return plans that exist in `PLAN_DEFAULTS`.
+
+### 🟡 M43 — Activity dropdown missing `feature_flag_toggled` (and other real action types)
+
+[AdminActivity.jsx ACTION_TYPES](frontend/src/pages/admin/AdminActivity.jsx) lists 23 action types for the dropdown filter. But `admin_activity_log` rows on livetest1 contain `feature_flag_toggled` (visible in the table), which is not selectable. Other action types likely also missing. Filter never matches → those rows are unfilterable.
+
+**Fix**: derive ACTION_TYPES dynamically from `SELECT DISTINCT action FROM admin_activity_log`, or audit the route hardcodes against the static list and reconcile.
+
+### 🟡 M44 — Revenue Stats card reads two field names the API doesn't return
+
+[AdminDashboard.jsx:483](frontend/src/pages/admin/AdminDashboard.jsx) reads `revenue.revenue_this_month` but `/api/admin/revenue-stats` returns `tenant_revenue_this_month`. Result: "Revenue This Month" shows "—" instead of the real value. Line 485 reads `revenue.overdue_count` but API returns `overdue` — falls back to `?? 0`, hiding the real overdue count if it were non-zero.
+
+Same class as P15 (field-name mismatch). Lower severity (just shows wrong value, doesn't crash). Bundle with P15 fix.
+
+### 🟡 M45 — Tenant Activity tab shows zero rows because tenants haven't done anything
+
+[/api/admin/tenant-activity](backend/routes/admin/monitoring.js) returns `{ entries: [] }` on livetest1. This is correct behavior given no cross-tenant work has happened — not a bug per se. Just noting that "empty" is hard to distinguish from "broken" for the admin. A note like "no tenant-side activity in last 30 days" would help.
+
+### 🟡 M46 — pg-boss `job_common` table has 1045 dead tuples and only 1 autovacuum today
+
+Per `/api/admin/infra` table_health: `pgboss.job_common` is the worst-vacuum table with ~18% dead-tuple ratio (1045 dead / 5616 live). Hourly+ cron jobs churn through this table. Last autovacuum 2026-04-29 09:26 UTC — current time 19:00 UTC so 10h since last vacuum. Postgres auto-vacuum threshold should re-fire as the dead count grows, but watching for runaway growth is worthwhile.
+
+**Recommendation**: monitor weekly. If dead/live ratio >20% sustained, set per-table autovacuum aggressive thresholds via `ALTER TABLE pgboss.job_common SET (autovacuum_vacuum_scale_factor = 0.05)`.
+
+### 🟡 M47 — 4 fbr-invoice jobs stuck `failed` in pg-boss + likely fbr_invoices table
+
+The 4 failed jobs (invoiceIds 1–4) from before commit `fb280fe` are now permanently `state=failed` in `pgboss.job` with `retry_count=5/5`. Their corresponding `tenant_livetest1.fbr_invoices` rows are likely also stuck `status=failed` or `processing`. No admin tooling exists to resurrect these — would need a manual SQL update + re-enqueue.
+
+**Status**: livetest1 is a test tenant so this is academic. But before any GST-registered customer goes live, an admin "retry failed FBR invoices" tool should exist. Bundle into FBR ops polish (deferred since FBR is sandbox-blocked).
+
+---
+
+## 5.3 What was checked vs what's clean
+
+| Page | URL | Verdict | Notes |
+|------|-----|---------|-------|
+| Dashboard | `/admin` | 🔴 multiple bugs | P15 (Worker Status), M40, M44; M46 (table health) — but Stats / Plan Distribution / Needs Attention / Orphaned Schemas / Infrastructure / Recent Tenants / Recent Activity all rendered correctly |
+| Tenants list | `/admin/tenants` | ✅ clean | 1 row (livetest1), all columns populated, search/filter works |
+| Tenant Detail | `/admin/tenants/95` | 🔴 multiple bugs | P17 (billing fields), M41 (max=0), M42 (starter plan rows), P16 (Migrate stub); but Edit, Suspend, Reset PIN, Log in as Tenant, Delete, Feature Flag toggles, Notes, Plan Pricing edit, Audit Log all wired correctly |
+| Support | `/admin/support` | ✅ clean | Empty (no tickets), filter dropdown works |
+| Emails | `/admin/emails` | 🔴 P18 | Reads dead `email_queue` table; pg-boss email jobs invisible |
+| Activity | `/admin/activity` | 🟡 minor | M43 (dropdown drift); 3 tabs render, CSV export wired |
+| Tax Rates | `/admin/tax-rates` | ✅ clean | 96 rows, Suggestions tab present (0 suggestions) |
+| Dead Letters | `/admin/dead-letters` | ✅ clean | "No dead letters" empty state |
+| Stuck Payments | `/admin/stuck-payments` | ✅ clean | 0 stuck intents, 3 sandbox webhooks Processed |
+| Backup Now button | dashboard | not tested live | (chose not to trigger an actual backup against prod) |
+| Migrate All button | dashboard | 🔴 P16 | Stub returns "not yet implemented" |
+| New Announcement | dashboard | not tested live | (would create real announcement, skipped) |
+
+**Workers checklist** (per Phase 5 plan doc — most items now invalidated by the broader investigation):
+- [x] Cleanup worker — registered, last fire 02:00 UTC ✅, heartbeat null (M39)
+- [x] Marketplace sync — registered + heartbeat updating ✅
+- [x] Shift auto-close — env-disabled (`SHIFT_AUTO_CLOSE_WORKER_ENABLED` not set on Railway). Plan doc said "verify registered + heartbeat" but it isn't. Defer.
+- [x] Retail digest — registered, last fire Mon 2026-04-27 ✅, next fire Mon 2026-05-04
+- [x] ABC inventory — registered, last fire 02:00 UTC ✅, heartbeat null (M39)
+- [x] Anomaly worker — registered, last fire 02:30 UTC ✅, heartbeat null (M39)
+- [x] Subscription grace — registered, last fire 19:00 UTC ✅, but **invisible in worker-status** (M40)
+- [x] Reservation reminder — env-disabled. Defer.
+- [-] Reservation expiry — running ✅ (registered, *5min cron, last poll 135s ago). Skipped seed-trigger test since worker is observably healthy.
+- [-] Hold expiry — running ✅ (registered, hourly cron, last poll 135s ago). Skipped seed-trigger test.
+- [-] Catalog scheduler — running ✅ (60s setInterval), but not surfaced in worker-status (M40). Skipped real-state trigger.
+- [skip] FBR worker — sandbox creds blocker (carryover from 3.3)
+- [-] Email worker — running ✅, heavily exercised in Phase 4
+
+**Active state of livetest1 after Phase 5 walkthrough** (no changes — all probes were read-only):
+- Plan: Pro (annual), expires 2027-04-28. Schema_version: 83.
+- Sales: 4 POS + 1 storefront. Stocks unchanged: Test Coffee 6, Coffee Beans 9, Snack Bar 17.
+- Customers: 2. Gift cards: 2 active.
+- Shift #1 still open (do not close).
+- attendance_sessions: 2 active (Hassan + Test Cashier 2).
+- channel_publications: 2 rows (Test Coffee + Snack Bar).
+- pg-boss state: 4 stuck-failed fbr-invoice jobs from pre-fb280fe (M47), all other workers healthy.
+- 0 sales / 0 inventory mutations during Phase 5.
+
+
 
 **State on `livetest1` (production):**
 - Test Coffee (id=8): stock **9.000** at outlet 1, sale id=1 (`INV-2026-00001`) Rs 200 cash, RTN-1 already refunded 1 unit (Rs 100). 1 unit still refundable.
