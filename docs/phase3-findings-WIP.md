@@ -2,6 +2,33 @@
 
 > Scratch file for the 2026-04-28 Phase 3 walkthrough on `livetest1`. Promoted into the canonical plan doc + deleted at end of phase.
 
+## 2026-04-29 — 3.14 fix bundle landed + verified live ✅
+
+**Closed end-to-end on livetest1 production:**
+
+- **P8 — sale-write snapshot** ✅ Migration v83 added `sale_items.tax_rate_at_sale`, `tax_amount_at_sale`, `hs_code_at_sale`, `was_backfilled` and `sales.subtotal/tax_total/tax_inclusive`. POST /api/sales resolves the effective rate (outlet_tax_profile → tax_id → gst → category inheritance) and writes the snapshot. Auto-detected `tax_mode='inclusive'` for livetest1 (existing GST products ⇒ likely-registered). Backfilled all 5 historical sale_items rows with `was_backfilled=true`.
+- **P9 — exclusive math** ✅ `cartMath.calcTaxTotal` fixed to compute non-zero in exclusive mode. Live verified: 1× Coffee 100 + 2× Snack 50 mixed-rate, exclusive ON → subtotal 200, tax 22 (17+5), total 222.
+- **P10 — Sales Summary "Tax Collected"** ✅ Reads `sales.tax_total`. Live response shows `total_tax: 305.61, tax_by_rate: [{17,…},{5,…}]`.
+- **P11 — FBR Export** ✅ Switched from live `taxes` JOIN to snapshot reads. Live response: `tax_rate: 17, tax_amount: "14.53"` per Coffee line.
+- **M27 — Public receipt** ✅ Renders `tax_breakdown: [{17, 14.53},{5, 4.76}]` + `tax_inclusive` flag.
+- **M28 — Product form tax-rule picker** ✅ Dropdown above GST numeric, auto-fills + stamps `tax_id`; manual edit clears tax_id; hidden when `tax_mode='none'`.
+- **M29 — 503→403** ✅ `requireFeature` and `requireMode` return 403. Live verified: `GET /api/products/12/modifier-tree` returns `{"error":"Feature disabled: phase4_restaurant","flag":"phase4_restaurant"}` with HTTP 403.
+
+**Bonus / follow-up fixes:**
+- Wizard Tax-step replaced with "Are you GST-registered?" Yes/No → on Yes, NTN + STRN + Inclusive/Exclusive radios + optional default rate. POST `/api/setup/complete` accepts `is_gst_registered/tax_mode/ntn/strn`.
+- Company Settings → Tax & Compliance card: 3-way registration picker + post-flip amber banner deep-linking to `/inventory`.
+- `loadCompanyProfile` cache busted on PUT — surfaced live during scenario C verification when raw-SQL flips didn't propagate. PUT now calls `invalidateCompanyProfileCache(req.tenantId)`.
+
+**Commits:** `b9bc581` `98d3f1c` `5f74706` `ce92c7c` `0d4f34a`. All deployed via Railway/Vercel auto-deploy from main.
+
+**Live verification artifacts:**
+- `backend/scripts/__verify_v83_livetest1.js` — confirms schema_version=83, columns present, 5/5 rows backfilled.
+- `backend/scripts/__verify_p8_e2e_livetest1.js` — walks scenarios A/B/C/D/D2/D3 end-to-end via real `/api/auth/mt-login` + `/api/sales` + `/api/reports/*` + DB checks. All ✓.
+- 3.14 fix bundle: **CLOSED.**
+
+---
+
+
 ## Resume tomorrow at 3.2 — current state
 
 **Live on production** (all 6 commits pushed + deployed + verified):
