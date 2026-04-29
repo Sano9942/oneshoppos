@@ -1607,6 +1607,74 @@ cd28587 fix(admin): wire migrate-all + per-tenant migrate to migrate-pg (P16)
 
 **Next phase**: Phase 6 — Edge Cases (mobile Safari pass, slow network, browser back-button, etc.) per the canonical plan doc.
 
+---
+
+## 5.5 Super-admin parity assessment vs mature SaaS (logged 2026-04-30)
+
+After Phase 5 closure, user asked how the panel compares to professional SaaS admin dashboards. Notes recorded here for future polish work — not a deferred-finding list per se, more a "where we sit on the maturity curve" snapshot.
+
+### Verdict
+
+Middle of the pack — better than 70% of early-stage SaaS but missing 5–6 things mature admins all have. After the P-tier fixes shipped this phase, the panel is functional and not embarrassing. None of the gaps below block launch; they're "you'll want these by your 50th paying tenant" features. Each is 1–3 days of work.
+
+### What's already good (above expectations for early-stage)
+
+- Impersonation with audit trail (`impersonation_sessions` + amber banner) — usually a 6-month-late feature; we have it
+- Per-tenant feature flag toggles (no LaunchDarkly dependency)
+- Per-tenant CRM notes (rare; Linear added in 2024)
+- Inline plan-pricing editor (Stripe-grade)
+- Activity + Security log with CSV export
+- Infrastructure panel (live DB connections, cache hit ratio, dead tuples, schema sizes) — most SaaS hides this in Datadog
+- Worker status dashboard (now that P15 ships) — even Vercel doesn't surface this
+- Dead Letters + Stuck Payments as named nav items (signals ops-thinking)
+- Country-aware tax rates registry — niche but well-done
+
+### Gaps vs mature admin panels (Stripe / Vercel / Linear / Auth0 / PostHog)
+
+#### 🟡 G1 — No global search "find user by email across all tenants"
+Today: must ask customer "what's your store code?" before locating their tenant. Stripe lets you paste an email and jump straight to that user's tenant. Fix: `GET /api/admin/users/search?email=` joining across `tenant_*.employees` schemas. **1 day.**
+
+#### 🟡 G2 — Tenant detail "Audit Log" only shows creation event
+Have data in three tables (`admin_activity_log`, `tenant_audit_log`, action_history) but no unified timeline view per tenant with filtering ("show all flag toggles in last 30d for tenant X"). Stripe Atlas and Vercel both do this. **1–2 days** since the data already exists.
+
+#### 🟡 G3 — No per-tenant metrics sparklines
+Tenant detail page shows static numbers (sales count, MRR contribution) but no trend graphs. Linear and PostHog show sparklines per workspace — huge for spotting which tenants are slipping. Recharts already in package.json (probably). **1 day.**
+
+#### 🟡 G4 — No cohort/segment builder
+"Needs Attention" has hardcoded categories. Can't ad-hoc filter "Pro plan AND no login in 14 days AND created after Jan 2026". PostHog "Cohorts", Mixpanel "Segments" — separates "ops dashboard" from "BI tool". Build with saved-filter table + a query builder UI. **3–5 days.**
+
+#### 🟡 G5 — No bulk actions
+Can suspend / activate / delete tenants one at a time. Cannot multi-select 5 dormant trials and bulk-email or bulk-extend trial. Vercel and Auth0 both have multi-select + bulk actions. Add checkbox column + bulk-actions dropdown. **1 day.**
+
+#### 🟡 G6 — No tenant data export before deletion
+Can DELETE a tenant from `/admin` but cannot export their products/sales/customers as a zip first. First GDPR / data-portability request triggers a panic. One-click "Export Tenant Snapshot" → zip of CSVs + JSON metadata. **2 days.**
+
+#### 🟡 G7 — Broadcast composer is bare-bones
+Raw HTML textarea + recipient = "all active". Missing: template library, live preview, segment-targeted recipients, test-send-to-myself, scheduled send, per-tenant variable substitution (`{{tenant.name}}`). Fine for 5 tenants, breaks at 50. **3–4 days.**
+
+#### 🟡 G8 — No webhook event explorer (only Dead Letters)
+Can see failed webhooks but not successful ones. When customer asks "did your system get my xPay webhook?" — no admin answer. Add webhooks-received log: payload + signature-verification result + downstream effect. **1 day** building on existing `dead_letter_events` table.
+
+#### 🟡 G9 — Single-destination alert routing
+`ALERT_EMAIL` env var → one inbox. Mature SaaS routes per category: "DB pressure → engineering Slack", "billing webhook fail → finance email", "signup spike → marketing". Small rules table + per-rule destination. No PagerDuty needed. **2 days.**
+
+### Explicitly NOT needed yet
+
+- Multi-admin RBAC (one-person team — skip until ops hire)
+- Super-admin 2FA (add when 3+ admins or after first incident)
+- SSO/SAML for super-admins (enterprise; irrelevant for retail tenants)
+- In-admin runbook / playbook links (overkill for solo founder)
+
+### Top-3 priority if/when we polish this
+
+1. **G3 metrics sparklines** — without this we're flying blind on retention (1 day)
+2. **G5 bulk actions** — repetitive manual ops will waste hours/week as tenant count grows (1 day)
+3. **G6 tenant data export** — first GDPR/data-portability ask will be stressful without this (2 days)
+
+Other 6 gaps can wait 6+ months. Bundle these 3 with the Phase 5 M-tier (M39, M41, M42, M43, M46, M47) into a focused 1-week super-admin polish sweep when ready.
+
+**Status**: log only — no work scheduled. Pick up when prioritised.
+
 
 
 **State on `livetest1` (production):**
