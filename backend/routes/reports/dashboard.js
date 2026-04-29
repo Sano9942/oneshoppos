@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps) {
   const { db } = deps;
@@ -23,7 +23,7 @@ module.exports = function (app, deps) {
 
   app.get("/api/reports/dashboard", async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const todayStr = new Intl.DateTimeFormat("en-CA", {
         timeZone: tz,
       }).format(new Date());
@@ -293,25 +293,33 @@ module.exports = function (app, deps) {
          ORDER BY stock ASC, p.name ASC LIMIT 8`, lsValues)).rows;
 
       // ─── Query 12: Sales trend (7 days) ───
+      // P22 fix: bucket by tenant-local date via AT TIME ZONE; emit as text to avoid
+      // pg-driver Date-object reinterpretation on JS side. tz inline-literal'd because
+      // isValidTz validates it (safe vs SQL injection) and Postgres needs identical
+      // expression text for GROUP BY matching.
       const stOutlet = buildOutletClause("s.outlet_id", outletIds, 2);
       const salesTrend = (await db.query(
-        `SELECT (s.timestamp)::date AS day, ROUND(SUM(s.total_amount)::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
+        `SELECT to_char((s.timestamp AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
+                ROUND(SUM(s.total_amount)::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 ${stOutlet.clause}
-         GROUP BY (s.timestamp)::date ORDER BY day ASC`,
+         GROUP BY (s.timestamp AT TIME ZONE '${tz}')::date ORDER BY day ASC`,
         [sixDaysAgoStart, ...stOutlet.values])).rows;
 
       // ─── Query 13: Sale/purchase comparison (7-day series) ───
+      // P22 fix: tz-aware bucketing for sales (tz inline-literal'd, validated).
+      // grn.received_at is a LOCAL timestamp column (already in tenant-local time per
+      // the column-type convention) so no TZ shift needed for grn buckets.
       const spcSalesOutlet = buildOutletClause("s.outlet_id", outletIds, 4);
       const spcGrnStartIdx = 4 + spcSalesOutlet.values.length;
       const spcGrnOutlet = buildOutletClause("grn.outlet_id", outletIds, spcGrnStartIdx + 1);
       const salePurchaseComparison = (await db.query(`
         WITH date_series AS (
-          SELECT d::date AS day FROM generate_series($1::date, $2::date, '1 day'::interval) d),
-        sales_daily AS (SELECT (s.timestamp)::date AS day,
+          SELECT to_char(d, 'YYYY-MM-DD') AS day FROM generate_series($1::date, $2::date, '1 day'::interval) d),
+        sales_daily AS (SELECT to_char((s.timestamp AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
           ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS sales_total
           FROM sales s WHERE s.voided = false AND s.timestamp >= $3 ${spcSalesOutlet.clause}
-          GROUP BY (s.timestamp)::date),
-        purchase_daily AS (SELECT grn.received_at::date AS day,
+          GROUP BY (s.timestamp AT TIME ZONE '${tz}')::date),
+        purchase_daily AS (SELECT to_char(grn.received_at::date, 'YYYY-MM-DD') AS day,
           ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0)::numeric, 2) AS purchase_total
           FROM goods_received_notes grn JOIN grn_items gi ON gi.grn_id = grn.id
           WHERE grn.received_at::date >= $${spcGrnStartIdx}::date ${spcGrnOutlet.clause}

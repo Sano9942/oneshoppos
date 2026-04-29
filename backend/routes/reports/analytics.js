@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
@@ -457,19 +457,23 @@ module.exports = function (app, deps, helpers) {
 
       let idx = 1;
       const whereStr = where.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+      // P22 fix: tz-aware bucketing of sales dates. tz is inline-literal'd because
+      // isValidTz validates it (safe vs SQL injection) and Postgres requires identical
+      // expression text for SELECT/GROUP BY matching.
+      const safeTz = isValidTz(tz) ? tz : "UTC";
 
       const sql = `
         WITH CustomerFirstPurchase AS (
-          SELECT customer_id, MIN(timestamp::date) as first_purchase_date
+          SELECT customer_id, MIN((timestamp AT TIME ZONE '${safeTz}')::date) as first_purchase_date
           FROM sales
           WHERE voided = false AND customer_id IS NOT NULL
           GROUP BY customer_id
         )
         SELECT
-          s.timestamp::date as sale_date,
+          to_char((s.timestamp AT TIME ZONE '${safeTz}')::date, 'YYYY-MM-DD') as sale_date,
           CASE
             WHEN s.customer_id IS NULL THEN 'walk_in'
-            WHEN s.timestamp::date = cfp.first_purchase_date THEN 'new_customer'
+            WHEN (s.timestamp AT TIME ZONE '${safeTz}')::date = cfp.first_purchase_date THEN 'new_customer'
             ELSE 'returning_customer'
           END as customer_type,
           SUM(s.total_amount) as revenue,
@@ -477,10 +481,10 @@ module.exports = function (app, deps, helpers) {
         FROM sales s
         LEFT JOIN CustomerFirstPurchase cfp ON s.customer_id = cfp.customer_id
         WHERE ${whereStr}
-        GROUP BY s.timestamp::date,
+        GROUP BY (s.timestamp AT TIME ZONE '${safeTz}')::date,
           CASE
             WHEN s.customer_id IS NULL THEN 'walk_in'
-            WHEN s.timestamp::date = cfp.first_purchase_date THEN 'new_customer'
+            WHEN (s.timestamp AT TIME ZONE '${safeTz}')::date = cfp.first_purchase_date THEN 'new_customer'
             ELSE 'returning_customer'
           END
         ORDER BY sale_date ASC

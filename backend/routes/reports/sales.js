@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
@@ -158,13 +158,17 @@ module.exports = function (app, deps, helpers) {
   // Sales Summary: high-level totals by date/outlet
   app.get("/api/reports/sales-summary", async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
       const { text, values } = pgWhere(where, params);
+      // P22 fix: bucket by tenant-local date, not Postgres session TZ.
+      // Emit as text (YYYY-MM-DD) to avoid pg-driver Date-object reinterpretation in JS.
+      // tz is inline-literal'd because isValidTz already validated it (safe vs SQL injection)
+      // and Postgres requires identical expression text to match GROUP BY across SELECT.
       const sql = `
-      SELECT s.timestamp::date AS date,
+      SELECT to_char((s.timestamp AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS date,
              s.id, s.timestamp, s.total_amount AS revenue,
              COALESCE(s.tax_total, 0) AS tax_total,
              COALESCE(o.name,'\u2014') AS outlet_name,
@@ -186,9 +190,8 @@ module.exports = function (app, deps, helpers) {
       let total_tax = 0;
 
       rows.forEach((r) => {
-        const dateStr = r.date instanceof Date
-          ? r.date.toISOString().slice(0, 10)
-          : String(r.date);
+        // r.date is already 'YYYY-MM-DD' text (post-P22 fix — emitted via to_char).
+        const dateStr = String(r.date);
         // Daily trend
         const existingDay = daily_sales.find((d) => d.date === dateStr);
         if (existingDay) {

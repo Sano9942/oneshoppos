@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function registerFinanceReports(app, deps, helpers) {
   const { db } = deps;
@@ -729,16 +729,20 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       );
       const { rows: saleMix } = await db.query(saleMixQ.text, saleMixQ.values);
 
+      // P22 fix: tz-aware bucketing of business_date. Inline-literal the tz (validated
+      // via isValidTz so safe vs SQL injection) to allow Postgres to recognize the
+      // SELECT and GROUP BY expressions as equal.
+      const safeTz = isValidTz(tz) ? tz : "UTC";
       const dailyInflowsQ = pgify(
         `
           SELECT
-            s.timestamp::date AS business_date,
+            to_char((s.timestamp AT TIME ZONE '${safeTz}')::date, 'YYYY-MM-DD') AS business_date,
             ROUND(COALESCE(SUM(sp.amount), 0), 2) AS total,
             COUNT(DISTINCT s.id) AS sale_count
           FROM sales s
           JOIN sale_payments sp ON sp.sale_id = s.id
           WHERE ${salesWhere.join(" AND ")}
-          GROUP BY s.timestamp::date
+          GROUP BY (s.timestamp AT TIME ZONE '${safeTz}')::date
           ORDER BY business_date DESC
         `,
         salesParams,
