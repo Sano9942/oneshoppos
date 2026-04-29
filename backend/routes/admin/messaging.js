@@ -8,35 +8,67 @@ const { CreateAnnouncementSchema } = require("../../schemas/admin");
 module.exports = function registerMessagingRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
-  // ── Email Queue ────────────────────────────────────────────────────────
+  // ── Email Queue (pg-boss backed) ───────────────────────────────────────
+  // Reads `pgboss.job WHERE name = 'email'`, the live queue. The legacy
+  // `public.email_queue` table is no longer written to by enqueueEmail()
+  // — pg-boss is the durable queue for all transactional email since
+  // commit 38b6d73 ("fix(workers): route email-worker-boss jobs through
+  // tenant context"). This endpoint returns the same row shape the
+  // existing AdminEmails.jsx expects (id, email_type, to_email, subject,
+  // tenant_slug, tenant_name, attempts, max_attempts, sent_at, send_at,
+  // created_at, error) so no frontend changes are needed.
+  //
+  // pg-boss state mapping:
+  //   created/retry  → pending  (sent_at NULL, attempts < max_attempts)
+  //   active         → pending  (in flight)
+  //   completed      → sent     (sent_at = completed_on)
+  //   failed         → failed   (attempts >= max_attempts, error from output)
+  //   cancelled      → failed   (rare; treat like failed for UI)
+  //
+  // Job IDs are UUIDs (strings); the route accepts string IDs throughout.
+  const EMAIL_SELECT_SQL = `
+    SELECT j.id,
+           (j.data->>'tenantId')::int AS tenant_id,
+           t.slug AS tenant_slug,
+           t.name AS tenant_name,
+           j.data->>'type' AS email_type,
+           j.data->>'to'   AS to_email,
+           j.data->>'from' AS from_address,
+           j.data->>'subject' AS subject,
+           j.start_after AS send_at,
+           CASE WHEN j.state = 'completed' THEN j.completed_on ELSE NULL END AS sent_at,
+           CASE WHEN j.state IN ('failed', 'cancelled') THEN j.output->>'message' ELSE NULL END AS error,
+           (j.retry_count + 1) AS attempts,
+           (j.retry_limit + 1) AS max_attempts,
+           j.created_on AS created_at,
+           j.state AS pgboss_state
+      FROM pgboss.job j
+      LEFT JOIN tenants t ON t.id = (j.data->>'tenantId')::int
+     WHERE j.name = 'email'`;
+
   app.get("/api/admin/email-queue", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { status, limit: lim } = req.query;
       const limit = Math.min(parseInt(lim, 10) || 100, 500);
 
-      let where = "1=1";
-      if (status === "pending") where = "eq.sent_at IS NULL AND eq.attempts < eq.max_attempts";
-      else if (status === "sent") where = "eq.sent_at IS NOT NULL";
-      else if (status === "failed") where = "eq.sent_at IS NULL AND eq.attempts >= eq.max_attempts";
+      let stateClause = "";
+      if (status === "pending") stateClause = " AND j.state IN ('created','retry','active')";
+      else if (status === "sent") stateClause = " AND j.state = 'completed'";
+      else if (status === "failed") stateClause = " AND j.state IN ('failed','cancelled')";
 
       const { rows } = await db.query(
-        `SELECT eq.id, eq.tenant_id, t.slug AS tenant_slug, t.name AS tenant_name,
-                eq.email_type, eq.to_email, eq.subject, eq.from_address,
-                eq.send_at, eq.sent_at, eq.error, eq.attempts, eq.max_attempts, eq.created_at
-         FROM email_queue eq
-         LEFT JOIN tenants t ON t.id = eq.tenant_id
-         WHERE ${where}
-         ORDER BY eq.id DESC
+        `${EMAIL_SELECT_SQL}${stateClause}
+         ORDER BY j.created_on DESC
          LIMIT $1`,
         [limit]
       );
 
       const { rows: [counts] } = await db.query(
         `SELECT
-           COUNT(*) FILTER (WHERE sent_at IS NULL AND attempts < max_attempts) AS pending,
-           COUNT(*) FILTER (WHERE sent_at IS NOT NULL) AS sent,
-           COUNT(*) FILTER (WHERE sent_at IS NULL AND attempts >= max_attempts) AS failed
-         FROM email_queue`
+           COUNT(*) FILTER (WHERE state IN ('created','retry','active')) AS pending,
+           COUNT(*) FILTER (WHERE state = 'completed') AS sent,
+           COUNT(*) FILTER (WHERE state IN ('failed','cancelled')) AS failed
+         FROM pgboss.job WHERE name = 'email'`
       );
 
       return res.json({
@@ -52,26 +84,40 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
+  // Retry: revive a failed/cancelled job by resetting state to 'created'
+  // and clearing retry_count + output. pg-boss will pick it up on the
+  // next fetch.
   app.post("/api/admin/email-queue/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
-        "UPDATE email_queue SET attempts = 0, error = NULL WHERE id = $1 AND sent_at IS NULL",
+        `UPDATE pgboss.job
+            SET state = 'created',
+                retry_count = 0,
+                output = NULL,
+                started_on = NULL,
+                completed_on = NULL,
+                start_after = NOW()
+          WHERE name = 'email' AND id = $1 AND state IN ('failed','cancelled','retry')`,
         [req.params.id]
       );
-      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
+      if (rowCount === 0) return res.status(404).json({ error: "Email not found or not retriable" });
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   });
 
+  // Send-now: bring forward `start_after` for a pending job so the next
+  // fetch picks it up immediately. No-op for already-sent jobs.
   app.post("/api/admin/email-queue/:id/send-now", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
-        "UPDATE email_queue SET send_at = NOW(), attempts = 0, error = NULL WHERE id = $1 AND sent_at IS NULL",
+        `UPDATE pgboss.job
+            SET start_after = NOW()
+          WHERE name = 'email' AND id = $1 AND state IN ('created','retry')`,
         [req.params.id]
       );
-      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
+      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already processed" });
       logAdminAction(req.admin.email, "email_force_sent", "email", req.params.id, null, req.ip);
       return res.json({ message: "Email queued for immediate send" });
     } catch (err) {
@@ -79,23 +125,30 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
-  // NOTE: purge-deleted must be registered BEFORE the :id param route to avoid Express matching "purge-deleted" as :id
+  // NOTE: purge-deleted must be registered BEFORE the :id param route to
+  // avoid Express matching "purge-deleted" as :id.
   app.delete("/api/admin/email-queue/purge-deleted", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
-        "DELETE FROM email_queue WHERE tenant_id IN (SELECT id FROM tenants WHERE status = 'deleted')"
+        `DELETE FROM pgboss.job
+          WHERE name = 'email'
+            AND state IN ('created','retry','failed','cancelled')
+            AND (data->>'tenantId')::int IN (SELECT id FROM tenants WHERE status = 'deleted')`
       );
       logAdminAction(req.admin.email, "email_purge_deleted", "email", null, { count: rowCount }, req.ip);
-      return res.json({ message: `Purged ${rowCount} email(s) for deleted tenants` });
+      return res.json({ message: `Purged ${rowCount} email(s) for deleted tenants`, deleted: rowCount });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   });
 
+  // Delete: only allow removing non-completed jobs. completed jobs are
+  // archived by pg-boss after `keep_until` and shouldn't be hand-deleted.
   app.delete("/api/admin/email-queue/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
-        "DELETE FROM email_queue WHERE id = $1 AND sent_at IS NULL",
+        `DELETE FROM pgboss.job
+          WHERE name = 'email' AND id = $1 AND state IN ('created','retry','failed','cancelled')`,
         [req.params.id]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
