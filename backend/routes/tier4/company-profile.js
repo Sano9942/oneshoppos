@@ -3,6 +3,7 @@ const multer = require("multer");
 const { getPreset, VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
 const { getFeatureFlagsForModes, VALID_MODES } = require("../../config/mode-registry");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
+const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
 
 module.exports = function createCompanyProfileRouter({
   db,
@@ -192,6 +193,12 @@ module.exports = function createCompanyProfileRouter({
           invalidateModeCache();
           invalidateFeatureFlagCache();
         }
+
+        // P8 (3.14): bust the company_profile cache so a tax_mode flip
+        // takes effect immediately. Without this, the 5-min cache served
+        // by loadCompanyProfile would keep the old tax_mode for up to
+        // five minutes, causing sales to snapshot the wrong stance.
+        invalidateCompanyProfileCache(req.tenantId);
 
         res.json({ message: "Company profile updated" });
       } catch (err) {
