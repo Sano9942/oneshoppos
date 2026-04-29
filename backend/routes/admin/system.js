@@ -33,6 +33,10 @@ module.exports = function registerSystemRoutes(app, deps) {
       const retailDigestStatus = global.__retailDigestWorkerStatus || null;
       // Bucket F — hourly force-close of stale open shifts.
       const shiftAutoCloseStatus = global.__shiftAutoCloseWorkerStatus || null;
+      // Customer subscription grace transitions (hourly).
+      const subscriptionGraceStatus = global.__subscriptionGraceWorkerStatus || null;
+      // Scheduled catalog changes — 60s setInterval poll.
+      const catalogSchedulerStatus = global.__catalogSchedulerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -65,6 +69,8 @@ module.exports = function registerSystemRoutes(app, deps) {
         anomaly: workerInfo(anomalyStatus, 24 * 60 * 60 * 1000),
         retail_digest: workerInfo(retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
         shift_auto_close: workerInfo(shiftAutoCloseStatus, 60 * 60 * 1000),
+        subscription_grace: workerInfo(subscriptionGraceStatus, 60 * 60 * 1000),
+        catalog_scheduler: workerInfo(catalogSchedulerStatus, 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

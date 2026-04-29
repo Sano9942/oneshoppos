@@ -28,7 +28,8 @@ function buildApp() {
   return app;
 }
 
-// Capture + restore the six worker heartbeat globals around each test.
+// Capture + restore worker heartbeat globals around each test.
+// Phase 5 P15 added subscription_grace + catalog_scheduler.
 const GLOBAL_KEYS = [
   "__emailWorkerStatus",
   "__fbrWorkerStatus",
@@ -36,6 +37,8 @@ const GLOBAL_KEYS = [
   "__reservationWorkerStatus",
   "__marketplaceSyncWorkerStatus",
   "__bookingReminderWorkerStatus",
+  "__subscriptionGraceWorkerStatus",
+  "__catalogSchedulerStatus",
 ];
 
 let savedGlobals;
@@ -55,7 +58,7 @@ afterEach(() => {
 });
 
 describe("GET /api/admin/worker-status", () => {
-  it("returns all six worker slots, all disabled when no globals set", async () => {
+  it("returns all worker slots, all disabled when no globals set", async () => {
     const res = await request(buildApp()).get("/api/admin/worker-status");
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("email");
@@ -64,12 +67,38 @@ describe("GET /api/admin/worker-status", () => {
     expect(res.body).toHaveProperty("reservation");
     expect(res.body).toHaveProperty("marketplace_sync");
     expect(res.body).toHaveProperty("booking_reminder");
+    // Phase 5 P15 added these two — previously running but invisible.
+    expect(res.body).toHaveProperty("subscription_grace");
+    expect(res.body).toHaveProperty("catalog_scheduler");
 
     // Every slot is { enabled: false, running: false } when its heartbeat
     // global is unset.
     for (const key of Object.keys(res.body)) {
       expect(res.body[key]).toEqual({ enabled: false, running: false });
     }
+  });
+
+  it("reports subscription_grace as running when heartbeat is fresh", async () => {
+    global.__subscriptionGraceWorkerStatus = {
+      lastPollAt: Date.now() - 60_000, // 1 min ago — within hourly * 2.5 window
+      processedToday: 1,
+      queueDepth: 0,
+    };
+    const res = await request(buildApp()).get("/api/admin/worker-status");
+    expect(res.body.subscription_grace.enabled).toBe(true);
+    expect(res.body.subscription_grace.running).toBe(true);
+    expect(res.body.subscription_grace.processed_today).toBe(1);
+  });
+
+  it("reports catalog_scheduler with 60s freshness window", async () => {
+    global.__catalogSchedulerStatus = {
+      lastPollAt: Date.now() - 30_000, // 30s ago — within 60s * 2.5
+      processedToday: 0,
+      queueDepth: 0,
+    };
+    const res = await request(buildApp()).get("/api/admin/worker-status");
+    expect(res.body.catalog_scheduler.enabled).toBe(true);
+    expect(res.body.catalog_scheduler.running).toBe(true);
   });
 
   it("reports reservation worker as running when its heartbeat is fresh", async () => {

@@ -217,8 +217,11 @@ function startAll(deps) {
   // Scheduled catalog changes worker
   if (process.env.SCHEDULED_CATALOG_WORKER_ENABLED === "1") {
     const { applyScheduledChange } = require("../services/catalog-scheduler");
+    global.__catalogSchedulerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
     const catalogInterval = setInterval(async () => {
+      global.__catalogSchedulerStatus.lastPollAt = Date.now();
       try {
+        let appliedThisPoll = 0;
         await forEachActiveTenant("catalog-scheduler", async (tenantDb) => {
           const { rows } = await tenantDb.query(
             `SELECT * FROM scheduled_catalog_changes
@@ -228,13 +231,14 @@ function startAll(deps) {
           );
           for (const change of rows) {
             await applyScheduledChange(tenantDb, change);
+            appliedThisPoll += 1;
           }
         }, deps);
+        global.__catalogSchedulerStatus.processedToday += appliedThisPoll;
       } catch (err) {
         console.error("[catalog-scheduler] poll error:", err.message);
       }
     }, 60_000);
-    global.__catalogSchedulerStatus = { lastPollAt: null, processedToday: 0 };
   }
 
   // pg-boss workers — email, FBR, and cleanup (requires DATABASE_URL / Postgres)

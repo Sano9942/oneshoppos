@@ -490,22 +490,38 @@ export default function AdminDashboard() {
       {workers && (
         <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">Worker Status</h2>
-          <div className="space-y-3">
-            {(workers.workers || []).map((w) => (
-              <div key={w.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
-                    w.status === "running" ? "bg-emerald-500" : w.status === "stopped" ? "bg-red-500" : "bg-slate-300"
-                  }`} />
-                  <span className="text-sm font-medium text-slate-700">{w.name}</span>
+          <div className="space-y-2">
+            {Object.entries(workers).map(([name, w]) => {
+              if (!w || typeof w !== "object") return null;
+              const dotColor = !w.enabled
+                ? "bg-slate-300"
+                : w.running
+                ? "bg-emerald-500"
+                : "bg-red-500";
+              const stateLabel = !w.enabled ? "disabled" : w.running ? "running" : "stopped";
+              return (
+                <div key={name} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+                    <span className="text-sm font-medium text-slate-700">{name}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-slate-400">{stateLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                    {w.enabled && w.queue_depth != null && <span>Queue: {w.queue_depth}</span>}
+                    {w.enabled && w.processed_today != null && <span>Today: {w.processed_today}</span>}
+                    {w.last_poll_at && (
+                      <span title={new Date(w.last_poll_at).toLocaleString()}>
+                        {w.last_poll_ago_seconds < 60
+                          ? `${w.last_poll_ago_seconds}s ago`
+                          : w.last_poll_ago_seconds < 3600
+                          ? `${Math.round(w.last_poll_ago_seconds / 60)}m ago`
+                          : `${Math.round(w.last_poll_ago_seconds / 3600)}h ago`}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-slate-500">
-                  {w.queue_depth != null && <span>Queue: {w.queue_depth}</span>}
-                  {w.processed_today != null && <span>Today: {w.processed_today}</span>}
-                  {w.last_poll && <span>Last poll: {new Date(w.last_poll).toLocaleString()}</span>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
