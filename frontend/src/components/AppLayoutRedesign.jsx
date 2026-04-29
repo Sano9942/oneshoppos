@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut, Moon, Search, Sun, User, UserCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Sun, User, UserCircle, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
@@ -80,6 +80,7 @@ export default function AppLayoutRedesign() {
   const { flags } = useFeatureFlags(authHeaders);
   const { hasMode } = usePreset();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Preset bootstrap moved to PresetProvider so routes outside AppLayout
   // (e.g. /pos opens in a new tab) also get presetLoaded=true.
@@ -100,26 +101,53 @@ export default function AppLayoutRedesign() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--ui-bg)">
+      {mobileOpen ? (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
       <aside
-        className={`${collapsed ? "w-20" : "w-72"} relative flex h-full flex-col border-r border-(--ui-border) bg-(--ui-surface) transition-all`}
+        className={`${collapsed ? "w-20" : "w-72"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r border-(--ui-border) bg-(--ui-surface) transition-transform lg:relative lg:translate-x-0`}
       >
         <button
-          className="ui-focus-ring absolute -right-3 top-5 rounded-full border border-(--ui-border) bg-(--ui-surface) p-1 text-(--ui-text-muted) shadow"
+          className="ui-focus-ring absolute -right-3 top-5 hidden rounded-full border border-(--ui-border) bg-(--ui-surface) p-1 text-(--ui-text-muted) shadow lg:block"
           onClick={() => setCollapsed((v) => !v)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
+        <button
+          className="ui-focus-ring absolute right-3 top-3 rounded-md p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
         <div className="border-b border-(--ui-border) px-4 py-4">
-          <div className="text-sm font-semibold tracking-wide text-(--ui-text-muted)">
-            SANOPOS
-          </div>
           {!collapsed ? (
-            <div className="mt-1 text-lg font-semibold text-(--ui-text)">
-              Admin
+            <>
+              <div className="text-sm font-semibold tracking-wide text-(--ui-text-muted)">
+                SANOPOS
+              </div>
+              <div className="mt-1 text-lg font-semibold text-(--ui-text)">
+                Admin
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-sm font-semibold tracking-wide text-(--ui-text-muted)">
+              SP
             </div>
-          ) : null}
+          )}
         </div>
-        <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+        <nav
+          className="flex-1 space-y-5 overflow-y-auto p-3"
+          onClick={(e) => {
+            // Close mobile drawer when a nav link is clicked.
+            if (e.target.closest("a")) setMobileOpen(false);
+          }}
+        >
           {nav.map((group) => (
             <div key={group.label}>
               {!collapsed ? (
@@ -168,8 +196,15 @@ export default function AppLayoutRedesign() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-(--ui-surface) px-5">
-          <div className="w-full max-w-xl">
+        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-(--ui-surface) px-3 lg:px-5">
+          <button
+            className="ui-focus-ring mr-2 rounded-md p-2 text-(--ui-text) hover:bg-(--ui-muted-surface) lg:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+          </button>
+          <div className="hidden w-full max-w-xl lg:block">
             <div className="relative">
               <Search
                 size={14}
@@ -181,7 +216,7 @@ export default function AppLayoutRedesign() {
               />
             </div>
           </div>
-          <div className="ml-4 flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-3 lg:ml-4 lg:gap-4">
             <ContextSwitcher />
             <NotificationBell />
             <ProfileDropdown employee={employee} logout={logout} navigate={navigate} />
