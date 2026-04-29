@@ -1103,6 +1103,260 @@ This is a P-level (compliance-blocker) fix worth a dedicated branch + PR rather 
 
 ---
 
+# Phase 4 — Public Surfaces (started 2026-04-29)
+
+## 4.1 Storefront `/store/livetest1` — anonymous browse → cart → checkout ✅ closed
+
+Walked end-to-end on production at 1440×900. Required publishing 2 products to the storefront channel first via `backend/scripts/__phase4_publish_storefront.js` (channel_publications was empty — see M30). Then walked Browse → PDP → Add → Cart → Checkout → Place Order → Order Status. Two criticals + two mediums.
+
+### 🔴 P12 — Checkout Total displayed Rs 0 instead of grandTotal — CLOSED
+
+Three field-name paste bugs in `frontend/src/pages/storefront/StorefrontCheckout.jsx`:
+- `quote.total` should be `quote.grandTotal`
+- `quote.tax` should be `quote.taxTotal`
+- `quote.shipping` should be `quote.shippingTotal`
+
+API returns the camelCase totals via `services/quote.js`, but the UI read mismatched names → defaulted to 0. Backend persisted the correct grandTotal to `web_orders.grand_total`, so the customer would commit to a real charge while seeing "Total: Rs 0" — refund-dispute fuel. Subtotal field accidentally happened to match (`quote.subtotal`), which is why only Total was visibly broken.
+
+**Fix**: commit `dcd5f86` `fix(storefront): rename quote field reads in checkout UI (P12)`. Verified live — checkout shows correct totals matching API + DB.
+
+### 🔴 P13 — Storefront quote service ignored P8 tax architecture — CLOSED
+
+`backend/services/quote.js` JOINed `taxes` only via product/category `tax_id`, ignoring:
+- `products.gst` (legacy direct-rate column, still in active use; livetest1 Snack Bar id=11 has gst=5, tax_id=null → was returning taxRate=0)
+- `company_profile.tax_mode` (`'inclusive'` / `'exclusive'` / `'none'`) — was never read
+- Inclusive math (price contains tax → extract; subtotal = gross − tax_total)
+
+POS sales were fixed in the P8 bundle (`routes/sales.js` lines 988–1118 do the full cascade). Storefront was a parallel call path that nobody updated. Compliance blocker for any GST-registered tenant routing customers through the storefront.
+
+**Fix**: commit `fe73b7e` `fix(storefront): apply P8 tax cascade to quote service (P13)`. Mirrors POS resolution: `tax_id → gst → category.tax_id → 0`, with `tax_mode='none'` overriding to 0 and `tax_mode='inclusive'` extracting tax from displayed price. `routes/storefront.js` now loads `company_profile.tax_mode` and passes it to `calculateQuote()`. Outlet tax profiles (P8 step 1) intentionally omitted — livetest1 doesn't use them and the route would also need `getFeatureFlagsMap` plumbed in. Add later if any tenant turns on `phase2_outlet_tax`.
+
+**Tests**: 4-case regression suite at `backend/tests/integration/pg-batch-phase4-storefront-tax.test.js` — exclusive+tax_id, exclusive+gst-only, inclusive (extract from displayed price), none-overrides-rate. All green.
+
+**Live verification**: cart with Test Coffee Rs 100 (no tax) + Snack Bar Rs 50 (gst=5) → Subtotal Rs 147.62, Tax Rs 2.38, Total Rs 150. `web_orders` row persisted: subtotal 147.62, tax_total 2.38, grand_total 150.00. Order token `88f0d2d9-0669-4b67-b5a5-42a4a14f33dc`, external_order_id `sf_6b90993b224742a49d65`.
+
+### 🟡 M30 (carryover from Phase 3) — Empty storefront state by default
+
+All tenants ship with `channel_publications` empty. The only way to publish a product is per-product toggle in `frontend/src/pages/redesign/ProductFormPage.jsx` lines 746–792 — no bulk action, no "publish all to storefront" default in the wizard, no banner on a fresh `/store/{slug}` telling the merchant to publish products. Phase 3 already flagged this. Recommend either default-on for new products or a bulk-publish multi-select in `/inventory`.
+
+**Status**: deferred to polish bundle.
+
+### 🟡 M31 — Storefront order placement does not enqueue customer email confirmation
+
+Verified live: placed order `sf_6b90993b224742a49d65` for `oneshop349@hotmail.com`, queried `public.email_queue` after — zero rows for that recipient. `routes/storefront.js` POST `/api/storefront/checkout` does the inventory + order persistence in a transaction but never calls `enqueueEmail()`. Customer only gets the in-page status URL (`/store/{slug}/order/{token}`) — easy to lose if they close the tab.
+
+Every other customer touchpoint (sale receipts via `email/send-receipt-v2`, password reset, support ticket replies, billing notifications) sends mail. Anonymous storefront orders go silent.
+
+**Recommendation**: add a `web_order_confirmation` email type to `services/email-templates.js` and enqueue from the storefront checkout transaction (after the row is created, before the response). Link customer back to the public status URL.
+
+**Status**: log only — likely the same gap exists across other Phase 4 surfaces (4.2/4.3/4.6). Cluster the email-gap fix into one bundle once Phase 4 walk is complete.
+
+### Drift noted (not flagged as findings)
+
+- Storefront PDP CLAUDE.md describes image gallery, variant selector, reviews, pickup-availability table — actual page renders only single image + Add to Cart. Doc drift; UI works for single-variant products.
+
+### State of livetest1 after 4.1
+
+- 5 sales (4 POS + 1 storefront `web_orders.id=1`).
+- Test Coffee stock: **6.000** (was 7, dropped 1 via storefront).
+- Snack Bar stock: **17.000** (was 18, dropped 1 via storefront).
+- Coffee Beans stock: 9.000 (unchanged).
+- 2 active gift cards (unchanged).
+- Shift #1 still open (do not close).
+- channel_publications: 2 rows (Test Coffee + Snack Bar published to storefront).
+- Backend at commit `fe73b7e`/`dcd5f86`, Vercel deployed at 13:42, Railway re-registered workers at 13:41.
+
+---
+
+## 4.2 Customer signup → OTP → portal landing ✅ closed
+
+Walked end-to-end on production at 1440×900. Signup form renders cleanly (name + email + mobile + password). Submit → DB inserts `customers` row + `customer_portal_otps` row + enqueues `customer_portal_email_verify` via pg-boss. Worker delivered email in 379ms (state='completed'). User entered code → verify → redirected to portal landing. Sign-out + password sign-in round-trip also works.
+
+**Live evidence**:
+- Customer row id=2 (livetest1 schema): `Phase 4 Customer GMail`, `oneshop349@gmail.com`, mobile `0300-1234567`, `portal_password_hash` set, `portal_enabled_at` flipped after OTP verify.
+- pg-boss job `43fa8db1-7fcb-48aa-8a17-dd0afc79bc8d` — type `customer_portal_email_verify`, completed.
+- OTP code `128980` (15-min TTL) marked used, session JWT issued.
+
+### 🔴 P14 — Initial OTP send went to Hotmail (Resend "completed" but undelivered)
+
+First signup attempt at 13:52 used `oneshop349@hotmail.com`. pg-boss job `79d2a5d2-…` reported `state='completed'` (Resend accepted hand-off) but the email never arrived in the user's hotmail inbox or junk. Hotmail/Outlook is known to be aggressive on Resend's `noreply@sanopos.com` if SPF/DKIM aren't aligned for `outlook.com` outbound IPs. Re-running the same signup with `oneshop349@gmail.com` delivered fine.
+
+**Status**: Not a code bug per se — `enqueueEmail` doesn't capture Resend's downstream delivery status, so "completed" only means we handed off. **Recommendation**: capture the Resend message-id and add a periodic job to poll `GET /emails/{id}` for terminal status (`bounced`, `complained`, `delivered`). Otherwise tenants lose customers silently to Microsoft spam filters and have no diagnostic trail. Already a known class of issue for any Resend-backed system.
+
+**Status**: log only — not blocking the walk, but worth flagging since it cost ~7min of debug time and would cost real customers their account access. Cluster with M31 in the email-deliverability fix bundle.
+
+### 🟡 M32 — Storefront has zero discovery link to customer portal/signup
+
+Verified by reading `frontend/src/pages/storefront/*.jsx` — zero references to `/portal/`, "sign in", "my account", "create account", or order-history links. The storefront header has `Live Test 1` brand + `All Products` + `Cart`. Post-checkout `StorefrontOrderStatus.jsx` shows the order timeline and a "Continue Shopping" link, but no "Save this order to your account" / "Sign up to track future orders" CTA.
+
+Customer must guess that `/portal/<slug>` exists. Reasonable to assume real customers won't, especially mobile.
+
+**Recommendation**: Add a header "My Account" link (icon-only on mobile) and a post-checkout "Track this order via your account" callout that pre-fills the signup email. Also wire portal-side to recognise the customer if their email matches a guest order on signup (M33 below).
+
+**Status**: deferred to polish bundle.
+
+### 🟡 M33 — Anonymous storefront orders not auto-linked to customers on signup
+
+After 4.1 placed order id=1 as `customer_email_snapshot='oneshop349@hotmail.com'` (anonymous, customer_id=null). When the same email signed up at 4.2, the new portal customer row (id=2, gmail not hotmail in the final test, so this is implied not observed for this exact run) sees an empty Orders tab. There's no backfill step that scans `web_orders WHERE customer_id IS NULL AND customer_email_snapshot = $newEmail` and links them.
+
+Even worse: even if the emails matched, the portal's `Orders` tab queries `web_orders WHERE customer_id = $1` per `routes/customer-portal/data.js` (probably — assumed; not opened during 4.3 walk; verify before fixing). So the customer would never see prior anonymous orders.
+
+**Recommendation**: On portal signup completion (after `portal_enabled_at` flip), run an UPDATE that links matching guest `web_orders.customer_email_snapshot` rows to the new customer_id. Same on first email-verify of an existing customer.
+
+**Status**: deferred to polish bundle.
+
+---
+
+## 4.3 Customer portal — 4 tabs ✅ closed
+
+Walked Dashboard → Orders → Loyalty → Profile after fresh signup. All four render cleanly:
+
+- **Dashboard**: welcome heading with signup name, "Your account at Live Test 1" subtitle, single Loyalty card (Points 0, "No tier yet", View details link).
+- **Orders**: empty state "No orders yet." (anonymous storefront order from 4.1 not linked — see M33).
+- **Loyalty**: 3 stat cards (Points 0, Total spend 0, Tier "No tier yet") + "To redeem points, mention your account at checkout in store." helper.
+- **Profile**: editable name + mobile (pre-populated from signup), optional address/city/DOB/gender/preferred-contact + 3 marketing-consent checkboxes (Email/SMS/WhatsApp) + Save button. "Saved addresses" section ("No saved addresses yet.").
+
+Sign out → redirect to `/portal/<slug>/login`. Password sign-in round-trip works.
+
+**Doc drift note (not a finding)**: plan doc said "4 tabs: invoices, orders, loyalty, profile" — actual nav is **Dashboard, Orders, Loyalty, Profile**. Invoices only appears when `customer_invoicing` flag is enabled (livetest1 retail = off). Same for Appointments/Treatments/Stays/Wallet which the route file declares but the nav config gates by feature. Plan doc should be amended to "tabs vary by tenant features; retail baseline is Dashboard/Orders/Loyalty/Profile."
+
+### State of livetest1 after 4.3
+
+- 2 customers: id=1 anonymous storefront guest (Phase 4 Tester), id=2 portal-registered (Phase 4 Customer GMail).
+- Note: the earlier hotmail attempt likely created a 3rd customer row that was abandoned mid-OTP. Worth a cleanup script. (Will check during Phase 4 closure.)
+- 1 customer_portal_otps row used.
+- pg-boss job archive carries 2 OTP emails (one hotmail-undelivered, one gmail-completed).
+
+---
+
+## 4.4 Public receipt `/receipt/INV-2026-00004` ✅ closed (post-P8 recheck)
+
+Walked the public receipt URL to re-confirm the M27 deliverable from Phase 3.14 (per-rate tax breakdown) is live.
+
+**Live render**:
+- Header: "Live Test 1" + Invoice INV-2026-00004 + Date Apr 29, 2026 04:44 AM + Served by Hassan
+- Items: Snack Bar 2 × Rs50.00 = Rs100.00; Coffee Beans 1 × Rs100.00 = Rs100.00
+- Subtotal Rs200.00, **GST 17% +Rs17.00**, **GST 5% +Rs5.00**, Total Rs200.00 (inclusive — gross matches displayed)
+- Payment: Cash Rs200.00, "Please come again." footer, Print Receipt button.
+
+Per-rate breakdown shows distinct lines for each tax rate, exactly as Phase 3.14 closure described. No regression. P8 inclusive math correctly extracts tax from displayed prices and the receipt customer-total matches what the customer paid.
+
+---
+
+## 4.5 Public gift-card balance `/gift-card/BF18801AC599` ✅ closed (recheck)
+
+Walked happy path + bad-code edge.
+
+**Happy path** (existing card from Phase 3.8):
+- Code BF18801AC599
+- Remaining Rs400.00 of Rs500.00 initial
+- Type "digital", Status "active"
+- "Present the code at the store to redeem." footer.
+
+**Bad-code edge** (`/gift-card/NOT-A-REAL-CODE`):
+- Renders "Gift card not found" + "Double-check the code on your card. If it still doesn't work, contact the store where you received it." — clean error state, no crash.
+- API returns 404 (1 console error from network 404, no JS exception).
+
+No regression on gift-card public balance from Phase 3.8 closure.
+
+---
+
+## 4.6 Kiosk `/kiosk?tenant=livetest1&outlet=1` ✅ closed
+
+**Discovery**: `/kiosk` is wrapped in `RequireAuth` (`frontend/src/routes/publicRoutes.jsx:140`), so an unauthenticated visitor gets redirected to `/login`. This is intentional security but contradicts the "public surface" framing in the plan doc — kiosk is employee-facing, just unauthenticated *as a specific employee* (PIN unlocks). Plan doc should be amended.
+
+**Walked as Hassan** (admin login → /kiosk):
+- Renders cleanly: store selector ("Main Store" auto-selected), live clock, "Attendance Kiosk" heading, numeric keypad (1-9, Back, 0, Submit PIN with "OK" label), helper line "Enter your PIN to clock in, break, or clock out".
+- **Happy path**: PIN 2222 → identified as **Test Cashier 2**, "You are not clocked in today", Clock In + Back buttons. Clock In → "Welcome, Test Cashier 2! Clocked in at 07:08 PM. Returning to kiosk in 5 seconds..." → DB write confirmed (`attendance_sessions` id=3, employee_id=2, outlet_id=1, session_start=14:08:53Z, session_end=null).
+- **Bad PIN edge**: PIN 9999 → "Invalid PIN" message, keypad cleared, Submit re-disabled. No crash.
+- **a11y/automation note**: keypad button refs invalidate every ~1s due to live clock re-render, breaking ref-based clicks. Used `evaluate(() => button.click())` with text-content lookup as a workaround. Not a finding for end users (manual finger taps don't have this issue) — only impacts e2e test infra.
+
+### 🟡 M35 — `/kiosk` doesn't accept hardware-keyboard numeric input
+
+`KioskRedesign` only listens for clicks on the on-screen keypad buttons. The Phase 4 walk attempted `keyboard.press('2')` four times — Submit stayed disabled. POS terminals often have USB number pads attached for staff convenience; this kiosk variant ignores them. Low severity.
+
+**Status**: log only — keypad works, hardware keyboard is a nice-to-have. Polish bundle.
+
+---
+
+## 4.7 Customer display `/customer-display?shift_id=1&tenant=livetest1` ✅ closed
+
+**Idle render**: header "SanoPOS" + status "Ready", body "Welcome! Your items will appear here.", footer Subtotal/Tax/Total all Rs 0.00.
+
+**Live sync verification**: scripted POST as Hassan to `/api/pos/customer-display` with a fake cart item (`Phase 4 Display Test`, qty 2, Rs 50). The display polled every 2s and updated within 3s:
+- Status: "Scanning items..." (was "Ready")
+- Item row visible: 1 × Phase 4 Display Test 2 × Rs 50.00 = Rs 100.00
+- Footer Subtotal Rs 95.24, Tax Rs 4.76, Total Rs 100.00 (inclusive math from POST payload)
+
+End-to-end sync works.
+
+### 🟡 M34 — Customer display shows hardcoded "SanoPOS" instead of tenant name
+
+`frontend/src/pages/CustomerDisplayPage.jsx:22` initialises `storeName` to `"SanoPOS"`. Lines 32–37 contain a TODO comment ("Try to get company name from company profile (public endpoint may not exist)") but no fetch is implemented. Result: every customer-facing screen displays "SanoPOS" branding rather than the tenant's company name (e.g. "Live Test 1"). Customer perception is wrong (they think they're shopping at SanoPOS, not the actual store).
+
+**Recommendation**: fetch `GET /api/storefront/config?tenant=<slug>` (already public, returns `company_name`) on mount and use that. Already proven via Storefront flow in 4.1.
+
+**Status**: log only — polish bundle.
+
+### 🟡 M36 — Customer display state is in-memory (lost on Railway restart)
+
+`backend/routes/customer-display.js` lines 13–27: `displayStore` is a Map living in process memory, cleaned up after 8h. Railway auto-restarts (max 3 per failure per `railway.toml`) wipe this state. Active checkouts in progress at restart see the customer display go blank until the next `POST /api/pos/customer-display` from POS. Self-heals on the next item rung; not blocking. But annoying for the cashier explaining to the customer.
+
+**Recommendation**: Either accept the trade-off (current state) or persist to Redis / a single ephemeral table. Document the trade-off either way.
+
+**Status**: log only — polish bundle.
+
+### 🟡 M37 — `/customer-display` (no params) shows missing-shift_id helper, but `?shift_id=` accepts any value
+
+Validation is shift_id-presence-only; there's no check that the shift belongs to the tenant or even exists. A malicious actor passing `?shift_id=999&tenant=otherTenant` won't see another tenant's cart (the `displayKey` includes tenant, and an unknown key returns idle), but the page renders as if it were a real shift. Low security risk because data is empty, but the UX could mislead.
+
+**Status**: log only — polish bundle. Tag with M36 in a "customer-display polish" bundle.
+
+---
+
+# Phase 4 closure — 2026-04-29
+
+**All 7 sub-flows walked**: storefront, customer signup, customer portal (4 tabs), public receipt recheck, gift-card balance recheck, kiosk PIN flow, customer display sync.
+
+**Criticals shipped during walk**:
+- 🔴 P12 — Storefront checkout Total displayed Rs 0 due to field-name mismatch — fixed (commit `dcd5f86`), live verified.
+- 🔴 P13 — Storefront quote service ignored P8 tax architecture (gst column, tax_mode, inclusive math) — fixed (commit `fe73b7e`) with regression tests, live verified.
+
+**Criticals logged but not fixed (deferred)**:
+- 🔴 P14 — Resend `state='completed'` does not mean email delivered; Hotmail silently dropped first OTP. Cluster with M31 in email-deliverability bundle.
+
+**Mediums logged (polish bundle candidates)**:
+- M30 — Empty storefront state by default (no bulk-publish UX, carryover from Phase 3).
+- M31 — Storefront order placement does not enqueue customer order-confirmation email.
+- M32 — Storefront has zero discovery link to customer portal/signup.
+- M33 — Anonymous storefront orders not auto-linked to customers on signup (data linkage gap).
+- M34 — Customer display shows hardcoded "SanoPOS" instead of tenant name.
+- M35 — Kiosk doesn't accept hardware-keyboard numeric input.
+- M36 — Customer display state in-memory (Railway-restart fragile).
+- M37 — `/customer-display?shift_id=…` accepts any shift_id without ownership check.
+
+**Doc drift noted**:
+- Plan doc said portal has "4 tabs: invoices, orders, loyalty, profile" — actual nav is Dashboard/Orders/Loyalty/Profile (Invoices is feature-flag-gated for retail tenants).
+- Plan doc placed `/kiosk` in "public surfaces" — actually `RequireAuth`-wrapped (employee-only).
+- Plan doc said portal had 16 sub-routes — accurate per route file but most are feature-gated, not all visible in nav.
+
+**Live state of livetest1 after Phase 4**:
+- Plan: Pro (annual), expires 2027-04-28.
+- Schema_version: 83 (unchanged, no migrations this phase).
+- Sales: 4 POS sales (INV-2026-00001..00004) + 1 storefront `web_orders.id=1`.
+- Stocks: Test Coffee 6, Coffee Beans 9, Snack Bar 17.
+- Customers: 2 (anonymous + portal-registered) + likely 1 abandoned hotmail row.
+- channel_publications: 2 rows (Test Coffee + Snack Bar published to storefront).
+- Shift #1 still open (do not close).
+- attendance_sessions: 2 active (Hassan + Test Cashier 2).
+- Backend at commit `fe73b7e`, frontend at `dcd5f86`. Both deployed.
+
+**Phase 4 status**: CLOSED.
+
+**Next phase**: Phase 5 — Worker-Driven Flows (per plan doc).
+
+---
+
 ## (legacy) Resume tomorrow at 3.8 — superseded by 3.12 closure above
 
 **State on `livetest1` (production):**

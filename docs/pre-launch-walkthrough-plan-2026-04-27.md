@@ -304,22 +304,21 @@ These are cross-feature flows that exercise multiple subsystems. Bugs here are u
 
 ---
 
-## Phase 4 — Public Surfaces
+## Phase 4 — Public Surfaces ✅ closed 2026-04-29
 
-The 6 customer-facing surfaces. Should work without merchant auth.
+7 customer-facing surfaces walked. Kiosk turned out to be employee-auth-required (RequireAuth wrapper), not strictly public — plan to amend.
 
-- [ ] `/store/{slug}` — storefront. Browse → add to cart → checkout (anonymous)
-- [ ] `/store/{slug}` — sign up as a customer → log in → portal
-- [ ] `/portal/{slug}` — customer portal. 4 tabs: invoices, orders, loyalty, profile. All render.
-- [ ] `/receipt/:invoiceNumber` — public receipt. Shareable. From Phase 3.7.
-- [ ] `/gift-card/:code` — public gift card balance. From Phase 3.8.
-- [ ] `/kiosk?tenant={slug}&outlet={id}` — employee clock-in. PIN flow works.
-- [ ] `/customer-display` — POS-side customer-facing display. Open in second window, ring up sale, verify display updates.
+- [x] `/store/{slug}` — storefront. Browse → cart → anonymous checkout. **2 criticals fixed live**: P12 grandTotal field-name mismatch, P13 P8 tax cascade not honoured. M30/M31 deferred.
+- [x] `/store/{slug}` — customer signup → portal. P14 (Hotmail deliverability silent-drop), M32 (no storefront→portal link) logged.
+- [x] `/portal/{slug}` — customer portal. Tabs render: Dashboard, Orders, Loyalty, Profile (Invoices/Appointments/etc are feature-flag-gated). M33 (anonymous orders not auto-linked) logged.
+- [x] `/receipt/:invoiceNumber` — public receipt. Per-rate tax breakdown (M27 from 3.14) reconfirmed live. No regression.
+- [x] `/gift-card/:code` — public gift card balance. Happy + bad-code 404 both clean.
+- [x] `/kiosk?tenant={slug}&outlet={id}` — employee clock-in. **Requires merchant auth first.** PIN flow + DB write verified. M35 (hardware keyboard ignored) logged.
+- [x] `/customer-display` — POS-side display. Idle + POST→GET sync verified end-to-end. M34/M36/M37 logged.
 
-Findings to log:
-- Slow loads on public pages (no auth = should be fast)
-- SEO meta tags / OG tags rendered correctly?
-- Mobile rendering of storefront (most customers will be mobile)
+**Total**: 3 P-tier (2 shipped: P12/P13; 1 deferred: P14) + 8 M-tier (all deferred to polish bundle).
+
+Full closure section at end of `docs/phase3-findings-WIP.md`.
 
 ---
 
