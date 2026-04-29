@@ -4,6 +4,46 @@
 const { validate } = require("../../middleware/validate");
 const { CreateTenantSchema } = require("../../schemas/admin");
 const { DEFAULT_FEATURE_FLAGS, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
+const { migrate: runMigrate, MIGRATIONS } = require("../../migrate-pg");
+
+/**
+ * Build a scoped db wrapper for a single tenant schema.
+ * Mirrors the pattern in `migrate-pg.js` migrateAllTenants — sets
+ * search_path on every query so migrate() applies DDL inside the
+ * tenant schema rather than public.
+ */
+function buildTenantScopedDb(pool, schemaName) {
+  return {
+    pool,
+    query: async (sql, params) => {
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO ${schemaName}, public`);
+        return await client.query(sql, params);
+      } finally {
+        client.release();
+      }
+    },
+    transaction: async (fn) => {
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO ${schemaName}, public`);
+        await client.query("BEGIN");
+        const wrappedClient = {
+          query: (sql, params) => client.query(sql, params),
+        };
+        const result = await fn(wrappedClient);
+        await client.query("COMMIT");
+        return result;
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+  };
+}
 
 module.exports = function registerTenantRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
@@ -495,6 +535,9 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Migrations ─────────────────────────────────────────────────────────
+  // Both routes invoke `runMigrate` from `migrate-pg.js`, which is the same
+  // function the Railway boot sequence uses. `runMigrate` is idempotent —
+  // it reads `schema_version` and only applies pending migrations.
   app.post("/api/admin/tenants/:id/migrate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
@@ -504,11 +547,20 @@ module.exports = function registerTenantRoutes(app, deps) {
         return res.status(400).json({ error: "Can only migrate active tenants" });
       }
 
-      const result = { applied: [], message: "Postgres tenant migration not yet implemented" };
+      const schemaName = `tenant_${tenant.slug}`;
+      const scopedDb = buildTenantScopedDb(db.pool, schemaName);
 
-      await auditLog(tenant.id, "migrated", { applied: result.applied }, `admin:${req.admin.email}`);
-      logAdminAction(req.admin.email, "tenant_migrated", "tenant", req.params.id, null, req.ip);
-      return res.json(result);
+      const beforeRow = await scopedDb.query(
+        "SELECT MAX(version) AS v FROM schema_version"
+      ).catch(() => ({ rows: [{ v: 0 }] }));
+      const before = beforeRow.rows[0]?.v || 0;
+
+      const after = await runMigrate(scopedDb);
+      const applied = MIGRATIONS.filter((m) => m.version > before && m.version <= after).map((m) => m.version);
+
+      await auditLog(tenant.id, "migrated", { applied, from: before, to: after }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "tenant_migrated", "tenant", req.params.id, { applied, from: before, to: after }, req.ip);
+      return res.json({ slug: tenant.slug, from: before, to: after, applied });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -516,18 +568,48 @@ module.exports = function registerTenantRoutes(app, deps) {
 
   app.post("/api/admin/migrate-all", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
+      // Always migrate the public (master) schema first — same order as Railway boot.
+      let publicResult;
+      try {
+        const before = (await db.query("SELECT MAX(version) AS v FROM schema_version").catch(() => ({ rows: [{ v: 0 }] }))).rows[0]?.v || 0;
+        const after = await runMigrate(db);
+        const applied = MIGRATIONS.filter((m) => m.version > before && m.version <= after).map((m) => m.version);
+        publicResult = { schema: "public", from: before, to: after, applied };
+      } catch (err) {
+        publicResult = { schema: "public", error: err.message };
+      }
+
       const { rows: tenants } = await db.query(
-        "SELECT id, slug, status FROM tenants WHERE status = 'active'"
+        "SELECT id, slug, status FROM tenants WHERE status = 'active' ORDER BY slug"
       );
 
-      const results = tenants.map((t) => ({
-        slug: t.slug,
-        applied: [],
-        message: "Postgres tenant migration not yet implemented",
-      }));
+      const results = [];
+      // Sequential — `migrate-pg.js` runs tenants serially to avoid
+      // shared-pool contention. Per-tenant errors are caught so one
+      // bad tenant doesn't abort the rest.
+      for (const t of tenants) {
+        const schemaName = `tenant_${t.slug}`;
+        const scopedDb = buildTenantScopedDb(db.pool, schemaName);
+        try {
+          const before = (await scopedDb.query("SELECT MAX(version) AS v FROM schema_version").catch(() => ({ rows: [{ v: 0 }] }))).rows[0]?.v || 0;
+          const after = await runMigrate(scopedDb);
+          const applied = MIGRATIONS.filter((m) => m.version > before && m.version <= after).map((m) => m.version);
+          results.push({ slug: t.slug, from: before, to: after, applied });
+        } catch (err) {
+          results.push({ slug: t.slug, error: err.message });
+        }
+      }
 
-      logAdminAction(req.admin.email, "migrate_all", "system", null, null, req.ip);
-      return res.json({ results });
+      // Derive counts the dashboard's success message reads:
+      //   migrated = tenants that actually applied at least one migration
+      //   skipped  = tenants whose schema was already current
+      //   errors   = tenants that threw during migrate
+      const migrated = results.filter((r) => !r.error && (r.applied?.length || 0) > 0).length;
+      const skipped = results.filter((r) => !r.error && (r.applied?.length || 0) === 0).length;
+      const errors = results.filter((r) => r.error).map((r) => ({ slug: r.slug, error: r.error }));
+
+      logAdminAction(req.admin.email, "migrate_all", "system", null, { tenant_count: tenants.length, public: publicResult, migrated, skipped, error_count: errors.length }, req.ip);
+      return res.json({ public: publicResult, results, migrated, skipped, errors });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
