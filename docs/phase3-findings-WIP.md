@@ -1522,6 +1522,91 @@ The 4 failed jobs (invoiceIds 1–4) from before commit `fb280fe` are now perman
 - pg-boss state: 4 stuck-failed fbr-invoice jobs from pre-fb280fe (M47), all other workers healthy.
 - 0 sales / 0 inventory mutations during Phase 5.
 
+---
+
+## 5.4 Phase 5 — All P-tier fixes verified live on production (2026-04-30)
+
+After commits pushed to `origin/main` and Vercel + Railway deployed (commits `8df2b5b` → `15b9b3c`), each fix was re-walked through Playwright against the production super-admin panel.
+
+### P15 — Worker Status panel ✅ verified
+
+**Before**: panel rendered the "Worker Status" heading with **zero rows below it** (frontend mapped `workers.workers` but API returns flat object).
+
+**After**: 19 worker rows render. Each shows name + state badge + queue + processed-today + relative-time heartbeat. Live observed:
+- `reservation` → RUNNING, last_poll **8s ago**
+- `catalog_scheduler` → RUNNING, last_poll **39s ago** (new worker now surfaced; catalog-scheduler heartbeat fix in `boot/workers.js` working)
+- 5 env-disabled workers labeled **DISABLED** with neutral slate dot
+- All other env-enabled-but-not-yet-fired workers labeled STOPPED (M39 — heartbeats wiped on Railway restart, repopulate as cron fires)
+
+API now also surfaces `subscription_grace` and `catalog_scheduler` keys (M40 absorbed into this fix).
+
+### P16 — Migrate All button ✅ verified
+
+**Before**: button POSTed to `/api/admin/migrate-all`, got `{ results: [{ slug:"livetest1", message:"Postgres tenant migration not yet implemented" }] }`. Audit log claimed success.
+
+**After**: real migration runs against tenant schemas via the migrate-pg.js `migrate()` function. Live test on livetest1:
+
+```json
+{
+  "public": { "schema": "public", "from": 83, "to": 83, "applied": [] },
+  "results": [{ "slug": "livetest1", "from": 83, "to": 83, "applied": [] }],
+  "migrated": 0, "skipped": 1, "errors": []
+}
+```
+
+UI banner reads **"Done. 0 schema(s) migrated, 1 already current."** Idempotent re-run worked correctly. Per-tenant migrate at `/api/admin/tenants/95/migrate` also returns real `{from, to, applied}` shape.
+
+### P17 — Tenant Detail billing fields ✅ verified
+
+**Before**: Billing card on `/admin/tenants/95` showed "Billing Cycle: —", "Expires: —", "Payment Status: active" (last one was a hardcoded UI fallback, not a real DB read).
+
+**After**: API now SELECTs `billing_cycle`, `plan_expires_at`, `grace_ends_at`, `payment_status`. UI renders:
+- **Plan**: Pro
+- **Billing Cycle**: Annual ✅
+- **Expires**: 4/29/2027 ✅
+- **Payment Status**: Active (real DB value) ✅
+
+Values match the 3 sandbox payments below in Payment History.
+
+### P18 — Admin Emails on pg-boss ✅ verified
+
+**Before**: page read dead `email_queue` table. Counts were "Pending: 1, Sent: 0, Failed: 0" — the 1 row was stale residue from before the pg-boss migration; nobody would ever process it. All real pg-boss email jobs (5 sent successfully today) were invisible.
+
+**After**: page reads `pgboss.job WHERE name = 'email'`. Counts read **Pending: 1, Sent: 5, Failed: 1**. Seven real email jobs visible with full data:
+- 3 sent customer-portal emails (welcome + 2× verify) from today's portal signup walk
+- 1 sent `billing_payment_recorded` (today's fresh sandbox payment)
+- 1 failed `billing_payment_recorded` (the historical pre-`fb280fe` destructure error — error message now visible to admin)
+- 1 pending `drip_features` (scheduled for May 2)
+- 1 sent `drip_getting_started`
+
+Tenant join via `(data->>'tenantId')::int = tenants.id` works: every row shows "Live Test 1 (livetest1)". UUID job IDs render as `#xxxxxxxx-xxxx-...`. Status badges, attempt counts (`retry_count + 1 / retry_limit + 1`), and timestamps all map correctly. Type colors render via the existing `TYPE_COLORS` map.
+
+### Phase 5 final commit graph (pushed to `origin/main`)
+
+```
+15b9b3c docs(phase5): close walkthrough — 4 P-tier shipped, 9 M-tier logged
+f7d9784 fix(admin): point email-queue routes at pg-boss instead of dead table (P18)
+c900628 fix(admin): include billing fields in GET /api/admin/tenants/:id (P17)
+cd28587 fix(admin): wire migrate-all + per-tenant migrate to migrate-pg (P16)
+8df2b5b fix(admin): Worker Status panel reads correct API shape (P15)
+004cbe1 docs(phase5): log walkthrough findings — 4 P-tier + 9 M-tier
+```
+
+### Phase 5 status
+
+**CLOSED** — 2026-04-30. 4 P-tier fixed + verified live. 9 M-tier logged for polish bundle (deferred per user direction). Catch-up M-tier work to be scheduled separately.
+
+**Carryover from earlier phases (still deferred):**
+- 3.3 FBR worker (sandbox creds blocker)
+- 3.9 Shopify (sandbox creds)
+- 3.10 Courier (sandbox creds)
+- P14 Resend delivery confirmation (Hotmail silent-drop, Phase 4)
+- M22, M23, M24, M25 (Phase 3.13 polish)
+- M30–M38 (Phase 4 polish)
+- M39, M41, M42, M43, M45, M46, M47 (Phase 5 polish — M40 + M44 absorbed into P15 fix)
+
+**Next phase**: Phase 6 — Edge Cases (mobile Safari pass, slow network, browser back-button, etc.) per the canonical plan doc.
+
 
 
 **State on `livetest1` (production):**
