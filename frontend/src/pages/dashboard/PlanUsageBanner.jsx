@@ -31,14 +31,22 @@ export default function PlanUsageBanner() {
     }
   });
 
+  const [plan, setPlan] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
     async function fetchUsage() {
       try {
-        const data = await api.get("/api/billing/usage");
-        if (!cancelled) setUsage(data);
+        const [u, s] = await Promise.all([
+          api.get("/api/billing/usage"),
+          api.get("/api/billing/status").catch(() => null),
+        ]);
+        if (!cancelled) {
+          setUsage(u);
+          if (s?.plan) setPlan(s.plan);
+        }
       } catch {
-        // Endpoint not available (e.g. Pro tenant without billing perm) — hide silently.
+        // Endpoint not available (e.g. tenant without billing perm) — hide silently.
       }
     }
     fetchUsage();
@@ -51,8 +59,15 @@ export default function PlanUsageBanner() {
 
   if (dismissed || !usage) return null;
 
+  // Pro tenants buy additional outlets via /billing/add-outlet — don't surface
+  // the outlet dimension here as a "Upgrade to Pro" upsell. employees/products
+  // already have limit=null on Pro and are filtered by the line below.
+  const dimensions = plan === "pro"
+    ? [["employees", "employees"], ["products", "products"]]
+    : [["employees", "employees"], ["products", "products"], ["outlets", "outlets"]];
+
   const overLimit = [];
-  for (const [key, label] of [["employees", "employees"], ["products", "products"], ["outlets", "outlets"]]) {
+  for (const [key, label] of dimensions) {
     const dim = usage[key];
     if (!dim || dim.limit == null) continue;
     if (dim.limit > 0 && dim.used / dim.limit >= WARN_THRESHOLD) {
