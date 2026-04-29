@@ -142,6 +142,7 @@ module.exports = function registerTenantRoutes(app, deps) {
       const { rows } = await db.query(
         `SELECT id, slug, name, owner_email, status, plan, timezone,
                 max_employees, max_outlets, max_products,
+                billing_cycle, plan_expires_at, grace_ends_at, payment_status,
                 stripe_customer_id, stripe_subscription_id, trial_ends_at,
                 created_at, updated_at, suspended_at, deleted_at
          FROM tenants WHERE id = $1`,
