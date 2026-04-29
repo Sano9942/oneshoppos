@@ -2506,7 +2506,17 @@ Applied the fix during this session (Option A): single bundled commit, ~65 lines
 
 **Regression sweep**: 60-test `pg-batch4-reports.test.js` suite still passes after fix. 470/471 unit tests pass (the 1 failure is unrelated — payment-gateway env var test, predates this session). Three legacy SQLite test files fail with `Cannot find module '../helpers/createTestApp'` but those are pre-existing infrastructure issues from the Phase 5 SQLite cleanup, not caused by this fix.
 
-**Live verification on production**: PENDING. Will verify on api.sanopos.com after Railway redeploy. Expected post-deploy outcome: livetest1's `/api/reports/sales-summary` returns daily_sales buckets matching PKT dates (Apr 28: 200, Apr 29: 400, Apr 30: 100) rather than the pre-fix buckets (Apr 27: 600, Apr 28: 100).
+**Live verification on production**: ✅ VERIFIED 2026-04-30 22:12 UTC (on first poll after `4f784f9` pushed at 22:11). Production `/api/reports/sales-summary` now returns:
+
+```json
+[
+  { "date": "2026-04-28", "total": 200, "orders": 1 },  // INV-1
+  { "date": "2026-04-29", "total": 400, "orders": 3 },  // INV-2, 3, 4
+  { "date": "2026-04-30", "total": 100, "orders": 1 }   // INV-25
+]
+```
+
+Exact match to expected PKT dates. Fix is live + working.
 
 
 
