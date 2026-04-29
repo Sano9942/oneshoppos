@@ -50,7 +50,9 @@ export function DiscountLeakageTab({ filters }) {
     try {
       const res = await api.raw(`/api/reports/discount-leakage?${buildParams(filters)}`);
       const data = await res.json();
-      if (res.status === 503) {
+      // M29: requireFeature now returns 403 (was 503). Accept either for
+      // back-compat across deploy windows.
+      if (res.status === 403 || res.status === 503) {
         setUnavailable(data?.error || "Feature unavailable");
         setRows([]);
         setTotals(null);
@@ -175,7 +177,8 @@ export function ExceptionsTab({ filters }) {
       params.set("type", type);
       const res = await api.raw(`/api/reports/exceptions?${params}`);
       const data = await res.json();
-      if (res.status === 503) {
+      // M29: requireFeature now returns 403 (was 503). Accept either.
+      if (res.status === 403 || res.status === 503) {
         setUnavailable(data?.error || "Feature unavailable");
         setRows([]);
         return;

@@ -140,12 +140,14 @@ export default function ReceiptPublicPage() {
   }
 
   const { store, sale, items, payments, fbr, template } = data;
+  const tax_breakdown = data.tax_breakdown || [];
   const sym = sale.currency_symbol || "";
   // Template overrides — null-safe across tenants that haven't run v76 yet.
   const headerLogo = template?.logo_url || store.logo || null;
   const footerText = template?.footer_text || null;
   const showFbr = template?.show_fbr !== false;
   const showQr = template?.show_qr !== false;
+  const showTaxBreakdown = template?.show_tax_breakdown !== false;
 
   return (
     <>
@@ -234,6 +236,31 @@ export default function ReceiptPublicPage() {
               <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
                 <span className="text-sm text-gray-500">Discount</span>
                 <span className="text-sm font-medium text-red-600">-{fmtMoney(sale.discount_amount, sym)}</span>
+              </div>
+            )}
+
+            {/* P8 (3.14): Subtotal + per-rate tax breakdown.
+                Inclusive: "Tax included in total" hint above the rate rows.
+                Exclusive: shows Subtotal first, then each rate as +Rs X. */}
+            {showTaxBreakdown && tax_breakdown.length > 0 && (
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                {sale.tax_inclusive === false && sale.subtotal != null && (
+                  <div className="flex items-center justify-between py-0.5">
+                    <span className="text-sm text-gray-500">Subtotal</span>
+                    <span className="text-sm font-medium text-gray-700">{fmtMoney(sale.subtotal, sym)}</span>
+                  </div>
+                )}
+                {sale.tax_inclusive ? (
+                  <p className="mb-1 text-xs text-gray-400">Tax included in total</p>
+                ) : null}
+                {tax_breakdown.map((b) => (
+                  <div key={b.rate} className="flex items-center justify-between py-0.5">
+                    <span className="text-sm text-gray-500">GST {Number(b.rate).toFixed(0)}%</span>
+                    <span className="text-sm font-medium text-gray-700">
+                      {sale.tax_inclusive ? "" : "+"}{fmtMoney(b.amount, sym)}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
 

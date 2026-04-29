@@ -371,24 +371,24 @@ describe("requireFeature", () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  it("returns 503 when flag is disabled by default (phase2_outlet_pricing = false)", async () => {
+  it("returns 403 when flag is disabled by default (phase2_outlet_pricing = false)", async () => {
     const req = { tenantId: null };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
     await requireFeature("phase2_outlet_pricing")(req, res, next);
-    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ flag: "phase2_outlet_pricing" })
     );
     expect(next).not.toHaveBeenCalled();
   });
 
-  it("returns 503 for a completely unknown flag key (not in DEFAULT_FEATURE_FLAGS)", async () => {
+  it("returns 403 for a completely unknown flag key (not in DEFAULT_FEATURE_FLAGS)", async () => {
     const req = { tenantId: null };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
     await requireFeature("nonexistent_flag")(req, res, next);
-    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });
 

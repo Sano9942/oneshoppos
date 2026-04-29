@@ -239,8 +239,8 @@ export default function CustomersRedesign() {
       setWalletLedger([]);
     }
     // Clinical presets: fetch subjects + treatment plans in parallel.
-    // Endpoints are mode/flag-gated on the backend — a 503 means the clinical
-    // feature isn't enabled, so swallow and leave the arrays empty.
+    // Endpoints are mode/flag-gated on the backend — a 403 (M29) means the
+    // clinical feature isn't enabled, so swallow and leave the arrays empty.
     if (isClinicalPreset(industry_type)) {
       try {
         const [subjectsRes, plansRes] = await Promise.all([
@@ -261,7 +261,7 @@ export default function CustomersRedesign() {
       const res = await api.get(`/api/patient-subjects`, { customer_id: customerId });
       setClinicalSubjects(res.subjects || []);
     } catch {
-      // Endpoint 503 (mode off) or transient error — leave prior list intact.
+      // Endpoint 403 (mode off, M29) or transient error — leave prior list intact.
     }
   };
 

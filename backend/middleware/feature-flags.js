@@ -166,7 +166,11 @@ function requireFeature(flagKey) {
     try {
       const flags = await getFeatureFlagsMap(req.tenantId);
       if (!flags[flagKey]) {
-        return res.status(503).json({
+        // M29 (Phase 3.14): "feature off" is a permission-style refusal,
+        // not a service-availability error. 503 was wrong because it
+        // implies "try again later" and triggers Sentry alerts on the
+        // POS modifier-tree probe. 403 matches "you cannot use this".
+        return res.status(403).json({
           error: `Feature disabled: ${flagKey}`,
           flag: flagKey,
         });
@@ -224,7 +228,9 @@ function requireMode(modeName) {
       // to let feature flags be the sole gate (backward compat)
       if (Object.keys(modes).length === 0) return next();
       if (!modes[modeName]) {
-        return res.status(503).json({
+        // M29 (Phase 3.14): align with requireFeature — "mode off" is a
+        // permission-style refusal, not a service-availability error.
+        return res.status(403).json({
           error: `Mode not enabled: ${modeName}`,
           mode: modeName,
         });

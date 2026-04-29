@@ -42,6 +42,9 @@ function buildVariantRows(attributeSet, basePrice, baseCost) {
 const BLANK_FORM = {
   name: "", description: "", image_url: "",
   price: "", cost_price: "", compare_at_price: "", gst: "",
+  // P8 (3.14): tax_id picker — picking a rule auto-fills gst AND stamps
+  // tax_id. Editing gst clears tax_id (user has gone off-rule).
+  tax_id: "",
   stock: "",
   category_id: "", brand_id: "", product_type: "", vendor: "", tags: "",
   barcode: "", sku: "", unit: "pcs",
@@ -60,7 +63,10 @@ export default function ProductFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const { authHeaders } = useAuth();
+  const { authHeaders, company } = useAuth();
+  // P8 (3.14): hide the tax-rule picker for unregistered tenants
+  // (tax_mode='none' — they cannot legally charge GST).
+  const taxMode = company?.tax_mode || "none";
   const { flags } = useFeatureFlags(authHeaders);
   const preset = usePreset();
   const unitOptions = preset.unit_vocabulary || DEFAULT_UNIT_VOCABULARY;
@@ -70,6 +76,7 @@ export default function ProductFormPage() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [taxes, setTaxes] = useState([]);
   const [attributeSets, setAttributeSets] = useState([]);
   const [outletStock, setOutletStock] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +160,7 @@ export default function ProductFormPage() {
         cost_price: form.cost_price !== "" ? Number(form.cost_price) : 0,
         compare_at_price: form.compare_at_price !== "" ? Number(form.compare_at_price) : 0,
         gst: form.gst !== "" ? Number(form.gst) : null,
+        tax_id: form.tax_id ? Number(form.tax_id) : null,
         stock: form.stock !== "" ? Number(form.stock) : 0,
         category_id: form.category_id || null,
         brand_id: form.brand_id || null,
@@ -244,6 +252,7 @@ export default function ProductFormPage() {
       api.get("/api/brands"),
       api.get("/api/attribute-sets"),
       api.get("/api/suppliers"),
+      api.get("/api/taxes"),
     ];
     const all = isEdit
       ? [...base,
@@ -254,11 +263,12 @@ export default function ProductFormPage() {
         ]
       : base;
 
-    Promise.all(all).then(([catD, brandD, attrD, suppD, ...editParts]) => {
+    Promise.all(all).then(([catD, brandD, attrD, suppD, taxD, ...editParts]) => {
       setCategories(sortCategories(catD.categories || []));
       setBrands(brandD.brands || []);
       setAttributeSets(attrD.attributeSets || []);
       setSuppliers(suppD.suppliers || []);
+      setTaxes(taxD?.taxes || []);
       if (isEdit) {
         const [prodD, varD, stockD, reviewsD] = editParts;
         if (Array.isArray(reviewsD)) setReviews(reviewsD);
@@ -272,6 +282,7 @@ export default function ProductFormPage() {
             cost_price: p.cost_price ?? "",
             compare_at_price: p.compare_at_price ?? "",
             gst: p.gst ?? "",
+            tax_id: p.tax_id ?? "",
             stock: p.total_stock ?? "",
             category_id: p.category_id || "",
             brand_id: p.brand_id || "",
@@ -416,7 +427,43 @@ export default function ProductFormPage() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-(--ui-text-muted)">GST %</label>
-                  <Input type="number" min="0" step="0.01" value={form.gst} onChange={(e) => upd("gst", e.target.value)} placeholder="0" />
+                  {/* P8 (3.14): tax-rule picker. Hidden for unregistered
+                      tenants (tax_mode='none'). Picking a rule auto-fills
+                      gst AND stamps tax_id. Editing gst clears tax_id. */}
+                  {taxMode !== "none" && taxes.length > 0 && (
+                    <select
+                      value={form.tax_id || ""}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const tax = taxes.find((t) => String(t.id) === id);
+                        setForm((p) => ({
+                          ...p,
+                          tax_id: id || "",
+                          gst: tax ? tax.rate : p.gst,
+                        }));
+                      }}
+                      className="rounded-md border border-(--ui-border) bg-(--ui-surface) px-2 py-1.5 text-sm text-(--ui-text)"
+                    >
+                      <option value="">— Pick a tax rule —</option>
+                      {taxes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.rate}%)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.gst}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Editing the rate manually means "off-rule" — drop tax_id.
+                      setForm((p) => ({ ...p, gst: v, tax_id: "" }));
+                    }}
+                    placeholder="0"
+                  />
                 </div>
               </div>
             </div>

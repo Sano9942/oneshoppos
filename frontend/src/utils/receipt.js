@@ -85,6 +85,11 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
 
     // Adjustments
     taxAmount: Number(slip.taxAmount || 0),
+    // P8 (3.14): per-rate tax breakdown — each entry { rate, amount }, sorted
+    // descending. Empty when no line carries a positive rate. Falls back to
+    // the legacy single-line `taxAmount` when this is empty.
+    taxBreakdown: Array.isArray(slip.tax_breakdown) ? slip.tax_breakdown : [],
+    taxInclusive: !!slip.taxInclusive,
     exchangeCredit: Number(slip.exchangeCredit || 0),
     discountAmount: Number(slip.discountAmount || 0),
     discountType: slip.discountType || "fixed",
@@ -248,8 +253,20 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   // Totals block
   b.appendChild(row("Subtotal", fmt(s.subtotal)));
 
-  if (s.showTaxBreakdown && s.taxAmount > 0)
-    b.appendChild(row("GST (incl.)", fmt(s.taxAmount)));
+  // P8 (3.14): per-rate tax breakdown when available; legacy single line
+  // otherwise. Inclusive shows "GST 17% Rs 14.53"; exclusive shows
+  // "GST 17% +Rs 17.00" so the cashier can tell the tax sits on top.
+  if (s.showTaxBreakdown && s.taxBreakdown && s.taxBreakdown.length > 0) {
+    const prefix = s.taxInclusive ? "" : "+";
+    for (const b1 of s.taxBreakdown) {
+      const rateLabel = `GST ${Number(b1.rate).toFixed(0)}%`;
+      b.appendChild(row(rateLabel, `${prefix}${fmt(b1.amount)}`));
+    }
+  } else if (s.showTaxBreakdown && s.taxAmount > 0) {
+    const prefix = s.taxInclusive ? "" : "+";
+    const label = s.taxInclusive ? "GST (incl.)" : "GST";
+    b.appendChild(row(label, `${prefix}${fmt(s.taxAmount)}`));
+  }
 
   if (s.exchangeCredit > 0) {
     b.appendChild(row("Return Credit", `- ${fmt(s.exchangeCredit)}`, "ret"));

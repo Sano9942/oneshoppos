@@ -1,8 +1,9 @@
 /**
  * feature-flags.test.js — Integration tests for feature flag middleware
  *
- * Tests that requireFeature() returns 503 when a flag is disabled,
- * and that toggling flags changes behavior dynamically.
+ * Tests that requireFeature() returns 403 when a flag is disabled
+ * (was 503 — changed in M29 / Phase 3.14), and that toggling flags
+ * changes behavior dynamically.
  */
 
 const { createTestApp, closeDb, dbRun, dbGet } = require("../helpers/createTestApp");
@@ -28,26 +29,26 @@ describe("Feature Flags — requireFeature middleware", () => {
 
     const res = await makeRequest(app, ADMIN_ID).get("/api/supplier-invoices");
     // Should not be 503
-    expect(res.status).not.toBe(503);
+    expect(res.status).not.toBe(403);
   });
 
-  it("supplier invoices endpoint returns 503 when supplier_payables flag is disabled", async () => {
+  it("supplier invoices endpoint returns 403 when supplier_payables flag is disabled", async () => {
     // Disable the flag
     await dbRun(db, "UPDATE feature_flags SET enabled = 0 WHERE key = 'supplier_payables'");
 
     const res = await makeRequest(app, ADMIN_ID).get("/api/supplier-invoices");
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/feature disabled/i);
 
     // Re-enable for other tests
     await dbRun(db, "UPDATE feature_flags SET enabled = 1 WHERE key = 'supplier_payables'");
   });
 
-  it("notifications endpoint returns 503 when notifications flag is disabled", async () => {
+  it("notifications endpoint returns 403 when notifications flag is disabled", async () => {
     await dbRun(db, "UPDATE feature_flags SET enabled = 0 WHERE key = 'notifications'");
 
     const res = await makeRequest(app, ADMIN_ID).get("/api/notifications");
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(403);
     expect(res.body.flag).toBe("notifications");
 
     // Re-enable

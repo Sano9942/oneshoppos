@@ -170,6 +170,25 @@ export function useCheckout({
     );
   }, [paymentAmount, paymentMethod, remaining]);
 
+  // P8 (3.14): per-rate tax breakdown derived from cart effectiveTaxRate.
+  // Inclusive: backs out tax inside sticker price. Exclusive: tax on top.
+  // Empty array when no line carries a positive rate.
+  const buildTaxBreakdown = useCallback(() => {
+    const map = new Map();
+    for (const i of cart) {
+      const rate = Number(i.effectiveTaxRate || 0);
+      if (rate <= 0) continue;
+      const lineGross = Number(i.price || 0) * Number(i.quantity || 0);
+      const amount = taxInclusive
+        ? lineGross - lineGross / (1 + rate / 100)
+        : lineGross * rate / 100;
+      map.set(rate, (map.get(rate) || 0) + amount);
+    }
+    return Array.from(map.entries())
+      .map(([rate, amount]) => ({ rate, amount: Math.round(amount * 100) / 100 }))
+      .sort((a, b) => b.rate - a.rate);
+  }, [cart, taxInclusive]);
+
   const buildSuccessSlip = useCallback((data, custObj, opts = {}) => ({
     saleId: data.saleId,
     invoiceNumber: data.invoiceNumber || "-",
@@ -183,14 +202,19 @@ export function useCheckout({
     discountAmount: discountValue,
     discountInput: opts.discountInput ?? Number(discountInput || 0),
     discountType: opts.discountType ?? discountType,
-    taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
+    // P8 (3.14): keep taxAmount as a single-line fallback (older render
+    // paths still read it); also pass tax_breakdown for the new per-rate
+    // rendering. Exclusive sales include tax on top so the legacy
+    // "GST (incl.)" line is replaced by the per-rate block.
+    taxAmount: taxTotal > 0 ? taxTotal : 0,
     taxInclusive,
+    tax_breakdown: buildTaxBreakdown(),
     orderNote: opts.orderNote ?? (orderNote || null),
     timestamp: new Date().toLocaleString(),
     // Phase 2-G Wave 2 (2-G.2) — codes issued on this sale (empty
     // array for any sale that didn't include a gift-card SKU).
     issuedGiftCards: Array.isArray(data?.issuedGiftCards) ? data.issuedGiftCards : [],
-  }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote]);
+  }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote, buildTaxBreakdown]);
 
   const clearAfterSale = useCallback(() => {
     setCart([]);
@@ -294,8 +318,9 @@ export function useCheckout({
           discountAmount: discountValue,
           discountInput: Number(discountInput || 0),
           discountType,
-          taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
+          taxAmount: taxTotal > 0 ? taxTotal : 0,
           taxInclusive,
+          tax_breakdown: buildTaxBreakdown(),
           orderNote: orderNote || null,
           timestamp: new Date().toLocaleString(),
           offline: true,

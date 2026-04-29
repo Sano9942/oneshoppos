@@ -25,7 +25,7 @@ describe("requireMode middleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("returns 503 when mode is not in the table", async () => {
+  it("returns 403 when mode is not in the table", async () => {
     mockDb.query.mockResolvedValueOnce({
       rows: [{ mode: "appointments", enabled: true }],
     });
@@ -36,7 +36,7 @@ describe("requireMode middleware", () => {
 
     await featureFlags.requireMode("restaurant")(req, res, next);
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "restaurant" })
     );
