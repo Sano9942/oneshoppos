@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api } from "../../../../api";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "../cartMath.js";
 
-export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice, posDeviceId }) {
+export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice, posDeviceId, taxMode }) {
   // ── Product search ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
@@ -15,7 +15,20 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
 
   // ── Cart ──────────────────────────────────────────────────────────────────
   const [cart, setCart] = useState([]);
-  const [taxInclusive, setTaxInclusive] = useState(false);
+  // P8 (3.14): default the inclusive toggle from the tenant's tax_mode.
+  // Cashier can flip per-cart for B2B overrides; resets to default after each
+  // sale. taxMode='none' (unregistered) → toggle never matters and is hidden.
+  const [taxInclusive, setTaxInclusive] = useState(taxMode === "inclusive");
+
+  // Re-sync the default when the tenant's tax_mode finishes loading from
+  // /api/auth/me (boot-async). Only re-sync if cart is empty so we don't
+  // surprise a cashier mid-sale.
+  useEffect(() => {
+    if (cart.length === 0) {
+      setTaxInclusive(taxMode === "inclusive");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taxMode]);
 
   // ── Order-level discount / note ───────────────────────────────────────────
   const [discountType, setDiscountType] = useState("percent");

@@ -26,18 +26,27 @@ export function calcDiscountValue(grossTotal, discountType, discountInput) {
 }
 
 /**
- * Tax amount extracted from item prices (inclusive tax only).
- * Returns 0 when taxInclusive is false (tax-exclusive mode adds tax in total).
+ * Tax amount for the cart, computed regardless of mode.
+ *   - inclusive: backs tax out of the sticker price.
+ *   - exclusive: tax sits on top of the price.
+ * Each line uses its own `effectiveTaxRate` so mixed-rate carts work
+ * (P8 / 3.14 fix — pre-fix this returned 0 in exclusive mode, silently
+ * dropping tax from the cart UI).
  * @param {Array<{price: number, quantity: number, effectiveTaxRate: number}>} cart
  * @param {boolean} taxInclusive
  * @returns {number}
  */
 export function calcTaxTotal(cart, taxInclusive) {
-  if (!taxInclusive) return 0;
   return cart.reduce((s, i) => {
     const rate = i.effectiveTaxRate || 0;
+    if (rate === 0) return s;
     const itemTotal = i.price * i.quantity;
-    return s + (itemTotal - itemTotal / (1 + rate / 100));
+    if (taxInclusive) {
+      // back out tax already in price
+      return s + (itemTotal - itemTotal / (1 + rate / 100));
+    }
+    // exclusive: tax sits on top
+    return s + (itemTotal * rate / 100);
   }, 0);
 }
 

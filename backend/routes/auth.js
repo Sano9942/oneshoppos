@@ -1081,6 +1081,23 @@ module.exports = function registerAuthRoutes(app, deps) {
         [employee.role_id || 3]
       );
 
+      // P8 (v83) — surface the tenant's tax_mode so the POS can default the
+      // tax-inclusive toggle and hide it when the merchant is unregistered.
+      // Loaded from req.company when loadCompanyProfile populated it; falls
+      // back to a direct read so /api/auth/me works even before the cache
+      // warms (cold-start path).
+      let taxMode = req.company?.tax_mode || null;
+      if (taxMode == null) {
+        try {
+          const { rows: [cp] } = await db.query(
+            "SELECT tax_mode FROM company_profile WHERE id = 1"
+          );
+          taxMode = cp?.tax_mode || "none";
+        } catch {
+          taxMode = "none";
+        }
+      }
+
       return res.json({
         employee: {
           id: employee.id,
@@ -1091,6 +1108,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           home_page: employee.home_page || null,
         },
         permissions: (rows || []).map((r) => r.permission),
+        company: {
+          tax_mode: taxMode,
+        },
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

@@ -246,6 +246,24 @@ export function AuthProvider({ children }) {
           existing.employee.role_id,
           existing.employee.id,
         );
+
+        // P8 (3.14) — also surface company.tax_mode so POS toggle defaults
+        // and visibility match the tenant's stance. Best-effort: a missing
+        // /api/auth/me must not break boot.
+        let companyFromMe = existing.company || null;
+        try {
+          const meHeaders = { "x-employee-id": String(existing.employee.id) };
+          if (IS_MULTI_TENANT && existing.token) {
+            meHeaders.Authorization = `Bearer ${existing.token}`;
+          }
+          const nf = window._nativeFetch || window.fetch;
+          const meRes = await nf(`${API}/api/auth/me`, { headers: meHeaders });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData.company) companyFromMe = meData.company;
+          }
+        } catch { /* non-critical */ }
+
         const refreshed = {
           employee: existing.employee,
           permissions: freshPerms,
@@ -254,6 +272,7 @@ export function AuthProvider({ children }) {
           ...(existing.token ? { token: existing.token } : {}),
           ...(existing.tenant_slug ? { tenant_slug: existing.tenant_slug } : {}),
           ...(existing.tenant ? { tenant: existing.tenant } : {}),
+          ...(companyFromMe ? { company: companyFromMe } : {}),
         };
         writeSession(refreshed);
         if (isMounted) setSession(refreshed);
@@ -418,6 +437,8 @@ export function AuthProvider({ children }) {
     };
   }, [employee?.id]); // token read live via readToken() — no dep needed
 
+  const company = session?.company || null;
+
   const value = useMemo(
     () => ({
       session,
@@ -438,6 +459,10 @@ export function AuthProvider({ children }) {
       subscriptionStatus,
       subscriptionDaysLeft,
       tenantPlan,
+      // P8 (3.14): exposes { tax_mode } loaded from /api/auth/me. POS uses
+      // it to default the inclusive toggle and hide it for unregistered
+      // tenants ('none').
+      company,
     }),
     [
       session,

@@ -31,8 +31,12 @@ export default function POSSubHeader() {
     posFlags,
     setHoldCreateOpen,
     setHoldPickupOpen,
+    taxMode,
   } = usePOS();
   const holdsOn = !!posFlags?.phase2g_holds;
+  // P8 (3.14): hide the inclusive/exclusive toggle for unregistered tenants
+  // — they cannot legally charge GST so the choice is meaningless.
+  const showTaxToggle = taxMode && taxMode !== "none";
 
   const [bulkScan, setBulkScan] = useState("increment");
   useEffect(() => { setBulkScan(readBulkScanMode()); }, []);
@@ -54,27 +58,29 @@ export default function POSSubHeader() {
             <Calendar size={12} />
             {new Date().toLocaleDateString("en-GB")}
           </span>
-          <button
-            onClick={() => setTaxInclusive((v) => !v)}
-            className={`sm:ml-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
-              taxInclusive
-                ? "bg-[#8066FF]/10 border-[#8066FF] text-[#8066FF]"
-                : "bg-white border-slate-200 text-slate-500"
-            }`}
-          >
-            <span
-              className={`w-7 h-3.5 rounded-full relative transition-colors ${
-                taxInclusive ? "bg-[#8066FF]" : "bg-slate-200"
+          {showTaxToggle && (
+            <button
+              onClick={() => setTaxInclusive((v) => !v)}
+              className={`sm:ml-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
+                taxInclusive
+                  ? "bg-[#8066FF]/10 border-[#8066FF] text-[#8066FF]"
+                  : "bg-white border-slate-200 text-slate-500"
               }`}
             >
               <span
-                className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow transition-all ${
-                  taxInclusive ? "left-3.5" : "left-0.5"
+                className={`w-7 h-3.5 rounded-full relative transition-colors ${
+                  taxInclusive ? "bg-[#8066FF]" : "bg-slate-200"
                 }`}
-              />
-            </span>
-            Tax Inclusive
-          </button>
+              >
+                <span
+                  className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow transition-all ${
+                    taxInclusive ? "left-3.5" : "left-0.5"
+                  }`}
+                />
+              </span>
+              Tax Inclusive
+            </button>
+          )}
           <button
             onClick={toggleBulkScan}
             title="When on, each barcode scan creates a new cart line instead of incrementing quantity"

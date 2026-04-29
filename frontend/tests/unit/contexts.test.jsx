@@ -52,9 +52,9 @@ describe("calcDiscountValue", () => {
 });
 
 describe("calcTaxTotal", () => {
-  it("returns 0 when taxInclusive is false", () => {
-    const cart = [{ price: 118, quantity: 1, effectiveTaxRate: 18 }];
-    expect(calcTaxTotal(cart, false)).toBe(0);
+  it("EXCLUSIVE mode: tax sits on top (P8 fix — was incorrectly 0 before)", () => {
+    const cart = [{ price: 100, quantity: 1, effectiveTaxRate: 18 }];
+    expect(calcTaxTotal(cart, false)).toBeCloseTo(18, 2);
   });
 
   it("extracts inclusive tax correctly (18% GST)", () => {
@@ -67,9 +67,10 @@ describe("calcTaxTotal", () => {
   it("returns 0 for items with zero tax rate", () => {
     const cart = [{ price: 100, quantity: 2, effectiveTaxRate: 0 }];
     expect(calcTaxTotal(cart, true)).toBe(0);
+    expect(calcTaxTotal(cart, false)).toBe(0);
   });
 
-  it("sums tax across multiple items", () => {
+  it("sums tax across multiple items (inclusive mode)", () => {
     const cart = [
       { price: 118, quantity: 1, effectiveTaxRate: 18 },
       { price: 110, quantity: 1, effectiveTaxRate: 10 },

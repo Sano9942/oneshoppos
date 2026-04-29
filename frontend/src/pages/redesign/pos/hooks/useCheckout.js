@@ -269,6 +269,10 @@ export function useCheckout({
       order_context: orderContext ?? null,
       table_session_id: tableSessionId ?? null,
       seat_count: seatCount || null,
+      // P8 (3.14): cart tax-inclusive toggle state. Backend resolves the
+      // effective mode against company_profile.tax_mode and snapshots
+      // per-line tax onto sale_items.
+      tax_inclusive: !!taxInclusive,
     };
 
     const queueSaleOffline = async () => {

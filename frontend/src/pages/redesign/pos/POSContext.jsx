@@ -78,7 +78,9 @@ export const usePOS = () => {
 
 export const POSProvider = ({ children }) => {
   const navigate = useNavigate();
-  const { employee, authHeaders, logout, hasPerm } = useAuth();
+  const { employee, authHeaders, logout, hasPerm, company } = useAuth();
+  // P8 (3.14): tenant-wide tax stance — drives toggle default + visibility.
+  const taxMode = company?.tax_mode || "none";
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
   const { labels: presetLabels } = usePreset();
 
@@ -258,6 +260,7 @@ export const POSProvider = ({ children }) => {
     posFlags,
     showNotice,
     posDeviceId,
+    taxMode,
   });
 
   // ── 2-G.15 Day 3 — cart resume checkpoint ───────────────────────────────
@@ -872,6 +875,9 @@ export const POSProvider = ({ children }) => {
     setCart: cartHook.setCart,
     taxInclusive: cartHook.taxInclusive,
     setTaxInclusive: cartHook.setTaxInclusive,
+    // P8 (3.14): expose tenant tax_mode so POSSubHeader can hide the toggle
+    // for unregistered tenants.
+    taxMode,
     discountType: cartHook.discountType,
     setDiscountType: cartHook.setDiscountType,
     discountInput: cartHook.discountInput,
