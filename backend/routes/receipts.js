@@ -34,6 +34,7 @@ module.exports = function mountReceiptRoutes(app, deps) {
         `SELECT s.id, s.invoice_number, s.timestamp, s.total_amount, s.discount_amount,
                 s.customer_id, s.employee_id, s.outlet_id,
                 s.fbr_irn, s.fbr_qr_code, s.fbr_status,
+                s.subtotal, s.tax_total, s.tax_inclusive,
                 e.name AS employee_name,
                 c.name AS customer_name,
                 o.name AS outlet_name,
@@ -59,10 +60,11 @@ module.exports = function mountReceiptRoutes(app, deps) {
         return res.status(404).json({ error: "Receipt not found" });
       }
 
-      // Fetch sale items with product info
+      // Fetch sale items with product info + per-line tax snapshot (v83)
       const { rows: items } = await db.query(
         `SELECT si.quantity, si.price_at_sale,
                 (si.quantity * si.price_at_sale) AS total,
+                si.tax_rate_at_sale, si.tax_amount_at_sale, si.was_backfilled,
                 p.name, p.sku
          FROM sale_items si
          LEFT JOIN products p ON si.product_id = p.id
@@ -70,6 +72,24 @@ module.exports = function mountReceiptRoutes(app, deps) {
          ORDER BY si.id ASC`,
         [sale.id]
       );
+
+      // P8: per-rate tax breakdown for the public receipt page. Group by
+      // tax_rate_at_sale, sum tax_amount_at_sale, sort descending. Empty
+      // when the sale has no tax rows (tax_mode='none' or pre-snapshot rows
+      // that only have tax_rate=0).
+      const breakdownMap = new Map();
+      for (const it of items) {
+        const rate = Number(it.tax_rate_at_sale || 0);
+        if (rate <= 0) continue;
+        const amt = Number(it.tax_amount_at_sale || 0);
+        breakdownMap.set(rate, (breakdownMap.get(rate) || 0) + amt);
+      }
+      const tax_breakdown = Array.from(breakdownMap.entries())
+        .map(([rate, amount]) => ({
+          rate,
+          amount: Math.round(amount * 100) / 100,
+        }))
+        .sort((a, b) => b.rate - a.rate);
 
       // Fetch sale payments. Column is `payment_method` per schema-pg.sql;
       // we alias to `method` so the externally-visible JSON field name on the
@@ -97,6 +117,10 @@ module.exports = function mountReceiptRoutes(app, deps) {
           employee_name: sale.employee_name,
           customer_name: sale.customer_name,
           currency_symbol: sale.currency_symbol,
+          // P8 (v83): aggregate tax snapshot
+          subtotal: sale.subtotal,
+          tax_total: sale.tax_total,
+          tax_inclusive: sale.tax_inclusive,
         },
         items: items.map(i => ({
           name: i.name,
@@ -104,7 +128,10 @@ module.exports = function mountReceiptRoutes(app, deps) {
           quantity: i.quantity,
           price: i.price_at_sale,
           total: i.total,
+          tax_rate: i.tax_rate_at_sale,
+          tax_amount: i.tax_amount_at_sale,
         })),
+        tax_breakdown,
         payments: payments.map(p => ({
           method: p.method,
           amount: p.amount,

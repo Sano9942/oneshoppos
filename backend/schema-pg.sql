@@ -455,7 +455,13 @@ CREATE TABLE IF NOT EXISTS sales (
   idempotency_key TEXT,
   fbr_status TEXT DEFAULT 'not_applicable',
   fbr_irn TEXT,
-  fbr_qr_code TEXT
+  fbr_qr_code TEXT,
+  -- v83 (P8): per-sale tax aggregate snapshot. NULL on pre-v83 rows;
+  -- new sale writes always populate. tax_inclusive captures the cart
+  -- toggle state at sale time (B2B override).
+  subtotal NUMERIC(12,2),
+  tax_total NUMERIC(12,2),
+  tax_inclusive BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -472,7 +478,15 @@ CREATE TABLE IF NOT EXISTS sale_items (
   -- 2-R.8: seat_number carried from draft_order_items for dine-in checks.
   -- Retail sales leave this null. Indexed by (sale_id, seat_number) for
   -- per-seat aggregation in reports and receipts.
-  seat_number INTEGER
+  seat_number INTEGER,
+  -- v83 (P8): per-line tax snapshot. Frozen at sale-write so receipts,
+  -- reports, and FBR-Export never have to recompute against live
+  -- taxes/products. was_backfilled=true means the row is approximate
+  -- (filled by the v83 backfill UPDATE from current products.gst).
+  tax_rate_at_sale NUMERIC(8,4),
+  tax_amount_at_sale NUMERIC(12,2),
+  hs_code_at_sale TEXT,
+  was_backfilled BOOLEAN NOT NULL DEFAULT false
   -- 2-G.5 (migration v64): price_override_* columns added via ALTER TABLE
   -- at the end of this file (after override_reasons + approval_events are
   -- defined, since they're forward-referenced FKs).
@@ -980,7 +994,13 @@ CREATE TABLE IF NOT EXISTS company_profile (
   country_code TEXT DEFAULT 'PK',
   industry_preset_version INTEGER DEFAULT 1,
   -- Bucket F shift auto-close threshold (migration v76)
-  shift_auto_close_hours INTEGER DEFAULT 36
+  shift_auto_close_hours INTEGER DEFAULT 36,
+  -- v83 (P8): tenant tax stance.
+  --   'none'      = unregistered, no GST shown anywhere
+  --   'inclusive' = sticker prices already include GST
+  --   'exclusive' = GST added on top at checkout
+  tax_mode TEXT NOT NULL DEFAULT 'none'
+    CHECK (tax_mode IN ('none', 'inclusive', 'exclusive'))
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (

@@ -541,6 +541,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       // Phase 2.1 C1 wiring — server-of-record override from POS checkout
       // when there's no table session (direct dine-in / walk-in tip flow).
       server_id = null,
+      // P8 (3.14): cart tax-inclusive toggle. Falls back to the tenant's
+      // configured tax_mode below.
+      tax_inclusive: tax_inclusive_in,
     } = req.body;
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
@@ -984,6 +987,165 @@ module.exports = function registerSalesRoutes(app, deps) {
       } catch { /* ignore idempotency check errors */ }
     }
 
+    // P8 (3.14) — Per-line tax snapshot resolution (read-only, before tx).
+    // For each cart line, resolve the effective tax rate using the cascade:
+    //   1. outlet_tax_profiles match (when phase2_outlet_tax flag on)
+    //   2. products.tax_id → taxes.rate
+    //   3. products.gst (legacy direct rate)
+    //   4. category-tree inherited tax_id → taxes.rate
+    //   5. 0
+    // tax_mode='none' overrides everything to 0.
+    const taxMode = (req.company && req.company.tax_mode) || "none";
+    const taxInclusiveResolved =
+      taxMode === "none"
+        ? false
+        : typeof tax_inclusive_in === "boolean"
+          ? tax_inclusive_in
+          : taxMode === "inclusive";
+
+    const taxByIndex = new Array(cartItems.length).fill(null);
+    if (taxMode === "none") {
+      for (let i = 0; i < cartItems.length; i++) {
+        taxByIndex[i] = { rate: 0, amount: 0, hsCode: null };
+      }
+    } else {
+      // Pre-fetch product rows for all cart items once.
+      const productIdsForTax = Array.from(
+        new Set(cartItems.map((x) => Number(x.original_product_id || x.id)).filter(Boolean))
+      );
+      let productMap = new Map();
+      if (productIdsForTax.length) {
+        const { rows: pRows } = await db.query(
+          `SELECT p.id, p.gst, p.tax_id, p.category_id,
+                  t.rate AS tax_table_rate
+             FROM products p
+             LEFT JOIN taxes t ON t.id = p.tax_id
+            WHERE p.id = ANY($1::int[])`,
+          [productIdsForTax]
+        );
+        for (const r of pRows) productMap.set(Number(r.id), r);
+      }
+
+      // Outlet tax profile lookup — only if the flag is on AND the table exists.
+      // Build a small in-memory map keyed by (product_id, category_id) → rate.
+      let outletProfileLines = [];
+      try {
+        const flags = await getFeatureFlagsMap(req.tenantId);
+        if (flags.phase2_outlet_tax) {
+          const { rows } = await db.query(
+            `SELECT otpl.product_id, otpl.category_id, otpl.priority, t.rate
+               FROM outlet_tax_profiles otp
+               JOIN outlet_tax_profile_lines otpl ON otpl.profile_id = otp.id
+               LEFT JOIN taxes t ON t.id = otpl.tax_id
+              WHERE otp.outlet_id = $1 AND otp.is_active = TRUE`,
+            [Number(outlet_id)]
+          );
+          outletProfileLines = rows;
+        }
+      } catch { /* outlet_tax_profiles table may not exist on older tenants */ }
+
+      // Lazy-load category indexes for resolveInheritedField (only if needed).
+      let categoryByIdMap = null;
+      const ensureCategoryMap = async () => {
+        if (categoryByIdMap) return categoryByIdMap;
+        try {
+          const { fetchCategoryIndexes } = require("../category-tree");
+          const idx = await fetchCategoryIndexes(db);
+          categoryByIdMap = idx?.byId || new Map();
+        } catch {
+          categoryByIdMap = new Map();
+        }
+        return categoryByIdMap;
+      };
+
+      for (let i = 0; i < cartItems.length; i++) {
+        const item = cartItems[i];
+        const productId = Number(item.original_product_id || item.id) || null;
+        const product = productId ? productMap.get(productId) : null;
+        const categoryId = product?.category_id || null;
+
+        let rate = null;
+
+        // 1. Outlet tax profile (highest priority match wins)
+        if (outletProfileLines.length) {
+          const matches = outletProfileLines
+            .filter(
+              (l) =>
+                (l.product_id != null && Number(l.product_id) === productId) ||
+                (l.category_id != null && Number(l.category_id) === Number(categoryId)) ||
+                (l.product_id == null && l.category_id == null)
+            )
+            .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+          if (matches.length && matches[0].rate != null) {
+            rate = Number(matches[0].rate);
+          }
+        }
+
+        // 2. products.tax_id → taxes.rate
+        if (rate == null && product?.tax_table_rate != null) {
+          rate = Number(product.tax_table_rate);
+        }
+
+        // 3. products.gst direct
+        if (rate == null && product?.gst != null) {
+          rate = Number(product.gst);
+        }
+
+        // 4. Category inheritance via tax_id
+        if (rate == null && categoryId) {
+          const byId = await ensureCategoryMap();
+          const { resolveInheritedField } = require("../category-tree");
+          const inheritedTaxId = resolveInheritedField(byId, categoryId, "tax_id");
+          if (inheritedTaxId) {
+            try {
+              const { rows: [tr] } = await db.query(
+                "SELECT rate FROM taxes WHERE id = $1",
+                [Number(inheritedTaxId)]
+              );
+              if (tr) rate = Number(tr.rate);
+            } catch { /* ignore */ }
+          }
+        }
+
+        if (rate == null || !isFinite(rate)) rate = 0;
+
+        // HS code: product → category inheritance
+        let hsCode = null;
+        if (categoryId) {
+          const byId = await ensureCategoryMap();
+          const { resolveInheritedField } = require("../category-tree");
+          hsCode = resolveInheritedField(byId, categoryId, "hs_code") || null;
+        }
+
+        // Per-line amount
+        const lineGross = Number(item.price) * Number(item.quantity);
+        let amount = 0;
+        if (rate > 0) {
+          if (taxInclusiveResolved) {
+            amount = Math.round((lineGross * rate / (100 + rate)) * 100) / 100;
+          } else {
+            amount = Math.round((lineGross * rate / 100) * 100) / 100;
+          }
+        }
+        taxByIndex[i] = { rate, amount, hsCode };
+      }
+    }
+
+    // Aggregate tax totals for the sale row. Subtotal differs by mode:
+    //   inclusive: subtotal = sum(price*qty) - tax_total (tax was inside)
+    //   exclusive: subtotal = sum(price*qty) (tax sits on top)
+    const taxTotalSnapshot = taxByIndex.reduce(
+      (s, t) => s + Number(t?.amount || 0),
+      0
+    );
+    const grossSnapshot = cartItems.reduce(
+      (s, it) => s + Number(it.price) * Number(it.quantity),
+      0
+    );
+    const subtotalSnapshot = taxInclusiveResolved
+      ? grossSnapshot - taxTotalSnapshot
+      : grossSnapshot;
+
     // Start Transaction Logic
     try {
       const saleId = await db.transaction(async (client) => {
@@ -1120,7 +1282,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -1136,6 +1298,9 @@ module.exports = function registerSalesRoutes(app, deps) {
             idempotency_key || null,
             chargeToFolio ? chargeToFolio.id : null,
             chargeToTreatmentFolio ? chargeToTreatmentFolio.id : null,
+            subtotalSnapshot,
+            taxTotalSnapshot,
+            taxInclusiveResolved,
           ]
         );
         const newSaleId = saleRow.id;
@@ -1148,14 +1313,16 @@ module.exports = function registerSalesRoutes(app, deps) {
           // 2-G.5: price_override_* columns are NULL unless an override was
           // validated in the pre-transaction pass (overridesByIndex).
           const ov = overridesByIndex[cartIdx];
+          const taxLine = taxByIndex[cartIdx] || { rate: 0, amount: 0, hsCode: null };
           const { rows: [insertedLine] } = await client.query(
             `INSERT INTO sale_items
                (sale_id, product_id, variant_id, quantity, price_at_sale,
                 cost_price_at_sale, gross_weight, tare_weight, staff_id, seat_number,
                 price_override_amount, price_override_reason_id,
                 price_override_approved_by, price_override_approved_at,
-                price_override_approval_event_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                price_override_approval_event_id,
+                tax_rate_at_sale, tax_amount_at_sale, hs_code_at_sale)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
              RETURNING id`,
             [
               newSaleId,
@@ -1176,6 +1343,10 @@ module.exports = function registerSalesRoutes(app, deps) {
               ov ? ov.approvedBy : null,
               ov ? new Date() : null,
               ov ? ov.approvalEventId : null,
+              // P8 (v83): per-line tax snapshot
+              Number(taxLine.rate || 0),
+              Number(taxLine.amount || 0),
+              taxLine.hsCode || null,
             ]
           );
           const saleItemId = insertedLine.id;

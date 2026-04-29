@@ -5979,6 +5979,182 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 83,
+    description:
+      "P8 — tax_mode + per-line tax snapshot on sales/sale_items (3.14 mixed-rate fix)",
+    up: async (client) => {
+      // Phase 3.14 walkthrough on livetest1 proved that mixed-rate tax sales
+      // are broken end-to-end: cart UI computes tax at render time but
+      // nothing tax-related is persisted on the sale row. This migration
+      // adds:
+      //   1. company_profile.tax_mode  ('none' | 'inclusive' | 'exclusive')
+      //   2. sale_items.tax_rate_at_sale + tax_amount_at_sale + hs_code_at_sale
+      //      + was_backfilled (per-line snapshot at sale-write time)
+      //   3. sales.subtotal + tax_total + tax_inclusive (per-sale aggregate)
+      //   4. Auto-detect tax_mode for existing tenants from products.gst
+      //   5. Best-effort backfill of historical sale_items + sales aggregates
+      //
+      // Each step is in its own SAVEPOINT block so a single failure (e.g.
+      // missing parent table on the public schema) doesn't poison the whole
+      // migration transaction.
+
+      // Step 1 — company_profile.tax_mode
+      try {
+        await client.query("SAVEPOINT v83_company_profile");
+        const { rows: cpExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'company_profile'
+        `);
+        if (cpExists.length) {
+          await client.query(`
+            ALTER TABLE company_profile
+              ADD COLUMN IF NOT EXISTS tax_mode TEXT NOT NULL DEFAULT 'none'
+                CHECK (tax_mode IN ('none', 'inclusive', 'exclusive'))
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_company_profile");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_company_profile");
+        console.warn(`[migrate-pg v83] company_profile.tax_mode skipped: ${err.message}`);
+      }
+
+      // Step 2 — sale_items snapshot columns
+      try {
+        await client.query("SAVEPOINT v83_sale_items");
+        const { rows: siExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sale_items'
+        `);
+        if (siExists.length) {
+          await client.query(`
+            ALTER TABLE sale_items
+              ADD COLUMN IF NOT EXISTS tax_rate_at_sale  NUMERIC(8,4),
+              ADD COLUMN IF NOT EXISTS tax_amount_at_sale NUMERIC(12,2),
+              ADD COLUMN IF NOT EXISTS hs_code_at_sale    TEXT,
+              ADD COLUMN IF NOT EXISTS was_backfilled     BOOLEAN NOT NULL DEFAULT false
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_sale_items");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_sale_items");
+        console.warn(`[migrate-pg v83] sale_items snapshot columns skipped: ${err.message}`);
+      }
+
+      // Step 3 — sales aggregate columns
+      try {
+        await client.query("SAVEPOINT v83_sales");
+        const { rows: salesExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sales'
+        `);
+        if (salesExists.length) {
+          await client.query(`
+            ALTER TABLE sales
+              ADD COLUMN IF NOT EXISTS subtotal      NUMERIC(12,2),
+              ADD COLUMN IF NOT EXISTS tax_total     NUMERIC(12,2),
+              ADD COLUMN IF NOT EXISTS tax_inclusive BOOLEAN
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_sales");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_sales");
+        console.warn(`[migrate-pg v83] sales aggregate columns skipped: ${err.message}`);
+      }
+
+      // Step 4 — auto-detect tax_mode for existing tenants
+      try {
+        await client.query("SAVEPOINT v83_auto_detect");
+        const { rows: cpExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'company_profile'
+        `);
+        const { rows: pExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'products'
+        `);
+        if (cpExists.length && pExists.length) {
+          await client.query(`
+            UPDATE company_profile
+               SET tax_mode = 'inclusive'
+             WHERE id = 1
+               AND tax_mode = 'none'
+               AND EXISTS (SELECT 1 FROM products WHERE gst IS NOT NULL AND gst > 0)
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_auto_detect");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_auto_detect");
+        console.warn(`[migrate-pg v83] auto-detect tax_mode skipped: ${err.message}`);
+      }
+
+      // Step 5 — backfill sale_items snapshot (only NULL rows, idempotent)
+      try {
+        await client.query("SAVEPOINT v83_backfill_items");
+        const { rows: siExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sale_items'
+        `);
+        const { rows: pExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'products'
+        `);
+        if (siExists.length && pExists.length) {
+          await client.query(`
+            UPDATE sale_items si
+               SET tax_rate_at_sale  = COALESCE(p.gst, 0),
+                   tax_amount_at_sale = ROUND(
+                     (si.price_at_sale * si.quantity * COALESCE(p.gst, 0) / 100.0)::numeric,
+                     2
+                   ),
+                   hs_code_at_sale    = NULL,
+                   was_backfilled     = true
+              FROM products p
+             WHERE si.product_id = p.id
+               AND si.tax_rate_at_sale IS NULL
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_backfill_items");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_backfill_items");
+        console.warn(`[migrate-pg v83] sale_items backfill skipped: ${err.message}`);
+      }
+
+      // Step 6 — backfill sales aggregates (only NULL rows, idempotent)
+      try {
+        await client.query("SAVEPOINT v83_backfill_sales");
+        const { rows: salesExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sales'
+        `);
+        const { rows: siExists } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sale_items'
+        `);
+        if (salesExists.length && siExists.length) {
+          await client.query(`
+            UPDATE sales s
+               SET subtotal      = COALESCE(agg.subtotal, 0),
+                   tax_total     = COALESCE(agg.tax_total, 0),
+                   tax_inclusive = false
+              FROM (
+                SELECT sale_id,
+                       SUM(price_at_sale * quantity)        AS subtotal,
+                       SUM(COALESCE(tax_amount_at_sale, 0)) AS tax_total
+                  FROM sale_items
+                 GROUP BY sale_id
+              ) agg
+             WHERE s.id = agg.sale_id
+               AND (s.subtotal IS NULL OR s.tax_total IS NULL)
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v83_backfill_sales");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v83_backfill_sales");
+        console.warn(`[migrate-pg v83] sales aggregate backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

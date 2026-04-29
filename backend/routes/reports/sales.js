@@ -166,6 +166,7 @@ module.exports = function (app, deps, helpers) {
       const sql = `
       SELECT s.timestamp::date AS date,
              s.id, s.timestamp, s.total_amount AS revenue,
+             COALESCE(s.tax_total, 0) AS tax_total,
              COALESCE(o.name,'\u2014') AS outlet_name,
              string_agg(DISTINCT COALESCE(sp.payment_method, s.payment_method), ',') AS payment_methods
       FROM sales s
@@ -174,7 +175,7 @@ module.exports = function (app, deps, helpers) {
       LEFT JOIN outlets o ON s.outlet_id = o.id
       LEFT JOIN sale_payments sp ON s.id = sp.sale_id
       WHERE ${text}
-      GROUP BY s.id, o.name, s.timestamp, s.total_amount
+      GROUP BY s.id, o.name, s.timestamp, s.total_amount, s.tax_total
       ORDER BY s.timestamp DESC`;
       const { rows } = await db.query(sql, values);
 
@@ -208,6 +209,7 @@ module.exports = function (app, deps, helpers) {
         });
 
         total_revenue += Number(r.revenue);
+        total_tax += Number(r.tax_total || 0);
       });
 
       const payment_methods = Object.keys(payment_map)
@@ -217,11 +219,35 @@ module.exports = function (app, deps, helpers) {
         }))
         .sort((a, b) => b.total - a.total);
 
+      // P8 (v83) \u2014 per-rate tax breakdown sub-table.
+      let tax_by_rate = [];
+      try {
+        const ratesParams = [];
+        const ratesWhere = ["s.voided = false", "si.tax_rate_at_sale > 0"];
+        applySaleTimeFilters(ratesWhere, ratesParams, req.query, "s", tz);
+        const { text: ratesText, values: ratesValues } = pgWhere(ratesWhere, ratesParams);
+        const { rows: rateRows } = await db.query(
+          `SELECT si.tax_rate_at_sale AS rate,
+                  ROUND(SUM(si.tax_amount_at_sale)::numeric, 2) AS amount
+             FROM sale_items si
+             JOIN sales s ON s.id = si.sale_id
+            WHERE ${ratesText}
+            GROUP BY si.tax_rate_at_sale
+            ORDER BY si.tax_rate_at_sale DESC`,
+          ratesValues
+        );
+        tax_by_rate = rateRows.map((r) => ({
+          rate: Number(r.rate),
+          amount: Number(r.amount),
+        }));
+      } catch { /* sale_items.tax_rate_at_sale missing on pre-v83 deploys */ }
+
       res.json({
         daily_sales: daily_sales.reverse(),
         payment_methods,
         total_revenue,
-        total_tax, // Placeholder if tax calculation is needed per-row
+        total_tax,
+        tax_by_rate,
         sales: rows, // Keep raw rows for table if needed
       });
     } catch (err) {

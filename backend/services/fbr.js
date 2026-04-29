@@ -24,19 +24,32 @@ function buildInvoicePayload(sale, items, company, customer, categoryTree) {
     buyerRegistrationType: customer?.ntn_cnic ? "Registered" : "Unregistered",
     invoiceRefNo: sale.invoice_number,
     items: items.map((item) => {
-      const hsCode = byId
+      // P8 (v83): prefer per-line snapshot fields written at sale-write time.
+      // Fall back to live recompute paths only when the snapshot is unset
+      // (pre-v83 enqueues).
+      const snapshotHs = item.hs_code_at_sale || null;
+      const inheritedHs = byId
         ? resolveInheritedField(byId, item.category_id, "hs_code")
         : null;
-      const taxRate = Number(item.effective_tax_rate || item.tax_rate || 0);
+      const hsCode = snapshotHs || inheritedHs;
+      const taxRate = Number(
+        item.tax_rate_at_sale != null
+          ? item.tax_rate_at_sale
+          : item.effective_tax_rate || item.tax_rate || 0
+      );
       const valueExclTax =
         Number(item.price_at_sale || item.price) * Number(item.quantity);
+      const taxAmount =
+        item.tax_amount_at_sale != null
+          ? Number(item.tax_amount_at_sale)
+          : (valueExclTax * taxRate) / 100;
       return {
         hsCode: hsCode || company.fbr_default_hs_code || "",
         productDescription: item.product_name || item.name || "",
         quantity: Number(item.quantity),
         uoM: "Numbers, pieces, units",
         valueSalesExcludingST: valueExclTax,
-        salesTaxApplicable: (valueExclTax * taxRate) / 100,
+        salesTaxApplicable: taxAmount,
         furtherTax: 0,
         extraTax: 0,
         fedPayable: 0,
