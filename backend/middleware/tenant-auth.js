@@ -184,8 +184,15 @@ async function loadTenantAndPerms(req, res, next) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
     }
-    req.employeePerms = [];
-    next();
+    if (err.name === "JsonWebTokenError" || err.name === "NotBeforeError") {
+      return res.status(401).json({ error: "Invalid token", code: "INVALID_TOKEN" });
+    }
+    // Genuinely unexpected — log + return 401 (not silent fall-through). Falling through
+    // to next() with empty perms used to surface as a 500 "[tenant-db-proxy-pg] No tenant
+    // DB in async context" downstream because tenant context never got attached.
+    const log = req.log || console;
+    log.error && log.error({ err: err.message || String(err) }, "loadTenantAndPerms: unexpected auth error");
+    return res.status(401).json({ error: "Authentication failed", code: "AUTH_FAILED" });
   }
 }
 

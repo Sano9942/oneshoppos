@@ -565,3 +565,94 @@ describe("ALLOWED_IMAGE_MIMES", () => {
     expect(ALLOWED_IMAGE_MIMES.has("application/pdf")).toBe(false);
   });
 });
+
+// ── tenant-auth: loadTenantAndPerms JWT error handling (P21 regression) ────────
+//
+// Previously every non-TokenExpiredError in JWT verification fell through
+// to next() with empty perms. Downstream that surfaced as a 500
+// "[tenant-db-proxy-pg] No tenant DB in async context" because tenant
+// context was never attached. Pin the contract: every JWT error returns
+// a structured 401 — never a fall-through.
+
+describe("loadTenantAndPerms — JWT error handling", () => {
+  // Reload the module fresh so init() state from earlier suites is irrelevant.
+  // tenant-auth is CJS; require.cache eviction is the documented pattern.
+  function loadFreshAuth() {
+    const path = require.resolve("../../middleware/tenant-auth.js");
+    delete require.cache[path];
+    const mod = require("../../middleware/tenant-auth.js");
+    // init() is required for IS_MULTI_TENANT/dbProxy refs but the catch block
+    // we're testing fires before any of those are touched.
+    mod.init({
+      db: { query: async () => ({ rows: [] }) },
+      IS_MULTI_TENANT: false,
+      dbProxy: null,
+      tenantDbManager: null,
+      asyncStore: null,
+    });
+    return mod;
+  }
+
+  function mockReqRes(authHeader) {
+    const req = {
+      headers: { authorization: authHeader },
+      query: {},
+      path: "/api/sales",
+      log: { error: vi.fn() },
+    };
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    };
+    const next = vi.fn();
+    return { req, res, next };
+  }
+
+  it("returns 401 INVALID_TOKEN when JWT signature is invalid", async () => {
+    process.env.JWT_SECRET = "test-secret-for-unit";
+    const { loadTenantAndPerms } = loadFreshAuth();
+    // Real JWT header+payload, signature replaced with junk → JsonWebTokenError
+    const corruptToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0aWQiOjk1LCJlaWQiOjEsInJpZCI6MSwib2lkIjoxLCJzY29wZSI6ImZ1bGwiLCJqdGkiOiJ0ZXN0IiwiaWF0IjoxNzc3MDAwMDAwLCJleHAiOjk5OTk5OTk5OTl9.corrupted-signature-zzz";
+    const { req, res, next } = mockReqRes(`Bearer ${corruptToken}`);
+    await loadTenantAndPerms(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: "Invalid token", code: "INVALID_TOKEN" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 INVALID_TOKEN when JWT is malformed (not three parts)", async () => {
+    process.env.JWT_SECRET = "test-secret-for-unit";
+    const { loadTenantAndPerms } = loadFreshAuth();
+    const { req, res, next } = mockReqRes("Bearer not-a-jwt");
+    await loadTenantAndPerms(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: "Invalid token", code: "INVALID_TOKEN" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 TOKEN_EXPIRED when JWT is expired (regression: pre-existing behavior)", async () => {
+    process.env.JWT_SECRET = "test-secret-for-unit";
+    const jwt = require("jsonwebtoken");
+    const expired = jwt.sign(
+      { tid: 95, eid: 1, rid: 1, oid: 1, scope: "full", jti: "test" },
+      process.env.JWT_SECRET,
+      { expiresIn: "-1s" }
+    );
+    const { loadTenantAndPerms } = loadFreshAuth();
+    const { req, res, next } = mockReqRes(`Bearer ${expired}`);
+    await loadTenantAndPerms(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: "Token expired", code: "TOKEN_EXPIRED" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("calls next() with empty perms when no Authorization header is present", async () => {
+    process.env.JWT_SECRET = "test-secret-for-unit";
+    const { loadTenantAndPerms } = loadFreshAuth();
+    const { req, res, next } = mockReqRes(undefined);
+    await loadTenantAndPerms(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.employeePerms).toEqual([]);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});
