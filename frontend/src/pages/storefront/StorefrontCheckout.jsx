@@ -462,16 +462,16 @@ export default function StorefrontCheckout() {
                     <span>Subtotal</span>
                     <span>{currencySymbol} {Number(quote.subtotal || 0).toLocaleString()}</span>
                   </div>
-                  {Number(quote.tax || 0) > 0 && (
+                  {Number(quote.taxTotal || 0) > 0 && (
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>Tax</span>
-                      <span>{currencySymbol} {Number(quote.tax).toLocaleString()}</span>
+                      <span>{currencySymbol} {Number(quote.taxTotal).toLocaleString()}</span>
                     </div>
                   )}
-                  {Number(quote.shipping || 0) > 0 && (
+                  {Number(quote.shippingTotal || 0) > 0 && (
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>Shipping</span>
-                      <span>{currencySymbol} {Number(quote.shipping).toLocaleString()}</span>
+                      <span>{currencySymbol} {Number(quote.shippingTotal).toLocaleString()}</span>
                     </div>
                   )}
                   {deliveryMethod === "pickup" && (
@@ -482,7 +482,7 @@ export default function StorefrontCheckout() {
                   )}
                   <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-base font-bold text-gray-900">
                     <span>Total</span>
-                    <span>{currencySymbol} {Number(quote.total || 0).toLocaleString()}</span>
+                    <span>{currencySymbol} {Number(quote.grandTotal || 0).toLocaleString()}</span>
                   </div>
                 </>
               ) : (
