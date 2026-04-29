@@ -107,6 +107,11 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       fiscal_year_start,
       tax_name,
       tax_rate,
+      // P8 (3.14): tax stance from the wizard.
+      is_gst_registered,
+      tax_mode,
+      ntn,
+      strn,
       outlet_name,
       outlet_address,
       admin_name,
@@ -115,6 +120,12 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       industry_type: rawIndustryType,
       country_code: rawCountryCode,
     } = req.body || {};
+
+    // Validate tax_mode if provided. Accept legacy callers that omit it.
+    const validTaxModes = ["none", "inclusive", "exclusive"];
+    const safeTaxMode = is_gst_registered === false
+      ? "none"
+      : (tax_mode && validTaxModes.includes(tax_mode) ? tax_mode : "none");
 
     const industry_type = rawIndustryType || "general_retail";
     // Resolve country code: accept explicit code or derive from country name
@@ -193,7 +204,10 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
              currency_symbol  = $7,
              currency_code    = $8,
              fiscal_year_start = $9,
-             cash_denominations = COALESCE($10, cash_denominations)
+             cash_denominations = COALESCE($10, cash_denominations),
+             tax_mode         = $11,
+             ntn              = COALESCE($12, ntn),
+             strn             = COALESCE($13, strn)
            WHERE id = 1`,
           [
             company_name,
@@ -206,6 +220,11 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
             currency_code || 'USD',
             fiscal_year_start || '01-01',
             cash_denominations || null,
+            // P8 (3.14): persist tax stance. Wizard always sends a value;
+            // legacy callers default to 'none' via safeTaxMode above.
+            safeTaxMode,
+            ntn || null,
+            strn || null,
           ]
         );
 

@@ -84,7 +84,14 @@ module.exports = function createCompanyProfileRouter({
           abc_window_days,
           tenant_default_lead_time_days,
           tenant_default_safety_stock_days,
+          // P8 (3.14): tenant tax stance — null/undefined preserves the
+          // existing value (COALESCE) so partial PUTs don't blow it away.
+          tax_mode,
         } = req.body || {};
+
+        const validTaxModes = ["none", "inclusive", "exclusive"];
+        const safeTaxMode =
+          tax_mode != null && validTaxModes.includes(tax_mode) ? tax_mode : null;
 
         await db.query(
           `UPDATE company_profile
@@ -110,6 +117,7 @@ module.exports = function createCompanyProfileRouter({
              abc_window_days = COALESCE($20, abc_window_days),
              tenant_default_lead_time_days = COALESCE($21, tenant_default_lead_time_days),
              tenant_default_safety_stock_days = COALESCE($22, tenant_default_safety_stock_days),
+             tax_mode = COALESCE($23, tax_mode),
              updated_at = NOW()
          WHERE id = 1`,
           [
@@ -135,6 +143,7 @@ module.exports = function createCompanyProfileRouter({
             abc_window_days != null ? Number(abc_window_days) : null,
             tenant_default_lead_time_days != null ? Number(tenant_default_lead_time_days) : null,
             tenant_default_safety_stock_days != null ? Number(tenant_default_safety_stock_days) : null,
+            safeTaxMode,
           ]
         );
         // If industry_type changed, re-derive modes and flags

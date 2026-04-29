@@ -174,6 +174,13 @@ export default function SetupWizard() {
     currency_code: "PKR",
     // Pakistan fiscal year is July–June; pulled from country pack on mount.
     fiscal_year_start: "07-01",
+    // P8 (3.14): tax stance — "Are you a GST-registered business?"
+    // null = unanswered (forces an explicit choice). 'inclusive' default
+    // matches Pakistani retail convention when the merchant answers Yes.
+    is_gst_registered: null,
+    tax_mode: "none",
+    ntn: "",
+    strn: "",
     tax_name: "",
     tax_rate: "",
     denominations: [5000, 1000, 500, 100, 50, 20, 10],
@@ -275,6 +282,13 @@ export default function SetupWizard() {
     if (step === 2) {
       if (!form.company_name.trim()) return "Store name is required.";
     }
+    if (step === 3) {
+      // P8 (3.14): force an explicit Yes/No on GST registration so we never
+      // silently default to 'none' for a registered merchant.
+      if (form.is_gst_registered !== true && form.is_gst_registered !== false) {
+        return "Tell us whether you are GST-registered.";
+      }
+    }
     if (step === 5) {
       if (!form.admin_name.trim()) return "Admin name is required.";
       if (!form.admin_pin) return "PIN is required.";
@@ -322,6 +336,13 @@ export default function SetupWizard() {
           currency_symbol: form.currency_symbol,
           currency_code: form.currency_code,
           fiscal_year_start: form.fiscal_year_start,
+          // P8 (3.14): tax stance fields. Backend writes tax_mode/ntn/strn
+          // onto company_profile so the POS toggle defaults correctly post-
+          // signup and FBR enqueueing only fires for registered tenants.
+          is_gst_registered: form.is_gst_registered === true,
+          tax_mode: form.tax_mode || "none",
+          ntn: form.ntn,
+          strn: form.strn,
           tax_name: form.tax_name,
           tax_rate: form.tax_rate,
           cash_denominations: JSON.stringify(form.denominations),
@@ -561,21 +582,120 @@ export default function SetupWizard() {
                       ))}
                     </select>
                   </Field>
-                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Optional: Add a tax
+                  {/* P8 (3.14): GST registration sub-flow. Many Pakistani
+                      merchants are NOT registered and cannot legally charge
+                      GST — picking "No" sets tax_mode='none' so the POS
+                      hides the tax toggle and never enqueues to FBR. */}
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Tax & Compliance
                     </p>
-                    <p className="mb-2 text-xs text-slate-500">
-                      We&apos;ll seed a 0% &ldquo;Default Tax&rdquo; for you. Add a country-specific tax here (e.g. GST 17% for Pakistan) if it applies — or skip and add it later under Settings &rarr; Taxes.
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Tax Name">
-                        <input className={inputCls} value={form.tax_name} onChange={(e) => set("tax_name", e.target.value)} placeholder="e.g. GST" />
-                      </Field>
-                      <Field label="Rate (%)">
-                        <input className={inputCls} type="number" min="0" max="100" step="0.01" value={form.tax_rate} onChange={(e) => set("tax_rate", e.target.value)} placeholder="0" />
-                      </Field>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-slate-700">
+                        Are you a GST-registered business?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              is_gst_registered: false,
+                              tax_mode: "none",
+                              ntn: "",
+                              strn: "",
+                              tax_name: "",
+                              tax_rate: "",
+                            }))
+                          }
+                          className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                            form.is_gst_registered === false
+                              ? "border-blue-500 bg-blue-50 text-blue-700"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                        >
+                          No, not registered
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              is_gst_registered: true,
+                              tax_mode: p.tax_mode === "none" ? "inclusive" : p.tax_mode,
+                            }))
+                          }
+                          className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                            form.is_gst_registered === true
+                              ? "border-blue-500 bg-blue-50 text-blue-700"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                        >
+                          Yes, registered
+                        </button>
+                      </div>
+                      {form.is_gst_registered === false && (
+                        <p className="text-xs text-slate-500">
+                          You won&apos;t be charged tax at checkout, and FBR Digital Invoicing will be off. You can switch later under Settings.
+                        </p>
+                      )}
                     </div>
+
+                    {form.is_gst_registered === true && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="NTN (optional)">
+                            <input className={inputCls} value={form.ntn} onChange={(e) => set("ntn", e.target.value)} placeholder="e.g. 1234567" />
+                          </Field>
+                          <Field label="STRN (optional)">
+                            <input className={inputCls} value={form.strn} onChange={(e) => set("strn", e.target.value)} placeholder="e.g. 17-12-3456-789-12" />
+                          </Field>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-slate-700">How are your prices listed?</p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => set("tax_mode", "inclusive")}
+                              className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium transition ${
+                                form.tax_mode === "inclusive"
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              }`}
+                            >
+                              Inclusive (sticker price includes GST)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => set("tax_mode", "exclusive")}
+                              className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium transition ${
+                                form.tax_mode === "exclusive"
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              }`}
+                            >
+                              Exclusive (GST added at checkout)
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Default GST rate (optional)
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            e.g. GST 17% — you can add more rules later under Settings &rarr; Taxes.
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Tax Name">
+                              <input className={inputCls} value={form.tax_name} onChange={(e) => set("tax_name", e.target.value)} placeholder="e.g. GST" />
+                            </Field>
+                            <Field label="Rate (%)">
+                              <input className={inputCls} type="number" min="0" max="100" step="0.01" value={form.tax_rate} onChange={(e) => set("tax_rate", e.target.value)} placeholder="17" />
+                            </Field>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

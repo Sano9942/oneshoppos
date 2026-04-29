@@ -51,6 +51,9 @@ const DEFAULT_FORM = {
   abc_window_days: 90,
   tenant_default_lead_time_days: 7,
   tenant_default_safety_stock_days: 3,
+  // P8 (3.14): tenant tax stance — 'none' for unregistered, 'inclusive' or
+  // 'exclusive' for GST-registered. Drives the POS toggle visibility.
+  tax_mode: "none",
 };
 
 function FormField({ label, children }) {
@@ -93,7 +96,10 @@ export default function CompanySettingsRedesign() {
   const load = useCallback(async () => {
     try {
       const data = await api.get("/api/company-profile");
-      if (data.profile) setForm({ ...DEFAULT_FORM, ...data.profile });
+      if (data.profile) {
+        setForm({ ...DEFAULT_FORM, ...data.profile });
+        setPrevTaxMode(data.profile.tax_mode || "none");
+      }
     } catch { /* silent */ }
   }, []);
 
@@ -104,12 +110,23 @@ export default function CompanySettingsRedesign() {
     setTimeout(() => setMsg(null), 4000);
   };
 
+  // P8 (3.14): track previous tax_mode so the post-save banner can announce
+  // the flip from 'none' → 'inclusive'/'exclusive' (the merchant just turned
+  // tax on for the first time and almost certainly needs to set GST rates
+  // on existing products).
+  const [prevTaxMode, setPrevTaxMode] = useState("none");
+  const [showTaxFlipBanner, setShowTaxFlipBanner] = useState(false);
+
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
+      const wasNone = prevTaxMode === "none";
+      const isNowOn = form.tax_mode && form.tax_mode !== "none";
       await api.put("/api/company-profile", form);
       showMsg("success", "Company profile saved.");
+      if (wasNone && isNowOn) setShowTaxFlipBanner(true);
+      setPrevTaxMode(form.tax_mode || "none");
       load();
       refresh();
       // Re-fetch bootstrap to update preset context with new industry labels/modes
@@ -247,7 +264,86 @@ export default function CompanySettingsRedesign() {
 
         {/* Tax & Legal */}
         <SectionCard className="p-5">
-          <h2 className="mb-3 font-semibold text-(--ui-text)">Tax &amp; Legal</h2>
+          <h2 className="mb-3 font-semibold text-(--ui-text)">Tax &amp; Compliance</h2>
+
+          {/* P8 (3.14): post-flip banner — only shown after a save flips
+              tax_mode from 'none' → on. Deep-links to /inventory so the
+              merchant can set GST rates on existing products. */}
+          {showTaxFlipBanner && (
+            <div className="mb-4 flex items-start justify-between rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <div>
+                <p className="font-medium">Tax is now on for this store.</p>
+                <p className="mt-1 text-amber-700">
+                  Next: set GST rates on your products so the cart math is correct.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/inventory"
+                  className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Set Now
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowTaxFlipBanner(false)}
+                  className="text-amber-600 hover:text-amber-900"
+                  aria-label="Dismiss"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* P8: GST-registration toggle. 'none' hides the POS tax toggle and
+              keeps FBR off; 'inclusive'/'exclusive' surfaces tax everywhere. */}
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-(--ui-text)">
+              Are you a GST-registered business?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => upd("tax_mode", "none")}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                  form.tax_mode === "none"
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
+                }`}
+              >
+                Not registered
+              </button>
+              <button
+                type="button"
+                onClick={() => upd("tax_mode", "inclusive")}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                  form.tax_mode === "inclusive"
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
+                }`}
+              >
+                Inclusive (sticker price includes GST)
+              </button>
+              <button
+                type="button"
+                onClick={() => upd("tax_mode", "exclusive")}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                  form.tax_mode === "exclusive"
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
+                }`}
+              >
+                Exclusive (GST added at checkout)
+              </button>
+            </div>
+            {form.tax_mode === "none" && (
+              <p className="text-xs text-(--ui-text-muted)">
+                With tax off, the POS hides the tax toggle and FBR Digital Invoicing won&apos;t fire.
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="NTN (National Tax Number)">
               <Input
