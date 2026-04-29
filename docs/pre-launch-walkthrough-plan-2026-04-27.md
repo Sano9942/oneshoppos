@@ -444,12 +444,85 @@ These should match the audit findings — if any behaves differently, that's a N
 - [ ] Verify: error reaches Sentry with tenant + employee context tagged
 
 ### 6.11 Timezone correctness on receipts and reports
-- [ ] During Phase 1 wizard, set timezone to a non-UTC zone (e.g., `Asia/Karachi` UTC+5)
-- [ ] Make a sale at a known wall-clock time
-- [ ] Verify receipt timestamp shows local PK time, not UTC
-- [ ] Verify Sales History date column shows local date
-- [ ] Run Sales Summary report with date filter for "today" — verify date boundary respects PK midnight, not UTC midnight (especially relevant for sales between 19:00–23:59 PK)
-- [ ] Spot-check FBR payload (if enabled): `invoice_datetime` should be local + offset, not bare UTC
+- [x] During Phase 1 wizard, set timezone to a non-UTC zone (livetest1 already on `Asia/Karachi`)
+- [x] Make a sale at a known wall-clock time (multiple seeded sales)
+- [x] Verify receipt timestamp shows local PK time, not UTC (✅ INV-2026-00025 → "Apr 30, 2026, 01:23 AM")
+- [x] Verify Sales History date column shows local date (✅ #25 → "4/30/2026, 1:23:33 AM")
+- [x] Run Sales Summary report with date filter for "today" — 🔴 **P22 FOUND** (daily-bucket aggregation in 4 report modules) — fix shipped commit `4f784f9`
+- [skip] Spot-check FBR payload (FBR worker disabled, carryover from 3.3)
+
+---
+
+## Phase 6 closure ✅ CLOSED 2026-04-30
+
+Walked all 11 sub-flows on production while authenticated as Hassan (livetest1). Found 4 P-tier criticals + 1 found-and-fixed-in-session bug. Phase 6 = the deepest engineering surface tested so far (auth, isolation, payment lifecycle, error recovery, timezone correctness).
+
+### Findings logged (full detail in `docs/phase3-findings-WIP.md` Phase 6 section)
+
+**Critical (P-tier) — all FIXED + committed:**
+- 🔴 P19 — AppLayoutRedesign sidebar not mobile-responsive (commit `2c585eb`)
+- 🔴 P20 — Dashboard outlet upsell card visible to Pro plan (commit `f52d21a`)
+- 🔴 P21 — `loadTenantAndPerms` returned HTTP 500 with internal error string for any non-expiry JWT failure; should be 401 (commit `49e584a`)
+- 🔴 P22 — Daily-bucket report aggregation used `s.timestamp::date` against UTC session TZ + JS Date double-shift; for non-UTC tenants buckets were off by 1-2 days (commit `4f784f9`)
+
+**Medium (M-tier) — logged for polish bundle:**
+- M48 — absorbed into P19 (mobile sidebar)
+- M49 — iOS PWA meta tags need real-device QA (deferred)
+- M50–M54 — dark-mode polish bundle (5 items, ~50 lines across 7 files)
+- M55–M56 — offline-UX polish bundle (2 items, ~30 lines)
+- M57 — sandbox payment-success page doesn't auto-redirect for /billing/add-outlet flow (sandbox-only, polish)
+- M58 — 3 ghost feature flags in `DEFAULT_FEATURE_FLAGS` with zero runtime gates (`phase2g_label_designer`, `phase2g_receipt_barcode_lookup`, `phase5_payment_gateways`); retire or add gates
+- M59 — `frontend/CLAUDE.md` description of `api.js` 401 behavior says "auto-logout" but actual impl propagates errors; correct the docs
+- M60 — `frontend/src/CLAUDE.md` says global ErrorBoundary wrap is in `App.jsx` but it's actually in `main.jsx:53`
+- M61 — receipt + sales-history timestamps render in browser TZ via `toLocaleString()`, not tenant TZ; consider passing `timeZone: req.company.timezone` for cross-region admin viewing
+
+**Carryover (still deferred):** FBR worker (3.3 sandbox blocker), Shopify (3.9), Courier (3.10).
+
+### Sub-flow verdicts
+
+| Sub-flow | Verdict | New finding |
+|---|---|---|
+| 6.1 Mobile Safari | P19 fixed | (in earlier closure) |
+| 6.2 Dark mode | M50–M54 logged | polish bundle |
+| 6.3 Offline POS | M55–M56 logged | polish bundle |
+| 6.4 Session expired | P21 fixed | clean live |
+| 6.5 Permission roles | ✅ PASS | none |
+| 6.6 Cross-tenant isolation | ✅ PASS | livetest2 created (Phase 8 cleanup) |
+| 6.7 Multi-outlet | ✅ PASS | M57 (sandbox redirect — polish) |
+| 6.8 Audit ghost flags | ✅ PASS via source | M58 (retire 3 flags) |
+| 6.9 JWT silent refresh | ✅ PASS | M59 (docs polish) |
+| 6.10 Error boundary | ✅ PASS via source + Sentry live | M60 (docs polish) |
+| 6.11 Timezone | mixed | **🔴 P22 fixed** + M61 (display tz polish) |
+
+### State of livetest1 + livetest2 after Phase 6 walkthrough
+
+**livetest1** (intentionally preserved for Phases 7-8):
+- Plan: Pro (annual), expires 2027-04-28, schema_version 83
+- max_outlets: **1 → 2** (paid via sandbox in 6.7)
+- Outlets: Main Store + "Branch 2 (Phase 6.7 test)"
+- 5 multi-outlet feature flags ALL ON (auto-seeded in 6.7)
+- 1 customer group ("Phase 6.7 test group")
+- payment_intents: id 5 (annual upgrade) + id 6 (outlet add) both completed
+- Sales: 5 valid POS + 1 voided (INV-2026-00026) + 1 storefront. Stocks unchanged from end of 5.5 baseline
+- Test Cashier 2 password_hash: **was set, then cleared back to NULL** in 6.5
+
+**livetest2** (NEW tenant — needs cleanup at Phase 8):
+- tenant_id 96, slug `livetest2`, plan free, status active
+- Admin LT2 (id=1, role 1, password `LT2Admin1234!`)
+- 1 outlet, 1 product (LT2 Widget sku LT2-001), 1 customer (LT2 Customer)
+- Created via direct provisioner (skipped email-verify wizard)
+- **Cleanup todo for Phase 8**: delete via /admin (cascade-drops `tenant_livetest2` schema)
+
+### Phase 6 commit graph (pushed: 19+f52+49e — P22 ready for push)
+
+```
+4f784f9 fix(reports): bucket daily aggregates by tenant timezone (P22)  ← P6.11, NOT YET PUSHED
+49e584a fix(auth): return 401 for any JWT verification error (P21)
+f52d21a fix(dashboard): hide outlet upsell on Pro plan (P20)
+2c585eb fix(layout): make AppLayoutRedesign mobile-responsive (P19)
+```
+
+P22 commit awaiting push approval before deploy. After deploy, verify on production by hitting `GET /api/reports/sales-summary` against livetest1 — daily_sales should bucket as Apr 28 (200) + Apr 29 (400) + Apr 30 (100), instead of pre-fix Apr 27 (600) + Apr 28 (100).
 
 ---
 

@@ -1710,6 +1710,803 @@ Other 6 gaps can wait 6+ months. Bundle these 3 with the Phase 5 M-tier (M39, M4
 - 6 legacy test files still import `helpers/createTestApp` instead of `-pg` (pre-existing).
 - Polish bundle (16+ items, see Phase 2 Day 2).
 
+---
+
+# Phase 6 — Edge Cases (started 2026-04-30)
+
+Phase 6 = real-world edge cases per [pre-launch-walkthrough-plan-2026-04-27.md:378-453](pre-launch-walkthrough-plan-2026-04-27.md). 11 sub-flows: 6.1 Mobile Safari, 6.2 Dark mode, 6.3 Offline POS, 6.4 Session expired, 6.5 Permission roles, 6.6 Cross-tenant isolation, 6.7 Multi-outlet, 6.8 Audit-flagged inconsistencies, 6.9 JWT silent refresh, 6.10 Error boundary, 6.11 Timezone correctness.
+
+Every claim verified against actual source files (CLAUDE.md treated as guidance, not gospel).
+
+## 6.1 Mobile Safari pass — walked 2026-04-30
+
+Viewport: 390×844 (iPhone-13 emulation). Browser: Chrome (Playwright). UA does NOT match real Safari — flagged below for real-device verification. Tenant: livetest1 (Pro/annual, Hassan logged in).
+
+### 🔴 P19 — Authenticated app shell has zero mobile responsiveness (sidebar consumes 74% of viewport at 390px)
+
+[AppLayoutRedesign.jsx:103-104](frontend/src/components/AppLayoutRedesign.jsx#L103-L104) renders the sidebar as `<aside class="${collapsed ? 'w-20' : 'w-72'} ...">`. Tailwind classes `w-72` (288px) and `w-20` (80px) are applied unconditionally — no `md:hidden`, `lg:hidden`, no overlay/drawer, no hamburger, no responsive breakpoint logic anywhere in the file. On a 390px iPhone-13 viewport the expanded sidebar consumes 74% of horizontal space; main content gets the remaining 26% with horizontal scrolling.
+
+Behavior verified live on `https://sanopos.com/dashboard` at 390×844:
+- Initial render: sidebar full (`w-72`), entire dashboard pushed to a horizontal-scroll strip.
+- The collapse chevron at [AppLayoutRedesign.jsx:106-111](frontend/src/components/AppLayoutRedesign.jsx#L106-L111) does work — clicking it shrinks to `w-20` icon-rail and content becomes usable.
+- But there is no auto-collapse on small viewports. Cold visit on phone = unusable until you find and tap a 24px chevron at the sidebar's right edge.
+- The "SANOPOS" brand text at [AppLayoutRedesign.jsx:113-115](frontend/src/components/AppLayoutRedesign.jsx#L113-L115) renders in `w-20` mode unchanged ("SANOPC" cropped per screenshot).
+
+Screenshots:
+- [docs/phase6-screenshots/6.1-dashboard-mobile.png](phase6-screenshots/6.1-dashboard-mobile.png) — default state
+- [docs/phase6-screenshots/6.1-dashboard-mobile-collapsed.png](phase6-screenshots/6.1-dashboard-mobile-collapsed.png) — after manual collapse
+
+Storefront `/store/livetest1` (different layout file) and POS (`POSRedesign.jsx`, has its own mobile tab bar) are both responsive — confirmed via [docs/phase6-screenshots/6.1-storefront-mobile.png](phase6-screenshots/6.1-storefront-mobile.png) and [6.1-pos-mobile.png](phase6-screenshots/6.1-pos-mobile.png). The bug is specifically in the authenticated app shell `AppLayoutRedesign.jsx`.
+
+**Severity rationale**: this is the ONLY shell wrapping every authenticated tenant page (Dashboard, Inventory, Reports, Customers — everything except POS and storefront). Any merchant attempting first-use on a phone gets an unusable layout. For a "Point of Sale" product targeting Pakistani retail SMBs (high mobile-first usage), this is launch-blocking.
+
+**Fix**: add `md:` responsive classes — default to `hidden` on mobile + overlay drawer pattern, or default to collapsed (`w-20`) below `md` breakpoint and prevent un-collapsing without an explicit hamburger toggle. Pattern from storefront (which works correctly) is a hamburger button + slide-in panel. The sidebar at line 104 needs:
+```
+className={`${collapsed ? "w-20" : "w-72"} ... lg:relative absolute inset-y-0 left-0 z-30 ${mobileOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 transition-transform`}
+```
+Plus a hamburger button in the top bar that flips `mobileOpen`, plus a backdrop. ~30-line fix.
+
+### 🔴 P20 — PlanUsageBanner shows "Upgrade to Pro" CTA for tenants already on Pro plan
+
+[PlanUsageBanner.jsx:55-61](frontend/src/pages/dashboard/PlanUsageBanner.jsx#L55-L61) checks all three dimensions (`employees`, `products`, `outlets`) for >=80% utilization. For a Pro tenant on the per-outlet billing model, `outlets.limit` is **not null** — it equals the number of paid-for outlets (1 by default). When `outlets.used / outlets.limit === 1.0`, the banner triggers with copy at line 83: `"You're using {summary}. Upgrade to Pro for unlimited."` and a button labeled "Upgrade" that links to `/billing`.
+
+Verified live on livetest1 (Pro/annual, `payment_status=active`, schema v83):
+- `GET /api/billing/usage` returns `{"employees":{"used":4,"limit":null}, "products":{"used":8,"limit":null}, "outlets":{"used":1,"limit":1}}`
+- Pro tenant gets `null` limits on employees + products (correctly handled by line 57's `dim.limit == null` skip), but outlets has limit=1 because Pro plan defaults to 1 outlet (additional outlets are bought via `/billing/add-outlet`, see Phase 6.7 plan).
+- Banner renders amber-warn box: "You're using 1 of 1 outlets. Upgrade to Pro for unlimited."
+- Tenant IS already Pro. The CTA is a dead-end — clicking "Upgrade" navigates to `/billing` where there's no further upgrade tier to take.
+
+This compounds with **P17** confusion (we just shipped per-tenant billing field surfacing). Merchant sees their billing card showing "Plan: Pro / Active" + a banner saying "Upgrade to Pro for unlimited" — contradictory messaging.
+
+**Fix options**:
+- A: Skip outlets dimension entirely from the warn check (treat outlet limits as a per-feature billing thing, not a plan-tier upsell). Outlets get their own dedicated UX via the existing `MultiOutletEnabledBanner` and `/billing/add-outlet` flow.
+- B: Branch CTA copy by current plan: Free → "Upgrade to Pro for unlimited", Pro → "Add another outlet" + link to `/billing` (specifically outlet purchase).
+- B is more correct. ~10-line fix.
+
+**Severity**: 🔴 because the contradiction is visible to any Pro tenant the moment they sign up — they see the upsell CTA but they ARE Pro. Erodes trust in billing UX. Different file from any prior fix; PlanUsageBanner is mode-shipped at component level so the fix is local.
+
+### 🟡 M48 — Mobile sidebar in icon-rail mode crops "SANOPOS" brand text mid-letter
+
+When the sidebar collapses to `w-20` (80px), [AppLayoutRedesign.jsx:113-115](frontend/src/components/AppLayoutRedesign.jsx#L113-L115) still renders the full "SANOPOS" brand text inside the 80px-wide column. Result: "SANOPC" with mid-letter crop visible in [docs/phase6-screenshots/6.1-dashboard-mobile-collapsed.png](phase6-screenshots/6.1-dashboard-mobile-collapsed.png). The "Admin" subtitle is correctly hidden in collapsed mode (line 116-120 wraps it in `!collapsed ?`) but the brand label has no such guard.
+
+**Fix**: wrap brand text in `!collapsed ?` like the subtitle, or render an icon mark (e.g. logo SVG) when collapsed. Trivial. Bundle into P19 mobile shell fix.
+
+### 🟡 M49 — PWA install prompt cannot be verified on real iOS via Playwright
+
+Manifest at `https://sanopos.com/manifest.webmanifest` is well-formed: name, short_name, description, start_url, scope, display=standalone, background_color, theme_color, 3 icons (192/512/svg). Service worker registered (scope `/`, active). All on the public `/store/...` page.
+
+But Playwright runs as Chrome/Windows UA — `beforeinstallprompt` is Chrome-only and iOS Safari uses a manual "Add to Home Screen" share-sheet flow that no automated tool can verify. The current manifest **does not include `apple-touch-icon` or `apple-mobile-web-app-capable` meta tags** in the document head (verified via Playwright DOM inspection); without these, the iOS PWA install via "Add to Home Screen" works but the icon and standalone-mode behavior degrade.
+
+**Recommendation**: add to `frontend/index.html`:
+```html
+<link rel="apple-touch-icon" href="/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="SanoPOS" />
+```
+
+Severity: 🟡 because real-iOS-device verification is still required after this fix lands. Defer to manual QA.
+
+### Pages clean (✅) on mobile pass
+
+- POS (`/pos`) — bottom-tab Cart/Search/Pay layout works (POSRedesign has its own mobile shell, separate from AppLayoutRedesign)
+- Public storefront (`/store/livetest1`) — hamburger + 2-col grid, fully responsive
+- Manifest + service worker registration — both healthy
+
+### P19 + P20 verified live on production (2026-04-30)
+
+After commits `2c585eb` (P19) + `f52d21a` (P20) pushed to `origin/main` and Vercel built (deployment age 2m, Status `● Ready`), re-walked 6.1 at 390×844:
+
+**P19 ✅** — Dashboard cold-load now renders **only the hamburger + top bar + full-width main content**. Sidebar is `-translate-x-full` (off-screen) by default. Tapping hamburger slides in a 280px drawer with backdrop. X-button or backdrop-click closes. Tapping any nav link auto-closes the drawer (delegated `onClick` handler). Verified via [docs/phase6-screenshots/6.1-dashboard-mobile-AFTER.png](phase6-screenshots/6.1-dashboard-mobile-AFTER.png) and [6.1-mobile-drawer-open.png](phase6-screenshots/6.1-mobile-drawer-open.png).
+
+**P20 ✅** — On Pro tenant livetest1, the "Approaching plan limit / Upgrade to Pro for unlimited" banner is gone. Verified visually + by inspecting that the dashboard renders directly into "Insights" cards with no amber banner above. Test rationale: `/api/billing/status` returns `plan="pro"`, banner now skips `outlets` dimension entirely on Pro tenants; `employees`/`products` already had `limit=null` for Pro and were filtered by the existing null-limit guard.
+
+**M48 ✅** — Brand text "SANOPOS / Admin" renders correctly when sidebar is in expanded mobile-drawer mode. Collapsed `w-20` mode (desktop only) now shows "SP" mark instead of cropped "SANOPC". Verified via [6.1-mobile-drawer-open.png](phase6-screenshots/6.1-mobile-drawer-open.png).
+
+**M49** — still deferred to manual real-iOS verification (Playwright UA is Chrome, can't simulate `apple-touch-icon` / "Add to Home Screen" flow).
+
+### 6.1 commit graph (pushed to `origin/main`)
+
+```
+f52d21a fix(dashboard): hide outlet upsell on Pro plan (P20)
+2c585eb fix(layout): make AppLayoutRedesign mobile-responsive (P19)
+```
+
+## 6.2 Dark mode pass — walked 2026-04-30
+
+Toggled `localStorage["sanopos_theme"]="dark"` (sets `<html data-theme="dark">`). Walked Dashboard, Inventory/Products, Customers, Sales History, POS, Storefront, Public Receipt. Every claim below verified against source files (CLAUDE.md treated as guidance only).
+
+### Verdict — overall
+
+Dark mode is **mostly working** for tenant pages built on the design-system primitives — sidebar (after P19 fix), main backgrounds, cards, table rows, Tailwind `emerald-*` badges all flip cleanly. But there is a consistent class of regressions caused by surfaces that hardcode `bg-white`/`bg-slate-*` instead of `bg-(--ui-surface)`. Bundleable as one focused dark-mode polish commit.
+
+No new criticals. All findings 🟡 M-tier (bundle for polish sweep).
+
+### 🟡 M50 — Pre-render loading screens flash bright white in dark mode
+
+Three loading surfaces hardcode light backgrounds and ignore the theme:
+
+- [RequireContext.jsx:15](frontend/src/components/RequireContext.jsx#L15) — `bg-slate-100 text-slate-600` for "Loading context..." (fires on every route nav until `useFeatureFlags` resolves; ~1-2s flash on every page change)
+- [RequireAuth.jsx:10](frontend/src/components/RequireAuth.jsx#L10) — `bg-slate-100 text-slate-600` for "Loading session..." (fires on cold-load bootstrap)
+- [routes/RouteLoading.jsx:4](frontend/src/routes/RouteLoading.jsx#L4) — `bg-white border-slate-200 text-slate-500` for the lazy-route Suspense fallback
+- [AppLayoutRedesign.jsx:229](frontend/src/components/AppLayoutRedesign.jsx#L229) — inline duplicate of the same Suspense fallback (should be replaced with `<RouteLoading />`)
+
+Verified live by navigating dashboard → /inventory → /customers in dark mode — each transition flashed a full-screen white panel before the dark dashboard rendered. Screenshots: [docs/phase6-screenshots/6.2-inventory-dark.png](phase6-screenshots/6.2-inventory-dark.png), [6.2-customers-dark.png](phase6-screenshots/6.2-customers-dark.png).
+
+**Fix**: replace hardcoded classes with theme-aware vars. e.g. `bg-(--ui-bg) text-(--ui-text-muted)` for full-screen and `bg-(--ui-surface) border-(--ui-border) text-(--ui-text-muted)` for the pill. ~5-line edit per file.
+
+### 🟡 M51 — Input + Select primitives hardcode `bg-white`, breaking dark mode globally
+
+[primitives.jsx:73](frontend/src/ui/primitives.jsx#L73) — `Input` className contains `bg-white`. Every Input across the dashboard renders white-on-dark in dark mode (verified live on Sales History date-pickers, customer-search input, dashboard top-bar search, Sales History dropdown filters).
+
+[primitives.jsx:82](frontend/src/ui/primitives.jsx#L82) — same on `Select`.
+
+These are the two most-used primitives in the design system; this single fix removes ~80% of the visible dark-mode regression.
+
+**Fix**: change `bg-white` to `bg-(--ui-surface)` on both. The token already darkens correctly to `#1e293b` in dark mode per [tokens.css:30](frontend/src/ui/tokens.css#L30). 2-character edit.
+
+### 🟡 M52 — NotificationBell + ContextSwitcher dropdowns + PlanLimitModal hardcode white surfaces
+
+[NotificationBell.jsx:109,121-141](frontend/src/components/NotificationBell.jsx#L109-L141) — bell icon button `text-slate-700 hover:bg-slate-100` (poor contrast on dark header), dropdown panel `bg-white border-slate-200` with row hover `bg-slate-50`. All hardcoded.
+
+[ContextSwitcher.jsx:89](frontend/src/components/ContextSwitcher.jsx#L89) — popover `bg-white shadow-lg`. Hardcoded.
+
+[PlanLimitModalInterceptor.jsx:44,87](frontend/src/components/PlanLimitModalInterceptor.jsx#L44) — modal sheet `bg-white` and secondary button `bg-white border-slate-300`. Hardcoded.
+
+**Fix**: same pattern — replace `bg-white` → `bg-(--ui-surface)`, `bg-slate-50/100` → `bg-(--ui-muted-surface)`, `border-slate-*` → `border-(--ui-border)`, slate text colors → `text-(--ui-text)` / `text-(--ui-text-muted)`. ~15 lines across the three files.
+
+### 🟡 M53 — POSRedesign uses hardcoded `bg-[#F8FAFC]` — main area stays light in dark mode
+
+[POSRedesign.jsx:68](frontend/src/pages/redesign/POSRedesign.jsx#L68) — `bg-[#F8FAFC]` (Tailwind slate-50 hex). The right cart panel uses `#0A0A0A` (always-dark), so in dark mode the page splits visually: dark sidebar + dark cart + white-ish main area. Verified via [docs/phase6-screenshots/6.2-pos-dark.png](phase6-screenshots/6.2-pos-dark.png).
+
+This is a deliberate POS design choice (POSContext doc notes "POS uses hardcoded colors"), but the result in dark mode is jarring. Two paths:
+- A: opt POS into the theme system (replace hardcoded hexes with tokens) — ~30-line refactor across POSRedesign + child modals
+- B: declare POS theme-immune and force light-mode-only inside POS at the route level (e.g. wrap `<POSRoute>` in a `data-theme="light"` div), so the page is always cohesive — ~5 lines
+
+Recommend B for launch (low-risk, preserves POS visual identity), revisit A post-launch as part of POS facelift.
+
+### 🟡 M54 — "Needs Attention" alert rows on Dashboard render amber-50/blue-50 against dark surface (poor contrast harmony)
+
+`DashboardAttention.jsx` builds high/medium/low alerts. The amber/blue/red alert backgrounds stay light (`bg-amber-50` etc.), which clashes with the dark `--ui-surface` underneath. Visible in [docs/phase6-screenshots/6.2-dashboard-dark.png](phase6-screenshots/6.2-dashboard-dark.png).
+
+Defer with M50–M53 polish bundle. Not a contrast a11y violation (text is still readable) — just visually loud. Quick fix: use Tailwind's `dark:` variants like `dark:bg-amber-950 dark:text-amber-200` (Tailwind v4 has `dark:` enabled by default with `[data-theme=dark]` selector when configured — verify in [vite.config.js](frontend/vite.config.js) before assuming).
+
+### Pages clean (✅) on dark-mode pass
+
+- Dashboard sidebar + nav + header brand area
+- Inventory (Products) table + row hovers + pagination
+- Sales History KPI cards + table
+- Public storefront `/store/livetest1` — correctly stays light (customer-facing, intentional)
+- Public receipt `/receipt/INV-2026-00001` — correctly stays light (intentional)
+- Storefront receipt content rendering — Test Coffee × 2.000 = Rs 200 (matches Phase 4 state)
+
+### State of livetest1 after 6.2
+
+No data changes. localStorage on Playwright session has `sanopos_theme=dark` set (will reset for 6.3+).
+
+## 6.3 Offline POS — walked 2026-04-30
+
+Approach: monkey-patched `Object.defineProperty(navigator, 'onLine', { get: () => false })` and dispatched the corresponding `offline`/`online` events. This triggers the exact code path in [useCheckout.js:336](frontend/src/pages/redesign/pos/hooks/useCheckout.js#L336) (`if (!navigator.onLine) await queueSaleOffline()`) without needing browser-level network throttling.
+
+Sale: Test Coffee × 1, Cash Rs 100, Walk-in customer. Performed at offline state, then flipped online.
+
+### Verdict — overall
+
+The offline-queue path **works end-to-end against production**. Sale was queued in IndexedDB, persisted across the network flip, and synced + dequeued automatically when `online` event fired. Stock deducted server-side. No data loss, no duplicate.
+
+No criticals. **2 medium UX findings** logged (M55 — slip frozen at queue-time, M56 — no pre-checkout offline indicator).
+
+### Confirmed working ✅
+
+- **Detection** — `useCheckout.js:336` correctly intercepts when `navigator.onLine === false`. Falls through to `queueSaleOffline()` without attempting the POST.
+- **Banner** — POSRedesign.jsx:70 amber banner appeared with copy `"1 sale(s) queued offline — will sync automatically"` + "Sync now" button.
+- **IndexedDB persistence** — verified via `indexedDB.open('sanopos_pos').sales_queue.getAll()`: 1 row with `idempotency_key` (UUID), `sync_state="pending"`, full payload (cartItems + payments + customer + tax_inclusive flag).
+- **Auto-sync on online** — `useOfflineQueue.js:131-135` `online` listener fired. `syncQueue()` POST'd `/api/sales`, server returned 201 with new sale, row dequeued.
+- **Server-side persistence** — verified via `GET /api/sales?limit=5`: new sale **INV-2026-00025** (id=25, Rs 100, timestamp 2026-04-29T20:23:33Z) created. Test Coffee stock: **6.000 → 5.000** confirmed via product-search `local_stock`.
+- **Idempotency** — single sale created (no duplicate from network race).
+
+### 🟡 M55 — Receipt slip shows "Invoice: PENDING" forever after sync
+
+When a sale is queued offline, [useCheckout.js:308-327](frontend/src/pages/redesign/pos/hooks/useCheckout.js#L308-L327) builds the slip immediately with `offline: true` (and the receipt template renders `Invoice: PENDING`). After sync, the slip object in React state is never updated — the sale's real `invoice_number` (e.g. `INV-2026-00025`) only surfaces if the cashier opens Recent Sales or queries Sales History.
+
+Visible in [docs/phase6-screenshots/6.3-after-sync.png](phase6-screenshots/6.3-after-sync.png) — even though the queue is empty and the sale is on the server, the receipt modal still says `Invoice: PENDING`.
+
+**Fix**: when `useOfflineQueue.syncQueue()` succeeds, post a `pos:offline-sale-synced` custom event with `{ idempotency_key, invoice_number, sale_id }`. POSContext listens, finds the slip with matching idempotency_key, patches `slip.invoice_number` and clears the `offline` flag. ~25-line change.
+
+### 🟡 M56 — Checkout modal does not surface offline state to the cashier
+
+[POSCheckoutModal.jsx:153](frontend/src/pages/redesign/pos/POSCheckoutModal.jsx#L153) computes `const isOffline = !navigator.onLine` but never renders that state anywhere in the modal. Result: cashier clicks "Complete Sale" while offline and only sees "queued offline" *after* the sale completes.
+
+For a 100-rupee transaction in a power outage this is fine. For a customer paying by Card or Wallet it's a problem — the cashier would expect to see an "offline mode — card payments queued" warning before processing tender.
+
+Per Card / Wallet specifically, [POSCheckoutModal.jsx:153](frontend/src/pages/redesign/pos/POSCheckoutModal.jsx#L153) does have a guard — `loyaltyToggle disabled when isOffline`. But the offline state isn't shown in any badge, banner, or color-tone change.
+
+**Fix**: add an amber pill at the top of the modal when `isOffline` — `"⚠️ Offline — sale will queue & sync automatically"`. Could also disable Card/Wallet buttons in offline mode (since gateway authorization needs network) and force Cash. Defer the Card/Wallet enforcement decision to product; the visible warning is the minimum.
+
+### Other observations (not bugs, just noted)
+
+- **localStorage migration**: `migrateFromLocalStorage(employee.id)` at `useOfflineQueue.js:48` moves any pre-existing `pos_offline_queue_<id>` LS entries into IndexedDB on first mount. Migration is idempotent — verified by running the test twice without rows duplicating.
+- **Resume previous cart? modal**: appeared on top of "Sale Complete" slip after offline sale. Cosmetic — POSContext's auto-resume from sessionStorage didn't realize the cart had just been cleared by `clearAfterSale()`. Filed mentally as polish; don't elevate to a finding.
+- **"Yesterday's shift is open" modal** still fires on every cold POS load. Same as 6.1 + 6.2 observation. Not a finding — Shift #1 is intentionally left open per Phase 4 brief.
+
+### State of livetest1 after 6.3
+
+- Plan: Pro/annual unchanged, schema v83 unchanged.
+- Sales: was 4 POS + 1 storefront, now **5 POS + 1 storefront**. Latest: **INV-2026-00025** Rs 100 cash, Test Coffee × 1, employee Hassan, Walk-in customer, timestamp 2026-04-29T20:23:33Z.
+- Test Coffee stock: was 6.000, now **5.000**.
+- Snack Bar stock: 17.000 unchanged. Coffee Beans stock: 9.000 unchanged.
+- pg-boss / customer state: unchanged.
+
+## 6.4 Session expired — walked 2026-04-30
+
+Goal: trigger `POSSessionExpiredModal` mid-checkout via a 401 response, verify PIN re-auth + auto-retry.
+
+Method: corrupt the JWT signature in localStorage, ring up Test Coffee × 1, click Complete Sale. Expectation per source: `useCheckout.js:348-352` captures the 401, sets `sessionExpired=true`, modal renders.
+
+### Findings
+
+**Source-review verdict** — the modal flow is correct in source:
+- [useCheckout.js:348-352](frontend/src/pages/redesign/pos/hooks/useCheckout.js#L348-L352) — captures pendingSaleRef + sets sessionExpired on 401
+- [POSSessionExpiredModal.jsx:28-44](frontend/src/pages/redesign/pos/POSSessionExpiredModal.jsx#L28-L44) — PIN re-auth via `POST /api/employees/validate-pin`, then `retryPendingSale()`
+- The cancel path parks the sale + redirects to /login
+
+**Live test surfaced a different — and worse — bug**: ⬇
+
+### 🔴 P21 — Invalid JWT signature returns HTTP 500 with internal error string instead of 401
+
+When the JWT signature is invalid (corrupted, tampered, or signed with a different secret), `POST /api/sales` returns:
+
+```
+HTTP 500
+{ "error": "[tenant-db-proxy-pg] No tenant DB in async context" }
+```
+
+Verified by hitting `/api/sales` with `Authorization: Bearer <corrupted-jwt>` directly via fetch.
+
+**Root cause** at [middleware/tenant-auth.js:183-189](backend/middleware/tenant-auth.js#L183-L189):
+
+```js
+} catch (err) {
+  if (err.name === "TokenExpiredError") {
+    return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
+  }
+  req.employeePerms = [];
+  next();   // ← falls through silently for ANY non-expiry JWT error
+}
+```
+
+Only `TokenExpiredError` is caught explicitly. `JsonWebTokenError` (invalid signature, malformed token, wrong issuer/audience) and any other JWT verification failure falls through with `req.employeePerms = []`. Then:
+1. `resolveTenant` runs without `req.tenantId` → tenant DB proxy never set
+2. Route handler queries `db` → tenant-db-proxy-pg.js throws "No tenant DB in async context"
+3. Express bubbles to global error handler → 500 with raw internal message
+
+**Why this is a real problem**:
+- **POSSessionExpiredModal never fires** for this case — modal triggers on 401, not 500. Cashier sees a red toast with internal error text instead of the friendly PIN re-auth modal.
+- **Internal implementation detail leaks to UI** — every user-facing 500 includes "[tenant-db-proxy-pg] No tenant DB in async context". Information disclosure (low-severity but inappropriate).
+- **Not theoretical**: any tenant whose JWT secret rotates, any session that survives a server-side JWT secret change, any token tampered by a malicious browser extension all hit this path. Rare in practice but real.
+- **Indistinguishable from a real backend crash**: support team can't tell user-induced from server-error from this signal alone.
+
+**Fix at backend/middleware/tenant-auth.js:183-189** — catch all JWT errors and return a structured 401:
+```js
+} catch (err) {
+  if (err.name === "TokenExpiredError") {
+    return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
+  }
+  if (err.name === "JsonWebTokenError" || err.name === "NotBeforeError") {
+    return res.status(401).json({ error: "Invalid token", code: "INVALID_TOKEN" });
+  }
+  // Genuinely unexpected — log + 500
+  req.log?.error?.({ err }, "loadTenantAndPerms: unexpected JWT error");
+  return res.status(401).json({ error: "Authentication failed", code: "AUTH_FAILED" });
+}
+```
+
+After fix, the existing `useCheckout.js:348` 401-detection path will fire correctly and the user-facing flow becomes the friendly PIN re-auth modal as designed.
+
+**Severity**: 🔴 P-tier. Wires into the same friendly flow that already works for token-expiry. Can be fixed standalone, ~10-line change to one file.
+
+### Source-review confidence: high (modal works for clean 401)
+
+Even though the live test surfaced P21 instead of triggering the modal, the modal flow itself is exercise-clean against source. The other path that legitimately produces a clean 401 is the AuthProvider's silent-refresh failure case (refresh token cookie cleared/expired) — that path doesn't invalidate the access token signature, just rejects the refresh, so loadTenantAndPerms gets a structurally-valid expired token, returns 401 + `TOKEN_EXPIRED`, AuthProvider tries to refresh, refresh returns non-200, the original 401 propagates back to useCheckout, modal opens.
+
+**Real-world trigger**: Hassan logs in at 9am, leaves POS open all day, comes back at 9:01am next day. Access token is now 24:01h old (default access TTL = 24h). Refresh token cookie is also 24:01h old (refresh TTL = 7d, but in some browsers the cookie may have been evicted). If refresh fails, modal opens, Hassan enters PIN, sale completes. This is the "happy path" of the modal that source-review already covers.
+
+### State of livetest1 after 6.4
+
+- One **accidental test sale created and immediately voided**: INV-2026-00026 (id=26), Rs 100 cash, voided with reason "Phase 6.4 walkthrough — accidental test POST during P21 surfacing". Created at 20:32:01Z, voided at 20:32:30Z. Stock restored.
+- Test Coffee stock: 5.000 → 4.000 (sale) → **5.000** (restored after void).
+- Sales count: 5 valid POS + 1 voided + 1 storefront. Total master record IDs now go up to 26 (with 26 marked voided).
+- Customer/gift-card/shift state unchanged.
+- Refresh token cookie was cleared via `/api/auth/logout` during testing, then re-issued on subsequent `mt-login` — current authSession is fresh + valid.
+
+### P21 verified live on production (2026-04-30)
+
+After commit `49e584a` pushed to `origin/main` and Railway redeployed (~5 min, polled `/api/sales` with corrupted JWT until response code flipped from 500 → 401):
+
+**Before** — same call returned:
+```
+HTTP 500
+{ "error": "[tenant-db-proxy-pg] No tenant DB in async context" }
+```
+
+**After** — same call returns:
+```
+HTTP 401
+{ "error": "Invalid token", "code": "INVALID_TOKEN" }
+```
+
+Verified via Playwright fetch from the page console:
+- `status: 401` ✅
+- `code: "INVALID_TOKEN"` ✅ (new structured code, frontend can now branch on this if needed)
+- `error: "Invalid token"` ✅ (no internal implementation leak)
+
+The new path means `useCheckout.js:348` will now correctly capture this as a 401 and trigger `POSSessionExpiredModal` for the corrupted-JWT scenario, just like it does for genuine token expiry. Frontend behavior is now consistent across all auth-failure modes.
+
+Side benefit: when the AuthProvider's silent refresh kicks in for `INVALID_TOKEN` requests, it'll either succeed (re-issuing a valid token) or surface the modal via the same path, instead of silently 500'ing under load.
+
+### Phase 6.1–6.4 commit graph (pushed to `origin/main`)
+
+```
+49e584a fix(auth): return 401 for any JWT verification error (P21)
+f52d21a fix(dashboard): hide outlet upsell on Pro plan (P20)
+2c585eb fix(layout): make AppLayoutRedesign mobile-responsive (P19)
+```
+
+Plus 4 new unit tests in `backend/tests/unit/middleware.test.js` covering the JWT error matrix (passing — total now 53/53 in middleware.test).
+
+
+
+## 6.5 Permission roles — walked 2026-04-30
+
+Goal: confirm a Cashier-role employee gets a properly filtered sidebar, and that direct-URL navigation to admin/manage_inventory/manage_orders pages bounces to `/access-denied` instead of crashing or leaking content.
+
+Method: temporarily set a dashboard password on `Test Cashier 2` (role_id=3, 3 perms: `view_reports`, `pos_discount`, `pos_park`), log in via `mt-login`, capture the rendered sidebar from `aside a`, then drive Playwright `page.goto()` against a sample of restricted URLs and check the landed pathname after the 1200ms `/access-denied` auto-redirect window.
+
+Pre-test gotcha confirmed: all three Test Cashier accounts (id=2,3,4) are PIN-only; the seed never set a `password_hash`. Worked around by hashing `CashierTest1234!` into emp 2 just for this walk, then cleared back to NULL after.
+
+### Findings
+
+**Sidebar nav filtering** — clean. Cashier session sees 17 nav items vs ~80 for admin. Items shown are exactly the ones with no `requiredPerm`, OR `requiredPerm: "view_reports"`, OR `requiredPerm: "pos_*"`. Items with `requiredPerm: "all_access" | "manage_inventory" | "manage_orders" | "manage_employees" | "manage_customers" | "manage_gift_cards" | "manage_restaurant" | …` are hidden.
+
+The checklist's rough description ("essentially POS + Customers + Returns + Sales History + Cash Mgmt") undercounts what Cashier should see. The actual list is broader because Cashier has `view_reports`:
+
+```
+Dashboard, POS, Customers, Returns, Sales History, Cash Management,
+Reports, Accounting, Credit/Debit Notes, Post-Dated Cheques,
+Kiosk, Attendance, Notifications, View Storefront, Tax Lookup,
+Retail Risk, My Tickets
+```
+
+This matches the role description in the seed (`"Access to POS and basic features"`) and is consistent with how other tenants are using Cashier role. Not a finding — checklist was approximate.
+
+**Direct URL navigation** — clean. All 6 restricted URLs tested via real `page.goto()` correctly redirected to `/access-denied`, which then auto-bounced to `/dashboard` after 1200ms via [AccessDenied.jsx:9-11](frontend/src/pages/AccessDenied.jsx#L9-L11):
+
+| Path | Required perm | Result |
+|------|--------------|--------|
+| `/employees` | `all_access` | → `/access-denied` → `/dashboard` ✅ |
+| `/outlets` | `all_access` | → `/access-denied` → `/dashboard` ✅ |
+| `/billing` | `all_access` | → `/access-denied` → `/dashboard` ✅ |
+| `/administrator` | `all_access` | → `/access-denied` → `/dashboard` ✅ |
+| `/purchase-orders` | `manage_orders` | → `/access-denied` → `/dashboard` ✅ |
+| `/promotions` | `manage_inventory` | → `/access-denied` → `/dashboard` ✅ |
+
+The guard is `RequirePerm` at [components/RequirePerm.jsx:12-22](frontend/src/components/RequirePerm.jsx#L12-L22) wrapping each restricted route in [routes/appRoutes.jsx](frontend/src/routes/appRoutes.jsx). It calls `<Navigate to="/access-denied" replace />` if `hasPerm(perm)` returns false.
+
+**False alarm during testing**: an initial sweep using `history.pushState()` + `popstate` to fast-test 8 URLs reported `/outlets`, `/billing`, `/promotions`, `/purchase-orders`, `/administrator` as "leaking" (landing on themselves, not `/access-denied`). Re-tested every one with real `page.goto()` and they all guard correctly. Conclusion: `pushState` + manual `popstate` events bypass React Router's normal guard navigation flow because React Router only re-runs `<Navigate>` redirects on its own `navigate(...)` calls and the corresponding history events. **Methodology note for future walks**: only trust `goto()`-style direct navigation when verifying React Router guards; in-page synthetic history events are unreliable.
+
+**Backend secondary defense**: even if a route guard somehow leaked, every server-side data endpoint these pages call is gated by its own `requirePerm`/`requireAnyPerm` middleware (per `backend/CLAUDE.md` "Auth on GET routes" Apr 1 2026 hardening). A Cashier session arriving at e.g. `/employees` would render the page shell but every data fetch would 403 → empty grid + toast. Not exercised, but architectural note.
+
+### State of livetest1 after 6.5
+
+- emp `Test Cashier 2` (id=2): `password_hash` was set, then cleared back to NULL. PIN unchanged. No other employee state touched.
+- localStorage cleared at end of session (refresh token cookie also cleared via login → expire path during cleanup).
+- No sales, no stock movement, no schema changes.
+
+### Severity
+
+No finding. 6.5 passes clean.
+
+
+
+## 6.6 Cross-tenant isolation — walked 2026-04-30
+
+Goal: prove that a JWT issued for tenant A cannot read tenant B's data, no matter what URL/header/query tampering the holder tries.
+
+Method: provisioned `livetest2` (tenant_id 96) directly via `tenant-provisioner-pg`, set `setup_complete=true`, gave it one product (`LT2 Widget`, sku `LT2-001`, price 99) and one customer (`LT2 Customer`, mobile 03000000002). Logged in via `mt-login` to get JWTs for both tenants, then probed isolation from three angles:
+1. Cross-token cross-tenant reads (lt1 token vs lt2 token, same endpoints)
+2. Header injection attacks: `X-Tenant-Slug`, `X-Tenant-Id`, `?tenant=`, `?slug=`
+3. JWT payload tamper (decode, swap `tid: 96 → 1`, re-encode without re-signing)
+
+### Findings
+
+**1. JWT signature is the load-bearing isolator.** Confirmed at [middleware/tenant-auth.js:80-82](backend/middleware/tenant-auth.js#L80-L82) — `req.tenantId` comes from the JWT's `tid` claim AFTER signature verification. `decoded.tid` is set on `req.tenantId`. `resolveTenant` then routes the DB to that tenant ID via `asyncStore.run({ db: tenantDb })` at [tenant-auth.js:226](backend/middleware/tenant-auth.js#L226). The `?tenant=` query fallback at [tenant-auth.js:203-211](backend/middleware/tenant-auth.js#L203-L211) only fires when `req.tenantId` is unset (anonymous flow). A signed JWT always wins.
+
+**2. JWT tamper test — 401 with `INVALID_TOKEN`** ✅
+   - Decoded lt2 JWT, swapped `tid: 96` → `tid: 1` (livetest1's id), re-encoded with the original signature.
+   - Result: `HTTP 401 {"error":"Invalid token","code":"INVALID_TOKEN"}` — the post-P21 fix correctly catches signature failure.
+   - Without `JWT_SECRET`, no attacker can produce a valid `tid` swap. This is the architectural defense.
+
+**3. Header/query injection from a valid lt2 JWT — does NOT override scope** ✅
+   - All 4 attempts hit livetest2's tenant DB (still cached as `setup_complete=false` from a recent change → returned 503), NOT livetest1's:
+     - `X-Tenant-Slug: livetest1` → 503 Setup required (lt2's profile)
+     - `X-Tenant-Id: 1` → 503 Setup required (lt2's profile)
+     - `?tenant=livetest1` → 503 Setup required (lt2's profile)
+     - `?slug=livetest1` → 503 Setup required (lt2's profile)
+   - The 503 itself is proof: livetest1 has `setup_complete=true`, so if header/query had overridden the JWT, we'd have hit livetest1's DB and gotten 200 + a product list. We did not.
+
+**4. Direct-row probes** — same outcome:
+   - `GET /api/products/1` with lt2 token → 503 (lt2 scope, no leak to lt1's product)
+   - `GET /api/customers/2` with lt2 token (lt1's portal customer id=2) → 503 (lt2 scope)
+   - `GET /api/sales/25` with lt2 token (lt1's INV-2026-00025) → 503 (lt2 scope)
+
+**5. Setup-required gate as a side defense** — Bonus observation: a freshly-provisioned tenant returns 503 `SETUP_REQUIRED` at [tenant-auth.js:269-277](backend/middleware/tenant-auth.js#L269-L277) until `company_profile.setup_complete` flips. Even a holder of a valid JWT for that tenant can't read its own data until setup completes. Defense in depth — a half-provisioned tenant can't accidentally leak partially-seeded data.
+
+### State of livetest1 + livetest2 after 6.6
+
+- **livetest1**: untouched (no products read, no rows written, no JWT actually used to fetch anything because lt2's token was the focus).
+- **livetest2** (NEW tenant, will need cleanup at Phase 8):
+  - tenant_id 96, slug `livetest2`, plan `free`, status `active`, payment_status `active`, email_verified_at set.
+  - 1 employee: Admin LT2 (id=1), email `oneshop350+lt2@gmail.com`, password `LT2Admin1234!`, role_id 1 (Admin).
+  - 1 outlet (Main, id=1).
+  - 1 product (LT2 Widget, id=1, price 99, stock 10 in outlet 1).
+  - 1 customer (LT2 Customer, id=1, mobile 03000000002).
+  - `company_profile.setup_complete = true` (set manually for testing — would normally happen via setup wizard).
+- localStorage cleared at end of session.
+
+### Severity
+
+No finding. 6.6 passes clean. JWT-signature isolation is the architectural defense, header/query tampering is correctly ignored, signature tampering returns 401 (post-P21).
+
+**Cleanup todo for Phase 8**: delete `livetest2` from `/admin` (will cascade-drop schema `tenant_livetest2` per `tenant-provisioner-pg` rollback path).
+
+
+
+## 6.7 Multi-outlet — walked 2026-04-30
+
+Goal: exercise the full Pro→2nd-outlet flow end-to-end via the real UI + sandbox payment gateway, verify the 5 multi-outlet feature flags auto-flip on POST `/api/outlets`, and verify the two downstream UI surfaces appear (Customer Groups Price Book sub-page + Products outlet visibility section).
+
+Method: sandbox payment gateway is live (`PAYMENT_GATEWAY=sandbox`, `SANDBOX_WEBHOOK_SECRET` set on Railway). Drove the entire flow in Playwright — login → /outlets → "Add Outlet" → upgrade modal → /api/sandbox/pay → "Pay Successfully" → returned to /outlets → real form → POST /api/outlets — and queried the DB at each step via a baseline-and-delta script.
+
+### Findings
+
+**Whole flow worked first try.** No bugs surfaced.
+
+**1. Pre-purchase state (livetest1 baseline)**:
+   - tenant: plan=`pro`, max_outlets=`1`, billing_cycle=`annual`, payment_status=`active`
+   - company_profile: `multi_outlet_flags_seeded=false`, `setup_complete=true`
+   - 1 outlet ("Main Store")
+   - 3 of 5 multi-outlet flags exist as `enabled=false`; the other 2 (`context_selection_required`, `context_header_enforced`) are missing from the table — they default to false via `DEFAULT_FEATURE_FLAGS`
+
+**2. Add-Outlet modal** at [outlets.js:40](backend/routes/outlets.js#L40)'s `requirePlanLimit("outlets")` correctly blocks the POST until quota grows. UI shows the upsell modal: "Add another outlet — adds PKR 8,000/month to your subscription (or the equivalent for your billing cycle)." Continue → `POST /api/billing/add-outlet` → returns sandbox checkout URL → browser redirects to `https://api.sanopos.com/api/sandbox/pay/sandbox_<ts>_<intent>`.
+
+**3. Sandbox payment page** server-rendered at [routes/sandbox.js:298](backend/routes/sandbox.js#L298) shows: "Platform Billing — Live Test 1 — pro plan (annual) — PKR 80,000". Three buttons: Pay Successfully / Fail Payment / Cancel. Click Pay → fires `POST /api/sandbox/simulate-webhook` with `event_type=payment.completed`, which calls `processWebhookEvent` synchronously. Net effect — `payment_intents.id=6` flipped to `status=completed` and `tenants.max_outlets` bumped from 1→2.
+
+**4. Auto-redirect after sandbox success — does not fire on this flow.** Code at [routes/sandbox.js:380-386](backend/routes/sandbox.js#L380-L386) auto-redirects to `params.get('returnUrl')` after 2s, but only when the URL has a `?returnUrl=...` query string. The Add-Outlet flow built the checkout URL via `paymentGateway.createCheckout({ returnUrl: "${frontendUrl}/outlets?payment=success&intent=${id}" })` at [billing.js:300-307](backend/routes/billing.js#L300-L307), but that returnUrl is stored on the `payment_intent` row, not appended to the sandbox payment-page URL. Result: merchant sees "Simulated payment.completed" success message but has to manually go back to the dashboard. Not a regression for the test — webhook still fires correctly — but worth flagging as **M57** in the polish bundle.
+
+**5. POST /api/outlets** with the new 2nd outlet name/address/phone → response includes `multi_outlet_flags_seeded:true`. Verified in DB:
+   - All 5 flags now `enabled=true`:
+     - `context_header_enforced` (was missing → row inserted as true)
+     - `context_selection_required` (was missing → row inserted as true)
+     - `phase2_outlet_pricing` (was false → true) ✅
+     - `phase2_outlet_visibility` (was false → true) ✅
+     - `phase2g_price_books` (was false → true) ✅
+   - `company_profile.multi_outlet_flags_seeded = true` ✅
+   - 2 outlets visible in DB and UI
+
+**6. context_selection_required side-effect** — On the next navigation after the 2nd outlet was added, Hassan's session was redirected to `/context-select` (because the flag is now ON and Hassan has no `active_outlet_id` set yet). The page rendered correctly: "All Branches" option (since Hassan has `all_access`) + both outlets listed. Picked "Main Store", clicked Continue → returned to dashboard with proper context. **The flag works as intended end-to-end.**
+
+**7. Customer Groups → Price Book sub-page** ✅
+   - Empty groups list initially showed only "New Group" — no Price Book button anywhere.
+   - Confirmed at [CustomerGroupsRedesign.jsx:145-152](frontend/src/pages/redesign/CustomerGroupsRedesign.jsx#L145-L152) — the "Price Book" button is rendered **per-row** inside the Actions cell of each customer group, not as a top-level page tab. With zero groups, there's nothing to render.
+   - Created a test group "Phase 6.7 test group" → "Price Book" button appeared in the row's Actions cell next to Edit/Delete ✅
+   - Click → navigated to `/customer-groups/1/price-book` → CustomerGroupPriceBookRedesign rendered: "Phase 6.7 test group — Price Book / Per-product overrides. Group discount 0.00% still applies on top at checkout." With CSV import, single-row Add form, and table view.
+
+**8. Products → Outlet Visibility section** ✅
+   - Opened a product detail (`/products/8` Test Coffee). The product form now has a new **OUTLET VISIBILITY** section reading "Control which outlets can see and sell this product." with a per-outlet toggle:
+     - "Branch 2 (Phase 6.7 test) — Visible" (toggle)
+     - "Main Store — Visible" (toggle)
+   - Bonus: the **STOCK BY LOCATION** section also gained both outlets, plus the inventory list-page "All locations" filter shows both outlets.
+
+### State of livetest1 after 6.7
+
+- **Plan**: pro (unchanged)
+- **max_outlets**: 1 → **2**
+- **outlets**: 1 ("Main Store") → **2**: id=1 Main Store, id=2 "Branch 2 (Phase 6.7 test)" (test address, 03000000099)
+- **company_profile.multi_outlet_flags_seeded**: false → **true**
+- **5 multi-outlet feature flags**: all now **true** (was all false/missing)
+- **customer_groups**: 0 → **1** ("Phase 6.7 test group", discount_percent=0)
+- **payment_intents**: new row id=6, amount 80,000, plan pro/annual, gateway sandbox, status completed
+- **payment_records**: a record was inserted by `processWebhookEvent` (not enumerated here but visible in admin billing panel)
+- All sales/stock/customers/employees unchanged
+- Hassan's session: `active_outlet_id` set to 1 (Main Store) via context-select
+
+**This state is intentionally preserved for 6.8–6.11**: the multi-outlet config is now baseline for subsequent sub-flows. Phase 8 cleanup will need to (a) delete Branch 2, (b) reset multi_outlet_flags_seeded, (c) optionally reset the 5 flags, (d) delete test customer group, (e) reset max_outlets to 1.
+
+### Severity
+
+No P-tier finding. One **M57** (low-priority, polish bundle):
+
+**M57** — Sandbox payment success page doesn't auto-redirect for non-billing-upgrade flows. The auto-redirect block at [sandbox.js:380-386](backend/routes/sandbox.js#L380-L386) reads `params.get('returnUrl')` from the page URL's query string, but the `/api/billing/add-outlet` flow stores returnUrl on the payment_intent row instead. Result: merchant clicks Pay Successfully, sees "Simulated payment.completed", and is left stuck on `https://api.sanopos.com/api/sandbox/pay/...` until they manually navigate. Fix: pass `returnUrl` as a query param when building the sandbox URL in `SandboxAdapter.createCheckout`. Polish-tier — sandbox-only path, doesn't affect xPay or production.
+
+### 6.7 verdict: PASS
+
+The whole multi-outlet path works as designed: payment intent → sandbox webhook → max_outlets bump → POST /api/outlets → flag seed → context-select redirect → Price Book sub-page + Products outlet visibility surfaces. End-to-end flow is solid.
+
+
+
+## 6.8 Audit-flagged inconsistencies — walked 2026-04-30
+
+Goal: re-confirm the 4 "ghost flag" findings from `docs/retail-targeted-code-audit-2026-04-27.md` against the current codebase. Audit predicts that 3 of these flags have ZERO runtime gates (defined in DEFAULT_FEATURE_FLAGS but never read at runtime) and 1 (`phase2g_loyalty`) has only narrow gates that don't hide the nav surface.
+
+Method: source-grep all 4 flag keys across `backend/routes`, `backend/middleware`, and `frontend/src` to enumerate every runtime read. Then cross-reference nav-config + appRoutes + page components for visibility/route guards. Live behavior was already exercised during 6.7 (payment-gateway sandbox flow) and 6.5/6.7 (nav rendering as Hassan/admin).
+
+### Findings
+
+**1. `phase2g_label_designer` — confirmed ghost** ✅
+   - Source-grep result: 1 occurrence outside docs — `backend/middleware/feature-flags.js:112` (DEFAULT_FEATURE_FLAGS entry only). Zero `requireFeature()` calls, zero `flags.phase2g_label_designer` reads in routes, zero frontend references.
+   - Nav: `Barcode Templates` at [nav-config.js:154](frontend/src/ui/nav-config.js#L154) has `requiredPerm: "manage_inventory"` and **no `requiredFlag`**.
+   - Route: [appRoutes.jsx:163](frontend/src/routes/appRoutes.jsx#L163) — perm only, no flag.
+   - Verdict: matches audit. Toggling this flag does literally nothing. Polish-tier: either add gates or retire the flag.
+
+**2. `phase2g_receipt_barcode_lookup` — confirmed ghost** ✅
+   - Source-grep result: 1 occurrence — `feature-flags.js:111` (DEFAULT_FEATURE_FLAGS entry only). Zero runtime reads anywhere.
+   - The `/api/sales/by-barcode/:code` endpoint that POS Return Exchange calls (`POSReturnExchangeModal.jsx`) is unconditionally available, gated only by `view_reports` perm.
+   - Verdict: matches audit. Polish-tier.
+
+**3. `phase5_payment_gateways` — confirmed ghost (live-verified during 6.7)** ✅
+   - Source-grep result: only docs + 1 `feature-flags.js:96` entry + 1 smoke-spec reference (which actually skips when flag check returns no real gate). Zero runtime gates in `backend/routes/billing.js`, `backend/routes/webhooks.js`, `services/payment-gateway.js`, or anywhere else in the request path.
+   - Live evidence from 6.7: `phase5_payment_gateways=false` on livetest1 right now (confirmed via `phase6-8-flag-state.js`), but the entire `POST /api/billing/add-outlet` → sandbox checkout → webhook → `max_outlets` bump flow worked perfectly. So the flag is provably ungated.
+   - Verdict: matches audit. Payment behavior is gated by `paymentGateway.isEnabled()` (which checks env vars), NOT by this flag.
+
+**4. `phase2g_loyalty` — gated narrowly, audit prediction confirmed** ✅
+   - Source-grep result: 3 runtime gates total:
+     - [`routes/loyalty.js:76`](backend/routes/loyalty.js#L76) — `GET /api/loyalty/customers/:id/ledger` requires the flag
+     - [`routes/loyalty.js:118`](backend/routes/loyalty.js#L118) — `POST /api/loyalty/customers/:id/adjust` requires the flag
+     - [`routes/sales.js:865-893`](backend/routes/sales.js#L865-L893) — `loyaltyOn` controls whether tier discount applies AND whether `loyalty_transactions` ledger row is written at sale time (sales.js:1575)
+   - Nav: `Loyalty Tiers` at [nav-config.js:77](frontend/src/ui/nav-config.js#L77) has `requiredPerm: "all_access"` and **no `requiredFlag`**. So with `phase2g_loyalty=false`, the nav entry is still visible to admin (audit's prediction).
+   - Audit's specific behavioral claim "points NOT earned": **partially correct**. With flag OFF, `sales.points_earned` IS still saved to the sale row (no flag-gate around the INSERT at `sales.js:1294`), but the `loyalty_transactions` ledger row is NOT written. So points balance can still be derived from sale totals; what's lost is the audit trail and the per-tier multiplier. Practical impact: customers earn baseline points but no tier-amplified earn, no per-transaction history. Not a finding by itself — known design.
+
+### Live state of livetest1 ghost-flag values during this walk
+
+Already-set values, captured by `backend/scripts/phase6-8-flag-state.js`:
+
+| Flag | livetest1 enabled | Audit claim | Reality |
+|------|-------------------|-------------|---------|
+| `phase2g_loyalty` | true | Narrow gates only — nav unaffected | ✅ confirmed |
+| `phase2g_label_designer` | true | Ghost — no runtime gate | ✅ confirmed (0 source refs) |
+| `phase2g_receipt_barcode_lookup` | true | Ghost — no runtime gate | ✅ confirmed (0 source refs) |
+| `phase5_payment_gateways` | **false** | Ghost — no runtime gate | ✅ confirmed live (sandbox flow worked at flag=off in 6.7) |
+
+### Severity
+
+No P-tier findings. The 4 audit predictions are accurate. There are 3 known-stale flags (`phase2g_label_designer`, `phase2g_receipt_barcode_lookup`, `phase5_payment_gateways`) that should either grow gates or be retired — this is documented in the audit as a follow-up:
+
+> "Add runtime gates for `phase2g_label_designer`, `phase2g_receipt_barcode_lookup`, and `phase5_payment_gateways`, or remove/retire those flags." — retail-targeted-code-audit-2026-04-27.md:291
+
+Logging this as **M58** (polish bundle): retire 3 ghost flags from `DEFAULT_FEATURE_FLAGS` + the migration that seeds them, OR write the runtime gates that justify their existence. Either is acceptable; the documentation drift is the actual issue. ~5-line cleanup if we go the retire path; larger if we add gates.
+
+### State of livetest1 after 6.8
+
+- No state change. No flags toggled, no rows written.
+
+### 6.8 verdict: PASS
+
+All 4 audit predictions hold. No new behavior leak, no gate regression, no surprise.
+
+
+
+## 6.9 Dashboard JWT silent refresh — walked 2026-04-30
+
+Goal: prove that an expired access token gets transparently swapped via the silent-refresh interceptor at [AuthProvider.jsx:392-410](frontend/src/auth/AuthProvider.jsx#L392-L410), without logging the user out or redirecting to /login.
+
+Method:
+1. Mint a structurally-valid JWT for Hassan (livetest1, eid=1, rid=1, oid=1) with `exp = 1 hour ago`, signed with the real `JWT_SECRET` from Railway env.
+2. Confirmed via curl that the backend correctly returns `HTTP 401 {"code":"TOKEN_EXPIRED"}` for that token.
+3. In Playwright: overwrite `localStorage.authSession.token` with the expired JWT.
+4. Call `window.fetch('https://api.sanopos.com/api/products')` — the patched fetch interceptor injects the expired token header, sees 401 + TOKEN_EXPIRED, calls `refreshAccessToken()`, retries with the new token.
+5. Inspect: response status, content-type (to confirm it's real backend not Vercel SPA shell), localStorage token JTI before/after, and current page URL.
+
+### Findings — 6.9 PASS, no finding
+
+End-to-end live test result:
+```
+requestStatus: 200
+requestContentType: application/json; charset=utf-8
+durationMs: 1170                         (initial 401 + refresh + retry round-trips)
+pageStillSame: true                       (no redirect)
+pageNotRedirectedToLogin: true            (no logout)
+beforeJti: phase6-9-expired-1777497841658
+afterJti:  7d8984d5-63d8-4afb-a430-4ffba02d2e91   (UUID format — real JWT signed by /api/auth/refresh)
+afterExpFresh: true                       (new exp > now)
+tokenSwapped: true
+```
+
+The expired JWT was silently replaced with a freshly-signed one carrying a UUID jti (per `jwt-auth.js:23` — `jti: crypto.randomUUID()`). Hassan stayed on `/customer-groups` throughout. The real `/api/products` JSON came back, not the Vercel SPA fallback HTML.
+
+### Methodology gotcha — false-positive at first
+
+Initial test used `fetch('/api/products')` (relative URL), which Vercel resolves to `https://sanopos.com/api/products`. Vercel's SPA fallback returns the React HTML shell with `HTTP 200` for any unmatched path. That looked like "request succeeded" but it never actually hit `api.sanopos.com`. The interceptor at [AuthProvider.jsx:324-325](frontend/src/auth/AuthProvider.jsx#L324-L325) **does** detect `rawUrl.startsWith("/api/")` as an API call and tries to inject auth, but with the URL pointed at the frontend domain, the response is the SPA HTML and never enters the 401 branch. **Future-walks note**: when testing the auth-401 path, always use the absolute backend URL (`https://api.sanopos.com/api/...`) — relative URLs against sanopos.com get swallowed by Vercel's SPA fallback.
+
+### Negative path — refresh-failure gracefully degrades to error propagation
+
+Not directly exercised live (refresh cookie is httpOnly, can't be revoked from JS without server-side intervention). Source-review at [AuthProvider.jsx:397-405](frontend/src/auth/AuthProvider.jsx#L397-L405): if `refreshAccessToken()` returns null (refresh endpoint returned non-200, or no `data.token`), the original 401 response is returned to the caller. `api.js:21-43` then throws an Error with `.status=401` + `.body`. Page-level handlers catch and show a toast. There is no auto-logout in `api.js` itself — the CLAUDE.md description "intercepts 401 → auto-logout" is slightly inaccurate; the actual behavior is "401 propagates as a thrown error and the page chooses what to do". Acceptable behavior — refresh failure surfaces as an error toast rather than a brittle global logout. Logging this nuance for the docs polish bundle as **M59**.
+
+### State of livetest1 after 6.9
+
+- Hassan's localStorage token: was a valid token → manually overwritten with expired JWT for the test → silently refreshed back to a fresh valid JWT (jti `7d8984d5-63d8-4afb-a430-4ffba02d2e91`, ~24h TTL).
+- Refresh token cookie: re-issued (still valid, no DB row added — refresh endpoint does not insert a new row, it only signs a new access token from the existing refresh row).
+- No other state changed. No sales, no products read by the test that mattered.
+
+### 6.9 verdict: PASS
+
+Silent refresh transparently swaps expired access tokens. User stays on whatever page they were on, no flash, no logout. Refresh token cookie is httpOnly + same-site (per `mt-login` flow) — safe enough for 24h access TTL + 7d refresh TTL.
+
+**M59** (docs polish, ~5 line edit): correct frontend/CLAUDE.md description of api.js 401 behavior — it propagates errors, it doesn't auto-logout. The auto-logout phrasing implies a single source of truth that doesn't exist.
+
+
+
+## 6.10 Error boundary recovery UI — walked 2026-04-30
+
+Goal: verify that React render errors in tenant pages get caught by `ui/ErrorBoundary` and show the recovery card (NOT a white screen), with Sentry capture, and that "Try Again" / "Reload" CTAs work.
+
+Method: source-review + wrap-location grep + Sentry init verification + brute-force patches to trigger render-time errors. The brute-force tests gracefully failed (i.e. could not force a render error in production), which is itself meaningful — see "Force-error attempts" below.
+
+### Findings — 6.10 PASS via source-review + indirect signals
+
+**1. Source review of `ui/ErrorBoundary.jsx`** — clean implementation:
+   - Class component using both `getDerivedStateFromError` (sync state update) + `componentDidCatch` (Sentry capture, logging) — the React-recommended pair for error boundaries.
+   - Two render branches: `level="page"` shows compact centered card with "Try Again" + "Reload"; default (no level) shows full-screen with "Reload Page" only.
+   - **`IS_DEV` gate at lines 52-58 + 83-89** hides `error.message` + `error.stack` in production — privacy/info-disclosure safe.
+   - **Sentry capture at line 18-22**: `componentDidCatch` calls `Sentry.captureException(error, { extra: errorInfo })` only when `SENTRY_DSN` is set. Verified `window.__SENTRY__` is live in browser → Sentry IS initialized on production Vercel.
+   - "Try Again" → `handleReset()` clears local `hasError` state + calls optional `props.onReset` (lets parent re-fetch / re-init).
+
+**2. Wrap-location verification (3 places)** — confirmed via grep:
+   - **Global** at [main.jsx:53](frontend/src/main.jsx#L53) — top-level `<ErrorBoundary>` wraps the entire `CurrencyProvider → ToastProvider → AuthProvider → App` tree. Catches anything not caught lower.
+   - **Page-level** at [components/AppLayoutRedesign.jsx:228](frontend/src/components/AppLayoutRedesign.jsx#L228) — `<ErrorBoundary level="page">` wraps `<Suspense> + <Outlet />` so any tenant route that crashes shows the compact recovery card with the sidebar still visible.
+   - **POS-specific** at [pages/redesign/POSRedesign.jsx:320](frontend/src/pages/redesign/POSRedesign.jsx#L320) — extra `<ErrorBoundary>` wrap inside `<POSProvider>` so a POS render error doesn't escape to global, allowing POS to be recoverable mid-shift.
+
+**Doc drift noted**: `frontend/src/CLAUDE.md` says "main.jsx" but the redesign-pages CLAUDE.md and the high-level README describe the global wrap as being "App.jsx". Actual source is in main.jsx. Minor — flagging as **M60** for the polish bundle.
+
+**3. Sentry initialization verified live**:
+   - `window.__SENTRY__` is truthy in production browser session — confirms `Sentry.init({ dsn: SENTRY_DSN })` ran successfully via `main.jsx`. No-op if `SENTRY_DSN` were unset, but it isn't.
+   - `componentDidCatch` only calls `Sentry.captureException` when `Sentry` is non-null (`const Sentry = SENTRY_DSN ? SentryModule : null` at line 6). Production has DSN → Sentry IS hooked up.
+
+**4. Indirect verification via 28 E2E spec suite**:
+   - `frontend/tests/accounting.spec.js`, `customers.spec.js`, `employees-hr.spec.js`, `orders.spec.js`, `reports.spec.js` (and likely others) call a `noErrorBoundary(page)` helper that asserts `getByText(/something went wrong/i).not.toBeVisible()` — every spec passes only when the boundary is NOT showing.
+   - This means ANY accidental boundary fire on common surfaces would surface as an immediate test failure in CI. The 28 specs together are an implicit integration test for the boundary's "don't fire on success" axis.
+
+**5. Force-error attempts (live, all gracefully failed — itself a positive signal)**:
+   - Patched `Number.prototype.toFixed` to throw → no boundary fire because `useCurrency().fmt` actually uses `toLocaleString`, not `toFixed`.
+   - Patched `JSON.parse` (one-shot) → got absorbed by some try/catch on the codepath before reaching React render. AnnouncementBanner.jsx:14-16 explicitly try/catches its sessionStorage JSON parse.
+   - Visited `/products/999999999` (non-existent product) → page handled cleanly with a console error + toast; no boundary fire because the failure was inside `useEffect` async fetch (not render-time).
+   - Conclusion: the codebase has defensive try/catch on all reasonable risky ops. A genuine render-time exception path is hard to manufacture from outside without modifying source — which is itself evidence of healthy defense-in-depth.
+
+**6. Why no live-fire screenshot**: production builds don't expose React on `window` and there's no debug toggle to inject a forced error. Reaching the boundary would require either (a) modifying source to add a debug `?force_error=1` flag (not warranted just for this audit), or (b) finding a real bug that triggers it (we didn't find one — that's good news). The unit test suite at `frontend/tests/unit/auth_guards.test.jsx` and the 28 E2E specs already provide the regression coverage.
+
+### State of livetest1 after 6.10
+
+- No state change. localStorage tokens already-fresh from 6.9 silent-refresh test.
+- Hassan still on Main Store outlet context.
+
+### 6.10 verdict: PASS via source + integration evidence
+
+Boundary is correctly implemented + correctly wrapped + Sentry-integrated. Could not force a synthetic render error live from outside React in production, but the existing 28-spec E2E suite + unit tests already provide the regression coverage. Sentry hookup is confirmed live (`window.__SENTRY__` present).
+
+**M60** (docs polish): minor — clarify in `frontend/src/CLAUDE.md` that the global ErrorBoundary wrap is in `main.jsx:53`, not `App.jsx`.
+
+
+
+## 6.11 Timezone correctness on receipts and reports — walked 2026-04-30
+
+Goal: confirm that for an Asia/Karachi tenant (livetest1), receipt timestamps, Sales History dates, and Sales Summary "today" filter all respect PK midnight, not UTC midnight, especially for sales that straddle the 19:00 UTC = 00:00 PKT boundary.
+
+Method: livetest1 already has `company_profile.timezone='Asia/Karachi'`. Test sales include INV-2026-00025 created at `2026-04-29T20:23:33Z` UTC = `2026-04-30T01:23 PKT` — perfect across-midnight sample. Walk:
+1. Receipt page rendering
+2. Sales History list timestamps
+3. Sales Summary daily-bucket aggregation
+4. Source-trace for backend bucketing logic
+
+### Findings — mixed: receipt + sales history PASS, **🔴 P22** in daily-bucket aggregation
+
+**1. Receipt timestamp** ✅
+   - `/receipt/INV-2026-00025?tenant=livetest1` renders: **"Apr 30, 2026, 01:23 AM"**
+   - Stored UTC: `2026-04-29T20:23:33Z` → displays correctly as PKT (UTC+5) → date correctly rolled to Apr 30
+   - Verified across-midnight case works.
+
+**2. Sales History list timestamps** ✅
+   - Page shows: `#25 → 4/30/2026, 1:23:33 AM`, `#4 → 4/29/2026, 4:44:41 AM`, etc.
+   - Uses `fmtUtcDateTime()` from [`utils/dates.js:36`](frontend/src/utils/dates.js#L36) which calls `d.toLocaleString()` (browser-local TZ).
+   - Caveat: a US-based admin viewing PK tenant data sees their own browser timezone, not the tenant's PK timezone. The display is browser-tz, not tenant-tz. For users physically in PK admining a PK tenant, this aligns. **Architectural note (M61)**: consider adding `timeZone: req.company.timezone` to the `toLocaleString` call so display always reflects the tenant's intended timezone regardless of where the admin is. Polish-tier, not blocking.
+
+**3. 🔴 P22 — Daily-bucket aggregation in reports is timezone-incorrect**
+
+Discovered while spot-checking the Sales Summary "today" daily-bucket. Expected at the time of the walk: Apr 28 / Apr 29 / Apr 30 (3 distinct PKT dates among 5 valid sales). Actual API response: `2026-04-27` and `2026-04-28` — off by 1 day from expected, off by an entire bucket structure.
+
+**Root cause** at [`backend/routes/reports/sales.js:167`](backend/routes/reports/sales.js#L167):
+```sql
+SELECT s.timestamp::date AS date, ...
+```
+And the consuming JS at [`sales.js:189-191`](backend/routes/reports/sales.js#L189):
+```js
+const dateStr = r.date instanceof Date
+  ? r.date.toISOString().slice(0, 10)
+  : String(r.date);
+```
+
+**Two compounding bugs:**
+
+(a) **Postgres session TZ is UTC, not tenant-local.** Confirmed via `SHOW TIMEZONE` from a Railway-run script: returned `'UTC'` despite `TZ=Asia/Karachi` set in Railway env. The `pg` Node driver does NOT inherit the OS-level `TZ` env into the Postgres connection. So `s.timestamp::date` casts using session `TimeZone='UTC'` → buckets by UTC date, not tenant-local.
+
+(b) **JS Date double-shift on the way back out.** The pg driver returns a Postgres `date` value as a JS `Date` object created by `new Date('YYYY-MM-DD')`, which JavaScript interprets as **midnight UTC** for that date. But `r.date.toISOString()` is invariant to local TZ — should be safe. However, in our test: `r.date.toISOString()` on the bucketed `2026-04-28` returned `'2026-04-27T19:00:00.000Z'` (i.e. midnight Asia/Karachi for 2026-04-28). That means `pg` is **actually constructing the Date with the Node process's TZ** (`process.env.TZ=Asia/Karachi`), not UTC. So `slice(0, 10)` returns `'2026-04-27'` — a SECOND day-shift in the wrong direction. Net effect: 2-day shift for sales between 19:00–23:59 UTC and 1-day shift during the rest of the day.
+
+**Field measurement** for livetest1's 5 valid sales (Asia/Karachi, sales straddling UTC midnight):
+
+| Sale | UTC timestamp | True PKT date | API daily_sales bucket | Off by |
+|------|---------------|---------------|------------------------|--------|
+| 1 | 2026-04-28 13:56 UTC | 2026-04-28 | 2026-04-27 | -1 day |
+| 2 | 2026-04-28 20:43 UTC | 2026-04-29 | 2026-04-27 | -2 days |
+| 3 | 2026-04-28 21:13 UTC | 2026-04-29 | 2026-04-27 | -2 days |
+| 4 | 2026-04-28 23:44 UTC | 2026-04-29 | 2026-04-27 | -2 days |
+| 25 | 2026-04-29 20:23 UTC | 2026-04-30 | 2026-04-28 | -2 days |
+
+Every single bucket is wrong. Sales totals roll up correctly (Rs 700 ✓) — only the date attribution is broken.
+
+**Affected surfaces** (grep `s.timestamp::date` across `backend/routes/reports/`):
+
+- `routes/reports/sales.js:167` — Sales Summary daily breakdown (tested live, broken)
+- `routes/reports/dashboard.js:298, 310` — Dashboard daily revenue chart (the one Hassan sees on every login)
+- `routes/reports/analytics.js:469, 472, 480, 483` — Customer analytics (new vs returning)
+- `routes/reports/finance.js:735, 741` — Finance daily reports
+
+**Already correct** (template for the fix): [`routes/reports/multichannel.js:112,129`](backend/routes/reports/multichannel.js#L112):
+```sql
+SELECT (s.timestamp AT TIME ZONE '${tz}')::date AS day,
+```
+
+**Severity assessment**: 🔴 P-tier (P22).
+- **Real customer impact**: tenant-facing reports are wrong by 1-2 days for any sale outside the UTC noon → 19:00 UTC window. For PK tenants (UTC+5), that's basically all evening + late-night sales — the busiest POS hours for many merchants.
+- **Trust risk**: a merchant comparing their till at end-of-day to the Sales Summary "today" total will see a mismatch and lose confidence.
+- **Compliance risk**: FBR submissions correctly use `invoice_datetime` UTC, but if a merchant reconciles FBR-reported sales-by-date against this report, they'll find a mismatch.
+- **Easy reproduction**: any Pakistan/India/Middle East tenant making a sale between 7pm and midnight local time will see it bucketed in yesterday's column.
+
+**Fix sketch** (~10 lines × 4 files = ~40 lines + tests):
+
+1. Replace every `s.timestamp::date` (and similar `column::date`) with `(s.timestamp AT TIME ZONE $tzParam)::date`. Inject `tzParam = req.company?.timezone || 'UTC'` into the params.
+2. Remove the `r.date.toISOString().slice(0, 10)` JS-side reformat — instead use `r.date::text` in the SQL projection or just trust the `Date` returned by pg (since Postgres returned a date in tenant-local TZ now, and we want the same string back).
+3. Cleanest pattern (mirror multichannel.js): emit `to_char((s.timestamp AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS date` so the projection is text, no JS Date involved.
+4. Add a Vitest in `backend/tests/integration/` that seeds 3 sales straddling UTC midnight against a non-UTC tenant, calls `GET /api/reports/sales-summary`, asserts the bucket dates equal the local PKT dates.
+
+**Recommended action**: bundle into one fix commit (single concern, single class of bug) per ground rule 9 + ground rule 6. ~40 lines of code, ~30 lines of test, single afternoon. **Surfacing to user before fixing** — per ground rules.
+
+### State of livetest1 after 6.11
+
+- No state change. Read-only inspection.
+- INV-2026-00026 (the voided test sale from 6.4) confirmed still voided.
+
+### 6.11 verdict: PASS for receipts + sales history, 🔴 P22 for daily-bucket aggregation
+
+Receipt rendering and Sales History list both correctly translate UTC → PKT. The daily-bucket aggregation in 4 reports modules is broken in a tenant-impacting way. **P22** filed.
+
+### Backend session-TZ note
+
+The Postgres connection does NOT inherit `TZ=Asia/Karachi` from Railway env. `SHOW TIMEZONE` returns `'UTC'`. This is normal `pg` driver behavior — the connection's `TimeZone` is whatever the Postgres server is configured with, not the client OS TZ. **All date casts should use explicit `AT TIME ZONE` with `req.company.timezone`** rather than relying on session TZ. Already documented as best practice in `backend/CLAUDE.md` "Timezone architecture" section, but the existing report code violated it. Consider adding a lint/test that catches `::date` patterns without `AT TIME ZONE`.
+
+### P22 fix shipped — commit `4f784f9`
+
+Applied the fix during this session (Option A): single bundled commit, ~65 lines across 4 route files + 1 new regression test (104 lines).
+
+**Fix shape**:
+1. Replace `s.timestamp::date` with `(s.timestamp AT TIME ZONE '<safeTz>')::date` everywhere in daily-bucket SELECT/GROUP BY.
+2. Emit the bucket as text via `to_char(..., 'YYYY-MM-DD')` so the pg driver returns a string, not a JS Date object — eliminates the second-shift JS reinterpretation entirely.
+3. Validate `req.company.timezone` via existing `isValidTz()` helper from `utils/tz.js` (already used by toUtcStart/toUtcEnd) — falls back to "UTC" on invalid/missing. Inline-literal the validated tz string into the SQL because Postgres requires identical expression text between SELECT and GROUP BY clauses, and `pgify`'s `?` placeholder rotates indices left-to-right which would produce different `$N` for the two positions of the same value.
+
+**Files changed**: `routes/reports/sales.js`, `dashboard.js`, `analytics.js`, `finance.js`. Pattern matches existing-correct code at `routes/reports/multichannel.js:112,129`.
+
+**Test**: `backend/tests/integration/p22-report-tz-buckets.test.js` — seeds 3 sales straddling UTC midnight against an `America/New_York` (UTC-4 EDT) tenant and asserts the bucket dates equal local (EDT) dates not UTC. Failed against pre-fix code (`expected 300 to be received 500`), passes after fix. Plus `total_revenue` independence-of-bucket assertion. Both pass.
+
+**Regression sweep**: 60-test `pg-batch4-reports.test.js` suite still passes after fix. 470/471 unit tests pass (the 1 failure is unrelated — payment-gateway env var test, predates this session). Three legacy SQLite test files fail with `Cannot find module '../helpers/createTestApp'` but those are pre-existing infrastructure issues from the Phase 5 SQLite cleanup, not caused by this fix.
+
+**Live verification on production**: PENDING. Will verify on api.sanopos.com after Railway redeploy. Expected post-deploy outcome: livetest1's `/api/reports/sales-summary` returns daily_sales buckets matching PKT dates (Apr 28: 200, Apr 29: 400, Apr 30: 100) rather than the pre-fix buckets (Apr 27: 600, Apr 28: 100).
 
 
 
