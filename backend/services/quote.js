@@ -16,9 +16,18 @@
  * @param {number|null} pickupOutletId – required when deliveryMethod === 'pickup'
  * @param {number}  channelId        – sales_channels.id
  * @param {number|null} courierId    – selected courier for shipping rate lookup
+ * @param {object}  [opts]           – optional context
+ * @param {string}  [opts.taxMode]   – 'none' | 'inclusive' | 'exclusive' (default 'none').
+ *   When 'inclusive', `unitPrice` is treated as already containing tax — the customer-facing
+ *   subtotal/grandTotal stay equal to (price × qty) and `taxAmount` is the slice extracted
+ *   from that figure. When 'exclusive', tax is added on top. When 'none', `taxAmount` is
+ *   forced to 0 regardless of product/category tax settings. Mirrors the P8 cascade in
+ *   `routes/sales.js` for parity between storefront and POS sale paths.
  * @returns {Promise<object>} quote object (see return shape below)
  */
-async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, channelId, courierId) {
+async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, channelId, courierId, opts = {}) {
+  const taxMode = (opts && opts.taxMode) || 'none';
+
   if (!cartItems || cartItems.length === 0) {
     return emptyQuote(deliveryMethod, pickupOutletId);
   }
@@ -44,10 +53,18 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
   const variantIds = cartItems.map(i => i.variantId).filter(Boolean);
 
   // ── 3. Batch-fetch product + category + tax data ───────────────────
+  // Resolution cascade mirrors `routes/sales.js` P8 (3.14) so storefront quote
+  // matches POS sales:
+  //   1. products.tax_id  → taxes.rate
+  //   2. products.gst     (legacy direct rate column, still in active use)
+  //   3. category.tax_id  → taxes.rate (legacy JOIN preserved as a fallback;
+  //      full multi-level inheritance via category-tree below)
   const { rows: productRows } = await db.query(
     `SELECT p.id, p.name, p.price, p.compare_at_price, p.category_id,
+            p.gst,
             (p.status = 'active' AND p.deleted_at IS NULL) AS is_active,
-            COALESCE(t2.rate, t.rate) AS tax_rate
+            t2.rate AS product_tax_id_rate,
+            t.rate  AS category_tax_id_rate
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id
        LEFT JOIN taxes t ON c.tax_id = t.id
@@ -151,11 +168,34 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
       (variant && variant.price != null) ? variant.price : product.price
     );
 
-    // Tax calculation
-    const rawRate = product.tax_rate != null ? Number(product.tax_rate) : 0;
+    // Tax-rate resolution (P13). tax_mode='none' wins regardless of column data.
+    let rawRate = 0;
+    if (taxMode !== 'none') {
+      if (product.product_tax_id_rate != null) {
+        rawRate = Number(product.product_tax_id_rate);
+      } else if (product.gst != null) {
+        rawRate = Number(product.gst);
+      } else if (product.category_tax_id_rate != null) {
+        rawRate = Number(product.category_tax_id_rate);
+      }
+      if (!isFinite(rawRate)) rawRate = 0;
+    }
     const taxRate = rawRate / 100; // e.g. 17 → 0.17
-    const taxAmount = round2(unitPrice * qty * taxRate);
-    const lineTotal = round2((unitPrice * qty) + taxAmount);
+    const grossLine = unitPrice * qty;
+
+    // Inclusive mode: unit price already contains tax. Extract the tax slice
+    // so reports/FBR see a non-zero tax amount, but keep grandTotal == grossLine.
+    // Exclusive: tax stacks on top.
+    // None: zero (rate already forced to 0 above).
+    let taxAmount;
+    let lineTotal;
+    if (taxMode === 'inclusive' && taxRate > 0) {
+      taxAmount = round2(grossLine - (grossLine / (1 + taxRate)));
+      lineTotal = round2(grossLine);
+    } else {
+      taxAmount = round2(grossLine * taxRate);
+      lineTotal = round2(grossLine + taxAmount);
+    }
 
     // Stock availability
     const availableQty = stockMap.get(productId) || 0;
@@ -189,8 +229,15 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
   }
 
   // ── 8. Compute subtotals ───────────────────────────────────────────
-  const subtotal = round2(items.reduce((sum, i) => sum + (i.unitPrice * i.qty), 0));
+  // In inclusive mode the line gross price ALREADY contains tax; subtotal is
+  // the customer-facing price minus the extracted tax slice so subtotal+tax
+  // round-trips back to the displayed price. In exclusive/none mode subtotal
+  // is the bare price × qty (tax stacks on top later).
   const taxTotal = round2(items.reduce((sum, i) => sum + i.taxAmount, 0));
+  const grossSubtotal = round2(items.reduce((sum, i) => sum + (i.unitPrice * i.qty), 0));
+  const subtotal = taxMode === 'inclusive'
+    ? round2(grossSubtotal - taxTotal)
+    : grossSubtotal;
 
   // Shipping cost: use selected courier's flat rate, or 0 for pickup / no courier
   let shippingTotal = 0;

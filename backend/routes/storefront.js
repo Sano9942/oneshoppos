@@ -524,13 +524,24 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         qty: i.quantity,
       }));
 
+      // P13 — load tenant tax_mode so the storefront quote uses the same
+      // resolution chain as POS sales (P8). Default to 'none' if missing.
+      let taxMode = "none";
+      try {
+        const { rows: cp } = await db.query(
+          "SELECT tax_mode FROM company_profile LIMIT 1"
+        );
+        if (cp[0]?.tax_mode) taxMode = cp[0].tax_mode;
+      } catch { /* column may not exist on a not-yet-migrated tenant */ }
+
       const quote = await calculateQuote(
         db,
         cartItems,
         method,
         pickup_outlet_id || null,
         cart.channel_id,
-        courier_id || null
+        courier_id || null,
+        { taxMode }
       );
 
       // Save quote snapshot to cart for later checkout reference
@@ -597,13 +608,26 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         variantId: i.variant_id,
         qty: i.quantity,
       }));
+      // P13 — propagate tenant tax_mode to checkout's final quote too. The
+      // values written to web_orders.subtotal/tax_total/grand_total below
+      // come from this snapshot, so they MUST match the live quote shown
+      // on the cart page.
+      let checkoutTaxMode = "none";
+      try {
+        const { rows: cp } = await db.query(
+          "SELECT tax_mode FROM company_profile LIMIT 1"
+        );
+        if (cp[0]?.tax_mode) checkoutTaxMode = cp[0].tax_mode;
+      } catch { /* not-yet-migrated tenant */ }
+
       const quote = await calculateQuote(
         db,
         cartItems,
         delivery_method,
         pickup_outlet_id || null,
         cart.channel_id,
-        courier_id || null
+        courier_id || null,
+        { taxMode: checkoutTaxMode }
       );
 
       // 3. Check for availability errors
