@@ -316,7 +316,7 @@ These are cross-feature flows that exercise multiple subsystems. Bugs here are u
 - [x] `/kiosk?tenant={slug}&outlet={id}` — employee clock-in. **Requires merchant auth first.** PIN flow + DB write verified. M35 (hardware keyboard ignored) logged.
 - [x] `/customer-display` — POS-side display. Idle + POST→GET sync verified end-to-end. M34/M36/M37 logged.
 
-**Total**: 3 P-tier (2 shipped: P12/P13; 1 deferred: P14) + 8 M-tier (all deferred to polish bundle).
+**Total**: 3 P-tier (2 shipped: P12/P13; 1 deferred: P14) + 9 M-tier (all deferred to polish bundle).
 
 Full closure section at end of `docs/phase3-findings-WIP.md`.
 

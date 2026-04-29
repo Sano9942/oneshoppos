@@ -1312,6 +1312,21 @@ Validation is shift_id-presence-only; there's no check that the shift belongs to
 
 **Status**: log only — polish bundle. Tag with M36 in a "customer-display polish" bundle.
 
+### 🟡 M38 — Customer display is undiscoverable for tenants
+
+After spot-checking the POS terminal UI (`POSHeader`, `POSSubHeader`, `nav-config.js`, settings pages): **zero entry points** to `/customer-display`. No "Open customer display" button in POS. No setting page. No mention in the dashboard's onboarding checklist. No tooltip. No nav menu entry. No documentation page in the app.
+
+This means a real tenant who buys a second monitor for their counter has **no way to discover this feature exists** unless they read the URL routes file or a sales rep tells them. They have to know the magic URL pattern `/customer-display?shift_id=N&tenant=slug` and they have to know `shift_id` comes from their currently-open shift.
+
+**Why this is a big deal**: customer-facing displays are a core retail trust signal — customers see their items being rung up correctly, no surprise totals, no "you scanned that twice" disputes. Most tenants will assume SanoPOS doesn't have this feature and either skip it (worse customer experience) or stay on a competitor that surfaces it visibly.
+
+**Recommendation**:
+1. Add a "Customer Display" button to `POSHeader` (next to Help/Lock/Logout). On click, opens `/customer-display?shift_id=${activeShift.id}&tenant=${tenantSlug}` in a new window/tab. Disabled until shift is open (matches the same gating as checkout).
+2. Add a one-line entry in the onboarding/setup checklist: "Open customer display on a second screen" with a link.
+3. Settings page section under POS Settings: "Customer Display" — explains the feature, shows the URL, has a copy-to-clipboard button.
+
+**Status**: log only — polish bundle. **Cluster as the "customer display surfacing" bundle** alongside M34 (hardcoded brand name), M36 (in-memory state), M37 (no shift ownership check). All four together are a half-day of work that converts a hidden feature into a sellable one.
+
 ---
 
 # Phase 4 closure — 2026-04-29
@@ -1334,6 +1349,7 @@ Validation is shift_id-presence-only; there's no check that the shift belongs to
 - M35 — Kiosk doesn't accept hardware-keyboard numeric input.
 - M36 — Customer display state in-memory (Railway-restart fragile).
 - M37 — `/customer-display?shift_id=…` accepts any shift_id without ownership check.
+- M38 — Customer display is undiscoverable for tenants (no in-app entry point — major UX gap, sellable feature hidden).
 
 **Doc drift noted**:
 - Plan doc said portal has "4 tabs: invoices, orders, loyalty, profile" — actual nav is Dashboard/Orders/Loyalty/Profile (Invoices is feature-flag-gated for retail tenants).
