@@ -65,6 +65,7 @@ export default function POSHeader() {
           <select
             value={selectedOutletId}
             onChange={(e) => setSelectedOutletId(e.target.value)}
+            aria-label="Select branch"
             className="text-sm font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer border-none"
           >
             <option value="">Select Branch</option>

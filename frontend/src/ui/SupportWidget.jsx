@@ -128,8 +128,9 @@ export default function SupportWidget() {
           <form onSubmit={handleSubmit} className="space-y-3 p-4">
             {/* Type */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Type</label>
+              <label htmlFor="support-ticket-type" className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Type</label>
               <select
+                id="support-ticket-type"
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text)"

@@ -74,6 +74,7 @@ export default function POSOpeningGateModal() {
                 <select
                   value={selectedOutletId}
                   onChange={(e) => setSelectedOutletId(e.target.value)}
+                  aria-label="Select branch"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-[#8066FF] focus:outline-none"
                 >
                   <option value="">Select branch...</option>
