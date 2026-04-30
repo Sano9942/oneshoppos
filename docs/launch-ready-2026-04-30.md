@@ -46,8 +46,8 @@ Important operator notes for livetest1:
 
 ## Phase 7 walkthrough — final scoreboard
 
-23 P-tier critical bugs found and shipped during the walkthrough.
-15 M-tier follow-ups logged; none are launch-blocking. All listed below.
+14 P-tier critical bugs found and shipped during the Phase 7 walkthrough (P22 through P35; full P-tier history of the audit reaches P21 → P35).
+71 M-tier follow-ups deferred across all 7 phases of the audit. None are launch-blocking. All listed below.
 
 ### P-tier (critical) — all FIXED + LIVE-VERIFIED
 
@@ -70,23 +70,162 @@ Important operator notes for livetest1:
 
 ### M-tier (polish) follow-ups, deferred — NOT launch-blocking
 
-| ID | Walk | What | Cost to fix | Priority |
-|---|---|---|---|---|
-| M64 | 7.6 | Super-admin backup excludes `pgboss` schema | 1-line change | low |
-| M65 | 7.6 | R2 backup retention strategy (versioning / 2nd bucket / cross-cloud) | infra config | low (R2 holds <1 MB total) |
-| M66 | 7.6 | Tenant `/backup-restore` UI copy says "restore" but is export-only | UI copy or feature lift | low |
-| M67 | 7.7 | Pakistan-locale legal clauses (PECA, FBR retention, jurisdiction) | content + UI | medium-low |
-| M68 | 7.8 | Tenants don't see their own attached screenshots in `/my-tickets` | UI | low |
-| M69 | 7.8 | `low_stock` notifications spam on duplicate stock states | dedupe in producer | low |
-| M70 | 7.9 | Confirmation email truncates message mid-word at 200 chars | template fix | low |
-| M71 | 7.9 | Worker-status `lastPollAt: null` ambiguous between "broken" and "no cron since boot" | UI distinction | low |
-| M72 | 7.11 | `tier4/company-profile.js` and `treatment-plans.js` upload paths share P31/P32 hazards (off-by-default flags) | adopt `rasterImageFileFilter` + `verifyImageMagicBytes` before flag-on | medium (gate before flipping flags) |
-| M79 | 7.13 | `POST /api/admin/backup/verify` only accepts local file paths; can't verify R2 keys | route enhancement | low |
-| M80 | 7.14.1 | Landing page Lighthouse Performance 84 (target ≥ 90) — likely hero imagery | image optimization | low |
-| M81 | 7.14.2 | WCAG 2.1 AA color-contrast: 11 nodes on landing emerald CTAs + 7 nodes on POS pre-flight | CSS palette tweaks | low |
-| M82 | 7.14.5 | Test stub `createTestApp-pg.js:211` returns 503 instead of production's 403 (drift from M29) | 3-line stub fix + narrow regression assertion | low |
+**71 items total**, accumulated across all 7 phases of the audit. None are launch-blocking. Grouped by category for triage.
 
-> M73-M78 (SEO/OG/PWA-icons cluster) shipped as one bundle in 7.12 — see [phase3-findings-WIP.md](phase3-findings-WIP.md) entries. They are P-tier-equivalent fixes (PWA install was broken pre-fix) but were classified M because individually low-impact; the cluster fix landed in `2d3189e`.
+> M73-M78 (SEO/OG/PWA-icons cluster) shipped as one bundle in 7.12 — see [phase3-findings-WIP.md](phase3-findings-WIP.md). M27, M28, M29 are also shipped (tax tab + 503→403 alignment, see file header summary). M61, M63 are out-of-scope of this audit.
+
+#### Priority key
+
+- **🔴 medium-elevated** — should pick up before broad rollout / before specific feature flag flips on
+- **🟡 medium-low** — visible to customers, fix when touching the area
+- **⚪ low** — true polish; safe to leave unbounded
+
+#### POS  (10 — mostly visible to cashiers)
+
+| ID | What | Priority |
+|---|---|---|
+| M10 | No "Share receipt" button in Sales History detail panel | ⚪ low |
+| M11 | Sales History detail panel missing Email + WhatsApp buttons | ⚪ low |
+| M12 | POS WhatsApp share embeds receipt-template `header_text` instead of company name | 🟡 medium-low |
+| M34 | Customer display shows hardcoded "SanoPOS" instead of tenant name | 🟡 medium-low |
+| M35 | `/kiosk` doesn't accept hardware-keyboard numeric input | 🟡 medium-low |
+| M36 | Customer display state is in-memory (lost on Railway restart) | ⚪ low |
+| M37 | `/customer-display` accepts any `shift_id` value with no validation | ⚪ low |
+| M38 | Customer display is undiscoverable for tenants | ⚪ low |
+| M55 | Receipt slip shows `Invoice: PENDING` forever after sync | 🟡 medium-low |
+| M56 | Checkout modal doesn't surface offline state to cashier | 🟡 medium-low |
+
+#### Admin panel  (5)
+
+| ID | What | Priority |
+|---|---|---|
+| M41 | Tenant Detail renders `max_employees:0` literally; looks like quota=zero | 🟡 medium-low |
+| M42 | Plan Pricing UI shows `starter/*` rows that shouldn't exist | 🟡 medium-low |
+| M43 | Activity dropdown missing `feature_flag_toggled` and other action types | ⚪ low |
+| M44 | Revenue Stats card reads 2 field names the API doesn't return | 🟡 medium-low |
+| M45 | Tenant Activity tab shows zero rows because tenants haven't done anything | ⚪ low |
+
+#### Billing  (5 — customer-visible)
+
+| ID | What | Priority |
+|---|---|---|
+| M5  | Cap-modal pricing line conflicts with /billing pricing cards | 🟡 medium-low |
+| M6  | Add Employee form opens at-cap with no preflight warning | 🟡 medium-low |
+| M22 | `/billing` Quarterly default conflicts with Annual BEST VALUE pill | 🟡 medium-low |
+| M23 | `/api/billing/pricing` still returns Starter tier rows | 🟡 medium-low |
+| M24 | `period_end` ISO timestamp shown verbatim on payment_records | ⚪ low |
+
+#### Storefront  (4)
+
+| ID | What | Priority |
+|---|---|---|
+| M30 | Empty storefront state by default | ⚪ low |
+| M31 | Storefront order placement does not enqueue customer email confirmation | 🟡 medium-low |
+| M32 | Storefront has zero discovery link to customer portal/signup | ⚪ low |
+| M33 | Anonymous storefront orders not auto-linked to customers on signup | 🟡 medium-low |
+
+#### Returns  (4)
+
+| ID | What | Priority |
+|---|---|---|
+| M1  | Sales History does NOT show return-linked status | 🟡 medium-low |
+| M2  | "Returned Stock" nav label is misleading | ⚪ low |
+| M3  | Process Return UI is product-first, not sale-lookup-first | 🟡 medium-low |
+| M4  | `processed_by_employee_id` is NULL after admin Returns submit | 🟡 medium-low |
+
+#### Workers  (4)
+
+| ID | What | Priority |
+|---|---|---|
+| M39 | Worker heartbeat globals are process-memory; lost on Railway restart | ⚪ low |
+| M40 | `subscription_grace` and `catalog_scheduler` heartbeats not in worker-status | ⚪ low |
+| M62 | `retail-digest-worker-boss.js` dedup check is broken | 🟡 medium-low |
+| M71 | worker-status `lastPollAt:null` ambiguous between "broken" and "no cron since boot" | ⚪ low |
+
+#### Import  (5)
+
+| ID | What | Priority |
+|---|---|---|
+| M16 | Excel scientific-notation barcode silently truncated | 🟡 medium-low |
+| M17 | Misleading error wording for non-numeric `selling_price` | ⚪ low |
+| M18 | Customer import accepts invalid email format silently | 🟡 medium-low |
+| M19 | Customer import accepts duplicate mobile silently | 🟡 medium-low |
+| M21 | XLSX auto-coerces ISO date strings into Excel serials | 🟡 medium-low |
+
+#### Dark mode  (5 — UX-visible)
+
+| ID | What | Priority |
+|---|---|---|
+| M50 | Pre-render loading screens flash bright white in dark mode | ⚪ low |
+| M51 | Input + Select primitives hardcode `bg-white`, breaking dark mode globally | 🟡 medium-low |
+| M52 | NotificationBell + ContextSwitcher + PlanLimitModal hardcode white surfaces | 🟡 medium-low |
+| M53 | POSRedesign hardcodes `bg-[#F8FAFC]` — main area stays light in dark mode | 🟡 medium-low |
+| M54 | Dashboard "Needs Attention" rows poor contrast against dark surface | ⚪ low |
+
+#### Gift cards  (3)
+
+| ID | What | Priority |
+|---|---|---|
+| M13 | Public gift card page shows balance with no currency symbol | 🟡 medium-low |
+| M14 | Gift card UI doesn't allow custom codes | ⚪ low |
+| M15 | Gift card tender renders as raw `gift_card` on receipts | 🟡 medium-low |
+
+#### Backup / DR  (3)
+
+| ID | What | Priority |
+|---|---|---|
+| M64 | Super-admin backup excludes `pgboss` schema | ⚪ low |
+| M66 | Tenant `/backup-restore` UI says "restore" but is export-only | ⚪ low |
+| M79 | `POST /api/admin/backup/verify` only accepts local paths, not R2 keys | ⚪ low |
+
+#### Infra  (2)
+
+| ID | What | Priority |
+|---|---|---|
+| M46 | pg-boss `job_common` table has 1045 dead tuples + only 1 autovacuum today | 🟡 medium-low |
+| M65 | R2 backup retention strategy (versioning / 2nd bucket / cross-cloud) | ⚪ low |
+
+#### Integrations  (2)
+
+| ID | What | Priority |
+|---|---|---|
+| M7 | WhatsApp API Token input is `type=text`, not `password` | 🟡 medium-low |
+| M8 | Pull Orders / Sync Products propagate upstream errors with HTTP 500 | 🟡 medium-low |
+
+#### Docs / repo  (2)
+
+| ID | What | Priority |
+|---|---|---|
+| M59 | `frontend/CLAUDE.md` mis-describes `api.js` 401 behavior | ⚪ low |
+| M60 | `frontend/src/CLAUDE.md` mislocates global ErrorBoundary mount | ⚪ low |
+
+#### Single-item categories (16)
+
+| ID | Category | What | Priority |
+|---|---|---|---|
+| M9  | Onboarding | "Make your first sale" step gates on TODAY's sale count, not lifetime first sale | 🟡 medium-low |
+| M20 | Customers | Customer name uniqueness not checked | ⚪ low |
+| M25 | Tenants | Tenant deletion does NOT purge pg-boss jobs that reference the tenant | 🟡 medium-low |
+| M26 | Products | `GET /api/products` (list) drops the `gst` field | 🟡 medium-low |
+| M47 | FBR | 4 fbr-invoice jobs stuck `failed` in pg-boss + likely `fbr_invoices` table | 🟡 medium-low |
+| M48 | Mobile | Sidebar in icon-rail mode crops "SANOPOS" brand text mid-letter | ⚪ low |
+| M49 | PWA | Install prompt cannot be verified on real iOS via Playwright (manual verify required) | ⚪ low |
+| M57 | Sandbox | Payment success doesn't auto-redirect for non-billing-upgrade flows | ⚪ low |
+| M58 | Flags | 3 ghost flags in `DEFAULT_FEATURE_FLAGS` with no runtime gates | ⚪ low |
+| M67 | Legal | Pakistan-locale clauses missing (PECA, FBR retention, jurisdiction) | 🟡 medium-low |
+| M68 | Support | Tenants don't see own attached screenshots in `/my-tickets` | ⚪ low |
+| M69 | Notifs | `low_stock` notifications spam on duplicate stock states | 🟡 medium-low |
+| M70 | Email | Confirmation email truncates message mid-word at 200 chars | ⚪ low |
+| M72 | Security | `tier4/company-profile.js` + `treatment-plans.js` upload paths share P31/P32 hazards | 🔴 medium-elevated — fix before either flag flips on for any tenant |
+| M80 | Perf | Landing page Lighthouse Performance 84 (target ≥ 90) — likely hero imagery | ⚪ low |
+| M81 | A11y | WCAG 2.1 AA color-contrast: 11 landing CTAs + 7 POS pre-flight nodes | ⚪ low |
+| M82 | Tests | Test stub `createTestApp-pg.js:211` returns 503 instead of production's 403 | ⚪ low |
+
+#### Quick stats
+
+- **🔴 medium-elevated**: 1 (M72 — gate before any tenant flips `phase4_company_profile_upload` or `phase4_treatment_plans` flags on)
+- **🟡 medium-low**: ~32 — fix when touching the area
+- **⚪ low**: ~38 — true polish, no urgency
 
 ### Phase 7.14 decisions (5 items, all closed)
 
