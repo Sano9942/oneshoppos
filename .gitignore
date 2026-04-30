@@ -79,3 +79,4 @@ frontend/dist/
 # Vite local cache (root + frontend)
 .vite/
 frontend/.vite/
+.tmp/

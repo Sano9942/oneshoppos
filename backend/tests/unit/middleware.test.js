@@ -444,6 +444,7 @@ const UPLOAD_VALIDATION_PATH = path.resolve(
 
 const {
   imageFileFilter,
+  rasterImageFileFilter,
   safeExtension,
   ALLOWED_IMAGE_MIMES,
 } = _require(UPLOAD_VALIDATION_PATH);
@@ -514,6 +515,44 @@ describe("imageFileFilter", () => {
     // ext will be "" — the extension check is skipped (ext is falsy), MIME passes
     const cb = vi.fn();
     imageFileFilter({}, makeFile("image/jpeg", "noextension"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+});
+
+describe("rasterImageFileFilter (P31 — SVG must be rejected)", () => {
+  function makeFile(mimetype, originalname = "photo.jpg") {
+    return { mimetype, originalname };
+  }
+
+  it("rejects image/svg+xml MIME", () => {
+    const cb = vi.fn();
+    rasterImageFileFilter({}, makeFile("image/svg+xml", "logo.svg"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toMatch(/image/i);
+  });
+
+  it("rejects .svg extension even with image/png MIME", () => {
+    const cb = vi.fn();
+    rasterImageFileFilter({}, makeFile("image/png", "sneaky.svg"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toContain(".svg");
+  });
+
+  it("still accepts image/jpeg", () => {
+    const cb = vi.fn();
+    rasterImageFileFilter({}, makeFile("image/jpeg", "test.jpg"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("still accepts image/png", () => {
+    const cb = vi.fn();
+    rasterImageFileFilter({}, makeFile("image/png", "test.png"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("still accepts image/webp", () => {
+    const cb = vi.fn();
+    rasterImageFileFilter({}, makeFile("image/webp", "test.webp"), cb);
     expect(cb).toHaveBeenCalledWith(null, true);
   });
 });
