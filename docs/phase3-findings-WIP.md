@@ -3603,5 +3603,37 @@ Two test files were created and deleted (`frontend/tests/tmp-a11y-smoke.spec.js`
 
 The original 7.14.2 finding incorrectly attributed the unlabelled `<select>` elements to `/context-select` based on the URL Playwright reported after login. Investigation confirmed the actual page rendered was the POS pre-flight gate (POSHeader + POSOpeningGateModal) — the SPA URL stays `/pos` even when content shows the gate, because gate visibility is controlled by `isReadyForCheckout` state in `POSContext`, not by route. `ContextSelect.jsx` itself has zero `<select>` elements — it uses styled `<button>` rows for branch picking, which axe found accessible. This correction matters only for documentation; the fix landed in the right files.
 
+---
+
+## 7.14.3 — AI insights chat scope confirmation
+
+Goal: confirm the AI insights feature is genuinely OFF before launch, per the `project-ai-deferred` decision (Mar 27 — "no customer demand, defer AI expansion"). Pre-launch checklist asked for explicit out-of-scope confirmation.
+
+### Three-layer verification (all independent)
+
+**Layer 1 — Frontend render gate.** [`DashboardRedesign.jsx:269`](frontend/src/pages/redesign/DashboardRedesign.jsx#L269) renders `AIChatPanel` with `flagEnabled={!!flags.ai_insights}`, and the `AIChatPanel` itself short-circuits when the flag is off. So users never see the chat unless the flag is true.
+
+**Layer 2 — Backend route gate.** [`routes/insights-ai.js:22`](backend/routes/insights-ai.js#L22) returns HTTP 503 when `process.env.ANTHROPIC_API_KEY` is unset. Verified via `railway variables --service oneshoppos`: no `ANTHROPIC_API_KEY` in the production env.
+
+**Layer 3 — DB state.** Per-tenant `feature_flags` table has shape `(key, enabled, description, updated_by, updated_at)`. Queried both active tenants:
+
+```sql
+SELECT 'livetest1' AS tenant, key, enabled FROM tenant_livetest1.feature_flags WHERE key = 'ai_insights'
+UNION ALL
+SELECT 'livetest2' AS tenant, key, enabled FROM tenant_livetest2.feature_flags WHERE key = 'ai_insights';
+```
+
+Result: **0 rows.** Neither tenant has the flag stored at all. The frontend `useFeatureFlags` hook treats missing keys as `false`, so the AIChatPanel render gate evaluates to `false` for every tenant by default.
+
+### State change: none
+
+This was a pure read-only verification.
+
+### Decision
+
+- **AI insights confirmed OFF for launch.** Three independent gates (frontend render, backend env, DB flag) all evaluate to OFF. The `project-ai-deferred` memory remains accurate. No code change needed.
+- The `ai_insights` flag will stay omitted from `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js`. If a tenant ever wants AI insights post-launch, the path is: (1) set `ANTHROPIC_API_KEY` on Railway, (2) UPSERT the per-tenant flag row to `enabled=true`. No new routes or migrations required.
+- No P-tier or M-tier finding from this exercise.
+
 
 
