@@ -214,7 +214,7 @@ export default function AdminSupportTickets() {
                                 <p className="font-medium mb-1">Screenshots:</p>
                                 <div className="flex flex-wrap gap-2">
                                   {t.screenshots.map((src, i) => (
-                                    <img key={i} src={src} alt={`Screenshot ${i + 1}`} className="max-h-40 rounded border border-slate-200" />
+                                    <img key={i} src={src.url} alt={src.filename || `Screenshot ${i + 1}`} className="max-h-40 rounded border border-slate-200" />
                                   ))}
                                 </div>
                               </div>

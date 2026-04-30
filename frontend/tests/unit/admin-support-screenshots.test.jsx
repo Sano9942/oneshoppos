@@ -51,7 +51,10 @@ describe("AdminSupportTickets — screenshot rendering (P26 regression)", () => 
       expect(screen.getByText("Screenshots:")).toBeInTheDocument();
     });
 
-    const img = screen.getByRole("img", { name: /Screenshot 1/i });
+    // Match by accessible name — accept either the filename or generic "Screenshot N" fallback
+    const img = screen.getByRole("img", {
+      name: /(phase7-8-step1\.png|Screenshot 1)/i,
+    });
     expect(img.getAttribute("src")).toBe(
       "https://api.sanopos.com/r2/support/abc123.png",
     );
