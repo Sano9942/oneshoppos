@@ -2,12 +2,17 @@ const crypto = require("crypto");
 const multer = require("multer");
 const { uploadToR2 } = require("../utils/r2");
 const { sendAlertEmail } = require("../utils/alertEmail");
-const { imageFileFilter, safeExtension } = require("../middleware/upload-validation");
+const { rasterImageFileFilter, safeExtension } = require("../middleware/upload-validation");
 
+// rasterImageFileFilter (not imageFileFilter) — SVG is intentionally rejected
+// here. Support uploads are served back from api.sanopos.com same-origin to
+// the auth cookie, so an SVG with <script> would XSS into a session-refresh
+// fetch. See P31 (Phase 7.11). Product/receipt logo paths still accept SVG
+// because sharp rasterises before storage.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  fileFilter: imageFileFilter,
+  fileFilter: rasterImageFileFilter,
 });
 
 module.exports = function supportRoutes(app, deps) {
