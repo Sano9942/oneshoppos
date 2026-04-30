@@ -2972,5 +2972,129 @@ Pages render correctly, link from signup correctly, contain reasonable starter l
 Read-only inspection of source files. No prod state touched.
 
 
+## 7.8 Support widget end-to-end — walked 2026-04-30
+
+Submitted a real ticket via the floating ? widget on `/dashboard` with a screenshot attachment, then replied as super-admin and verified the reply landed at `/my-tickets` + bell incremented. Two 🔴 P-tier bugs surfaced and were both fixed live during the walk.
+
+### What worked first try
+
+- Floating ? button visible on every authenticated page (`fixed bottom-4 right-4 z-50`, emerald-600).
+- Panel rendered correctly: type dropdown (Bug/Feature Request/Question), message textarea, screenshot input gated to 3 files / 5 MB each.
+- Submit flow: `POST /api/support/upload → 200` (R2 URL returned), `POST /api/support/tickets → 201`, 0 console errors, toast confirmation.
+- `support_tickets` row landed in `tenant_livetest1.support_tickets` with the correct shape: `screenshots = [{filename, url}]`, `page_url='/dashboard'`, full UA in `browser`.
+- Tenant `/my-tickets` page rendered the row with status pill, truncated message, em-dash placeholder for `admin_reply`, and correct `created_at`.
+- Admin `/admin/support` listed the ticket, expansion revealed full detail.
+- Reply route `PUT /api/admin/support-tickets/:tenantId/:ticketId/reply` flipped status to `acknowledged` and persisted `admin_reply` + `replied_at` correctly.
+- After reply, tenant `/my-tickets` correctly showed the truncated reply preview + replied_at timestamp.
+
+### 🔴 P26 — Admin support viewer rendered `[object Object]` for screenshots
+
+**Severity:** 🔴 (functional regression that defeats a feature)
+**Surface:** super-admin only — `/admin/support` expansion view
+**File:** [`frontend/src/pages/admin/AdminSupportTickets.jsx:217`](frontend/src/pages/admin/AdminSupportTickets.jsx#L217)
+
+#### Root cause
+
+`SupportWidget.jsx:71-72` stores screenshots as `{ filename, url }` objects. `AdminSupportTickets.jsx:217` rendered `<img src={src} />` where `src` is the whole object — React's String coercion produced `"[object Object]"`. Image broke (`naturalWidth=0`), admin literally could not view any uploaded screenshot.
+
+#### Parallel-paths audit
+
+Per the `feedback_parallel_paths.md` memory, audited every other consumer of `screenshots`:
+- DB schema (`schema-pg.sql:1762`): `JSONB` passthrough — fine.
+- Backend producer (`routes/support.js:30-39`): `JSON.stringify` passthrough — fine.
+- Backend admin reader (`routes/admin/operations.js:21`): SELECT passthrough — fine.
+- Tenant `/my-tickets` viewer (`MyTicketsRedesign.jsx`): doesn't render screenshots at all (M68 candidate).
+- Existing integration test (`pg-batch10-wave2.test.js:74-89`): asserts `{filename, url}` shape — confirms intended contract.
+
+Only one broken site. No defensive string-fallback needed because production has zero strings-shape rows.
+
+#### Fix shipped — `c353796`
+
+Changed line 217 to `src={src.url} alt={src.filename || \`Screenshot ${i + 1}\`}`. Filename now surfaces as alt, falling back to the generic counter if missing.
+
+#### TDD pair
+
+- `3073015` — `frontend/tests/unit/admin-support-screenshots.test.jsx` — RED first (asserted `src='[object Object]'`), GREEN after fix.
+
+#### Live-verified
+
+After Vercel deploy `dpl_Es3BdpcxGNSJ8BWvyWtJwo2kpR8N`, reloaded `/admin/support`, expanded ticket id=1: `naturalWidth=1440, naturalHeight=900, complete=true, src=https://api.sanopos.com/r2/support/1767cb369e63d99f6b30ba1f6a320443.png, alt=phase7-8-step1-widget-opened.png`. Screenshot rendered inline.
+
+### 🔴 P27 — Admin reply silently never notified the tenant employee
+
+**Severity:** 🔴 (silent feature failure since the support feature shipped)
+**Surface:** every tenant whose employees use the bell to surface admin replies
+**Files:**
+- [`backend/routes/admin/operations.js:114-119`](backend/routes/admin/operations.js#L114) — INSERT into a non-existent column
+- [`backend/schema-pg.sql:836-844`](backend/schema-pg.sql#L836) — `notifications` table has no `employee_id`
+
+#### Root cause
+
+Reply route INSERTed into `notifications(employee_id, type, title, message)`. The notifications table is **tenant-wide** — only `id, type, title, message, link, is_read, created_at` exist. INSERT threw `column "employee_id" does not exist`. The throw was swallowed by `catch (_) { /* non-critical */ }`. Reply returned 200, notification never landed.
+
+Empirical proof captured pre-fix: live API query returned `nNotifications=7`, all `type='low_stock'`, **zero** `support_reply` rows after a successful reply.
+
+#### Parallel-paths audit
+
+Reviewed every other notification producer to confirm the schema mismatch is unique to this route:
+- `feature-flags.js:254` (`createNotification`): correct shape `(type, title, message, link)`
+- `routes/shifts.js`, `routes/purchase-orders.js`, `routes/tier4/hr.js`, `routes/tier4/crm.js`: all use `createNotification(...)` correctly, no `employee_id`.
+
+Only the support reply route had the bad column reference. No other producers affected.
+
+#### Fix shipped — `807add7`
+
+- INSERT now matches actual schema: `(type, title, message, link)` with `link='/my-tickets'` so clicking the bell row routes correctly.
+- Replaced silent `catch (_) {}` with `req.log.error` so future schema drift is visible instead of silently swallowed.
+- Note for future per-employee scoping: would need a migration to add `employee_id` AND a backfill for existing low_stock rows. Out of scope for soft launch.
+
+#### TDD pair
+
+- `f97569a` — `backend/tests/integration/pg-p27-support-reply-notification.test.js` — provisions a tenant via `POST /api/admin/tenants`, inserts a ticket directly, PUTs reply, asserts the row in `tenant_<slug>.notifications` with the right shape. RED first (rowcount=0), GREEN after fix.
+- Verified `pg-batch11-admin.test.js` (36 tests) still passes with the fix.
+
+#### Live-verified
+
+After Railway deploy at 18:03:39 PKT (commit `807add7`):
+- Submitted second ticket (id=2) via POST `/api/support/tickets`.
+- Replied via super-admin PUT `/api/admin/support-tickets/95/2/reply`.
+- Tenant `GET /api/notifications` now returns 8 rows (was 7). New row at top: `{ id: 8, type: 'support_reply', title: 'Support ticket reply', link: '/my-tickets', is_read: false }`.
+- Bell badge incremented from 7 → 8 in the UI.
+- Bell dropdown shows the reply at the top with "44s ago" timestamp.
+
+### Bell coverage audit (research, not a finding)
+
+User asked: *what notifications should appear on the bell, and are they actually showing?*
+
+**Producers wired and verified working:** `low_stock`, `shift_open`, `shift_close`, `shift_variance_approved`, `po_received`, `leave_request`, `quotation_accepted`. Plus `support_reply` (now working post-P27).
+
+**Not on the bell — separate UI surfaces:** trial/billing warnings (SubscriptionBanner), multi-outlet upsell, "Needs Attention" dashboard cards, Reorder Alerts page.
+
+**Coverage gaps (informational):** sale-completed, return-processed, payment-received don't notify — by design.
+
+### 🟡 M68 — Tenant `/my-tickets` viewer doesn't show uploaded screenshots
+
+`MyTicketsRedesign.jsx` table has columns Type/Message/Status/Admin Reply/Created. Screenshots are uploaded to R2 and stored on the ticket but invisible to the submitter — only the super-admin can see them. UX gap: submitter cannot review what they attached without re-opening the original page. Polish, not a launch blocker.
+
+### 🟡 M69 — Notifications table has no dedup or auto-resolve for `low_stock`
+
+Every sale of a stock-≤10 product inserts a fresh `low_stock` row. No upsert by product_id, no auto-clear when stock recovers. Bell currently shows 5 stale duplicate rows for "Test Coffee" alone. At scale this would spam dozens of identical alerts and dilute signal. Polish, not a launch blocker.
+
+### State change: production
+
+- New row in `public.tenants`: NONE (P27 test did not run against production — local test schema only).
+- Two new rows in `tenant_livetest1.support_tickets`: ticket id=1 (replied), ticket id=2 (replied).
+- One new row in R2: `support/1767cb369e63d99f6b30ba1f6a320443.png` (3.3 MB widget screenshot).
+- Tenant notifications table: +1 row (`support_reply`, id=8).
+- These need cleanup in Phase 8 — log entries added there.
+
+### Logged as
+
+- **P26** (FIXED + LIVE-VERIFIED): admin viewer rendered `[object Object]` for screenshots — `c353796`.
+- **P27** (FIXED + LIVE-VERIFIED): admin reply silently never notified tenant employee — `807add7`.
+- **M68**: tenants don't see their own attached screenshots in `/my-tickets`.
+- **M69**: low_stock notifications spam on duplicate stock states.
+
+
 
 
