@@ -27,21 +27,29 @@ const fs = require("fs");
 const path = require("path");
 
 describe("P29 — index.js trust-proxy must be > 1 for Railway", () => {
-  it("index.js sets `trust proxy` to a value greater than 1", () => {
+  it("index.js sets `trust proxy` to a multi-hop value (>=2 or env-driven)", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../../index.js"), "utf8");
-    const match = src.match(/app\.set\("trust proxy",\s*(\S+?)\)/);
+    // Capture the entire RHS expression — could be a literal `2` or
+    // `Number(process.env.TRUST_PROXY_HOPS || 2)`.
+    const match = src.match(/app\.set\("trust proxy",\s*([^)]+(?:\([^)]*\))*[^)]*)\)/);
     expect(match).not.toBeNull();
-    const value = match[1];
-    // Pre-fix was `1`. Railway's chain is multi-hop (internal router + edge),
-    // so the value must be at least 2. `true` would also work but
-    // express-rate-limit v7 warns against it (ERR_ERL_PERMISSIVE_TRUST_PROXY).
-    if (value === "true") {
-      // explicit accept
+    const expr = match[1].trim();
+
+    // Reject the bare `1` regression. Allow numeric literals >=2,
+    // `true`, or env-var-default forms whose fallback is >=2.
+    expect(expr).not.toBe("1");
+
+    if (/^\d+$/.test(expr)) {
+      expect(Number(expr)).toBeGreaterThanOrEqual(2);
+    } else if (expr === "true") {
+      // explicit "trust everything" — acceptable but not preferred
       expect(true).toBe(true);
     } else {
-      const numeric = Number(value);
-      expect(Number.isFinite(numeric)).toBe(true);
-      expect(numeric).toBeGreaterThanOrEqual(2);
+      // Env-driven form: must declare a fallback >= 2 in code, e.g.
+      // `Number(process.env.TRUST_PROXY_HOPS || 2)`
+      const fallbackMatch = expr.match(/\|\|\s*(\d+)/);
+      expect(fallbackMatch).not.toBeNull();
+      expect(Number(fallbackMatch[1])).toBeGreaterThanOrEqual(2);
     }
   });
 });

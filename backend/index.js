@@ -85,7 +85,13 @@ featureFlags.init(mtDeps);
 // ─── Express app + middleware chain ─────────────────────────────────────────
 const app = express();
 if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
+  // Railway puts ~2 proxy hops in front of the container (internal router
+  // + edge). With `trust proxy=1`, req.ip resolved to the rotating internal
+  // router IP, breaking IP-based rate limiting (auth, webhook, public
+  // booking, customer portal). `2` makes Express trust both hops and pull
+  // the real client IP from X-Forwarded-For. Tunable via env if Railway
+  // changes its chain.
+  app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 2));
 }
 const PORT = process.env.PORT || 5000;
 const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(
