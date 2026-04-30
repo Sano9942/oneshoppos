@@ -2650,6 +2650,56 @@ Single bundled fix following Phase 6 P22 "Option A" pattern.
 - One throwaway script written + deleted: `backend/scripts/probe-r2.js` (already removed).
 - Phase 8 cleanup: this image stays — gets nuked when Test Coffee is wiped or livetest1 is fully reset.
 
+### P23 verified live + DB row patched
+
+- Commit `61337f3` (CORP fix) deployed. `https://api.sanopos.com/r2/products/product_1777546520381_905075.webp` → 200, `image/webp`, 25,056 bytes, `cross-origin-resource-policy: cross-origin`.
+- Stale DB row patched via `backend/scripts/patch-p23-image-url.js` → image_url updated to absolute URL. Affected 1 row across all tenants (Test Coffee on livetest1).
+- Browser verify on `/inventory`: Test Coffee `<img>` decoded with `naturalWidth=370, naturalHeight=800`. Console errors: 0.
+
+### P24 surfaced + fixed during P23 live verification
+
+While verifying P23 on the storefront product detail page, the image still didn't render. Investigation revealed a **separate, broader systemic mismatch** between storefront API responses and storefront frontend reads: API uses camelCase, frontend was written against snake_case. Same root-cause class as the Phase 1 C2 fix that already corrected `/api/storefront/config`.
+
+### Surfaces broken pre-P24
+
+| Endpoint / surface | Field shape mismatch | Customer-visible effect |
+|---|---|---|
+| `/api/storefront/categories` | wrapped `{ categories }` vs bare array | Storefront category nav silently empty |
+| `/api/storefront/products` (list) | `imageUrl/compareAtPrice/inStock` vs `image_url/compare_at_price/in_stock` | No images, no strikethrough, no in-stock badge on Home + Products grid |
+| `/api/storefront/products/:id` | same camelCase set + `pickupAvailability/customerName/body` | No detail image, no strikethrough, pickup table never renders, reviews show empty rows |
+
+### Already aligned (no fix needed)
+
+- `/api/storefront/config` (snake_case — fixed under Phase 1 C2)
+- `/api/storefront/cart/*` (cart items return raw snake_case columns)
+- `/api/storefront/cart/:token/quote` (camelCase on both sides — shared with POS, don't change)
+- `/api/storefront/pickup-locations`, `/shipping-methods` (already match frontend)
+- `/api/storefront/checkout` (returns `order_token`)
+- `/api/storefront/orders/:token` (snake_case throughout)
+
+### Fix shipped — commit forthcoming
+
+**(a) `backend/routes/storefront.js`** — three response shapes corrected:
+- `/categories`: unwrap to bare array (matches `Array.isArray(catData)` check in StorefrontLayout)
+- `/products` list: rename `imageUrl→image_url`, `compareAtPrice→compare_at_price`, `categoryId→category_id`, `categoryName→category_name`, `inStock→in_stock`
+- `/products/:id` detail: same set of renames + `brandId/brandName`, plus reviews use `{ author, text }` shape (frontend-friendly), images use `alt_text`, `pickupAvailability → availability` with `outlet_id/outlet_name/in_stock` sub-keys
+
+**(b) `frontend/src/pages/storefront/StorefrontHome.jsx` + `StorefrontProducts.jsx`** — simplified the in-stock check from `product.track_inventory === false || (product.stock_quantity ?? 0) > 0` (two undefined fields) to `product.in_stock === true`.
+
+**(c) Test**: `backend/tests/integration/p24-storefront-snake-case.test.js` — 5 assertions across the three endpoints. RED pre-fix (5 fails), GREEN post-fix (5 pass). Existing `pg-batch-phase1-storefront-contracts.test.js` (config) + `pg-batch-phase4-storefront-tax.test.js` (quote) still pass — no regression on the endpoints we deliberately left as-is.
+
+### Live verification plan (post-deploy)
+
+1. Wait for Vercel + Railway redeploy (~2 min each).
+2. `curl https://api.sanopos.com/api/storefront/products/8?tenant=livetest1` → response includes `image_url` (snake_case), no `imageUrl`.
+3. Browser: navigate to `/store/livetest1` — Snack Bar (no image, but should show price + name) and Test Coffee (with image) render. In-stock badge appears.
+4. Navigate to `/store/livetest1/products/8` — Test Coffee image renders.
+5. Categories nav at top should show categories (currently empty — there's no category yet for livetest1 products, which is fine).
+
+### State change for P24
+
+Backend response shapes only — no DB writes. No tenant data affected. Two frontend files (Home, Products) had a 1-line in-stock simplification.
+
 
 
 
