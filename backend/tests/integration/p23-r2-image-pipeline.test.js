@@ -168,6 +168,7 @@ describe("P23 — R2 image pipeline", () => {
         try {
           const data = await stubR2.send(new GetObjectCommand({ Bucket: "x", Key: key }));
           res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
           data.Body.pipe(res);
         } catch (err) {
           res.status(404).json({ error: "Not found" });
@@ -215,6 +216,7 @@ describe("P23 — R2 image pipeline", () => {
         try {
           const data = await stubR2.send(new GetObjectCommand({ Bucket: "x", Key: key }));
           res.setHeader("Content-Type", data.ContentType);
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
           data.Body.pipe(res);
         } catch (err) {
           res.status(404).json({ error: "Not found" });
@@ -233,6 +235,46 @@ describe("P23 — R2 image pipeline", () => {
               });
             });
             expect(sentKeys).toEqual(["consents/42/sig_x.png"]);
+            server.close(resolve);
+          } catch (e) {
+            server.close(() => reject(e));
+          }
+        });
+      });
+    });
+
+    test("sets Cross-Origin-Resource-Policy: cross-origin so the frontend can render <img>", async () => {
+      // Without this header, helmet's default CORP=same-origin makes the
+      // browser block image rendering when the frontend (sanopos.com) loads
+      // an asset from the backend (api.sanopos.com), even though the bytes
+      // arrive successfully (curl works fine, browser shows naturalWidth=0).
+      const express = require("express");
+      const app = express();
+      const stubR2 = {
+        send: async () => ({ ContentType: "image/webp", Body: { pipe: (res) => res.end("") } }),
+      };
+      const { GetObjectCommand } = require("@aws-sdk/client-s3");
+      app.get("/r2/*key", async (req, res) => {
+        const raw = req.params.key;
+        const key = Array.isArray(raw) ? raw.join("/") : raw;
+        const data = await stubR2.send(new GetObjectCommand({ Bucket: "x", Key: key }));
+        res.setHeader("Content-Type", data.ContentType);
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        data.Body.pipe(res);
+      });
+
+      await new Promise((resolve, reject) => {
+        const server = app.listen(0, async () => {
+          try {
+            const port = server.address().port;
+            const http = require("http");
+            const headers = await new Promise((res2) => {
+              http.get(`http://127.0.0.1:${port}/r2/products/x.webp`, (r) => {
+                r.on("data", () => {});
+                r.on("end", () => res2(r.headers));
+              });
+            });
+            expect(headers["cross-origin-resource-policy"]).toBe("cross-origin");
             server.close(resolve);
           } catch (e) {
             server.close(() => reject(e));

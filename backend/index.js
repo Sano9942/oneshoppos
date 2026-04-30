@@ -151,6 +151,10 @@ if (!process.env.R2_PUBLIC_URL) {
       const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
       res.setHeader("Cache-Control", "public, max-age=31536000");
+      // The frontend (Vercel) and this API (Railway) live on different origins,
+      // so helmet's default Cross-Origin-Resource-Policy: same-origin would
+      // block <img> rendering. Open this read-only static asset to cross-origin.
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       data.Body.pipe(res);
     } catch (err) {
       res.status(404).json({ error: "Not found" });
