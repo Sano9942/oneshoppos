@@ -74,7 +74,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Holds & Layaway", path: "/holds", icon: PauseCircle, requiredPerm: "manage_orders", requiredFlag: "phase2g_holds" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Customer Groups", path: "/customer-groups", icon: Users, requiredPerm: "manage_customers" },
-      { name: "Loyalty Tiers", path: "/loyalty-tiers", icon: Award, requiredPerm: "all_access" },
+      { name: "Loyalty Tiers", path: "/loyalty-tiers", icon: Award, requiredPerm: "all_access", requiredFlag: "phase2g_loyalty" },
       { name: "Gift Cards", path: "/gift-cards", icon: Gift, requiredPerm: "manage_gift_cards", requiredFlag: "phase2g_gift_cards" },
       { name: "Returns", path: "/returns", icon: RotateCcw },
       { name: "Return Policies", path: "/return-policies", icon: Shield, requiredPerm: "all_access", requiredFlag: "phase2_returns_policy" },

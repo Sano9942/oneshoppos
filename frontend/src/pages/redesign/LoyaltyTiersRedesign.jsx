@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { Navigate } from "react-router-dom";
 import { Award, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import {
@@ -205,6 +208,8 @@ function TierCard({ tier, money, onEdit, onDelete }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LoyaltyTiersRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const { error: toastError, success } = useToast();
   const [tiers, setTiers] = useState([]);
@@ -224,6 +229,11 @@ export default function LoyaltyTiersRedesign() {
   }, [toastError]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Feature gate — hide page entirely when phase2g_loyalty is off.
+  // useFeatureFlags loading guard prevents flicker; redirect home when off.
+  if (flagsLoading) return null;
+  if (!flags.phase2g_loyalty) return <Navigate to="/" replace />;
 
   function openCreate() {
     setEditing(null);

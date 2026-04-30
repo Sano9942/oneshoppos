@@ -2,7 +2,7 @@ const { validate } = require("../middleware/validate");
 const { CreateCustomerSchema, UpdateCustomerSchema } = require("../schemas/customers");
 
 module.exports = function registerCustomerRoutes(app, deps) {
-  const { db, requirePerm, requireAnyPerm } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature } = deps;
   const { toUtcStart, toUtcEnd } = require("../utils/tz");
 
   // ── Customer Groups CRUD ───────────────────────────────────────────────────
@@ -733,7 +733,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // ── Loyalty Tier CRUD ──────────────────────────────────────────────────────
 
   // GET all loyalty tiers
-  app.get("/api/loyalty/tiers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/loyalty/tiers", requireFeature("phase2g_loyalty"), requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT lt.*,
@@ -750,7 +750,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // POST create loyalty tier
-  app.post("/api/loyalty/tiers", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/loyalty/tiers", requireFeature("phase2g_loyalty"), requirePerm("all_access"), async (req, res) => {
     const { name, min_spend, points_multiplier, discount_percent, benefits, color, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: "Tier name is required" });
     if (min_spend === undefined || isNaN(min_spend) || min_spend < 0)
@@ -769,7 +769,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // PUT update loyalty tier
-  app.put("/api/loyalty/tiers/:id", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/loyalty/tiers/:id", requireFeature("phase2g_loyalty"), requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
     const { name, min_spend, points_multiplier, discount_percent, benefits, color, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: "Tier name is required" });
@@ -790,7 +790,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // DELETE loyalty tier (block if customers assigned)
-  app.delete("/api/loyalty/tiers/:id", requirePerm("all_access"), async (req, res) => {
+  app.delete("/api/loyalty/tiers/:id", requireFeature("phase2g_loyalty"), requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows: [countRow] } = await db.query(
