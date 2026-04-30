@@ -3480,9 +3480,66 @@ One 🔴 P-tier finding emerged before any of the actual walk steps: every `back
 - **P33** (FIXED + LIVE-VERIFIED): backup_log column drift + 6 silent INSERT failures + cross-tenant `backup-status`/`backup-log` leak — `6106c33`.
 - **M79** (follow-up): `POST /api/admin/backup/verify` should accept an R2 key in addition to a local filePath. Today it only verifies user-uploaded restore files; can't verify the dumps the admin endpoint just created. Small enhancement, not launch-blocking.
 
+---
 
+## 7.14.1 — Performance baseline
 
+Goal: capture pre-launch performance numbers (Lighthouse on three surfaces + sale-completion latency) per the `pre-launch-walkthrough-plan-2026-04-27.md` Phase 7.14 checklist, line 617. No prior baseline exists in the project; the Apr 17 maturity roadmap deferred this exact item and `docs/plans/phase1-foundation-polish/01-baseline.md` lists Lighthouse numbers as TBD.
 
+### Tooling
+
+`npx -y lighthouse@12 ... --preset=desktop --output=json,html --chrome-flags="--headless --no-sandbox"`. Reports archived under `d:/newprojects/oneshoppos/.tmp/lighthouse/` (gitignored). Sale latency via `curl -w "%{time_total}"` on `POST /api/sales` from the local box (Karachi → Railway US, so includes round-trip wire time — real merchant requests will be similar from PK).
+
+### Lighthouse — 3 surfaces (desktop preset)
+
+| Surface | Performance | A11y | Best Practices | SEO | LCP | TBT | CLS | FCP | Speed Index |
+|---|---|---|---|---|---|---|---|---|---|
+| Landing `https://sanopos.com/` | **84** | 95 | 100 | 100 | 1.7 s | 0 ms | 0 | 1.4 s | 2.6 s |
+| `/login` (loads same Vite bundle as dashboard) | **93** | 95 | 100 | 92 | 1.3 s | 0 ms | 0 | 0.7 s | 1.8 s |
+| `/pos` (pre-auth shell) | **96** | 95 | 100 | 92 | 1.3 s | 0 ms | 0 | 0.7 s | 1.2 s |
+
+All three Core Web Vitals pass on every surface (LCP < 2.5 s, CLS < 0.1, TBT < 200 ms). Performance lifts on `/login` and `/pos` are because those routes don't load the marketing-page imagery.
+
+**Soft point:** landing is 84, six points under the project's "Lighthouse > 90" goal. Cause likely hero/section imagery weight on the marketing page. Not launch-blocking; logged as a follow-up only.
+
+### Sale completion latency — `POST /api/sales` on livetest1
+
+Setup: inserted a temporary `attendance_sessions` row for employee 1 / outlet 1 to satisfy the `employee_not_clocked_in` guard at `routes/sales.js:72-86`. After the runs, the temp row was deleted (`DELETE FROM tenant_livetest1.attendance_sessions WHERE id = 4`). Payload: 1× Test Coffee (id=8) @ 100 PKR, cash, no customer, no FBR (livetest1 has FBR off).
+
+5 sequential timed runs:
+
+| Run | Latency | HTTP | Sale ID | Invoice |
+|---|---|---|---|---|
+| 1 (cold) | 743 ms | 200 | 27 | INV-2026-00027 |
+| 2 | 611 ms | 200 | 28 | INV-2026-00028 |
+| 3 | 617 ms | 200 | 29 | INV-2026-00029 |
+| 4 | 664 ms | 200 | 30 | INV-2026-00030 |
+| 5 | 678 ms | 200 | 31 | INV-2026-00031 |
+
+- **Median:** **664 ms**
+- **Min:** 611 ms
+- **Max (cold):** 743 ms
+
+Single-write end-to-end including auth + tenant resolution + middleware chain + attendance check + stock `FOR UPDATE` lock + sale + sale_items + sale_payments + receipt insert + Karachi↔Virginia round trip. No FBR enqueue, no Shopify push, no email. This is the lower bound for what a real merchant in Karachi sees on a cash sale.
+
+Real-merchant numbers will be **higher** if any of these are on: FBR enabled (adds ~15 ms async enqueue + worker post), Shopify connected (adds inventory push), customer email receipt (adds queue insert), variants in the cart (extra `product_variants` lock). For pure cash sale on a tenant with no integrations, sub-second is the baseline.
+
+### State change: production
+
+- **5 new sales** on tenant_livetest1 (id 27–31), invoices INV-2026-00027 → INV-2026-00031, total 500 PKR cash, all unvoided. Stock for Test Coffee dropped by 5 (was 0; now likely -5 since the product allows oversell).
+- 1 attendance_sessions row added (id=4) and deleted in the same session. Net zero.
+
+These 5 sales fold into the existing Phase 8.2 cleanup item ("INV-2026-00026 voided test sale — leave or hard-delete") — the cleanup will now cover invoices 27–31 plus 26.
+
+### Decision
+
+- **Performance baseline:** ✅ captured. All three Lighthouse runs are at or above 84; Core Web Vitals all green. Median sale latency 664 ms is well within retail "feels instant" territory (< 1 s).
+- No P-tier or M-tier finding from this exercise.
+- Landing perf score 84 logged as **M80** below.
+
+### Logged as
+
+- **M80** (follow-up, not launch-blocking): landing page Lighthouse Performance 84 (target ≥ 90). Likely cause is unoptimized hero/section imagery on `LandingPage.jsx`. Investigate when there's appetite — `npx -y lighthouse@12 https://sanopos.com/ --preset=desktop --view` to inspect "Opportunities" pane in the saved report at `d:/newprojects/oneshoppos/.tmp/lighthouse/landing.report.html`. Other three Lighthouse categories on landing all 95+.
 
 
 
