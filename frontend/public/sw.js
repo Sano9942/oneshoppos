@@ -1,6 +1,18 @@
-const STATIC_CACHE = "sanopos-static-v1";
+// v2 — Phase 7.12: replace vite.svg with real favicon set + add OG image to
+// the precache. Bump on each precache-list change to evict stale entries
+// from the activate-handler purge.
+const STATIC_CACHE = "sanopos-static-v2";
 const API_CACHE = "sanopos-api-v1";
-const STATIC_ASSETS = ["/", "/manifest.webmanifest", "/vite.svg"];
+const STATIC_ASSETS = [
+  "/",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/favicon.ico",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+  "/og-default.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

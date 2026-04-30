@@ -14,6 +14,8 @@ node_modules/
 !docs/**/*.png
 !docs/**/*.jpg
 !images/**
+!frontend/public/**/*.png
+!frontend/public/**/*.jpg
 docs/phase6-screenshots/
 
 # OS
