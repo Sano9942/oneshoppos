@@ -446,6 +446,8 @@ const {
   imageFileFilter,
   rasterImageFileFilter,
   safeExtension,
+  detectImageType,
+  verifyImageMagicBytes,
   ALLOWED_IMAGE_MIMES,
 } = _require(UPLOAD_VALIDATION_PATH);
 
@@ -554,6 +556,91 @@ describe("rasterImageFileFilter (P31 — SVG must be rejected)", () => {
     const cb = vi.fn();
     rasterImageFileFilter({}, makeFile("image/webp", "test.webp"), cb);
     expect(cb).toHaveBeenCalledWith(null, true);
+  });
+});
+
+describe("detectImageType (P32 — magic-byte sniff)", () => {
+  it("detects JPEG from FF D8 FF header", () => {
+    const buf = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    expect(detectImageType(buf)).toBe("image/jpeg");
+  });
+
+  it("detects PNG from 89 50 4E 47 0D 0A 1A 0A header", () => {
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(detectImageType(buf)).toBe("image/png");
+  });
+
+  it("detects GIF87a", () => {
+    expect(detectImageType(Buffer.from("GIF87a..."))).toBe("image/gif");
+  });
+
+  it("detects GIF89a", () => {
+    expect(detectImageType(Buffer.from("GIF89a..."))).toBe("image/gif");
+  });
+
+  it("detects WEBP from RIFF...WEBP envelope", () => {
+    const buf = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.from([0x00, 0x00, 0x00, 0x00]),
+      Buffer.from("WEBP"),
+      Buffer.from("VP8 "),
+    ]);
+    expect(detectImageType(buf)).toBe("image/webp");
+  });
+
+  it("detects BMP from BM header", () => {
+    expect(detectImageType(Buffer.from("BMxxxxxxxxxxxx"))).toBe("image/bmp");
+  });
+
+  it("detects TIFF little-endian (II*\\0)", () => {
+    const buf = Buffer.from([0x49, 0x49, 0x2a, 0x00]);
+    expect(detectImageType(buf)).toBe("image/tiff");
+  });
+
+  it("detects TIFF big-endian (MM\\0*)", () => {
+    const buf = Buffer.from([0x4d, 0x4d, 0x00, 0x2a]);
+    expect(detectImageType(buf)).toBe("image/tiff");
+  });
+
+  it("returns null for an unknown DOS MZ header (the P32 EXE-as-jpg attack)", () => {
+    const buf = Buffer.from([0x4d, 0x5a, 0x90, 0x00]);
+    expect(detectImageType(buf)).toBeNull();
+  });
+
+  it("returns null for empty buffer", () => {
+    expect(detectImageType(Buffer.alloc(0))).toBeNull();
+  });
+
+  it("returns null for null/undefined input", () => {
+    expect(detectImageType(null)).toBeNull();
+    expect(detectImageType(undefined)).toBeNull();
+  });
+});
+
+describe("verifyImageMagicBytes (P32)", () => {
+  it("accepts JPEG bytes claimed as image/jpeg", () => {
+    const buf = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    expect(verifyImageMagicBytes(buf, "image/jpeg")).toBe(true);
+  });
+
+  it("rejects EXE bytes claimed as image/jpeg", () => {
+    const buf = Buffer.from([0x4d, 0x5a, 0x90, 0x00]); // DOS MZ header
+    expect(verifyImageMagicBytes(buf, "image/jpeg")).toBe(false);
+  });
+
+  it("rejects PNG bytes when MIME claims image/jpeg", () => {
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    expect(verifyImageMagicBytes(buf, "image/jpeg")).toBe(false);
+  });
+
+  it("accepts PNG bytes claimed as image/png", () => {
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(verifyImageMagicBytes(buf, "image/png")).toBe(true);
+  });
+
+  it("rejects when bytes do not match any known image format", () => {
+    const buf = Buffer.from("ZIP_FILE_OR_RANDOM_GARBAGE_NOT_AN_IMAGE");
+    expect(verifyImageMagicBytes(buf, "image/png")).toBe(false);
   });
 });
 
