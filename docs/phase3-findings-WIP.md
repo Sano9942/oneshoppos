@@ -3745,5 +3745,39 @@ livetest1 (flag=true) → HTTP 200  body: {"tiers":[...full list...]}
 - **P35** (FIXED + LIVE-VERIFIED, `7bb7f8d`): closes audit item #6.
 - **M82** (follow-up, not launch-blocking): test stub `backend/tests/helpers/createTestApp-pg.js:211` returns 503 when its `requireFeature` rejects — drift from the M29 production fix that aligned the production middleware to return 403. Tests had to accept either status range. Stub should be updated to match prod (3-line change), and the regression test then narrowed to assert exactly 403.
 
+---
+
+## Phase 8 — Launch-readiness cleanup
+
+Goal: scrub production of walkthrough test artifacts and produce a launch-ready baseline doc.
+
+### Decisions made
+
+- **livetest1 kept as a populated internal demo tenant** rather than scrubbed back to a fresh signup state. Reason: the merchant explicitly wants to keep testing post-launch and the Pro-tier billing state, multi-outlet config, retail flag bundle, and historical data are useful for both bug repro and demos. Documented as the canonical demo tenant in the launch-ready doc.
+- **Open shift on outlet 1 stays open** for ongoing testing (would otherwise distort shift-summary reports — caveat documented).
+- **`backup_log` row 1 stays** as live evidence the audit pipeline works after P33.
+
+### Actions taken
+
+| Sub-phase | Action | Result |
+|---|---|---|
+| 8.1 livetest2 | `DELETE /api/admin/tenants/96` via super-admin auth | HTTP 200, schema dropped, soft-delete on master, audit row 208 (`actor='admin:sano9942@hotmail.com'`) |
+| 8.2 livetest1 baseline | SKIPPED | Per decision above |
+| 8.3 Phase 4 leftovers | SKIPPED | Per decision above |
+| 8.4 close shift / clear attendance | SKIPPED | Per decision above |
+| 8.5 walk artifacts | DB: 1 `email_queue` orphan (id 12) + 1 `notifications` row (id 8 support_reply) + 3 `support_tickets` (id 1, 2, 3); R2: 13 support uploads (1 from 7.8 ticket + 12 from 7.11 walk-test) + 2 backup `.dump` files | All deleted; `support/` and `backups/` R2 prefixes empty (0 objects each); 12 demo notifications kept; `backup_log` row 1 kept |
+| 8.6 launch-ready doc | New file `docs/launch-ready-2026-04-30.md` | Final tenant inventory, P-tier wins (P22-P35), M-tier deferred backlog (M64-M82), operator caveats |
+
+### State change: production
+
+- 1 tenant deleted (livetest2 id=96), 1 active tenant remaining (livetest1).
+- 1 audit row added to `tenant_audit_log` (id 208).
+- 5 DB rows deleted (across `public.email_queue`, `tenant_livetest1.notifications`, `tenant_livetest1.support_tickets`).
+- 15 R2 objects deleted (~6.9 MB freed). `support/` and `backups/` prefixes both at 0 objects.
+
+### Verdict
+
+**Launch-ready.** All P-tier critical bugs from the walkthrough are fixed and live-verified. M-tier backlog is documented in `docs/launch-ready-2026-04-30.md` with priority and cost-to-fix; none are launch-blocking. Production tenant inventory is intentional (1 demo + super-admin). Operator caveats documented.
+
 
 
