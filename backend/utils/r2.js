@@ -60,10 +60,20 @@ async function uploadToR2(buffer, key, contentType) {
     })
   );
 
+  // Always return an absolute URL so the frontend (often hosted on a different
+  // origin than the API) can fetch the asset. Prefer R2_PUBLIC_URL (custom CDN
+  // domain) when set; otherwise route through the backend's /r2/<key> proxy at
+  // APP_PUBLIC_BASE_URL. A bare relative `/r2/<key>` would resolve against the
+  // frontend host (Vercel) and never reach the backend (Railway) — see P23.
   if (process.env.R2_PUBLIC_URL) {
     return `${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
   }
-  return `/r2/${key}`;
+  if (process.env.APP_PUBLIC_BASE_URL) {
+    return `${process.env.APP_PUBLIC_BASE_URL.replace(/\/$/, "")}/r2/${key}`;
+  }
+  throw new Error(
+    "R2 upload misconfigured: set R2_PUBLIC_URL (CDN/custom domain) or APP_PUBLIC_BASE_URL (backend proxy) — a relative URL would resolve against the wrong host under split-host deploys"
+  );
 }
 
 /**

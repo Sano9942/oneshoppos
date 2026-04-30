@@ -143,7 +143,10 @@ if (!process.env.R2_PUBLIC_URL) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
   const { r2, bucket } = require("./utils/r2");
   app.get("/r2/*key", async (req, res) => {
-    const key = req.params.key;
+    // Express 5 named-wildcard returns the matched segments as an ARRAY,
+    // not a string. Join them back so S3 receives a valid key.
+    const raw = req.params.key;
+    const key = Array.isArray(raw) ? raw.join("/") : raw;
     try {
       const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
