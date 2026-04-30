@@ -71,6 +71,74 @@ const rasterImageFileFilter = makeImageFileFilter(
 );
 
 /**
+ * Sniff the first bytes of a buffer and return a canonical image MIME, or
+ * null if the magic bytes don't match any known image format.
+ *
+ * P32 — multer's `file.mimetype` comes from the client multipart envelope
+ * and can be lied about. detectImageType reads the actual bytes so a
+ * payload.exe renamed payload.jpg with Content-Type: image/jpeg can be
+ * caught before it lands on R2.
+ */
+function detectImageType(buffer) {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 4) return null;
+
+  const b = buffer;
+
+  // JPEG: FF D8 FF
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    b.length >= 8 &&
+    b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
+    b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  // GIF: "GIF87a" or "GIF89a"
+  if (b.length >= 6 && b.slice(0, 3).toString() === "GIF") {
+    const ver = b.slice(3, 6).toString();
+    if (ver === "87a" || ver === "89a") return "image/gif";
+  }
+
+  // WEBP: "RIFF....WEBP"
+  if (
+    b.length >= 12 &&
+    b.slice(0, 4).toString() === "RIFF" &&
+    b.slice(8, 12).toString() === "WEBP"
+  ) {
+    return "image/webp";
+  }
+
+  // BMP: "BM"
+  if (b[0] === 0x42 && b[1] === 0x4d) return "image/bmp";
+
+  // TIFF little-endian: 49 49 2A 00
+  if (b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0x00) {
+    return "image/tiff";
+  }
+  // TIFF big-endian: 4D 4D 00 2A
+  if (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0x00 && b[3] === 0x2a) {
+    return "image/tiff";
+  }
+
+  return null;
+}
+
+/**
+ * True if the buffer's magic bytes match the claimed MIME type.
+ * False on mismatch or unknown bytes. Note: SVG is text-based and has no
+ * magic bytes; SVG callers should use the rasterImageFileFilter (which
+ * already excludes SVG) rather than relying on byte-level checks here.
+ */
+function verifyImageMagicBytes(buffer, claimedMime) {
+  const sniffed = detectImageType(buffer);
+  if (!sniffed) return false;
+  return sniffed === String(claimedMime || "").toLowerCase();
+}
+
+/**
  * Returns a safe extension from the original filename,
  * falling back to a default derived from the MIME type.
  */
@@ -95,6 +163,8 @@ module.exports = {
   imageFileFilter,
   rasterImageFileFilter,
   safeExtension,
+  detectImageType,
+  verifyImageMagicBytes,
   ALLOWED_IMAGE_MIMES,
   ALLOWED_IMAGE_EXTS,
   ALLOWED_RASTER_IMAGE_MIMES,

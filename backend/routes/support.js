@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const multer = require("multer");
 const { uploadToR2 } = require("../utils/r2");
 const { sendAlertEmail } = require("../utils/alertEmail");
-const { rasterImageFileFilter, safeExtension } = require("../middleware/upload-validation");
+const { rasterImageFileFilter, safeExtension, verifyImageMagicBytes } = require("../middleware/upload-validation");
 
 // rasterImageFileFilter (not imageFileFilter) — SVG is intentionally rejected
 // here. Support uploads are served back from api.sanopos.com same-origin to
@@ -103,6 +103,15 @@ module.exports = function supportRoutes(app, deps) {
         const file = req.file;
         if (!file) {
           return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        // P32 — multer's file.mimetype comes from the client multipart envelope
+        // and is unverified. Sniff the actual bytes against the claim to block
+        // EXE-renamed-jpg, ZIP-as-png, etc. from landing on R2 with an image
+        // content-type. Empty files have no magic bytes either, so they fail
+        // here too.
+        if (!verifyImageMagicBytes(file.buffer, file.mimetype)) {
+          return res.status(400).json({ error: "File contents do not match an image format" });
         }
 
         const ext = safeExtension(file.originalname, file.mimetype);
