@@ -47,8 +47,23 @@ describe("Batch 11 — Admin routes (Postgres, public schema)", () => {
       id SERIAL PRIMARY KEY, admin_email TEXT, broadcast_type TEXT, subject TEXT,
       message TEXT, recipient_count INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+    // P33 — backup_log union shape (matches schema-pg.sql + migration v84).
+    // Older revisions of this stub used (filename, size_bytes, url) only,
+    // which masked the production-vs-code drift discovered in Phase 7.13.
     await pool.query(`CREATE TABLE IF NOT EXISTS backup_log (
-      id SERIAL PRIMARY KEY, filename TEXT, size_bytes BIGINT, url TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+      id            SERIAL PRIMARY KEY,
+      action        TEXT,
+      filename      TEXT,
+      size_bytes    BIGINT,
+      performed_by  TEXT,
+      note          TEXT,
+      url           TEXT,
+      schema_name   TEXT,
+      status        TEXT,
+      duration_ms   INTEGER,
+      error_message TEXT,
+      tenant_slug   TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
     )`);
 
     // Create test super admin
