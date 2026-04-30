@@ -108,15 +108,19 @@ module.exports = function registerOperationsRoutes(app, deps) {
       );
       if (rows.length === 0) return res.status(404).json({ error: "Ticket not found" });
 
-      // Create in-app notification for the employee
-      if (rows[0].employee_id) {
-        try {
-          await tenantDb.query(
-            `INSERT INTO notifications (employee_id, type, title, message)
-             VALUES ($1, 'support_reply', 'Support ticket reply', $2)`,
-            [rows[0].employee_id, `Your support ticket has been replied to: ${reply.trim().substring(0, 100)}`]
-          );
-        } catch (_) { /* non-critical */ }
+      // Create in-app notification on the tenant — surfaces in NotificationBell
+      // for any logged-in employee at that tenant. The notifications table is
+      // tenant-wide (no employee_id column); /my-tickets filters by submitter.
+      try {
+        await tenantDb.query(
+          `INSERT INTO notifications (type, title, message, link)
+           VALUES ('support_reply', 'Support ticket reply', $1, '/my-tickets')`,
+          [`Your support ticket has been replied to: ${reply.trim().substring(0, 100)}`]
+        );
+      } catch (notifErr) {
+        // Don't fail the reply over a notification write — but DO log it
+        // so a future schema drift is visible instead of silently swallowed.
+        req.log?.error({ err: notifErr, tenantId: req.params.tenantId, ticketId: req.params.ticketId }, "Failed to create support_reply notification");
       }
 
       logAdminAction(req.admin.email, "ticket_replied", "support_ticket", req.params.ticketId, { tenant_id: req.params.tenantId }, req.ip);
