@@ -366,6 +366,11 @@ module.exports = function registerWebhookRoutes(app, deps) {
   const logger = _logger;
   const { z } = require("zod");
 
+  // Rate limiter for all webhook endpoints — passed from registerAllRoutes
+  // deps. Defaults to a passthrough so this module is callable in tests
+  // without wiring the full middleware chain.
+  const webhookLimiter = deps.webhookLimiter || ((_req, _res, next) => next());
+
   // Structural schema for xPay payloads — non-fatal. HMAC is the real gate;
   // this logs anomalies so unexpected payload shapes surface in Sentry/Pino
   // before they corrupt downstream idempotency state. passthrough() preserves
@@ -380,7 +385,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
   // Note: raw body is captured by express.json() verify callback in index.js
   // and available as req.rawBody for HMAC verification.
 
-  app.post("/api/webhooks/xpay", async (req, res) => {
+  app.post("/api/webhooks/xpay", webhookLimiter, async (req, res) => {
     try {
       const rawBody = req.rawBody;
       const { valid, event_type, transaction_id, status, amount, raw, error } =
@@ -427,7 +432,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
   });
 
   // POST /api/webhooks/meta — Facebook/Instagram order webhooks
-  app.post("/api/webhooks/meta", async (req, res) => {
+  app.post("/api/webhooks/meta", webhookLimiter, async (req, res) => {
     try {
       const { object, entry } = req.body || {};
       logger.info({ object, entries: entry?.length }, "Meta webhook received");
@@ -452,7 +457,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
   });
 
   // POST /api/webhooks/whatsapp — receive WhatsApp messages
-  app.post("/api/webhooks/whatsapp", async (req, res) => {
+  app.post("/api/webhooks/whatsapp", webhookLimiter, async (req, res) => {
     try {
       const { entry } = req.body || {};
       const changes = entry?.[0]?.changes || [];
@@ -492,7 +497,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
   });
 
   // POST /api/webhooks/daraz — Daraz order status push notifications
-  app.post("/api/webhooks/daraz", async (req, res) => {
+  app.post("/api/webhooks/daraz", webhookLimiter, async (req, res) => {
     try {
       const { trade_order_id, status, timestamp } = req.body || {};
       if (!trade_order_id) return res.status(400).json({ error: "Missing order ID" });
