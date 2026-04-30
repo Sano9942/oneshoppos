@@ -137,7 +137,7 @@ async function loadTenantAndPerms(req, res, next) {
     // failed under pool pressure.
     const loadPerms = async () => {
       const { rows: [emp] } = await permDb.query(
-        "SELECT role_id, name FROM employees WHERE id = $1", [decoded.eid]
+        "SELECT role_id, name, email FROM employees WHERE id = $1", [decoded.eid]
       );
       if (!emp) return { empty: true };
       const { rows } = await permDb.query(
@@ -175,6 +175,7 @@ async function loadTenantAndPerms(req, res, next) {
       return next();
     }
     req.employee.name = result.emp.name;
+    req.employee.email = result.emp.email || null;
     if (req.isImpersonating) {
       req.employee.name = (result.emp.name || "Admin") + " (impersonated by Super-Admin)";
     }
