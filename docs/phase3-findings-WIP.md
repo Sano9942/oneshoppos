@@ -3181,5 +3181,70 @@ Production: ticket id=3 + `support_received` email logged. Add ticket #3 to the 
 - **M71**: worker-status `lastPollAt: null` is ambiguous between "broken" and "no cron since boot."
 
 
+## 7.10 Rate limit smoke — walked 2026-04-30
+
+Three checks: auth (21 wrong-pw → 429), webhook (121/min → 429), global (normal browsing not throttled). All three started broken; two were 🔴 P-tier; both fixed during the walk.
+
+### 🔴 P29 — Rate limiters bucketed by rotating Railway proxy IP, never tripped
+
+**Severity:** 🔴 (security: credential brute-force, webhook flood, public-booking flood all unrate-limited)
+
+**Empirical evidence:**
+
+1. Production `req.ip` rotates per request from the same client. Pulled directly from `admin_security_log.ip_address` for 10 successive logins by `sano9942@hotmail.com`:
+   - `104.156.93.26`, `.36`, `.87`, `.69`, `104.156.91.20`, `.30`, `.29`, etc.
+   - All rotating in the Railway edge IP range (Choopa LLC / Vercel-allocated).
+2. 25 wrong-password attempts in <30s never triggered 429. `ratelimit-remaining` bounced 19, 19, 18, 19, ... — different requests landing in different buckets.
+3. Pre-fix `app.set("trust proxy", 1)` told Express to trust only 1 hop. Railway's chain has 2 (internal router + edge), so `req.ip` resolved to the rotating internal router IP.
+
+**Fix shipped — `850870e`:**
+```js
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 2));
+```
+Env-tunable in case Railway's chain length changes; default 2.
+
+**TDD pair (`ca9f60f`, `850870e`):**
+- `tests/integration/pg-p29-rate-limit-trust-proxy.test.js` — 2 assertions:
+  - Code-shape: `index.js` trust-proxy must be ≥2 (or `true`, or env-driven with fallback ≥2). RED on `1`.
+  - Behavior: with `trust proxy=2` + simulated multi-hop XFF, the 21st auth attempt from the same real client returns 429 with Retry-After.
+- 89 neighbor tests (53 middleware + 36 admin) still pass.
+
+**Live-verified (Railway deploy 18:57 PKT, `850870e`):** smoke fired 25 wrong-password POSTs at `/api/auth/mt-login`. `ratelimit-remaining` decremented monotonically 19→0. Request #21 returned `429 {"error":"Too many requests","retry_after_seconds":864}` with `retry-after: 864` header.
+
+**Affects all req.ip-keyed limiters** (now all working): `authLimiter`, `webhookLimiter` (combined with P30), `reviewLimiter`, `publicBookingLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`, plus the inline `checkSignupRate` map.
+
+### 🔴 P30 — webhook routes never invoked the configured webhookLimiter
+
+**Severity:** 🔴 (DDoS amplification: bad actors could flood webhook endpoints, burning HMAC-verify CPU + log volume)
+
+**Empirical evidence:**
+- After P29 fix, fired 122 fake-sig POSTs at `/api/webhooks/xpay` — all returned 400, no 429 ever fired.
+- Grep'd `app.post("/api/webhooks/...` in `routes/webhooks.js`: 4 routes (xpay, meta, whatsapp, daraz) all defined with no limiter middleware.
+- `webhookLimiter` IS exported from `middleware/rate-limit.js`, IS passed to `registerWebhookRoutes` via `deps`, but never wired to any route.
+
+**Fix shipped — `85bbd0c`:**
+- Import limiter from deps with passthrough fallback: `const webhookLimiter = deps.webhookLimiter || ((_req, _res, next) => next())`.
+- Wire on each of 4 routes: `app.post("/api/webhooks/xpay", webhookLimiter, async (req, res) => {...})`.
+
+**TDD pair (`85bbd0c`):**
+- `tests/integration/pg-p30-webhook-rate-limit.test.js` — registers webhooks routes with a mock limiter that returns 429 after 3 calls; asserts each of xpay/meta/whatsapp/daraz routes invoke the limiter and trip 429 on call #4. RED before fix (limiter never invoked); GREEN after (4/4 routes pass).
+
+**Live-verified (Railway deploy 19:13 PKT, `85bbd0c`):** smoke fired 130 parallel POSTs at `/api/webhooks/xpay` to land all within the 60s window. Result: **120 × 400 + 10 × 429** — exact 120/min cap honored. Response now includes `ratelimit-limit: 120, ratelimit-policy: 120;w=60` headers.
+
+### Global limiter sanity (✅ pass)
+
+30 consecutive `GET /api/health` requests returned 30 × 200, no 429. Global limit (600/min) is not triggered by normal browsing — as designed.
+
+### State change: production
+
+- 5 successful webhook-limit deploys at 18:27, 18:57, 19:13 PKT (within ~46 minutes of work).
+- `admin_activity_log` has new entries from the test login bursts; minor, will be cleaned up in Phase 8.5.
+
+### Logged as
+
+- **P29** (FIXED + LIVE-VERIFIED): rate limiters bucketed by rotating Railway proxy IP — `850870e`.
+- **P30** (FIXED + LIVE-VERIFIED): webhook routes never invoked the configured limiter — `85bbd0c`.
+
+
 
 
