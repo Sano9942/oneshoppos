@@ -3541,5 +3541,63 @@ These 5 sales fold into the existing Phase 8.2 cleanup item ("INV-2026-00026 voi
 
 - **M80** (follow-up, not launch-blocking): landing page Lighthouse Performance 84 (target ≥ 90). Likely cause is unoptimized hero/section imagery on `LandingPage.jsx`. Investigate when there's appetite — `npx -y lighthouse@12 https://sanopos.com/ --preset=desktop --view` to inspect "Opportunities" pane in the saved report at `d:/newprojects/oneshoppos/.tmp/lighthouse/landing.report.html`. Other three Lighthouse categories on landing all 95+.
 
+---
+
+## 7.14.2 — Accessibility smoke
+
+Goal: catch obvious WCAG 2.1 AA failures on public + authenticated surfaces before launch via axe-core, in addition to Lighthouse's a11y category (which already returned 95 across all three surfaces in 7.14.1).
+
+### Tooling
+
+- Installed `@axe-core/playwright@^4.11.3` as devDependency in `frontend/`. This is a permanent addition to `package.json` so future a11y testing is one-line — no install needed.
+- Throwaway spec ran via a separate config (`tmp-a11y.config.js`, deleted post-run) so the suite's `globalSetup` (which logs into `packagesmall`) didn't hijack the run. Spec performed its own login to `livetest1` using `hassan/Danish11`.
+- WCAG tags scanned: `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`. Output saved to `d:/newprojects/oneshoppos/.tmp/lighthouse/a11y-smoke.json`.
+
+### Findings (5 surfaces scanned)
+
+| Surface | Total | Critical | Serious | Moderate |
+|---|---|---|---|---|
+| Landing `/` | 1 | 0 | 1 (color-contrast, 11 nodes) | 0 |
+| `/login` | 0 | 0 | 0 | 0 |
+| `/pos` (pre-auth shell) | 0 | 0 | 0 | 0 |
+| `/context-select` (post-login on multi-outlet tenant) | 2 | **1 (select-name, 2 nodes)** | 1 (color-contrast, 7 nodes) | 0 |
+| POS canvas (auto-redirected back to context-select — outlet-pick form did not auto-confirm in headless flow) | 2 | (same as above) | (same) | 0 |
+
+### Real findings (de-duped)
+
+**1. Color contrast on landing** — 11 nodes, WCAG 2.1 AA `1.4.3` (serious)
+- Selectors include `[href$="login"]` button, `[href="/signup?plan=free"]` CTA, `.text-emerald-50` "free" badge.
+- All emerald-on-emerald variants where text contrast falls below 4.5:1 (or 3:1 for large text).
+- Fix: bump text shade or background shade on the emerald CTA palette in `LandingPage.jsx`. Trivial CSS-only change.
+
+**2. Color contrast on context-select** — 7 nodes, same rule (serious)
+- Slate-400 text on white, indigo borders on a similar-luminance fill.
+- Fix: review `ContextSelectRoute.jsx` (or wherever the page is) for low-contrast helper text.
+
+**3. Select element without accessible name** — 2 nodes, WCAG 2.0 A `4.1.2` (**critical**)
+- Two `<select>` elements on `/context-select` (the outlet + scope dropdowns) have no associated `<label for="...">`, no `aria-label`, no `aria-labelledby`.
+- Selectors: `.text-slate-700` and `.border-slate-300`.
+- Impact: screen readers announce the selects as "combo box" with no purpose. A blind merchant or staff member hitting this page after login cannot tell what either dropdown is for.
+- Fix: add `aria-label="Outlet"` and `aria-label="Scope"` (or wire `<label htmlFor>` to the select `id`). Two-line fix in `ContextSelectRoute.jsx` / `context-select` page component.
+
+### What WAS NOT scanned
+
+- Real POS canvas (`/pos` after outlet selection) — the auto-confirm in the spec didn't find a confirm button matching `(continue|confirm|enter|go|select)` after filling both selects, so the navigation didn't complete and the scan ran against context-select again. Lighthouse already gave POS 95/100 a11y in 7.14.1, so the gap is acceptable for a smoke check, but a manual axe pass against the live POS canvas (devtools → axe extension) before launch is recommended if perfectionist.
+- Dashboard, settings, reports, admin panel — all defer to Lighthouse's earlier 95 a11y score for now. Full WCAG audit is its own phase, not a launch gate.
+
+### State change: none
+
+Two test files were created and deleted (`frontend/tests/tmp-a11y-smoke.spec.js`, `frontend/tests/tmp-a11y.config.js`). One persistent change: `@axe-core/playwright` added to `frontend/package.json` devDependencies — kept on purpose so future a11y testing is no-friction. `package-lock.json` updated accordingly.
+
+### Decision
+
+- **Accessibility smoke:** ✅ done. One critical (`select-name`), three serious (color-contrast on two surfaces). All fixable in well under an hour each.
+- Logged as **M81** (color-contrast on landing + context-select) and **P34** (select-name on context-select — critical because it blocks screen-reader users from picking an outlet at all).
+
+### Logged as
+
+- **P34** (BLOCKING for screen-reader accessibility, NOT yet launch-blocking — graceful-degradation scenario): two `<select>` elements on `/context-select` lack accessible names. Two-line fix in the context-select React component to add `aria-label`. Recommend including in pre-launch polish bundle.
+- **M81** (follow-up, not launch-blocking): WCAG 2.1 AA color-contrast violations on landing (11 nodes, emerald CTAs) and context-select (7 nodes, slate-400 helper text). All CSS palette tweaks. Cluster with M80 in a "design-polish" bundle.
+
 
 
