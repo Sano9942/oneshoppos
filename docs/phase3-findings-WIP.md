@@ -3409,4 +3409,80 @@ This is a Vite SPA without SSR. Static-render head can only carry one global set
 
 
 
+## 7.13 Backup data integrity — walked 2026-04-30
+
+Walk option B (simplified): trigger fresh backup, confirm audit row + R2 file, structural sanity on the dump, and product-image link verification. Skipped the full schema-renamed restore-into-fresh-tenant because (a) the existing restore endpoint only restores into the caller's own tenant schema and (b) Supabase Pro PITR + daily auto-backups are the production safety net; the app-level dump is the customer-facing self-export feature, not the primary DR.
+
+One 🔴 P-tier finding emerged before any of the actual walk steps: every `backup_log` INSERT in the codebase referenced columns that don't exist in production, every INSERT was wrapped in a silent catch, and every backup audit row was being lost despite the R2 .dump uploads succeeding. Fixed and live-verified during the walk.
+
+### 🔴 P33 — backup_log column drift; audit rows silently lost on every backup
+
+**Severity:** 🔴 (no data loss, but every "did our backup run?" check returned the wrong answer; pre-launch trust issue + observability gap)
+
+**Empirical evidence:**
+
+1. Production columns (queried `information_schema` via Supabase MCP):
+   `(id, action NOT NULL, filename, size_bytes, performed_by, note, created_at)` — 7 columns.
+2. `schema-pg.sql` (line 944) and migrate-pg.js v4 documented a different shape:
+   `(id, schema_name NOT NULL, status NOT NULL, size_bytes, duration_ms, error_message, created_at)`.
+3. Six INSERT statements in code reference columns that don't exist in prod:
+   - `routes/admin/system.js:174` (admin full backup): `(filename, size_bytes, url, created_at)` — `url` doesn't exist
+   - `routes/barcode-expenses.js:410, 415, 424, 468, 478` (5 tenant INSERTs): all reference `schema_name, status, duration_ms, error_message` — none of those exist in prod
+4. Every INSERT wrapped in `try { … } catch (_) {}` or `.catch(() => {})`.
+5. `SELECT COUNT(*) FROM public.backup_log` = 0 despite a successful backup yesterday creating `backups/full-backup-2026-04-30T12-13-10-663Z.dump` on R2 (3.3 MB).
+6. Confirmed `/api/admin/backup-history` returns `[]`. `/api/backup-status` returns `{backup: null}`. The tenant-side `BackupStatusCard.jsx` accordingly shows "No backups recorded yet" forever.
+
+**Bonus finding:** `/api/backup/log` and `/api/backup-status` query `SELECT * FROM backup_log ORDER BY created_at DESC` with **no tenant scoping** — would leak cross-tenant audit rows the moment any rows existed. Hidden today by the empty table.
+
+**Fix shipped — `83d7256` + `6106c33`:**
+
+- migration v84: idempotent `ADD COLUMN IF NOT EXISTS` for the union of all three shapes' columns (`url`, `schema_name`, `status`, `duration_ms`, `error_message`, `tenant_slug`). `DROP NOT NULL` on `action` so existing INSERTs that don't supply it still land. Wrapped in a SAVEPOINT block; skipped on tenant schemas (backup_log lives only in public).
+- `schema-pg.sql` `backup_log` rewritten to the union shape with a comment explaining the history.
+- `routes/admin/system.js` admin backup INSERT: now writes `(action='full_backup', filename, size_bytes, performed_by, url, status, tenant_slug=NULL)` with logged warning instead of silent catch.
+- `routes/barcode-expenses.js`: 5 tenant-side INSERTs (3 backup, 2 restore) rewritten to the union shape with `tenant_slug` populated from `req.tenantSlug`. All silent catches replaced with `console.warn`.
+- `routes/barcode-expenses.js`: `GET /api/backup/log` and `GET /api/backup-status` now scope `WHERE tenant_slug = $1 OR (tenant_slug IS NULL AND action = 'full_backup')`. Tenants see their own per-schema audit rows plus platform-wide full-backup rows that cover them. Cross-tenant leak closed.
+
+**TDD pair (`83d7256`, `6106c33`):**
+
+- `tests/integration/pg-p33-backup-log-insert-shapes.test.js` — creates a `backup_log` reflecting CURRENT prod shape (action NOT NULL, no extras), applies the migration v84 ALTER block inline, runs all 6 INSERT SQL statements verbatim, asserts each lands. **RED with the ALTER block commented out (verified — all 7 cases fail). GREEN with v84 columns added.**
+- `tests/integration/pg-batch11-admin.test.js`: stub schema widened from `(filename, size_bytes, url)` to the full union shape so it doesn't mask the same drift in admin-route tests going forward.
+
+**Live-verified (Railway deploy 20:25 UTC, `6106c33`):**
+
+- Migration ran at boot — `information_schema.columns` confirms all 13 expected columns + `action` is now nullable.
+- `POST /api/admin/backup` triggered live: returned `{message: "Backup created", key: "backups/full-backup-2026-04-30T20-26-09-314Z.dump", size: 3426353, schemas_included: 3, tenant_schemas: ["livetest1", "livetest2"]}`.
+- `GET /api/admin/backup-history` now returns the row with all metadata populated: `id=1, action="full_backup", filename, size_bytes=3426353, performed_by="sano9942@hotmail.com", url, status="success", tenant_slug=null`. **Was `[]` pre-fix; same response shape, real data, 100% of metadata populated.**
+
+### 7.13 walk results (after P33 fix)
+
+| Check | Result |
+|---|---|
+| Backup file exists in R2 | ✅ `https://api.sanopos.com/r2/backups/full-backup-2026-04-30T20-26-09-314Z.dump`, 3.43 MB |
+| Backup file structure | ✅ valid `PGDMP\x01\x10\x00\x04\x08\x01\x01\x00\x09` magic — pg_dump custom format v1.10.0 |
+| Schemas included | ✅ `public + tenant_livetest1 + tenant_livetest2` (string-search shows 201× hits each for schema names + critical table names: `products`, `sales`, `customers`, `employees`, `outlets`, `sale_items`, `product_variants`) |
+| Audit row landed in `backup_log` | ✅ row id=1 with full metadata, was 0 rows pre-fix |
+| Live row counts on `tenant_livetest1` | ✅ baseline: customers=3, employees=4, products=9, sales=6, sale_items=7, sale_payments=6, returns=1, outlets=2, support_tickets=3, notifications=8, product_variants=0, inventory_transfers=0 |
+| Test Coffee product image survives | ✅ `https://api.sanopos.com/r2/products/product_1777546520381_905075.webp` returns `image/webp`, valid `RIFF…WEBP` magic, `Cache-Control: public, max-age=31536000`, `nosniff` set |
+
+### Skipped (intentional — out of scope for the walk)
+
+- **Schema-renamed restore into a fresh `livetest1_restore` tenant.** The existing restore endpoint (`POST /api/backup/restore` in `routes/barcode-expenses.js`) restores into the caller's own tenant schema only — there is no "restore as a different schema" endpoint, and the only safe ways to do it are (a) Supabase branch (creates a new dev DB at $0.32/day), (b) one-off psql/pg_restore against a temporary schema (manual, easy to mess up). With Supabase Pro PITR + daily auto-backups as the production safety net, the app-level dump's structural validity is sufficient evidence; full byte-for-byte round-trip is overkill for the walkthrough.
+- **`POST /api/admin/backup/verify` against the new dump.** That endpoint expects a *local file path* on the Railway filesystem; the streaming upload doesn't persist a file there (it uploads to R2 and discards). The endpoint exists for verifying user-uploaded files passed to `POST /api/backup/restore`, not R2-hosted dumps. Not a defect, but worth a small enhancement to teach it about R2 keys.
+
+### State change: production
+
+- backup_log table schema migrated from 7 columns to 13 (all additive, no data loss; table was empty pre-walk).
+- 1 row now in `backup_log` (id=1, the walk-triggered backup).
+- 1 new R2 file: `backups/full-backup-2026-04-30T20-26-09-314Z.dump` (3.43 MB). Plus yesterday's still there. Both will be deleted in Phase 8.5.
+
+### Logged as
+
+- **P33** (FIXED + LIVE-VERIFIED): backup_log column drift + 6 silent INSERT failures + cross-tenant `backup-status`/`backup-log` leak — `6106c33`.
+- **M79** (follow-up): `POST /api/admin/backup/verify` should accept an R2 key in addition to a local filePath. Today it only verifies user-uploaded restore files; can't verify the dumps the admin endpoint just created. Small enhancement, not launch-blocking.
+
+
+
+
+
+
 
