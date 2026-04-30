@@ -3096,5 +3096,90 @@ Every sale of a stock-≤10 product inserts a fresh `low_stock` row. No upsert b
 - **M69**: low_stock notifications spam on duplicate stock states.
 
 
+## 7.9 Worker monitoring sanity — walked 2026-04-30
+
+Hit `GET /api/admin/worker-status` and inspected each heartbeat empirically. Pulled the actual route source at `routes/admin/system.js:8-78` and cross-referenced with `boot/workers.js` since CLAUDE.md docs were stale (claimed 9 workers — endpoint actually returns 19).
+
+### Empirical worker inventory (post-deploy, captured 13:13 UTC)
+
+| Worker | enabled | running | last_poll_at | Verdict |
+|---|---|---|---|---|
+| email | ✅ | ❌ | null | OK — only the hourly billing-lifecycle cron ticks `lastPollAt`; on-demand `email` jobs bump `processedToday` instead. Confirmed working empirically by P28 verify (Resend delivery succeeded). |
+| fbr | ✅ | ❌ | null | Expected — sandbox blocked (carryover 3.3) |
+| cleanup | ✅ | ❌ | null | Daily 2 AM UTC cron — won't tick again until tomorrow |
+| reservation | ✅ | ❌ | 170s ago | Polling on schedule (5-min cron) |
+| marketplace_sync | ✅ | ✅→❌ | varies | Polling but stub handlers (per actual source — `pullOrders` calls commented out) |
+| booking_reminder | ❌ | — | — | env not set |
+| rental_overdue | ✅ | ❌ | null | Daily 8 AM UTC cron — restart wiped global, won't tick until tomorrow |
+| room_overdue | ✅ | ❌ | null | Daily 11 AM UTC cron — same |
+| treatment_plan | ✅ | ❌ | null | Daily 9 AM UTC cron — same |
+| course_release, kds_snapshot, reservation_reminder, shift_auto_close | ❌ | — | — | env not set |
+| abc | ✅ | ❌ | null | Daily cron, restart wiped |
+| hold_expiry | ✅ | ❌ | null | Hourly cron, restart wiped |
+| anomaly | ✅ | ❌ | null | Daily cron, restart wiped |
+| retail_digest | ✅ | ❌ | null | Weekly cron — wiped, won't tick for up to 7 days |
+| subscription_grace | ✅ | ❌ | null | Hourly cron, restart wiped |
+| catalog_scheduler | ✅ | ✅ | 11s ago | Healthy — 60s setInterval in boot/workers.js |
+
+### Findings surfaced during this walk
+
+The walk turned into a deep dig into the email pipeline because the user asked "what notifications/emails should appear, and are they actually showing?" That dig surfaced one critical (P28) before we even got to rate-limit + upload smokes.
+
+#### 🔴 P28 — `req.employee.email` never populated → support confirmation emails silently dropped
+
+**Severity:** 🔴 (silent feature failure since the support feature shipped — same class as P27)
+
+**File:** [`backend/middleware/tenant-auth.js:140`](backend/middleware/tenant-auth.js#L140)
+
+**Empirical evidence:**
+- `/api/employees` returns Hassan with `email: 'oneshop349@gmail.com'` ✅ (DB has data)
+- `/api/auth/me` does NOT include email in its response shape (separate route, separate SELECT — out of scope to fix here)
+- `loadTenantAndPerms` SELECTs `(role_id, name)` only, never `email`. Assigns `req.employee = { id, role_id, name }`. Email field never set.
+- `routes/support.js:64` reads `if (req.employee?.email) sendEmail(...)` — gate is permanently false. **No `support_received` email has ever been delivered to any tenant since this feature shipped.**
+- User inbox check confirmed empirically: zero confirmation emails after multiple ticket submissions.
+
+**Parallel-paths audit:** grepped for `req.employee.email` and `req.employee?.email` across the entire backend. **Only one consumer** (`routes/support.js:64-78`). Fix is contained.
+
+**Fix shipped — `b9072eb`:** Two-line change in `tenant-auth.js`:
+- Line 140: `SELECT role_id, name` → `SELECT role_id, name, email`
+- Line 178: assign `req.employee.email = result.emp.email || null` after the existing name assignment
+
+**TDD pair:**
+- `2550f80` — `backend/tests/unit/tenant-auth-employee-email.test.js` — stubs the permDb, runs the real `loadTenantAndPerms` middleware, asserts `req.employee.email` is set. RED before fix (`expected undefined to be 'oneshop349@gmail.com'`), GREEN after fix. Existing 53-test middleware suite continues to pass.
+
+**Live-verified (Railway deploy 18:27 PKT, commit `b9072eb`):**
+- Submitted ticket id=3 via `POST /api/support/tickets`.
+- Railway logs show `[INFO] Email sent to="oneshop349@gmail.com" subject="Support ticket #3 received — Live Test 1"` — Resend send path engaged for the first time ever.
+- User confirmed delivery in Gmail Inbox: branded SanoPOS template rendered with ticket id, type, message snippet. Sender `noreply@sanopos.com`. Not in spam — clean Resend → Gmail deliverability.
+
+#### 🟡 M70 — Confirmation email truncates message at fixed 200 chars, mid-word
+
+`routes/support.js:72` does `message.trim().substring(0, 200)`. Empirically observed in the live ticket #3 email: ended at "…so the email st" — chopped mid-word. Cosmetic only. Polish: truncate at last space within 200 chars + ellipsis, or raise the limit.
+
+#### 🟡 M71 — Worker heartbeat `lastPollAt: null` is ambiguous after restart
+
+The `/api/admin/worker-status` endpoint can't distinguish "this worker is broken / never started" from "this worker is healthy but hasn't ticked since the last deploy because its cron is daily/weekly/hourly." All `global.__*WorkerStatus` heartbeats reset to `{ lastPollAt: null, processedToday: 0, queueDepth: 0 }` on every Railway redeploy. After today's three deploys (P26, P27, P28), most workers showed `null` despite being healthy.
+
+**Suggested polish:** record a `bootedAt` field at module init, surface as `worker_age_seconds` separately from `last_poll_ago_seconds`. Lets the admin dashboard render "no poll yet (booted 12 min ago)" instead of misleading "stopped." Not a launch blocker — operators just need to know the heuristic.
+
+#### 📚 Bell coverage audit (research, not a finding)
+
+Producers wired and verified working: `low_stock`, `shift_open`, `shift_close`, `shift_variance_approved`, `po_received`, `leave_request`, `quotation_accepted`, `support_reply` (post-P27).
+
+Not on the bell — separate UI surfaces: trial/billing warnings (SubscriptionBanner), multi-outlet upsell, "Needs Attention" dashboard cards, Reorder Alerts page.
+
+Coverage gaps (informational, not bugs): sale-completed, return-processed, payment-received don't notify — by design.
+
+### State change
+
+Production: ticket id=3 + `support_received` email logged. Add ticket #3 to the Phase 8.5 cleanup list.
+
+### Logged as
+
+- **P28** (FIXED + LIVE-VERIFIED): support confirmation emails silently never sent — `b9072eb`.
+- **M70**: confirmation email truncates message mid-word at 200 chars.
+- **M71**: worker-status `lastPollAt: null` is ambiguous between "broken" and "no cron since boot."
+
+
 
 
