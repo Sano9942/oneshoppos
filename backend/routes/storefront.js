@@ -53,7 +53,10 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         ORDER BY c.sort_order, c.name
       `);
 
-      res.json({ categories: rows });
+      // Return a bare array — StorefrontLayout.jsx checks `Array.isArray(catData)`
+      // and falls back to [] otherwise. Wrapping in { categories } silently
+      // empties the storefront category nav.
+      res.json(rows);
     } catch (err) {
       console.error("Storefront categories error:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -150,11 +153,11 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           name: p.name,
           sku: p.sku,
           price: parseFloat(p.price),
-          compareAtPrice: p.compare_at_price ? parseFloat(p.compare_at_price) : null,
-          imageUrl: p.image_url,
-          categoryId: p.category_id,
-          categoryName: p.category_name,
-          inStock: p.in_stock,
+          compare_at_price: p.compare_at_price ? parseFloat(p.compare_at_price) : null,
+          image_url: p.image_url,
+          category_id: p.category_id,
+          category_name: p.category_name,
+          in_stock: p.in_stock,
         })),
         pagination: {
           page,
@@ -254,12 +257,12 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         sku: product.sku,
         barcode: product.barcode,
         price: parseFloat(product.price),
-        compareAtPrice: product.compare_at_price ? parseFloat(product.compare_at_price) : null,
-        imageUrl: product.image_url,
-        categoryId: product.category_id,
-        categoryName: product.category_name,
-        brandId: product.brand_id,
-        brandName: product.brand_name,
+        compare_at_price: product.compare_at_price ? parseFloat(product.compare_at_price) : null,
+        image_url: product.image_url,
+        category_id: product.category_id,
+        category_name: product.category_name,
+        brand_id: product.brand_id,
+        brand_name: product.brand_name,
         variants: variantsRes.rows.map((v) => ({
           id: v.id,
           name: v.sku || `Variant ${v.id}`,
@@ -271,23 +274,25 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         images: imagesRes.rows.map((img) => ({
           id: img.id,
           url: img.url,
-          altText: img.alt_text,
+          alt_text: img.alt_text,
           position: img.position,
         })),
+        // Reviews use the simpler { author, text } shape the frontend reads.
         reviews: reviews.map((r) => ({
           id: r.id,
-          customerName: r.customer_name,
+          author: r.customer_name,
           rating: r.rating,
           title: r.title,
-          body: r.body,
-          createdAt: r.created_at,
+          text: r.body,
+          created_at: r.created_at,
         })),
-        averageRating,
-        reviewCount,
-        pickupAvailability: stockRes.rows.map((s) => ({
-          outletId: s.outlet_id,
-          outletName: s.outlet_name,
-          inStock: s.in_stock,
+        average_rating: averageRating,
+        review_count: reviewCount,
+        // `availability` (not `pickupAvailability`) — matches frontend.
+        availability: stockRes.rows.map((s) => ({
+          outlet_id: s.outlet_id,
+          outlet_name: s.outlet_name,
+          in_stock: s.in_stock,
         })),
       });
     } catch (err) {

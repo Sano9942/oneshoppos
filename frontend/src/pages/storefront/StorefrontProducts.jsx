@@ -189,7 +189,7 @@ export default function StorefrontProducts() {
 
 function ProductCard({ product, tenantSlug, currencySymbol }) {
   const imageUrl = product.image_url || product.images?.[0]?.url;
-  const hasStock = product.track_inventory === false || (product.stock_quantity ?? 0) > 0;
+  const hasStock = product.in_stock === true;
 
   return (
     <Link
