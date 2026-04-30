@@ -405,25 +405,42 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
         proc.on("close", async (code) => {
           const durationMs = Date.now() - startTime;
-          if (code === 0) {
-            await db.query(
-              "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms) VALUES ($1, $2, $3, $4)",
-              [schemaName, "success", size, durationMs]
-            ).catch(() => {});
-          } else {
-            await db.query(
-              "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
-              [schemaName, "failed", size, durationMs, `pg_dump exited with code ${code}`]
-            ).catch(() => {});
+          // P33 — write into the public.backup_log audit table. action and
+          // tenant_slug are required for the dashboards to scope correctly;
+          // schema_name + status + duration_ms + size_bytes preserve the
+          // older audit fields for back-compat. Errors are logged, not
+          // silently swallowed.
+          try {
+            if (code === 0) {
+              await db.query(
+                `INSERT INTO backup_log
+                   (action, schema_name, tenant_slug, status, size_bytes, duration_ms, performed_by, filename)
+                 VALUES ('backup', $1, $2, 'success', $3, $4, $5, $6)`,
+                [schemaName, req.tenantSlug || null, size, durationMs, req.employee?.email || null, filename]
+              );
+            } else {
+              await db.query(
+                `INSERT INTO backup_log
+                   (action, schema_name, tenant_slug, status, size_bytes, duration_ms, error_message, performed_by, filename)
+                 VALUES ('backup_failed', $1, $2, 'failed', $3, $4, $5, $6, $7)`,
+                [schemaName, req.tenantSlug || null, size, durationMs, `pg_dump exited with code ${code}`, req.employee?.email || null, filename]
+              );
+            }
+          } catch (err) {
+            console.warn(`[backup/download] backup_log INSERT failed: ${err.message}`);
           }
         });
 
         proc.on("error", (err) => {
           const durationMs = Date.now() - startTime;
           db.query(
-            "INSERT INTO backup_log (schema_name, status, duration_ms, error_message) VALUES ($1, $2, $3, $4)",
-            [getSchemaName(req.tenantSlug), "failed", durationMs, err.message]
-          ).catch(() => {});
+            `INSERT INTO backup_log
+               (action, schema_name, tenant_slug, status, duration_ms, error_message, performed_by)
+             VALUES ('backup_failed', $1, $2, 'failed', $3, $4, $5)`,
+            [getSchemaName(req.tenantSlug), req.tenantSlug || null, durationMs, err.message, req.employee?.email || null]
+          ).catch((logErr) => {
+            console.warn(`[backup/download] backup_log INSERT failed: ${logErr.message}`);
+          });
           if (!res.headersSent) {
             res.status(500).json({ error: `Backup failed: ${err.message}` });
           }
@@ -464,20 +481,34 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         runtimeState.isRestoreInProgress = false;
         const durationMs = Date.now() - startTime;
 
-        await db.query(
-          "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
-          [schemaName, "success", req.file.size, durationMs, result.stderr || null]
-        ).catch(() => {});
+        // P33 — audit row. action='restore' for success.
+        try {
+          await db.query(
+            `INSERT INTO backup_log
+               (action, schema_name, tenant_slug, status, size_bytes, duration_ms, error_message, performed_by, filename)
+             VALUES ('restore', $1, $2, 'success', $3, $4, $5, $6, $7)`,
+            [schemaName, req.tenantSlug || null, req.file.size, durationMs, result.stderr || null, req.employee?.email || null, req.file.originalname || null]
+          );
+        } catch (logErr) {
+          console.warn(`[backup/restore] backup_log INSERT failed: ${logErr.message}`);
+        }
 
         res.json({ success: true, message: "Restore complete" });
       } catch (err) {
         runtimeState.isRestoreInProgress = false;
         const durationMs = Date.now() - startTime;
         const { getSchemaName } = require("../utils/backup-pg");
-        await db.query(
-          "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
-          [getSchemaName(req.tenantSlug), "failed", req.file?.size || 0, durationMs, err.message]
-        ).catch(() => {});
+        // P33 — audit row. action='restore_failed' for failure.
+        try {
+          await db.query(
+            `INSERT INTO backup_log
+               (action, schema_name, tenant_slug, status, size_bytes, duration_ms, error_message, performed_by, filename)
+             VALUES ('restore_failed', $1, $2, 'failed', $3, $4, $5, $6, $7)`,
+            [getSchemaName(req.tenantSlug), req.tenantSlug || null, req.file?.size || 0, durationMs, err.message, req.employee?.email || null, req.file?.originalname || null]
+          );
+        } catch (logErr) {
+          console.warn(`[backup/restore] backup_log INSERT failed: ${logErr.message}`);
+        }
         res.status(500).json({ error: err.message });
       } finally {
         if (req.file?.path) fs.unlink(req.file.path, () => {});
@@ -485,7 +516,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     },
   );
 
-  // GET /api/backup/log — backup/restore history
+  // GET /api/backup/log — backup/restore history (P33: tenant-scoped)
   app.get(
     "/api/backup/log",
     requirePerm("all_access"),
@@ -493,7 +524,11 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     async (req, res) => {
       try {
         const { rows } = await db.query(
-          "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100"
+          `SELECT * FROM backup_log
+            WHERE tenant_slug = $1
+               OR (tenant_slug IS NULL AND action = 'full_backup')
+            ORDER BY created_at DESC LIMIT 100`,
+          [req.tenantSlug || null]
         );
         res.json({ log: rows });
       } catch (err) {
@@ -503,13 +538,21 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   );
 
   // GET /api/backup-status — latest backup record for dashboard card
+  // P33: previously returned ANY most-recent row across all tenants — leaked
+  // cross-tenant data. Now scoped to the calling tenant_slug, falling back
+  // to the most recent platform-wide full_backup so tenants on a fresh
+  // schema still see "yes, infra-side backups exist".
   app.get(
     "/api/backup-status",
     requirePerm("all_access"),
     async (req, res) => {
       try {
         const { rows } = await db.query(
-          "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 1"
+          `SELECT * FROM backup_log
+            WHERE tenant_slug = $1
+               OR (tenant_slug IS NULL AND action = 'full_backup')
+            ORDER BY created_at DESC LIMIT 1`,
+          [req.tenantSlug || null]
         );
         res.json({ backup: rows[0] || null });
       } catch (err) {

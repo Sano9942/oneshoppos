@@ -6155,6 +6155,63 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 84,
+    description:
+      "P33 — backup_log column union: every documented INSERT site must succeed",
+    up: async (client) => {
+      // Phase 7.13 walkthrough proved every backup_log INSERT in the codebase
+      // referenced columns that don't exist in production:
+      //   - production columns: (action NOT NULL, filename, size_bytes, performed_by, note, created_at)
+      //   - migration v4 + schema-pg.sql shape: (schema_name, status, size_bytes, duration_ms, error_message)
+      //   - admin INSERT (system.js): (filename, size_bytes, url, created_at)
+      //   - 5 tenant INSERTs (barcode-expenses.js): (schema_name, status, size_bytes, duration_ms, error_message)
+      // Every INSERT was wrapped in silent try/catch, so the actual R2 .dump
+      // upload happened but the audit row was lost — admin/tenant dashboards
+      // saw "no backups". Confirmed live on 2026-04-30 (table empty despite
+      // a successful backup yesterday).
+      //
+      // Fix: union all columns so every INSERT site works. Drop NOT NULL on
+      // action so prod-shape rows that don't supply it (i.e. all current
+      // INSERTs) succeed.
+      //
+      // backup_log lives only in the public schema — skip when migrating
+      // a tenant schema. Tenant schemas don't have a backup_log table.
+      try {
+        await client.query("SAVEPOINT v84_backup_log_union");
+        const { rows: bl } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'backup_log'
+        `);
+        if (bl.length) {
+          await client.query(`
+            ALTER TABLE backup_log
+              ADD COLUMN IF NOT EXISTS action        TEXT,
+              ADD COLUMN IF NOT EXISTS filename      TEXT,
+              ADD COLUMN IF NOT EXISTS size_bytes    BIGINT,
+              ADD COLUMN IF NOT EXISTS performed_by  TEXT,
+              ADD COLUMN IF NOT EXISTS note          TEXT,
+              ADD COLUMN IF NOT EXISTS url           TEXT,
+              ADD COLUMN IF NOT EXISTS schema_name   TEXT,
+              ADD COLUMN IF NOT EXISTS status        TEXT,
+              ADD COLUMN IF NOT EXISTS duration_ms   INTEGER,
+              ADD COLUMN IF NOT EXISTS error_message TEXT,
+              ADD COLUMN IF NOT EXISTS tenant_slug   TEXT
+          `);
+          // Drop NOT NULL on action (production has it, the migration v4
+          // shape doesn't have action at all). Either way, INSERTs that
+          // omit action must succeed.
+          await client.query(`
+            ALTER TABLE backup_log ALTER COLUMN action DROP NOT NULL
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v84_backup_log_union");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v84_backup_log_union");
+        console.warn(`[migrate-pg v84] backup_log union skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

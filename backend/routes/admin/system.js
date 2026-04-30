@@ -169,12 +169,19 @@ module.exports = function registerSystemRoutes(app, deps) {
       const buffer = Buffer.concat(chunks);
       const url = await uploadToR2(buffer, key, "application/octet-stream");
 
+      // P33 — log audit row. action='full_backup' marks this as the
+      // platform-wide backup (no tenant_slug scope). Errors are logged
+      // (not silent) so future schema drift surfaces immediately.
       try {
         await db.query(
-          "INSERT INTO backup_log (filename, size_bytes, url, created_at) VALUES ($1, $2, $3, NOW())",
-          [key, buffer.length, url]
+          `INSERT INTO backup_log
+             (action, filename, size_bytes, performed_by, url, schema_name, status, tenant_slug)
+           VALUES ($1, $2, $3, $4, $5, NULL, 'success', NULL)`,
+          ["full_backup", key, buffer.length, req.admin?.email || null, url]
         );
-      } catch (_) { /* table may not exist */ }
+      } catch (err) {
+        console.warn(`[admin/backup] backup_log INSERT failed: ${err.message}`);
+      }
 
       logAdminAction(req.admin.email, "backup_created", "system", null, {
         key, size: buffer.length, schema_count: schemas.length,

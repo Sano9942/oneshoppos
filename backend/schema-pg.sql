@@ -941,14 +941,26 @@ CREATE TABLE IF NOT EXISTS feature_flags (
 
 -- ── Backup Log ────────────────────────────────────────────────────────
 
+-- Audit table for both admin full backups (system.js) and tenant pg_dump
+-- streams + restores (barcode-expenses.js). Production drift through 2026
+-- left three different "shapes" floating around (migration v4 shape, prod
+-- shape, admin-INSERT shape); migration v84 unions them so every documented
+-- INSERT site works. action is nullable — old INSERTs that don't set it
+-- still land. tenant_slug scopes rows to a tenant for /api/backup-status.
 CREATE TABLE IF NOT EXISTS backup_log (
-  id SERIAL PRIMARY KEY,
-  schema_name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'success',
-  size_bytes BIGINT DEFAULT 0,
-  duration_ms INTEGER DEFAULT 0,
+  id            SERIAL PRIMARY KEY,
+  action        TEXT,
+  filename      TEXT,
+  size_bytes    BIGINT,
+  performed_by  TEXT,
+  note          TEXT,
+  url           TEXT,
+  schema_name   TEXT,
+  status        TEXT,
+  duration_ms   INTEGER,
   error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  tenant_slug   TEXT,
+  created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ── Company Profile ───────────────────────────────────────────────────
