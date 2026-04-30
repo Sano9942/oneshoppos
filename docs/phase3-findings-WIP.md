@@ -3596,8 +3596,12 @@ Two test files were created and deleted (`frontend/tests/tmp-a11y-smoke.spec.js`
 
 ### Logged as
 
-- **P34** (BLOCKING for screen-reader accessibility, NOT yet launch-blocking — graceful-degradation scenario): two `<select>` elements on `/context-select` lack accessible names. Two-line fix in the context-select React component to add `aria-label`. Recommend including in pre-launch polish bundle.
-- **M81** (follow-up, not launch-blocking): WCAG 2.1 AA color-contrast violations on landing (11 nodes, emerald CTAs) and context-select (7 nodes, slate-400 helper text). All CSS palette tweaks. Cluster with M80 in a "design-polish" bundle.
+- **P34** (FIXED + LIVE-VERIFIED, `09048d1`): two `<select>` elements on the **POS pre-flight surface** (NOT `/context-select` as initially logged — corrected after grepping the source) lack accessible names. Source files: `frontend/src/pages/redesign/pos/POSHeader.jsx:65` (outlet switcher) + `frontend/src/pages/redesign/pos/POSOpeningGateModal.jsx:74` (opening-gate branch picker). Both now have `aria-label="Select branch"`. Bonus: `frontend/src/ui/SupportWidget.jsx:131-132` had the same class of bug (label not linked via `htmlFor`); fixed in same commit because SupportWidget renders on every authenticated page. Live-verified post-Vercel-deploy `dpl_GDkwCh...`: re-ran axe against `https://sanopos.com/pos` with livetest1 auth, both selects show `aria-label="Select branch"` in the live DOM, **`select-name` violation gone** (was 2 nodes, now 0).
+- **M81** (follow-up, not launch-blocking): WCAG 2.1 AA color-contrast violations on landing (11 nodes, emerald CTAs) and POS pre-flight (7 nodes, indigo border / slate-400 helper text). All CSS palette tweaks. Cluster with M80 in a "design-polish" bundle.
+
+### Correction note
+
+The original 7.14.2 finding incorrectly attributed the unlabelled `<select>` elements to `/context-select` based on the URL Playwright reported after login. Investigation confirmed the actual page rendered was the POS pre-flight gate (POSHeader + POSOpeningGateModal) — the SPA URL stays `/pos` even when content shows the gate, because gate visibility is controlled by `isReadyForCheckout` state in `POSContext`, not by route. `ContextSelect.jsx` itself has zero `<select>` elements — it uses styled `<button>` rows for branch picking, which axe found accessible. This correction matters only for documentation; the fix landed in the right files.
 
 
 
