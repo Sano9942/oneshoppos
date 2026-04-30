@@ -3349,4 +3349,64 @@ Two 🔴 P-tier findings emerged. Both fixed during the walk.
 
 
 
+## 7.12 SEO and OG tag verification — walked 2026-04-30
+
+Static-render head inspection on the five public routes from the handoff (`/`, `/login`, `/signup`, `/receipt/:invoiceNumber`, `/store/:tenantSlug`) plus a crawler-UA test (Twitterbot, Facebookbot). Five M-tier issues stacked, one of them with PWA-install consequences. Bundled into a single fix and shipped.
+
+### Findings (pre-fix)
+
+All five paths returned the same boilerplate `index.html` head — generic `<title>SanoPOS</title>`, no description, no OG, no Twitter card, `<link rel="icon" href="/vite.svg">` (Vite scaffold leftover). `ReceiptPublicPage.jsx` injects OG tags at runtime, but Twitterbot/Facebookbot/WhatsApp/LinkedIn/iMessage/Discord crawlers do not run JS — they saw the static HTML only.
+
+Worse: `/favicon.ico`, `/icon-192.png`, `/icon-512.png` referenced from the manifest all returned 200 with `Content-Type: text/html` and 718 bytes of `<!doctype html>`. Root cause: `vercel.json` rewrite source was `/(.*)` — too greedy, caught every static-asset miss. PWA install would have failed because manifest-listed icons couldn't load.
+
+### Issues logged
+
+- **M73** generic title + missing description on every public route.
+- **M74** no Open Graph or Twitter Card tags at static-render time.
+- **M75** `vite.svg` Vite-scaffold favicon still wired up.
+- **M76** `/favicon.ico` and PWA icons returned the SPA HTML fallback (200 with text/html, 718 bytes). PWA install broken.
+- **M77** no `<link rel="canonical">`, no `<meta name="robots">`.
+- **M78** root cause of M76 — `vercel.json` rewrite `/(.*)` swallowed static-asset paths.
+
+### Fix shipped — `2d3189e`
+
+Bundled into one cohesive change since all five issues share the same surface (HTML head + Vercel rewrite + manifest):
+
+- Generated brand asset set with `sharp`: `favicon.ico` (real multi-size ICO container, 16/32/48 px), `icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` (180×180), `og-default.png` (1200×630). Brand: emerald `#10b981` rounded square + white "S", matching landing-page palette and manifest `theme_color`. OG card includes "SanoPOS / Modern POS for Pakistan / Retail · Restaurants · Salons · Clinics · Rentals · FBR · Multi-outlet · Free to start".
+- `frontend/index.html` — full head replacement: real favicon set, brand title `SanoPOS — Modern POS for Pakistan`, description, canonical, robots, complete Open Graph block (type, site_name, title, description, url, image+w/h/alt, locale `en_PK`), Twitter Card block (`summary_large_image` + image+alt). All static, visible to JS-less crawlers.
+- `frontend/public/manifest.webmanifest` — drop `vite.svg` fallback, point at the new icon set, expand description.
+- `frontend/public/sw.js` — bump `STATIC_CACHE` to `v2` (forces precache rotation), add the new icon files + `og-default.png` to the precache list. Existing PWA installs purge stale entries on next load.
+- `frontend/vercel.json` — rewrite source changed from `/(.*)` to `/((?!.*\.[^/]+$).*)`. Any path with a file extension now falls through to Vercel's static handler (real 404 if missing, real Content-Type if present). Verified locally with 14 path fixtures: 5 SPA routes rewrite, 9 static-asset paths fall through.
+- `frontend/public/vite.svg` — removed. No remaining references.
+- `.gitignore` — added `!frontend/public/**/*.png` and `!frontend/public/**/*.jpg` exception so brand PNGs are not caught by the broader `*.png` debug-screenshot ignore.
+- `frontend/public/CLAUDE.md` — refreshed to document new file inventory and SW v2 cache name.
+
+Build smoke locally: `npx vite build` succeeds in 18.81s; `dist/` contains all 6 brand assets and `dist/index.html` shows the full new head.
+
+### Live-verified (Vercel deploy 19:55 UTC, `2d3189e`)
+
+| Endpoint | Pre-fix | Post-fix |
+|---|---|---|
+| `GET /favicon.ico` | 200 text/html (HTML fallback) | 200 image/vnd.microsoft.icon, real ICO header `00 00 01 00 03 00`, 2235 B |
+| `GET /icon-192.png` | 200 text/html | 200 image/png, magic `89 50 4E 47`, 4404 B |
+| `GET /icon-512.png` | 200 text/html | 200 image/png, 16046 B |
+| `GET /apple-touch-icon.png` | 404 (didn't exist) | 200 image/png, 4012 B |
+| `GET /og-default.png` | 404 (didn't exist) | 200 image/png, 52847 B |
+| `GET /icon.svg` | 404 (didn't exist) | 200 image/svg+xml, 350 B |
+| `GET /vite.svg` | 200 image/svg+xml (Vite logo) | **404** (clean miss, rewrite no longer swallows) |
+| `GET /` | title `SanoPOS`, no OG/Twitter, no description | brand title + full OG/Twitter/canonical/robots/description |
+| `GET /login`, `/signup`, `/store/:slug`, `/receipt/:n` | same generic head | same brand head (SPA rewrite still works) |
+| `User-Agent: Twitterbot/1.0` | OG/Twitter tags absent | full OG + Twitter Card present |
+| `User-Agent: facebookexternalhit/1.1` | OG tags absent | full OG block present |
+
+### Note on per-page differentiation
+
+This is a Vite SPA without SSR. Static-render head can only carry one global set of OG/Twitter tags. Per-page differentiation (e.g. `og:title` per receipt invoice) requires either SSR or a build-time HTML splitter — both larger than the launch scope. `ReceiptPublicPage.jsx` retains its runtime `document.head.appendChild` injection for receipt-specific titles + OG; this works for human users and JS-running crawlers (Googlebot, Slackbot recent), and the static defaults cover everyone else.
+
+### Logged as
+
+- **M73 / M74 / M75 / M76 / M77 / M78** (FIXED + LIVE-VERIFIED): bundled into `2d3189e`. Single commit covers static head, brand asset set, manifest, service-worker precache version bump, and the Vercel rewrite scope fix that was the root cause of M76.
+
+
+
 
