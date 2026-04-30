@@ -3635,5 +3635,66 @@ This was a pure read-only verification.
 - The `ai_insights` flag will stay omitted from `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js`. If a tenant ever wants AI insights post-launch, the path is: (1) set `ANTHROPIC_API_KEY` on Railway, (2) UPSERT the per-tenant flag row to `enabled=true`. No new routes or migrations required.
 - No P-tier or M-tier finding from this exercise.
 
+---
+
+## 7.14.4 — PWA installed-mode test
+
+Goal: verify the PWA install path actually works for the first time post-M76. Yesterday's M76 fix replaced SPA-HTML-fallback responses for `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png`, `/favicon.ico`, and `/og-default.png` with real binary content, plus bumped `sw.js` from cache `sanopos-static-v1` to `v2`. Pre-fix, PWA install was silently broken — manifest icons returned `text/html` so Chrome refused to install. This is the first walk that proves the fix actually delivers an installable PWA.
+
+### HEAD smoke (curl) — all assets healthy
+
+| Path | Status | Content-Type | Size | Magic bytes |
+|---|---|---|---|---|
+| `/favicon.ico` | 200 | `image/vnd.microsoft.icon` | 2235 B | `00 00 01 00 03 00` (ICO, 3 entries) |
+| `/icon-192.png` | 200 | `image/png` | 4404 B | `89 50 4e 47` (PNG) |
+| `/icon-512.png` | 200 | `image/png` | 16046 B | `89 50 4e 47` (PNG) |
+| `/apple-touch-icon.png` | 200 | `image/png` | 4012 B | `89 50 4e 47` (PNG) |
+| `/og-default.png` | 200 | `image/png` | 52847 B | `89 50 4e 47` (PNG) |
+| `/manifest.webmanifest` | 200 | `application/manifest+json; charset=utf-8` | 616 B | valid JSON |
+| `/sw.js` | 200 | `application/javascript; charset=utf-8` | 2192 B | starts `// v2 — Phase 7.12: ...` |
+
+### Headless Chrome verification (Playwright + CDP)
+
+Throwaway spec navigated to `https://sanopos.com/`, waited for SW activation, then queried Chrome's internal installability checker via CDP.
+
+```js
+const client = await page.context().newCDPSession(page);
+const r = await client.send("Page.getInstallabilityErrors");
+// → { installabilityErrors: [] }
+```
+
+**Empty array = Chrome considers the site installable.** This is the same check Chrome runs to decide whether to show the "Install SanoPOS" button in the address bar.
+
+8/8 install criteria pass:
+
+| Check | Result |
+|---|---|
+| Manifest reachable + valid JSON | ✅ |
+| `display: "standalone"` | ✅ |
+| At least one icon ≥ 192px declared | ✅ (3 icons declared) |
+| Service worker active + scope `/` | ✅ (scriptURL `/sw.js`) |
+| `sanopos-static-v2` cache active | ✅ (8 precached entries) |
+| `sanopos-static-v1` evicted | ✅ |
+| CDP `getInstallabilityErrors` returned `[]` | ✅ |
+| All 3 declared manifest icons return real PNG bytes | ✅ |
+
+### Note on `beforeinstallprompt`
+
+The headless test injected a `beforeinstallprompt` listener before navigation; it did **not** fire. This is expected — Chromium gates the event on a user-engagement heuristic (~30s interaction + revisit) that headless tests can't satisfy. The CDP `getInstallabilityErrors` check bypasses this gate and is the authoritative signal: **Chrome will offer install to a real user once engagement criteria are met**. Yesterday's M76 fix is responsible for unlocking this — pre-fix the icon fetches would have populated `getInstallabilityErrors` with `NO_ICON_AVAILABLE` or similar.
+
+### Lighthouse PWA category
+
+Lighthouse 12 dropped the dedicated PWA category. The CDP installability check + manifest/SW/icon verification above replaces that signal completely.
+
+### State change: none
+
+Two test files were created and deleted (`frontend/tests/tmp-pwa-verify.spec.js`, `frontend/tests/tmp-pwa.config.js`). No code or production changes.
+
+### Decision
+
+- **PWA installable on production** — yesterday's M76 fix is verified working. Real users on Chromium-based browsers (Chrome, Edge, Brave, Opera, Samsung Internet, Android) will see the install prompt after engagement.
+- **iOS Safari**: out of scope — Safari uses a separate install path (Add to Home Screen menu item, no `beforeinstallprompt` event). Not regressed by anything in M76; manifest is consumed differently.
+- No P-tier or M-tier finding from this exercise.
+
 
 
