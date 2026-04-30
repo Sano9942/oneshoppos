@@ -3696,5 +3696,54 @@ Two test files were created and deleted (`frontend/tests/tmp-pwa-verify.spec.js`
 - **iOS Safari**: out of scope — Safari uses a separate install path (Add to Home Screen menu item, no `beforeinstallprompt` event). Not regressed by anything in M76; manifest is consumed differently.
 - No P-tier or M-tier finding from this exercise.
 
+---
+
+## 7.14.5 — Audit finding #6: loyalty tiers ungated nav
+
+Goal: close the carry-over audit finding from `docs/retail-targeted-code-audit-2026-04-27.md` (item 6). Audit predicted `phase2g_loyalty` was only narrowly gated — `loyalty.js` ledger/adjust endpoints had `requireFeature`, but the dedicated `/api/loyalty/tiers` CRUD in `customers.js`, the nav entry, and the page itself had **no flag gate at all**. Re-confirmed against current code at `phase3-findings-WIP.md:2261`.
+
+### Scope confirmed against actual code
+
+- [`frontend/src/ui/nav-config.js:77`](frontend/src/ui/nav-config.js#L77): `Loyalty Tiers` nav entry had `requiredPerm: "all_access"` only — no `requiredFlag`
+- [`frontend/src/pages/redesign/LoyaltyTiersRedesign.jsx`](frontend/src/pages/redesign/LoyaltyTiersRedesign.jsx) had no `useFeatureFlags` call and no `Navigate` guard
+- [`backend/routes/customers.js:736-805`](backend/routes/customers.js#L736-L805): GET, POST, PUT, DELETE `/api/loyalty/tiers` had `requirePerm`/`requireAnyPerm` but no `requireFeature("phase2g_loyalty")`
+- The nav-filter at [`AppLayoutRedesign.jsx:95`](frontend/src/components/AppLayoutRedesign.jsx#L95) DOES respect `requiredFlag` — adding it to the nav-config entry is sufficient to hide the nav
+
+Customer-record JOINs to `loyalty_tiers` (lines 221, 659 in `customers.js`) intentionally NOT gated — they fall through to null tier when no rows exist; gating them would break the customer page when loyalty is off.
+
+### TDD
+
+**RED (`5eabd94`):** new test file [`backend/tests/integration/pg-p35-loyalty-tiers-flag-gate.test.js`](backend/tests/integration/pg-p35-loyalty-tiers-flag-gate.test.js) — 4 flag-OFF tests asserting GET/POST/PUT/DELETE all return a flag-rejected status. Pre-fix: 4/4 RED (returned 200/500/200/200 — handler executed instead of guard firing).
+
+**GREEN (`7bb7f8d`):**
+- `backend/routes/customers.js`: destructure `requireFeature` from `deps`; wrap each of the 4 CRUD handlers with `requireFeature("phase2g_loyalty")` ahead of the existing perm middleware.
+- `frontend/src/ui/nav-config.js:77`: add `requiredFlag: "phase2g_loyalty"`.
+- `frontend/src/pages/redesign/LoyaltyTiersRedesign.jsx`: import `useFeatureFlags` + `useAuth` + `Navigate`; place `if (flagsLoading) return null; if (!flags.phase2g_loyalty) return <Navigate to="/" replace />;` AFTER the existing `useState/useCallback/useEffect` hooks (per the all-hooks-before-conditional-return rule).
+
+Post-fix: 6/6 tests pass (4 flag-OFF rejection + 2 flag-ON 200 pass).
+
+### Live-verified on production (Railway deploy ~02:50 UTC)
+
+```
+[02:49:43] /api/loyalty/tiers on livetest2 (flag=false) → HTTP 200  body: {"tiers":[...]}    # pre-fix
+[02:50:04] /api/loyalty/tiers on livetest2 (flag=false) → HTTP 403  body: {"error":"Feature disabled: phase2g_loyalty","flag":"phase2g_loyalty"}    # post-fix
+```
+
+And no regression on the flag=true tenant:
+
+```
+livetest1 (flag=true) → HTTP 200  body: {"tiers":[...full list...]}
+```
+
+### State change: production
+
+- No DB changes required. Both active tenants already have a `feature_flags` row for `phase2g_loyalty` set per their intended UX (livetest1=true, livetest2=false — verified pre-fix).
+- New tenants get `phase2g_loyalty=false` by default per `DEFAULT_FEATURE_FLAGS` + `schema-pg.sql:2214` + `migrate-pg.js:4777` seeds. Loyalty Tiers nav and page hidden by default. Super-admin can flip the flag per tenant via the existing admin UI.
+
+### Logged as
+
+- **P35** (FIXED + LIVE-VERIFIED, `7bb7f8d`): closes audit item #6.
+- **M82** (follow-up, not launch-blocking): test stub `backend/tests/helpers/createTestApp-pg.js:211` returns 503 when its `requireFeature` rejects — drift from the M29 production fix that aligned the production middleware to return 403. Tests had to accept either status range. Stub should be updated to match prod (3-line change), and the regression test then narrowed to assert exactly 403.
+
 
 
