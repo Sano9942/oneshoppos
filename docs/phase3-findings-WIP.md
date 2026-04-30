@@ -3247,4 +3247,106 @@ Env-tunable in case Railway's chain length changes; default 2.
 
 
 
+## 7.11 Upload security smoke — walked 2026-04-30
+
+Four checks against `POST /api/support/upload` (the only authenticated upload endpoint reachable on a launch-baseline tenant — product/receipt logo paths sharp-rasterise so they're inherently safe; company-logo and treatment-plan-doc paths are feature-flag-gated off): MIME-vs-extension mismatch, SVG with embedded `<script>`, 50MB oversized file, and zero-byte file.
+
+Two 🔴 P-tier findings emerged. Both fixed during the walk.
+
+### 🔴 P31 — Stored XSS via SVG support upload → full session takeover
+
+**Severity:** 🔴 critical (any tenant employee → super-admin session takeover)
+
+**Empirical evidence:**
+
+1. `imageFileFilter` (`backend/middleware/upload-validation.js:11–19`) whitelisted `image/svg+xml` + `.svg`. Confirmed with grep + read of source.
+2. Uploaded `xss.svg` (containing `<script>` and `onload="alert()"`) to production `/api/support/upload` with `Content-Type: image/svg+xml`. Returned 200, URL `https://api.sanopos.com/r2/support/<id>.svg`.
+3. `HEAD` on URL: `Content-Type: image/svg+xml` — R2 stored client-supplied content-type. `nosniff` is set, but `nosniff` only blocks browser MIME-upgrade; an honestly-claimed `image/svg+xml` will still be parsed and executed.
+4. Playwright navigated to URL as a top-level document → both `<script>` and `onload` fired in origin `https://api.sanopos.com`.
+5. Built `xss-takeover.svg` containing `fetch('/api/auth/refresh', { credentials: 'include' })`. Logged a real victim (`hassan` / `livetest1`) into `api.sanopos.com` (refresh cookie `HttpOnly; Secure; SameSite=None; Path=/api/auth`). Navigated to the SVG. Console output: `TAKEOVER_RESULT {"token":"eyJhbGci..."` — a fresh access JWT for `tid:95, eid:1, rid:1` (Hassan's account). HttpOnly stops JS *reading* the cookie but the browser still *sends* it on same-origin requests, so the SVG-controlled fetch picks up the cookie and the same-origin response body is JS-readable.
+
+**Reachability:** any authenticated tenant employee, including Cashier role, can hit `/api/support/upload`. Victim is anyone whose refresh cookie is set on `api.sanopos.com` — including the platform Super-Admin while reviewing tickets in `/admin`.
+
+**Fix shipped — `e44b024` (Option A, per-route override):**
+- Add `rasterImageFileFilter` in `middleware/upload-validation.js` — same shape as `imageFileFilter` but with `image/svg+xml` + `.svg` removed. Both filters share `makeImageFileFilter(mimes, exts)`.
+- Switch `routes/support.js` to `rasterImageFileFilter`.
+- Leave `imageFileFilter` alone — product/receipt-logo/company-logo paths run buffers through `sharp().webp()` which rasterises SVG before storage (verified with a `sharp().resize()` smoke on a sample SVG: success, output 86 bytes of webp).
+
+**TDD pair (`c4f8184`, `e44b024`):**
+- `tests/unit/middleware.test.js` — adds 5 cases for `rasterImageFileFilter` (svg+xml rejected, .svg ext rejected even with image/png MIME, jpeg/png/webp still accepted). Existing "imageFileFilter accepts svg" stays green.
+- `tests/integration/pg-p31-support-svg-rejection.test.js` — mounts `routes/support.js` on a stub Express harness with stub upstream middleware, posts an SVG, asserts 400. Hermetic — no R2 credentials needed because the filter rejects before `uploadToR2`.
+
+**Live-verified (Railway deploy 19:34 UTC, `e44b024`):**
+- SVG (`image/svg+xml`) → 400 `"Only image uploads are allowed"`
+- SVG smuggled via `image/png` MIME → 400 `"File extension \".svg\" is not allowed"`
+- Legit JPEG → 200 (regression check)
+- Legit PNG → 200 (regression check)
+
+### 🔴 P32 — `/api/support/upload` trusted client MIME with no byte-level verification
+
+**Severity:** 🔴 (no exec chain, but the API origin hosts arbitrary attacker bytes under image/* content-type)
+
+**Empirical evidence:**
+
+1. Built `payload.jpg`: 512-byte buffer, first 2 bytes `4D 5A` (DOS MZ exe header) + filler text "This program cannot be run in DOS mode."
+2. POSTed to production `/api/support/upload` with `Content-Type: image/jpeg`. Result: `200 {"url":"https://api.sanopos.com/r2/support/<id>.jpg"}`.
+3. `HEAD` on URL: `Content-Type: image/jpeg` — R2 served EXE bytes as a JPEG. Browser refused to render (no decoder match) but the file persisted on a same-origin URL the user trusts.
+4. Same path served zero-byte uploads as 200 (cosmetic — broken image in admin viewer).
+
+**Fix shipped — `cbd7286`:**
+- Add `detectImageType(buffer)` in `middleware/upload-validation.js` — sniffs the first ~12 bytes against magic numbers for JPEG (`FF D8 FF`), PNG (`89 50 4E 47 0D 0A 1A 0A`), GIF (`GIF87a`/`GIF89a`), WEBP (`RIFF…WEBP`), BMP (`BM`), TIFF LE (`49 49 2A 00`) and TIFF BE (`4D 4D 00 2A`). Returns canonical MIME or null. SVG is text-based and intentionally not sniffed here — `rasterImageFileFilter` already excludes it on the affected route.
+- Add `verifyImageMagicBytes(buffer, claimedMime)` wrapper.
+- `routes/support.js` calls `verifyImageMagicBytes(file.buffer, file.mimetype)` between multer and `uploadToR2`. Mismatch (or empty buffer with no magic) → 400 `"File contents do not match an image format"`.
+
+**TDD pair (`255699c`, `cbd7286`):**
+- `tests/unit/middleware.test.js` — 16 new cases on `detectImageType` and `verifyImageMagicBytes`. Includes the exact `4D 5A` exe-header attack as a `.toBeNull()` assertion.
+- `tests/integration/pg-p31-support-svg-rejection.test.js` extended with 3 P32 cases: EXE-as-jpg → 400, PNG bytes claimed image/jpeg → 400, 0-byte → 400. Total 6/6 passing in the file.
+
+**Live-verified (Railway deploy 19:42 UTC, `cbd7286`):**
+- EXE-as-jpg → 400 `"File contents do not match an image format"`
+- 0-byte file claimed image/png → 400 (incidental fix; closes the zero-byte bullet from the handoff)
+- PNG bytes claimed image/jpeg → 400
+- Legit JPEG → 200 (regression)
+- Legit PNG → 200 (regression)
+- P31 sanity: SVG → 400 (still holding)
+
+### Other checks
+
+- **50MB oversized file** (✅ pass). Multer `limits: { fileSize: 5 * 1024 * 1024 }` returns clean `413 {"error":"File too large (max 5 MB)"}`. No fix needed.
+- **Zero-byte file** (✅ now fixed by P32). Pre-walk: 200, broken image on R2. Post-fix: 400.
+
+### State change: production
+
+- 5 successful R2 uploads from the walk are now garbage on R2 (2× SVG XSS, 1× EXE-as-jpg, 0-byte file, plus a few legit JPEG/PNG regression-check uploads):
+  - `support/1e53f4d3edafe65982cfc98c6ab4e1bc.jpg` (EXE-as-jpg attack)
+  - `support/6b95bd50fffc749374182aa52a47f851.svg` (XSS attack #1)
+  - `support/05adca3556c411318203cc76bb6d530d.svg` (console-log XSS variant)
+  - `support/bbb3b954f1ea174abf35e859ac0abfec.svg` (session-takeover proof)
+  - `support/64d75aeca36db8021f577a824cf8a398.svg` and `support/50d67fa85a84e82854155c57855668eb.svg` (post-deploy SVG retest, expected to fail but landed pre-redeploy)
+  - `support/6c5bd8af80fb35314a1bd3ebe907a142.png` (0-byte)
+  - `support/100ed5874cc9fca9964ace5f5584b285.jpg`, `f733efeafe908cdfbb60e8e937e6f49e.jpg`, `267df35b2d5566526f5c12cce7cfc603.png`, `4302bd1dc7e2dc017be0545e6538943c.png`, `3738727198715636b0314aaac6f0d0f9.jpg` (regression-check legit uploads)
+  - Plus the orphan still in `support/1767cb369e63d99f6b30ba1f6a320443.png` from yesterday.
+  All to be deleted in Phase 8.5.
+
+- 4 rate-limit deploys (P31 fix, P32 fix) within 8 minutes — Railway auto-deploy from main; manual redeploy for P31 was rejected with "currently building" because auto already kicked.
+
+### Other upload paths re-checked (verified against actual source files, not CLAUDE.md)
+
+| Endpoint | Filter | Storage | Verdict |
+|---|---|---|---|
+| `POST /api/support/upload` | `rasterImageFileFilter` + magic-byte verify | client mimetype → R2 | **fixed** (P31+P32) |
+| `POST /api/uploads/product-image` | `imageFileFilter` (still allows SVG) | sharp→webp→R2 | safe (sharp rasterises) |
+| `POST /api/uploads/receipt-logo` | `imageFileFilter` | sharp→webp→R2 | safe (sharp rasterises) |
+| `POST /api/company-profile/logo` | `imageFileFilter` | client mimetype → R2 | not reachable on launch tenants — gated by `multi_company` flag (off). Logged as M-tier follow-up. |
+| `POST /api/treatment-plans/:id/documents` | **none** (50MB) | client mimetype → R2 | not reachable on launch tenants — gated by `phase4_treatment_plans` flag + `treatment_plans` mode (both off). Logged as M-tier follow-up. |
+| `POST /api/backup/restore` | none, 50MB, disk dest | local → pg_restore | not user-reachable; admin + `backup_restore` flag. Out of scope for 7.11. |
+
+### Logged as
+
+- **P31** (FIXED + LIVE-VERIFIED): SVG XSS via support upload → full session takeover — `e44b024`.
+- **P32** (FIXED + LIVE-VERIFIED): support upload trusted client MIME — `cbd7286`.
+- **M72** (follow-up): `tier4/company-profile.js` and `treatment-plans.js` upload paths share P31/P32 hazards. Behind off-by-default flags so not launch-blocking, but should pick up `rasterImageFileFilter` + `verifyImageMagicBytes` before either flag flips on for any tenant.
+
+
+
 
