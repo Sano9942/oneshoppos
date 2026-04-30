@@ -7,7 +7,9 @@ RUN npm ci --omit=dev
 
 # Stage 2: Production image (no build tools)
 FROM node:22-alpine
-RUN apk add --no-cache sqlite tzdata
+# postgresql17-client provides pg_dump / pg_restore for the /api/admin/backup
+# and /api/backup/download endpoints. Match Supabase server major version (17).
+RUN apk add --no-cache sqlite tzdata postgresql17-client
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
