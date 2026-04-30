@@ -340,11 +340,17 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 
 ## Infrastructure Capacity (as of Apr 2026)
 
-### Current Stack Tier
+> **⚠️ Always verify tier before relying on this section.** Supabase / Railway / Vercel plans change. Confirm via:
+> - Supabase: project dashboard → Billing, or `mcp__claude_ai_Supabase__get_organization` (returns subscription plan)
+> - Railway: `railway status` + dashboard billing
+> - Vercel: `mcp__claude_ai_Vercel__list_teams` returns plan info
+> Don't quote this table in launch decisions without re-checking.
+
+### Current Stack Tier (verified 2026-04-30)
 
 | Service | Plan | Key Limit |
 |---------|------|-----------|
-| **Supabase** | Free | 60 max Postgres connections, 500MB DB storage, pauses after 7 days inactivity |
+| **Supabase** | **Pro** ($25/mo) | Daily auto-backups + 7-day PITR, 8GB DB included, ~200 max Postgres connections, no auto-pause |
 | **Railway** | Hobby/Pro | Single Node.js instance, single-threaded event loop |
 | **Vercel** | Pro | 100GB bandwidth/mo — not a bottleneck |
 | **Cloudflare R2** | Free tier | 10M reads/mo free, then $0.015/M — negligible at current scale |
@@ -353,22 +359,21 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 
 - Pool size: **20 connections** (hardcoded in `backend/db-pg.js`)
 - All tenants share this pool — no per-tenant pooling
-- Supabase Free allows 60 total connections; ~5 reserved internally → ~55 usable
-- Current pool leaves ~35 headroom for future Railway instances or worker connections
+- Supabase Pro allows ~200 direct connections (compute add-on dependent); current 20-conn pool is comfortably under cap
+- With Supabase Transaction Pooler (port 6543), effective capacity scales much further
 
 ### Realistic Pro Tenant Capacity
 
 | Scenario | Tenant Count |
 |----------|-------------|
-| Safe, no changes | 10–20 Pro tenants |
-| Stretched (peak spikes) | 20–40 tenants |
-| With Supabase PgBouncer enabled | 80–150 tenants |
+| Safe, no changes | 50–100 Pro tenants |
+| With Supabase Transaction Pooler enabled | 300+ tenants |
 
-**When to upgrade Supabase to Pro ($25/mo):** before hitting 15 paying tenants — Free tier pauses after 7 days inactivity (kills production) and 500MB fills within 6–12 months of moderate use.
+**Quick win:** Enable Transaction Pooler (Supabase dashboard → Settings → Database → Connection Pooling, mode=Transaction), then update Railway `DATABASE_URL` to port 6543. Frees direct-connection budget for workers + admin tools.
 
-**Quick win:** Enable PgBouncer in Supabase dashboard → Settings → Database → Connection Pooling, then update Railway `DATABASE_URL` to use port 6543 instead of 5432. Free, no code changes, ~4–5x effective capacity.
+### Supabase storage budget
 
-### Supabase 500MB Budget Estimate
+Pro tier includes **8 GB** of database storage. Current usage is well under 1% of that — not a concern at launch scale. Indicative growth per active Pro tenant:
 
 | Source | Estimated Size |
 |--------|---------------|
@@ -379,7 +384,14 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 | Shopify raw_payload JSONB | ~20KB/order |
 | WhatsApp messages | ~1KB/message |
 
-At 20 active Pro tenants: estimated **200–350MB within 6–12 months**.
+At 20 active Pro tenants: estimated **200–350MB within 6–12 months** — small fraction of the 8 GB Pro allowance.
+
+### Backups (Supabase Pro)
+
+- **Daily automated backups** retained 7 days (configurable to 14/30 in dashboard)
+- **Point-in-time recovery (PITR)** for the last 7 days
+- Restore via Supabase dashboard → Database → Backups, or `pg_restore` from a downloaded snapshot
+- App-level `pg_dump` to R2 (`POST /api/admin/backup` + `POST /api/backup/download`) is supplementary for tenant-self-export, not the primary DR strategy
 
 ## Storage Destination Map
 
