@@ -2893,5 +2893,84 @@ Backup/restore feature now works end-to-end on production. Supabase Pro daily ba
 - Two local /tmp dump files deleted after verification.
 
 
+## 7.7 Terms / Privacy content review — walked 2026-04-30
+
+Goal: verify legal content at `/terms` and `/privacy` is actually fit for launch.
+
+### Empirical state
+
+Both pages are real React components at [`frontend/src/pages/public/Terms.jsx`](frontend/src/pages/public/Terms.jsx) (79 lines) and [`frontend/src/pages/public/Privacy.jsx`](frontend/src/pages/public/Privacy.jsx) (90 lines).
+
+**Both are explicitly marked as placeholder copy by the developer:**
+- Terms.jsx:1 — `// PLACEHOLDER COPY — Replace with lawyer-reviewed terms before broad public launch.`
+- Privacy.jsx:1 — `// PLACEHOLDER COPY — Replace with lawyer-reviewed privacy policy before broad public launch.`
+- Both include a footer note: "This is placeholder copy. Replace with lawyer-reviewed terms before broad public launch."
+- Both have `Effective date: replace before launch.` placeholder
+
+### Where the pages are linked
+
+- **`SignupPage.jsx:257-272`** — ToS acceptance checkbox during signup. **Every new tenant is asked to "agree to the Terms of Service and Privacy Policy" via these placeholder pages**.
+- 6 alternate landing-page variants (`LandingBazaar`, `LandingBrutalist`, `LandingEditorial`, `LandingLuxury`, `LandingScrapbook`, `LandingShowroom`) link both pages in their footers. The currently-default `LandingPage.jsx` doesn't appear to.
+
+### Content audit
+
+| Topic | Terms.jsx | Privacy.jsx |
+|---|---|---|
+| Account & access | ✓ section 1 | — |
+| Plans & billing | ✓ section 2 (mentions Free plan limits + paid billing in advance) | — |
+| Acceptable use | ✓ section 3 | — |
+| Data ownership | ✓ section 4 (states business data belongs to user, export possible) | — |
+| Service availability / SLA | ✓ section 5 (no uptime guarantee) | — |
+| Liability cap | ✓ section 6 (12 months of fees) | — |
+| Information collected | — | ✓ section 1 |
+| Use of data | — | ✓ section 2 |
+| Sub-processor sharing | — | ✓ section 3 |
+| Storage & encryption (TLS in transit, AES-256-GCM at rest) | — | ✓ section 4 |
+| Retention | — | ✓ section 5 (vague: "while account is active") |
+| User rights (GDPR/CCPA mention) | — | ✓ section 6 |
+| Cookies | — | ✓ section 7 |
+| Children's privacy | — | ✓ section 8 (under 13) |
+| Change notification | ✓ section 7 | ✓ section 9 |
+| Contact emails | ✓ `support@sanopos.com` | ✓ `privacy@sanopos.com` |
+
+### Pakistan-specific gaps (per launch plan)
+
+Both documents are **silent on Pakistan-specific clauses** the launch plan called out:
+
+- **PECA (Prevention of Electronic Crimes Act 2016)** — no acknowledgment. Relevant for tenant content moderation, sensitive personal data handling, and law-enforcement disclosure flow.
+- **FBR retention requirements** — no mention. Pakistan's FBR Digital Invoicing rules require retention of invoice records for 6 years; the platform actually does this (FBR invoices stored in `fbr_invoices`), but neither doc commits to that retention.
+- **Local data sovereignty** — not addressed. Production stores data in Supabase Singapore (`ap-southeast-1`); some PK enterprise customers will ask whether that's acceptable.
+- **Pakistani jurisdiction / governing law** — Terms doc doesn't pick a governing-law clause at all.
+
+### Severity assessment
+
+**Not a code bug — but a real launch consideration.** Two issues:
+
+1. **🟡 Legal placeholder risk**: Self-described placeholder copy is the actual legal-binding text being clicked through during every signup. Acceptable for a soft launch with friendly testers (no real money flowing yet — payment gateway is sandbox per 7.5), but DOES need lawyer review before any meaningful onboarding push.
+
+2. **🟡 Pakistan-locale gap**: PECA + FBR-retention + local-jurisdiction clauses absent. For a PK-focused product these should appear once a lawyer has reviewed.
+
+### Operator decisions
+
+These are calls for the user, not engineering:
+
+- (a) Accept placeholder copy for soft launch, schedule lawyer review before broad launch — **recommended given (a) sandbox payments mean no real money + (b) only friendly testers in Phase 1**.
+- (b) Replace copy with lawyer-reviewed text before any signup at all — blocks launch on a non-engineering dependency.
+- (c) Disable signup gating temporarily, keep `/terms` and `/privacy` reachable via footer only, defer ToS-checkbox-at-signup to lawyer-reviewed version.
+
+### Verdict — ⚠️ FUNCTIONAL but legally placeholder
+
+Pages render correctly, link from signup correctly, contain reasonable starter language, and self-flag as placeholder. No engineering work needed. **Lawyer review is the gating dependency, not code**.
+
+### Logged as
+
+- **M67**: Pakistan-locale legal clauses missing (PECA, FBR retention, jurisdiction). Not blocking soft launch.
+- **Operator action item**: get lawyer review of `/terms` and `/privacy` before broad public launch. Track separately.
+
+### State change: none
+
+Read-only inspection of source files. No prod state touched.
+
+
 
 
