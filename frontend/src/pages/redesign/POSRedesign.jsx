@@ -42,6 +42,26 @@ const MOBILE_TABS = [
 // Bucket F: banner label respects type-split so users know whether their
 // queue contains refunds as well as sales. `queuedSalesCount`/`queuedReturnsCount`
 // are optional so older tests / external callers without Bucket F still render.
+// Status bar shortcut chip. Black "F-key" pill + label, clickable.
+// Mirrors the style of cashier-facing POSes like Lightspeed Retail.
+function ShortcutHint({ k, label, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 hover:bg-slate-200 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{k}</span>
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+function ShortcutSep() {
+  return <span className="shrink-0 select-none text-slate-300">·</span>;
+}
+
 function offlineBannerLabel({ offlineQueueCount, queuedSalesCount, queuedReturnsCount }) {
   const s = Number(queuedSalesCount || 0);
   const r = Number(queuedReturnsCount || 0);
@@ -58,6 +78,7 @@ function POSContent() {
     offlineSyncing, offlineSyncResult, syncQueue,
     posLayout, suggestions, addToCart,
     parkSale, setShowParked, setShowShortcutsOverlay,
+    setShowDiscountModal, removeFromCart, setCart,
   } = usePOS();
   const [activeTab, setActiveTab] = useState("cart");
 
@@ -66,6 +87,18 @@ function POSContent() {
       '[placeholder*="Scan, search"], [placeholder*="search products"]',
     );
     if (el && typeof el.focus === "function") el.focus();
+  };
+  const focusCustomerSearch = () => {
+    const el = document.querySelector('[data-pos-customer-search]');
+    if (el && typeof el.focus === "function") el.focus();
+  };
+  const removeLastLine = () => {
+    if (!cart.length) return;
+    removeFromCart(cart[cart.length - 1].id);
+  };
+  const clearCart = () => {
+    if (!cart.length) return;
+    if (window.confirm("Clear entire cart?")) setCart([]);
   };
   const cartEmpty = cart.length === 0;
 
@@ -215,49 +248,27 @@ function POSContent() {
 
       {/* Desktop-only status bar — clickable shortcut hints. Mobile gets the
           bottom tab bar instead, so this is hidden under md. Style matches
-          POS's slate/violet hardcoded palette (NOT design-system tokens). */}
-      <div className="hidden md:flex shrink-0 items-center gap-1 border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-500">
-        <button
-          type="button"
-          onClick={() => setShowShortcutsOverlay((v) => !v)}
-          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
-        >
-          <span className="font-bold text-slate-700">F1</span> Help
-        </button>
-        <span className="text-slate-300">·</span>
-        <button
-          type="button"
-          onClick={() => { if (!cartEmpty) parkSale(); }}
-          disabled={cartEmpty}
-          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <span className="font-bold text-slate-700">F3</span> Park
-        </button>
-        <span className="text-slate-300">·</span>
-        <button
-          type="button"
-          onClick={() => setShowParked(true)}
-          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
-        >
-          <span className="font-bold text-slate-700">F5</span> Parked
-        </button>
-        <span className="text-slate-300">·</span>
-        <button
-          type="button"
-          onClick={() => { if (!cartEmpty) openCheckout(); }}
-          disabled={cartEmpty}
-          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <span className="font-bold text-slate-700">F9</span> Pay
-        </button>
-        <span className="text-slate-300">·</span>
-        <button
-          type="button"
-          onClick={focusOmni}
-          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
-        >
-          <span className="font-bold text-slate-700">/</span> Search
-        </button>
+          POS's slate/violet hardcoded palette (NOT design-system tokens).
+          Spans the full POS width (under both the cart column and the dark
+          sidebar) so it reads as a unified app footer, not a column hint. */}
+      <div className="hidden md:flex shrink-0 items-center gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+        <ShortcutHint k="F1" label="Help" onClick={() => setShowShortcutsOverlay((v) => !v)} />
+        <ShortcutSep />
+        <ShortcutHint k="F2" label="Discount" disabled={cartEmpty} onClick={() => setShowDiscountModal(true)} />
+        <ShortcutSep />
+        <ShortcutHint k="F3" label="Park" disabled={cartEmpty} onClick={parkSale} />
+        <ShortcutSep />
+        <ShortcutHint k="F4" label="Customer" onClick={focusCustomerSearch} />
+        <ShortcutSep />
+        <ShortcutHint k="F5" label="Parked" onClick={() => setShowParked(true)} />
+        <ShortcutSep />
+        <ShortcutHint k="F8" label="Remove" disabled={cartEmpty} onClick={removeLastLine} />
+        <ShortcutSep />
+        <ShortcutHint k="F9" label="Pay" disabled={cartEmpty} onClick={openCheckout} />
+        <ShortcutSep />
+        <ShortcutHint k="F10" label="Clear" disabled={cartEmpty} onClick={clearCart} />
+        <ShortcutSep />
+        <ShortcutHint k="/" label="Search" onClick={focusOmni} />
       </div>
 
       {/* Modals */}
