@@ -111,11 +111,11 @@ module.exports = function createAccountingRouter({
 
         const tz = req.company?.timezone || "UTC";
         const { rows: inflowsRows } = await db.query(
-          `SELECT sp.payment_method, COALESCE(SUM(sp.amount), 0) AS total
+          `SELECT LOWER(sp.payment_method) AS payment_method, COALESCE(SUM(sp.amount), 0) AS total
            FROM sale_payments sp
            JOIN sales s ON s.id = sp.sale_id
            WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2
-           GROUP BY sp.payment_method
+           GROUP BY LOWER(sp.payment_method)
            ORDER BY total DESC`,
           [toUtcStart(from, tz), toUtcEnd(to, tz)]
         );
@@ -171,15 +171,14 @@ module.exports = function createAccountingRouter({
         }
 
         const { rows: inflowRows } = await db.query(
-          `SELECT s.timestamp::date AS date,
+          `SELECT (s.timestamp AT TIME ZONE $${inflowParams.length + 1})::date AS date,
                   COALESCE(SUM(sp.amount), 0) AS inflow
            FROM sale_payments sp
            JOIN sales s ON s.id = sp.sale_id
            WHERE s.voided = false
-             AND sp.payment_method = 'Cash'
              AND s.timestamp >= $1 AND s.timestamp < $2${outletSql}
-           GROUP BY s.timestamp::date`,
-          inflowParams
+           GROUP BY (s.timestamp AT TIME ZONE $${inflowParams.length + 1})::date`,
+          [...inflowParams, tz]
         );
 
         const expParams = [date_from, date_to];
