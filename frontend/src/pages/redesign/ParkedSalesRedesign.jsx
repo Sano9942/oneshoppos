@@ -35,13 +35,15 @@ export default function ParkedSalesRedesign() {
     setError("");
     try {
       const data = await api.get("/api/parked-sales");
-      setRows(data.parkedSales || data.parked_sales || []);
+      setRows((data.parkedSales || data.parked_sales || []).map((r) => ({ ...r, _source: "parked" })));
       // Also fetch draft orders if enabled
       if (useDrafts) {
         try {
           const drafts = await api.get("/api/draft-orders?status=open,claimed");
-          setDraftRows(drafts.draftOrders || []);
+          setDraftRows((drafts.draftOrders || []).map((r) => ({ ...r, _source: "draft" })));
         } catch { setDraftRows([]); }
+      } else {
+        setDraftRows([]);
       }
     } catch (e) {
       setError(e.message || "Failed to load parked sales");
@@ -59,18 +61,30 @@ export default function ParkedSalesRedesign() {
     }
   };
 
+  // Re-fetch when useDrafts toggles — feature flags load async, so the
+  // first render sees `useDrafts=false` and skips the /api/draft-orders
+  // call. Without this dep, draft orders never appeared until the user
+  // hit the Refresh button.
   useEffect(() => {
     load();
     loadOutlets();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useDrafts]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (row) => {
     setBusy(true);
     setError("");
     try {
-      await api.del(`/api/parked-sales/${id}`);
+      const url =
+        row._source === "draft"
+          ? `/api/draft-orders/${row.id}`
+          : `/api/parked-sales/${row.id}`;
+      await api.del(url);
       setConfirmId(null);
-      setRows((prev) => prev.filter((r) => r.id !== id));
+      if (row._source === "draft") {
+        setDraftRows((prev) => prev.filter((r) => r.id !== row.id));
+      } else {
+        setRows((prev) => prev.filter((r) => r.id !== row.id));
+      }
     } catch (e) {
       setError(e.message || "Failed to delete parked sale");
     } finally {
@@ -78,9 +92,17 @@ export default function ParkedSalesRedesign() {
     }
   };
 
+  // Merge legacy parked_sales + draft_orders rows. Both shapes share the
+  // fields the table renders (id, customer_name, total, outlet, items)
+  // because we tagged each row with _source in `load()`. Sort newest first.
+  const merged = [...rows, ...draftRows].sort((a, b) => {
+    const ta = new Date(a.parked_at || a.created_at || 0).getTime();
+    const tb = new Date(b.parked_at || b.created_at || 0).getTime();
+    return tb - ta;
+  });
   const filtered = outletFilter
-    ? rows.filter((r) => String(r.outlet_id) === outletFilter)
-    : rows;
+    ? merged.filter((r) => String(r.outlet_id) === outletFilter)
+    : merged;
 
   return (
     <PageShell
@@ -128,8 +150,10 @@ export default function ParkedSalesRedesign() {
             </thead>
             <tbody>
               {!loading &&
-                filtered.map((r) => (
-                  <tr key={r.id} className="border-t border-(--ui-border)">
+                filtered.map((r) => {
+                  const rowKey = `${r._source || "parked"}:${r.id}`;
+                  return (
+                  <tr key={rowKey} className="border-t border-(--ui-border)">
                     <td className="px-3 py-2 text-(--ui-text)">
                       {r.customer_name || r.customer_id ? (
                         <div>
@@ -170,13 +194,13 @@ export default function ParkedSalesRedesign() {
                         "-"}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      {confirmId === r.id ? (
+                      {confirmId === rowKey ? (
                         <div className="flex items-center justify-center gap-2">
                           <Button
                             size="sm"
                             tone="danger"
                             disabled={busy}
-                            onClick={() => handleDelete(r.id)}
+                            onClick={() => handleDelete(r)}
                           >
                             Confirm
                           </Button>
@@ -188,7 +212,7 @@ export default function ParkedSalesRedesign() {
                         <Button
                           size="sm"
                           tone="danger"
-                          onClick={() => setConfirmId(r.id)}
+                          onClick={() => setConfirmId(rowKey)}
                         >
                           <Trash2 size={13} className="mr-1 inline" />
                           Delete
@@ -196,7 +220,8 @@ export default function ParkedSalesRedesign() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
             </tbody>
           </table>
 

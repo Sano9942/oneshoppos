@@ -503,15 +503,46 @@ export const POSProvider = ({ children }) => {
   const offlineQueue = useOfflineQueue({ showNotice });
 
   // parked-sales loader — needed by useCheckout
+  // When phase2_draft_orders is on, parkSale writes to /api/draft-orders
+  // instead of /api/parked-sales. The reader must mirror that. We also fetch
+  // legacy /api/parked-sales rows so tenants who flipped the flag mid-life
+  // don't lose access to anything they parked before the flip. Draft rows
+  // are normalized (created_at -> parked_at, _source flag) so the existing
+  // POSParkedModal render code keeps working without a shape branch.
   const loadParked = useCallback(async (outletId = shift.selectedOutletId) => {
+    const query = outletId ? { outlet_id: outletId } : undefined;
+    const draftsEnabled = !!posFlags.phase2_draft_orders;
     try {
-      const query = outletId ? { outlet_id: outletId } : undefined;
-      const data = await api.get("/api/parked-sales", query);
-      setParkedSales(data.parkedSales || []);
+      const requests = [
+        api.get("/api/parked-sales", query).then(
+          (d) => (d.parkedSales || []).map((r) => ({ ...r, _source: "parked" })),
+          () => [],
+        ),
+      ];
+      if (draftsEnabled) {
+        const draftQuery = { ...(query || {}), status: "open,claimed" };
+        requests.push(
+          api.get("/api/draft-orders", draftQuery).then(
+            (d) => (d.draftOrders || []).map((r) => ({
+              ...r,
+              parked_at: r.parked_at || r.created_at,
+              _source: "draft",
+            })),
+            () => [],
+          ),
+        );
+      }
+      const lists = await Promise.all(requests);
+      const merged = lists.flat().sort((a, b) => {
+        const ta = new Date(a.parked_at || a.created_at || 0).getTime();
+        const tb = new Date(b.parked_at || b.created_at || 0).getTime();
+        return tb - ta;
+      });
+      setParkedSales(merged);
     } catch {
       setParkedSales([]);
     }
-  }, [shift.selectedOutletId]);
+  }, [shift.selectedOutletId, posFlags.phase2_draft_orders]);
 
   const checkout = useCheckout({
     selectedOutletId: shift.selectedOutletId,
@@ -622,8 +653,18 @@ export const POSProvider = ({ children }) => {
   }, [cartHook, shift.selectedOutletId, posFlags, selectedCustomerId, employee?.id, loadParked, showNotice]);
 
   const restoreParked = useCallback(async (row) => {
+    // Pick the matching endpoint based on where this row came from. The
+    // _source tag is set by loadParked when it merges the two lists. Fall
+    // back to draft when the flag is on and source is missing (e.g. row
+    // came from a stale closure) so we don't 404 against the legacy table.
+    const isDraft =
+      row._source === "draft" ||
+      (!row._source && !!posFlags.phase2_draft_orders);
+    const detailUrl = isDraft
+      ? `/api/draft-orders/${row.id}`
+      : `/api/parked-sales/${row.id}`;
     try {
-      const data = await api.get(`/api/parked-sales/${row.id}`);
+      const data = await api.get(detailUrl);
       cartHook.setCart(
         (data.items || []).map((i) => ({
           id: i.product_id,
@@ -634,22 +675,26 @@ export const POSProvider = ({ children }) => {
           availableStock: 99999,
         })),
       );
-      cartHook.setOrderNote(data.parkedSale?.notes || "");
-      if (data.parkedSale?.customer_id)
-        setSelectedCustomerId(String(data.parkedSale.customer_id));
-      await api.del(`/api/parked-sales/${row.id}`);
+      const header = data.parkedSale || data.draftOrder || {};
+      cartHook.setOrderNote(header.notes || "");
+      if (header.customer_id)
+        setSelectedCustomerId(String(header.customer_id));
+      await api.del(detailUrl);
       await loadParked(shift.selectedOutletId);
       setShowParked(false);
       showNotice("Parked sale restored.");
     } catch (e) {
-      if (e.message?.includes("Parked sale not found")) {
+      if (
+        e.message?.includes("Parked sale not found") ||
+        e.message?.includes("Draft order not found")
+      ) {
         await loadParked(shift.selectedOutletId);
         showNotice("That parked sale was already restored on another terminal.");
         return;
       }
       setError(e.message || "Failed to restore parked sale");
     }
-  }, [cartHook, shift.selectedOutletId, loadParked, showNotice]);
+  }, [cartHook, shift.selectedOutletId, loadParked, showNotice, posFlags.phase2_draft_orders]);
 
   // ── Return-from-sale ────────────────────────────────────────────────────
   const openReturnFromSale = useCallback((sale) => {

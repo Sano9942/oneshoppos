@@ -57,8 +57,17 @@ function POSContent() {
     offlineQueueCount, queuedSalesCount, queuedReturnsCount,
     offlineSyncing, offlineSyncResult, syncQueue,
     posLayout, suggestions, addToCart,
+    parkSale, setShowParked, setShowShortcutsOverlay,
   } = usePOS();
   const [activeTab, setActiveTab] = useState("cart");
+
+  const focusOmni = () => {
+    const el = document.querySelector(
+      '[placeholder*="Scan, search"], [placeholder*="search products"]',
+    );
+    if (el && typeof el.focus === "function") el.focus();
+  };
+  const cartEmpty = cart.length === 0;
 
   if (isLocked) {
     return <POSLockScreen />;
@@ -202,6 +211,53 @@ function POSContent() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Desktop-only status bar — clickable shortcut hints. Mobile gets the
+          bottom tab bar instead, so this is hidden under md. Style matches
+          POS's slate/violet hardcoded palette (NOT design-system tokens). */}
+      <div className="hidden md:flex shrink-0 items-center gap-1 border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-500">
+        <button
+          type="button"
+          onClick={() => setShowShortcutsOverlay((v) => !v)}
+          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
+        >
+          <span className="font-bold text-slate-700">F1</span> Help
+        </button>
+        <span className="text-slate-300">·</span>
+        <button
+          type="button"
+          onClick={() => { if (!cartEmpty) parkSale(); }}
+          disabled={cartEmpty}
+          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span className="font-bold text-slate-700">F3</span> Park
+        </button>
+        <span className="text-slate-300">·</span>
+        <button
+          type="button"
+          onClick={() => setShowParked(true)}
+          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
+        >
+          <span className="font-bold text-slate-700">F5</span> Parked
+        </button>
+        <span className="text-slate-300">·</span>
+        <button
+          type="button"
+          onClick={() => { if (!cartEmpty) openCheckout(); }}
+          disabled={cartEmpty}
+          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span className="font-bold text-slate-700">F9</span> Pay
+        </button>
+        <span className="text-slate-300">·</span>
+        <button
+          type="button"
+          onClick={focusOmni}
+          className="rounded px-2 py-1 hover:bg-slate-100 hover:text-slate-700 transition"
+        >
+          <span className="font-bold text-slate-700">/</span> Search
+        </button>
       </div>
 
       {/* Modals */}

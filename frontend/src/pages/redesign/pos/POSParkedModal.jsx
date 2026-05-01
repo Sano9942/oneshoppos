@@ -62,7 +62,11 @@ export default function POSParkedModal() {
                   <div className="flex gap-2 ml-4 shrink-0">
                     <button
                       onClick={async () => {
-                        await api.del(`/api/parked-sales/${p.id}`);
+                        const url =
+                          p._source === "draft"
+                            ? `/api/draft-orders/${p.id}`
+                            : `/api/parked-sales/${p.id}`;
+                        await api.del(url);
                         await loadParked(selectedOutletId);
                         showNotice("Parked sale deleted.");
                       }}
