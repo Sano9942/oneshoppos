@@ -18,6 +18,12 @@ const CloseShiftSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   variance_reason: z.string().max(500).nullable().optional(),
   variance_approved_by: z.string().max(200).nullable().optional(),
+  // Manager PIN supplied when phase2g_risk_controls is on AND the variance
+  // exceeds the tenant threshold. The route resolves this via verifyManagerPin
+  // and stores the manager's employee_id in variance_approved_by. Without
+  // this declaration the PIN was stripped by Zod and the close 400'd with
+  // "Manager PIN required" even when one was provided.
+  variance_approved_by_pin: z.string().max(20).nullable().optional(),
   denominations: z.array(DenominationSchema).optional(),
 });
 
