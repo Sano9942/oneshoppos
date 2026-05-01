@@ -1,27 +1,29 @@
 # Types — Claude Guide
 
-- **2 TypeScript declaration files** — reference only (tsconfig: `allowJs` + `noEmit`, no runtime type checking enforced)
+**2 TypeScript declaration files.** tsconfig uses `allowJs + noEmit` — no runtime type checking enforced. These are reference-only shapes for editor tooling.
 
 ---
 
 ## `auth.ts`
 
 ### `AuthEmployee`
-Shape of the employee object stored in `AuthProvider` after a successful login (derived from `POST /api/auth/login` or `/api/auth/mt-login` response):
+
+Shape of the employee object stored in `AuthProvider` after login (from `POST /api/auth/login` or `/api/auth/mt-login`):
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | `number` | Employee ID |
+| `id` | `number` | |
 | `name` | `string` | Display name |
 | `username` | `string` | Login username |
 | `role_id` | `number` | |
 | `outlet_id` | `number \| null` | Null if no outlet assigned |
 | `permissions` | `string[]` | Array of permission strings |
 | `token` | `string` | JWT access token |
-| `refreshToken` | `string?` | Optional — present when refresh tokens are issued |
+| `refreshToken` | `string?` | Present when refresh tokens issued |
 
 ### `JwtPayload`
-Reference shape for the decoded JWT payload (decoding is done **server-side only** — not decoded client-side at runtime):
+
+Reference shape for the decoded JWT payload. **Decoding is server-side only** — not decoded client-side at runtime:
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -39,23 +41,24 @@ Reference shape for the decoded JWT payload (decoding is done **server-side only
 ```ts
 { data?: T; message?: string }
 ```
-Both fields are optional — some endpoints return a direct object (no `data` wrapper); some return only `message`.
+Both fields optional — some endpoints return a direct object (no `data` wrapper), some return only `message`.
 
 ### `ApiError`
 ```ts
 { error: string; details?: unknown }
 ```
-Backend always returns `{ error: string }` on failure. `details` is optional and present on validation errors.
+Backend always returns `{ error: string }` on failure. `details` is present on Zod validation errors.
 
 ### `ApiResponse<T>`
 ```ts
 type ApiResponse<T> = ApiOk<T> | ApiError
 ```
 
-### `isApiError(res)`
-**Runtime function** (not just a type) — exported as a callable type guard:
+### `isApiError(res)` — **runtime callable, not just a type**
+
 ```ts
 isApiError(res: ApiResponse): res is ApiError
 // Returns true if res.error is a string
 ```
-Import and call directly to narrow an `ApiResponse` to the error case.
+
+Use to narrow an `ApiResponse` to the error case. Import and call directly.

@@ -29,6 +29,8 @@ Exports `AuthProvider` + `useAuth()`.
 | `impersonationSessionId` | `string\|null` | Used for impersonation audit trail |
 | `subscriptionStatus` | `null\|'trial'\|'grace'\|'expired'\|'active'` | Drives `SubscriptionBanner` |
 | `subscriptionDaysLeft` | `number\|null` | Days remaining in trial or grace period |
+| `tenantPlan` | `null\|'free'\|'pro'` | Tenant subscription plan — used by billing UI and plan-gated features |
+| `company` | `object\|null` | `session.company` — loaded from `/api/auth/me` on boot; includes `tax_mode` (`'inclusive'\|'exclusive'\|'none'`), used by POS to default and hide the tax-inclusive toggle (P8/3.14) |
 
 ### Fetch interceptor (patches `window.fetch`)
 
@@ -50,7 +52,7 @@ Applied to all calls where URL contains `${API}/api/` or starts with `/api/`. Sk
 **Interceptor behaviors (in order):**
 1. **Offline guard** — non-GET while `!navigator.onLine` returns synthetic `503` with `X-Offline-Mode: 1`
 2. **Header injection** — injects employee/token/context headers
-3. **Token refresh** — on 401 with `body.code === "TOKEN_EXPIRED"` (MT only): calls `refreshAccessToken()`, retries once. `_refreshPromise` lock prevents parallel refresh stampede
+3. **Token refresh** — on 401 with `body.code === "TOKEN_EXPIRED"` (MT only): calls `refreshAccessToken()`, retries once. `_refreshPromise` module-level lock prevents parallel refresh stampede
 4. **Request ID tracking** — sets `window.__lastFailedReqId` to `X-Request-Id` on any failed response (used by `SupportWidget`)
 5. **Subscription expiry** — on 403 with `body.code === "SUBSCRIPTION_EXPIRED"`: sets `subscriptionStatus = "expired"`
 

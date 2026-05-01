@@ -1,6 +1,6 @@
 # Components — Claude Guide
 
-**6 files** — shared layout shell and auth/context guard components.
+**7 files** — shared layout shell, auth/context guards, and global UI interceptors.
 
 ---
 
@@ -18,6 +18,7 @@ Route guard — redirects to `/login` if not authenticated.
 
 Props: `{ perm, children, redirectTo? = "/dashboard" }`
 
+- Returns `null` (not a spinner) during `isBootstrapping`
 - If `perm` is falsy → renders children (pass-through, no guard)
 - If `hasPerm(perm)` → renders children
 - Otherwise → redirects to `/access-denied` with `state: { from: location.pathname, redirectTo }`
@@ -47,12 +48,13 @@ Passes `authHeaders` from `useAuth()` to `useFeatureFlags` to authenticate the f
 Dropdown in the top bar for switching active outlet/branch without going to `/context-select`.
 
 **Behavior:**
-- Fetches outlet list from `GET /api/context/bootstrap` on mount (when `employee.id` is set)
+- Fetches outlet list from `GET /api/context/bootstrap` on mount (when `employee.id` is set) using raw `fetch` with `authHeaders()` (not `api.js`)
 - "All Branches" option only shown for `hasPerm("all_access")` users
 - `switchOutlet(id)` validates the outlet is in the allowed list before writing — prevents unauthorized context writes
 - `switchToAll()` gated by `hasPerm("all_access")` — silently returns if not admin
 - Returns `null` (renders nothing) if no context is set yet
 - Context written via `writeContext()` from `authStore` — updates both state and localStorage atomically
+- "Change context..." link navigates to `/context-select`
 
 **Context modes:**
 - `scope_mode: "single_branch"` + `active_outlet_id: N` — standard per-outlet scope
@@ -65,6 +67,8 @@ Dropdown in the top bar for switching active outlet/branch without going to `/co
 Bell icon in top bar with unread badge and dropdown panel.
 
 **Polling:** `GET /api/notifications/count` every **60 seconds** (always). Full rows loaded from `GET /api/notifications` only when dropdown is opened.
+
+Uses raw `fetch` with `authHeaders()` — not `api.js`.
 
 **Notification types + icons:**
 
@@ -92,6 +96,21 @@ Bell icon in top bar with unread badge and dropdown panel.
 - Unread rows have `bg-blue-50/30` background
 - Row click: marks read (if unread), closes dropdown, navigates to `row.link` if set
 - Message truncated to 80 characters in row preview
+- `relativeTime()` helper formats timestamps: s/m/h/d ago — handles pg-style `"YYYY-MM-DD HH:MM:SS"` by replacing space with `T`
+
+---
+
+## `PlanLimitModalInterceptor.jsx`
+
+Global modal shown whenever `api.js` receives a `403 { code: "PLAN_LIMIT_REACHED" }` response.
+
+**How it works:**
+- Listens for `PLAN_LIMIT_EVENT` (custom DOM event) exported from `api.js`
+- Mounted **once** inside `AppLayoutRedesign` — applies to all pages automatically
+- `e.detail` shape: `{ error, current, limit }` — message + usage numbers
+- "Upgrade to Pro" button navigates to `/billing`
+- Per-page error toasts still fire via the rejected promise — this modal is *addtional*, not a replacement
+- Hardcodes Pro plan price: "8000 PKR/month per outlet"
 
 ---
 
@@ -103,20 +122,24 @@ Main app shell — renders sidebar + top bar + page content area.
 ```
 flex h-screen
 ├── <aside> — collapsible sidebar (w-72 expanded / w-20 collapsed)
-│   ├── SANOPOS brand header
-│   └── Nav groups from SHOPIFY_NAV_GROUPS (filtered by perm + flag)
+│   ├── SANOPOS / SP brand header
+│   └── Nav groups from SHOPIFY_NAV_GROUPS (filtered by perm + flag + mode)
 └── <div> — main content column
-    ├── <header> — top bar: search, ContextSwitcher, NotificationBell, ProfileDropdown
+    ├── <header> — top bar: Search (decorative), ContextSwitcher, NotificationBell, ProfileDropdown
     └── <main>
         ├── AnnouncementBanner
         ├── Breadcrumbs
-        └── ErrorBoundary > Suspense > <Outlet />
-└── SupportWidget (outside main content, fixed position)
+        └── ErrorBoundary level="page" > Suspense > <Outlet />
+├── SupportWidget (fixed position, outside main)
+└── PlanLimitModalInterceptor (global, outside main)
 ```
 
-**Nav filtering:** Each nav item is shown only if:
+**Nav filtering:** Each nav item is shown only if ALL of:
 - `item.requiredPerm` is unset OR `hasPerm(item.requiredPerm)` is true
 - `item.requiredFlag` is unset OR `flags[item.requiredFlag]` is truthy
+- `item.requiredMode` is unset OR `hasMode(item.requiredMode)` is true (from `usePreset()`)
+
+Empty groups (all items filtered out) are also hidden.
 
 **Special nav path:** `item.path === "__STOREFRONT__"` is resolved to `/store/${readTenantSlug()}` at render time — used for the tenant storefront link in the sidebar.
 
@@ -124,10 +147,15 @@ flex h-screen
 
 **Active state:** `location.pathname.startsWith(resolvedPath)` — prefix match (not exact).
 
-**`ProfileDropdown` (internal component):**
-- Shows employee name + role label (hardcoded: role_id 1 = "Administrator", 2 = "Manager", else = "Cashier")
-- "My Profile" → `/profile`
-- Dark mode toggle via `toggleTheme()` from `utils/theme.js`
-- Logout → calls `logout()`, then navigates to `/login`
+**Mobile sidebar:** Hidden behind overlay (`-translate-x-full` → `translate-x-0`). `mobileOpen` toggled by hamburger button. Closes on nav link click (event delegation on `<nav>` — checks `e.target.closest("a")`).
 
-**`<Outlet />` wrapping:** `ErrorBoundary level="page"` + `Suspense` with same "Loading..." pill as `RouteLoading.jsx`
+**Search bar:** `<Input>` with `Search` icon — decorative only, no search logic wired.
+
+**`ProfileDropdown` (internal component, not exported):**
+- Props: `{ employee, logout, navigate }`
+- Shows employee name + role label (hardcoded: role_id 1 = "Administrator", role_id 2 = "Manager", else = "Cashier")
+- "My Profile" → `/profile`
+- Dark mode toggle via `toggleTheme()` from `utils/theme.js` — updates local `theme` state immediately
+- Logout → `await logout()`, then `navigate("/login", { replace: true })`
+
+**`<Outlet />` wrapping:** `ErrorBoundary level="page"` + `Suspense` fallback is a pill-style "Loading..." card (matches `RouteLoading.jsx`).

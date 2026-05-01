@@ -1,6 +1,6 @@
 # Routes — Claude Guide
 
-**4 files** — React Router route definitions split by access level. All `lazy()`-loaded unless noted.
+**5 files** — React Router route definitions split by access level. All `lazy()`-loaded unless noted.
 
 ---
 
@@ -11,20 +11,36 @@ Routes accessible without authentication (or with special auth handling):
 | Path | Component | Notes |
 |------|-----------|-------|
 | `/` | `HomeRedirect` | See logic below |
-| `/login` | `LandingPage` | Alias for `/` login form |
-| `/setup` | `SetupWizard` | First-run wizard |
+| `/login` | `LoginPage` | Standalone login page |
+| `/landing-preview` | `LandingPagePreview` | Marketing landing preview |
+| `/preview/landing-v2` | `LandingEditorial` | |
+| `/preview/landing-brutalist` | `LandingBrutalist` | |
+| `/preview/landing-luxury` | `LandingLuxury` | |
+| `/preview/landing-bazaar` | `LandingBazaar` | |
+| `/preview/landing-truckart` | `LandingTruckart` | |
+| `/preview/landing-y2k` | `LandingY2k` | |
+| `/preview/landing-showroom` | `LandingShowroom` | |
+| `/preview/landing-scrapbook` | `LandingScrapbook` | |
+| `/setup` | `SetupWizard` | First-run wizard (not lazy) |
 | `/reset-password` | `ResetPassword` | `?token=xxx&tenant=slug` |
 | `/signup` | `SignupPage` | Self-service signup |
+| `/verify-email` | `VerifyEmail` | Email verification link target |
+| `/terms` | `Terms` | |
+| `/privacy` | `Privacy` | |
 | `/receipt/:invoiceNumber` | `ReceiptPublicPage` | Public shareable receipt |
-| `/access-denied` | `AccessDenied` | Permission error landing |
-| `/context-select` | `ContextSelect` | Requires auth — outlet/company picker |
-| `/pos` | `POSRoute` | Requires auth + `ErrorBoundary level="page"` |
-| `/kiosk` | `KioskRedesign` | Standalone attendance kiosk — requires auth + `ErrorBoundary`. **Not** the restaurant ordering kiosk (that's `KioskOrderingRoute` in `appRoutes`) |
+| `/gift-card/:code` | `GiftCardBalancePage` | Public gift card balance check |
+| `/access-denied` | `AccessDenied` | Permission error landing (not lazy) |
+| `/context-select` | `ContextSelect` | Requires `RequireAuth` — outlet/company picker |
+| `/pos` | `POSRoute` | Requires `RequireAuth` + `ErrorBoundary level="page"` |
+| `/pos/restaurant` | `POSRestaurantRoute` | Restaurant mode POS. Requires `RequireAuth` + `ErrorBoundary level="page"` |
+| `/kiosk` | `KioskRedesign` | Attendance kiosk — Requires `RequireAuth` + `ErrorBoundary`. **Not** the restaurant ordering kiosk (that's in `appRoutes`) |
 | `/customer-display` | `CustomerDisplayPage` | No auth |
 | `/store/:tenantSlug` | `StorefrontLayout` | Public storefront — 6 nested routes: `index`, `products`, `products/:productId`, `cart`, `checkout`, `order/:orderToken` |
 | `/book/:tenantSlug` | `PublicBookingPage` | Public appointment booking |
 | `/menu/:token` | `PublicRestaurantMenuPage` | Public restaurant QR menu |
-| `/portal/:tenantSlug` | `PortalLayout` | M8 customer portal — 16 nested routes (see below). Uses its own `PortalAuthProvider`; NOT wrapped in the main `AuthProvider` |
+| `/pay/:token` | `RestaurantPayPage` | Restaurant table self-pay |
+| `/reserve/:tenantSlug` | `ReservationBookingPage` | Public restaurant reservation |
+| `/portal/:tenantSlug` | `PortalLayout` | M8 customer portal — 16 nested routes. Uses `PortalAuthProvider` (NOT the main `AuthProvider`) |
 
 ### Portal nested routes (`/portal/:tenantSlug/...`)
 
@@ -47,15 +63,16 @@ Routes accessible without authentication (or with special auth handling):
 | `wallet` | `PortalWallet` |
 | `profile` | `PortalProfile` |
 
-All portal components live in `pages/portal/`.
+All portal components in `pages/portal/`.
 
 ### `HomeRedirect` logic
-1. If `isBootstrapping` → render null (wait)
-2. If `isAuthenticated` → redirect to `/context-select`
-3. If NOT `IS_MULTI_TENANT` → fetch `GET /api/setup/status`; if `!setup_complete` → redirect to `/setup`
-4. Otherwise → render `LandingPage`
 
-The setup check is **skipped in MT mode** (`IS_MULTI_TENANT = true`) — tenants don't go through the setup wizard.
+1. If `isBootstrapping` → render null (wait)
+2. If `isAuthenticated` → `<Navigate to="/context-select" replace />`
+3. If NOT `IS_MULTI_TENANT` → fetch `GET /api/setup/status`; if `!setup_complete` → navigate to `/setup`
+4. Otherwise → render `LandingPagePreview`
+
+The setup check is **skipped in MT mode** — a `checkedRef` prevents it from running again on re-renders.
 
 ---
 
@@ -65,55 +82,79 @@ All app routes nested under a single pathless layout route:
 ```
 RequireAuth > RequireContext > AppLayoutRedesign
 ```
-Every route in this file automatically gets auth, context enforcement, and the app shell layout. No per-route auth wrapper needed.
+Every route in this file automatically gets auth, context enforcement, and the app shell. No per-route auth wrapper needed.
 
 **Helpers:**
 - `wrap(Component)` — wraps in `<Suspense fallback={<RouteLoading />}>`
 - `perm(permString, element)` — wraps in `<RequirePerm perm={permString}>`
 
-**Route → permission map (selected):**
+**Route → permission map:**
 
 | Path | Perm | Notes |
 |------|------|-------|
 | `/dashboard` | — | All authenticated |
-| `/profile` | — | All authenticated |
-| `/my-tickets` | — | All authenticated |
-| `/sales-history` | — | All authenticated |
-| `/customers` | — | All authenticated |
-| `/crm` | `manage_orders` | |
-| `/quotations` | `manage_orders` | |
-| `/orders` | `manage_orders` | |
-| `/parked-sales` | `manage_orders` | |
-| `/inventory` | `manage_inventory` | |
-| `/products/new`, `/products/:id` | `manage_inventory` | `ProductFormPage` |
-| `/adjustments`, `/transfers` | `manage_inventory` | |
-| `/categories`, `/taxes`, `/brands` | `manage_inventory` | |
+| `/retail/home` | — | Alias for `/dashboard` (2-G.16) |
+| `/profile` | — | |
+| `/my-tickets` | — | |
+| `/sales-history` | — | |
+| `/cash-management` | — | |
+| `/customers` | — | |
+| `/returns` | — | |
+| `/reports` | — | |
+| `/notifications` | — | |
+| `/tax-lookup` | — | |
+| `/crm`, `/quotations`, `/orders` | `manage_orders` | |
+| `/parked-sales`, `/holds` | `manage_orders` | |
+| `/supplier-payables`, `/returned-stock` | `manage_orders` | |
 | `/suppliers`, `/purchase-orders` | `manage_orders` | |
-| `/employees`, `/outlets` | `all_access` | Admin only |
-| `/administrator` | `all_access` | |
-| `/import`, `/backup-restore` | `all_access` | |
+| `/approvals` | `manage_orders` | |
+| `/fulfillment`, `/cod-settlements` | `manage_orders` | |
+| `/messaging/inbox`, `/customer-invoices` | `manage_orders` | |
+| `/inventory`, `/products/new`, `/products/:id` | `manage_inventory` | |
+| `/adjustments`, `/transfers`, `/stock-counts` | `manage_inventory` | |
+| `/categories`, `/taxes`, `/brands` | `manage_inventory` | |
+| `/promotions`, `/expenses`, `/barcode-templates` | `manage_inventory` | |
+| `/reorder-alerts`, `/inventory-intelligence` | `manage_inventory` | |
+| `/price-lists`, `/review-moderation` | `manage_inventory` | |
+| `/settings/integrations` | `manage_inventory` | |
+| `/accounting`, `/attendance` | `view_reports` | |
+| `/report-builder` | `view_reports` | |
+| `/credit-debit-notes`, `/postdated-cheques` | `view_reports` | |
+| `/retail-risk` | `view_reports` | |
+| `/employees`, `/outlets`, `/administrator` | `all_access` | |
+| `/action-history`, `/import`, `/backup-restore` | `all_access` | |
 | `/company-settings`, `/billing` | `all_access` | |
 | `/settings/fbr`, `/fbr` | `all_access` | |
-| `/settings/integrations` | `manage_inventory` | `IntegrationsHubRedesign` |
-| `/accounting` | `view_reports` | Also feature-flagged `accounting_core` |
-| `/attendance` | `view_reports` | |
-| `/reports` | — | All authenticated |
-| `/chart-of-accounts`, `/journal-entries` | `all_access` | Wave 2 |
-| `/stock-counts`, `/price-lists` | `manage_inventory` | Wave 3 |
-| `/loyalty-tiers` | `all_access` | Wave 4 |
-| `/customer-groups` | `manage_customers` | Wave 4 |
-| `/fulfillment`, `/cod-settlements` | `manage_orders` | Wave 5 |
-| `/restaurant/floor`, `/restaurant/checks` | `manage_restaurant` | Phase 4 |
-| `/kds` | `manage_kds` | Phase 4 |
-| `/kiosk` | — | `KioskOrderingRoute` — restaurant ordering (no perm required in route, component may gate internally) |
-| `/appointments/*` | `manage_bookings` | Phase 4 |
-| `/projects` | `manage_projects` | Phase 4 |
-| `/contracts` | `manage_contracts` | Phase 4 |
-| `/service-tickets` | `manage_tickets` | Phase 4 |
-| `/treatment-plans`, `/treatment-plans/active`, `/treatment-plans/calendar`, `/treatment-plans/labs`, `/treatment-plans/templates`, `/treatment-plans/:planId`, `/treatment-plans/chart/:planId` | `manage_treatment_plans` | M10 |
+| `/hr`, `/scheduling` | `all_access` | |
+| `/chart-of-accounts`, `/journal-entries` | `all_access` | |
+| `/loyalty-tiers`, `/subscriptions` | `all_access` | |
+| `/smart-collections`, `/scheduled-changes` | `all_access` | |
+| `/settings/outlet-tax-profiles`, `/settings/pos-layouts` | `all_access` | |
+| `/commissions` | `all_access` | |
+| `/marketing/campaigns` | `all_access` | |
+| `/return-policies` | `all_access` | |
+| `/customer-groups`, `/customer-groups/:groupId/price-book` | `manage_customers` | |
+| `/gift-cards` | `manage_gift_cards` | |
+| `/restaurant/floor`, `/restaurant/checks` | `manage_restaurant` | |
+| `/restaurant/availability`, `/restaurant/menu-schedules` | `manage_restaurant` | |
+| `/restaurant/reservations`, `/restaurant/waitlist` | `manage_restaurant` | |
+| `/restaurant/modifiers`, `/restaurant/inbox` | `manage_restaurant` | |
+| `/restaurant/void-reasons` | `all_access` | |
+| `/kds` | `manage_kds` | |
+| `/tips` | `manage_tips` | |
+| `/kiosk` | — | `KioskOrderingRoute` — restaurant ordering kiosk (no perm in route) |
+| `/appointments/services`, `/appointments/calendar`, `/appointments/bookings` | `manage_bookings` | |
+| `/projects`, `/contracts` | `manage_projects` / `manage_contracts` | |
+| `/service-tickets` | `manage_tickets` | |
+| `/rentals`, `/rentals/items`, `/rentals/contracts`, `/rentals/timeline` | `manage_rentals` | All render `RentalsRoute` |
+| `/rooms`, `/rooms/rates`, `/rooms/bookings`, `/rooms/calendar`, `/rooms/arrivals-departures` | `manage_rooms` | All render `RoomManagementRoute` |
+| `/treatment-plans`, `/treatment-plans/active`, `/treatment-plans/calendar`, `/treatment-plans/labs`, `/treatment-plans/templates`, `/treatment-plans/:planId`, `/treatment-plans/chart/:planId` | `manage_treatment_plans` | All render `TreatmentPlansRoute` |
+| `/printer-settings`, `/courier-settings` | `all_access` | |
+| `/receipt-templates` | — | No perm required |
 
-**Standalone report deep-links (17 routes):**
-Each maps a URL to a `ReportTabStandaloneRoute` with a `tabId`:
+**Placeholder routes (5):** `/lookup`, `/custom-fields`, `/partners`, `/shopcast`, `/reports/parent-report`
+
+**Report deep-links (19 routes):**
 
 | Path | tabId |
 |------|-------|
@@ -134,16 +175,16 @@ Each maps a URL to a `ReportTabStandaloneRoute` with a `tabId`:
 | `/reports/wastage` | `wastage` |
 | `/reports/product-movement` | `product-movement` |
 | `/reports/product-performance` | `product-performance` |
+| `/reports/kds-analytics` | `kds-analytics` |
+| `/reports/menu-engineering` | `menu-engineering` |
 
-`ReportTabStandaloneRoute` is a named export from `pages/ReportsRoute.jsx` (not the default export).
-
-**Placeholder routes (5):** `/lookup`, `/custom-fields`, `/partners`, `/shopcast`, `/reports/parent-report` — all render `PlaceholderPage`.
+`ReportTabStandaloneRoute` is loaded via `.then((mod) => ({ default: mod.ReportTabStandaloneRoute }))` from `pages/ReportsRoute.jsx` — it's a named export, not the default.
 
 ---
 
 ## `adminRoutes.jsx`
 
-All routes nested under `/admin`. Admin auth is checked **inside `AdminLayout`** via `getAdminToken()` — there is no `RequireAuth` wrapper at the route level.
+All routes nested under `/admin`. Auth is checked **inside `AdminLayout`** via `getAdminToken()` — no `RequireAuth` wrapper at the route level.
 
 | Path | Component |
 |------|-----------|
@@ -156,11 +197,13 @@ All routes nested under `/admin`. Admin auth is checked **inside `AdminLayout`**
 | `/admin/dead-letters` | `AdminDeadLetters` |
 | `/admin/tax-rates` | `AdminTaxRates` |
 | `/admin/activity` | `AdminActivity` |
+| `/admin/stuck-payments` | `AdminStuckPayments` |
 
 ---
 
 ## `RouteLoading.jsx`
 
-`Suspense` fallback — a centered pill with `"Loading..."` text:
-- `min-h-[40vh]` container, white card, `border-slate-200`, `shadow-sm`
+`Suspense` fallback — centered white card with `"Loading..."`:
+- Container: `min-h-[40vh]`, centered flex
+- Card: `rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm`
 - Used by both `appRoutes.jsx` and `adminRoutes.jsx` via their local `wrap()` helpers

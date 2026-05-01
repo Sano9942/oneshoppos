@@ -190,7 +190,14 @@
       "WebFetch(domain:en.wikipedia.org)",
       "WebFetch(domain:www.skytab.com)",
       "WebFetch(domain:commons.wikimedia.org)",
-      "mcp__claude_ai_Supabase__list_organizations"
+      "mcp__claude_ai_Supabase__list_organizations",
+      "WebFetch(domain:help.shopify.com)",
+      "WebFetch(domain:shopify.dev)",
+      "WebFetch(domain:developer.squareup.com)",
+      "WebFetch(domain:download1.fbr.gov.pk)",
+      "WebFetch(domain:www.ezinvoice.pk)",
+      "mcp__claude_ai_Supabase__search_docs",
+      "mcp__claude_ai_Vercel__deploy_to_vercel"
     ],
     "additionalDirectories": [
       "\\tmp",
@@ -198,7 +205,8 @@
       "C:\\Users\\HP\\.claude",
       "C:\\Users\\HP\\.railway",
       "d:\\newprojects\\oneshoppos\\.claude\\reviews",
-      "D:\\newprojects\\oneshoppos\\.claude"
+      "D:\\newprojects\\oneshoppos\\.claude",
+      "d:\\newprojects\\oneshoppos\\.claude\\commands"
     ]
   },
   "hooks": {

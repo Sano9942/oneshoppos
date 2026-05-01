@@ -1,116 +1,217 @@
 # POS Module — Claude Guide
 
-- **22 files** — entire POS terminal, driven by a single React Context (`POSContext`)
-- **`POSContext.jsx`** — central state machine (~1394 lines). `POSProvider` wraps the page, `usePOS()` hook for all children. **~165 exports** (state values + setters + computed values + functions). Lock state in `sessionStorage` (`posLocked=1`, clears on tab close). Offline queue uses `localStorage` keyed per employee ID (`pos_offline_queue_<employeeId>`). M9 exports: `chargeToRoomFolioId`, `setChargeToRoomFolioId`, `openBookings`, `openBookingsLoading`. M10 exports: `chargeToTreatmentFolioId`, `setChargeToTreatmentFolioId`, `openTreatmentPlans`, `setOpenTreatmentPlans`. Also exports `presetLabels` (from `usePreset()`) used by `printSlip`.
-- **`cartMath.js`** — pure utility, zero React. `calcGrossTotal`, `calcDiscountValue` (percent/flat), `calcTaxTotal` (inclusive only — exclusive adds tax in calling code), `calcTotal` (always ≥ 0)
+- **62 files** — entire POS terminal, driven by a single React Context (`POSContext`) that is composed from 8 domain hooks
+- **`POSContext.jsx`** — orchestrator only (~400 lines). Composes hooks, wires state between them, provides `POSContext` value. ~165 exports (wave-C snapshot list at top of file). `usePOS()` hook — throws if used outside `POSProvider`.
+- **`cartMath.js`** — pure utility, zero React. `calcGrossTotal`, `calcDiscountValue` (percent/flat), `calcTaxTotal` (both inclusive and exclusive — inclusive backs tax out, exclusive adds on top), `calcTotal` (always ≥ 0)
+- **`omniInputRouter.js`** — pure pattern classifier. `classifyOmniInput(raw)` returns `{ kind, value?, format? }`. Kinds: `noop`, `barcode` (EAN-8/12/13/14 by digit length), `plu` (4-5 digit numeric), `customer` (`#`-prefixed), `text` (everything else).
 
-## Context Bootstrap Behavior
+---
 
-On mount, `POSProvider`:
-1. Parallel-fetches `/api/outlets` + `/api/customers` — auto-selects outlet from `readContext().active_outlet_id` if set; falls back to auto-select if only one outlet exists
-2. Fetches `/api/receipt-templates/active` — silently falls back to defaults if none
-3. Fetches `/api/feature-flags` into `posFlags` map — controls `phase2_draft_orders` behavior
-4. After outlet selected: fetches active shift (`/api/shifts/active?outlet_id=X`) + attendance status (`/api/attendance/my-status`)
+## Context Hook Decomposition
+
+`POSContext.jsx` composes 8 hooks (bottom-up, each receives results of earlier hooks):
+
+| Hook | File | Owns |
+|------|------|------|
+| `useShiftGate` | `hooks/useShiftGate.js` | outlets, selectedOutletId, activeShift, attendanceStatus, openShift, closeShift |
+| `useCart` | `hooks/useCart.js` | cart, search, price lists, POS layout, suggestions, promotions, discount, note, tax toggle |
+| `useReceipt` | `hooks/useReceipt.js` | slip, slipOpen, receiptTemplate, recentSales, printSlip |
+| `useCustomerDisplay` | `hooks/useCustomerDisplay.js` | customer display sync (debounced POST to `/api/pos/customer-display`) |
+| `useLoyaltyWallet` | `hooks/useLoyaltyWallet.js` | checkoutWalletBalance, loyalty points, earnRate, redeemRate |
+| `useFolioCharging` | `hooks/useFolioCharging.js` | chargeToRoomFolioId, chargeToTreatmentFolioId, openBookings, openTreatmentPlans |
+| `useOfflineQueue` | `hooks/useOfflineQueue.js` | offlineQueueCount, queuedSalesCount, queuedReturnsCount, syncQueue |
+| `useCheckout` | `hooks/useCheckout.js` | completeSale, addPayment, payments, submitting, handleQuickCreateCustomer |
+
+---
 
 ## Critical Gotchas
 
-- **`completeSale` uses `api.raw` (not `api.post`)** — to detect 401 mid-checkout (session expiry). On 401, stores payload in `pendingSaleRef.current`, sets `sessionExpired=true`. Do NOT refactor to `api.post`.
-- **Park sale is feature-flagged** — when `posFlags.phase2_draft_orders` is true, parks to `POST /api/draft-orders` instead of `POST /api/parked-sales`. Both paths then call `loadParked()`.
-- **F-key shortcuts use `ref` indirection** — `parkSaleRef`, `openCheckoutRef`, `removeFromCartRef` are updated each render so the keyboard `useEffect` (which captures a stale closure) still calls the current function. Pattern: declare the ref, assign in the function body, call `ref.current?.()` in the keyboard handler.
-- **Offline idempotency** — `completeSale` generates `crypto.randomUUID()` as `idempotency_key`. On sync, if backend returns `{ duplicate: true }`, the sale is dequeued without error. Auto-sync fires on `window.online` event.
-- **Opening denominations are hardcoded** in `POSContext.jsx` — `OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10]`. Closing denominations come from `useCurrency().denominations` (tenant-configurable).
-- **Loyalty rates are hardcoded** — `LOYALTY_EARN_RATE = 1` (1pt per PKR 100 spent), `LOYALTY_REDEEM_RATE = 10` (100pts = PKR 10 off). A TODO comment marks these for future configurability.
-- **Price list resolution priority** — customer price list takes priority over outlet price list. Customer list fetched on `selectedCustomerId` change; outlet list fetched on `selectedOutletId` change using highest-priority assignment from `/api/price-list-assignments?scope_type=outlet&scope_id=X`.
-- **Customer display sync** — debounced 500ms, POSTs to `/api/pos/customer-display` on every cart change while `activeShift.id` is set. Silent fail (`catch(() => {})`).
-- **Barcode scanner** — global `keydown` listener buffers rapid keystrokes (100ms inter-key timeout). On `Enter` with buffer ≥ 3 chars, calls `handleBarcodeScanned` via `api.raw GET /api/products/scan/:barcode`. Ignores 404.
-- **`isReadyForCheckout`** — computed boolean: `selectedOutletId && activeShift && attendanceCode === "clocked_in"`. All three must be true before checkout is allowed.
-- **Auto-apply promotions** — debounced 400ms POST to `/api/promotions/quote` on cart changes. Result sets `appliedPromotions` + `promoDiscount` (included in `completeSale` payload alongside manual discount).
-- **POS layout + item suggestions** — `posLayout` fetched from `/api/pos-layouts` on outlet change; `suggestions` fetched from `/api/pos/suggestions?product_ids=...` with 500ms debounce on cart changes.
+- **`completeSale` uses `api.raw` (not `api.post`)** — to detect 401 mid-checkout. On 401, stores payload in `pendingSaleRef.current`, sets `sessionExpired=true`. Do NOT refactor to `api.post`.
+- **Park sale is feature-flagged** — when `posFlags.phase2_draft_orders` is true, parks to `POST /api/draft-orders` instead of `POST /api/parked-sales`.
+- **F-key shortcuts use `ref` indirection** — `parkSaleRef`, `openCheckoutRef`, `removeFromCartRef` updated each render so the keyboard `useEffect` (stale closure) calls the current function.
+- **Offline queue now IndexedDB-backed** (`utils/offlineQueue.js`). Also supports returns (`type: "return"`). Legacy `localStorage` migration runs on mount. Failed entries viewable in `POSStuckQueueModal`. Auto-sync fires on `window.online` event.
+- **Offline idempotency** — `completeSale` generates `crypto.randomUUID()` as `idempotency_key`. Backend returns `{ duplicate: true }` on replay → dequeued without error.
+- **Opening denominations** — hardcoded in `useShiftGate.js`: `OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10]`. Closing denominations come from `useCurrency().denominations`.
+- **Loyalty rates** — NO LONGER HARDCODED. Fetched from `GET /api/loyalty/config` on mount. Falls back to defaults (earn=1pt per 100 spent, redeem=PKR10 per 100 pts) if endpoint errors or returns null.
+- **Price list priority** — customer price list takes priority over outlet price list. Outlet price list only fetched when `posFlags.phase2_outlet_pricing` is on (skips on 503 to avoid Sentry noise).
+- **Barcode scanner (global keydown)** — 100ms inter-key timeout buffer, fires `handleBarcodeScanned` on `Enter` with buffer ≥ 3 chars. Separate from `POSOmniInput` (which is the typed search box).
+- **POS device registration** — `POST /api/pos-devices/register` called when `posFlags.phase2_pos_layouts` is on. Device UUID in `localStorage["pos_device_uuid"]`, surrogate ID in `localStorage["pos_device_id"]`. Silently fails when flag is off.
+- **Cart checkpoint/resume** — debounced 1s write to `sessionStorage["pos_cart_checkpoint_${employeeId}"]`. On mount (empty cart), if checkpoint ≤ 8h old, `POSCartResumeModal` prompts restore. Scoped per employee ID.
+- **Stale-shift recovery** — `POSShiftRecoveryModal` opens when active shift is >20h old. No before-noon filter (any time-of-day). Dismissed for rest of session via state (not persisted).
+- **Tax mode** — default for `taxInclusive` toggle derived from `company.tax_mode` (from `useAuth()`). Re-syncs when mode loads async but only resets if cart is empty.
+- **`isReadyForCheckout`** — `Boolean(selectedOutletId && activeShift && attendanceCode === "clocked_in")`. All three required.
+
+---
+
+## `POSOmniInput.jsx`
+
+Single search bar that replaces the old 4-field search. Uses `classifyOmniInput` to route:
+- `barcode`/`plu` → `GET /api/products/scan/:barcode` via `api.raw`. If variants → sets `pendingVariantProductId` (opens variant modal). If `serial_required` → sets `pendingSerialContext` + `pendingSerialProductId`. Otherwise → `addToCart`.
+- `customer` → `GET /api/customers?search=X`. If one match → sets `selectedCustomerId`. If multiple → opens customer dropdown.
+- `text` → sets `search` state → triggers search results dropdown.
+
+Auto-focus on mount. Re-focuses every 10 seconds if no input/textarea/select is focused. `/` key moves focus to omni-input (when no input is active).
+
+---
 
 ## Modal Components
 
-All modals read from `usePOS()` context and null-guard at top (`if (!open) return null`) — **except `POSApprovalModal` and `POSEmailReceiptModal` which use props instead of context**.
+All modals null-guard with `if (!open) return null` at top, using `usePOS()` — **except those noted with props below**.
 
-| Modal | Context vs Props | Key behavior |
-|-------|-----------------|--------------|
-| `POSCheckoutModal` | context | Multi-payment tenders; loyalty points toggle (disabled offline); wallet toggle adds/removes `{ method: "Wallet" }` payment entry; quick-create customer inline |
+| Modal | Source | Key behavior |
+|-------|--------|-------------|
+| `POSCheckoutModal` | context | Multi-payment tenders; loyalty points toggle; wallet toggle adds `{ method: "Wallet" }` payment entry; quick-create customer inline |
 | `POSDiscountModal` | context | Percent/flat toggle; value stored in `discountInput` + `discountType` |
-| `POSReturnExchangeModal` | context | Most complex modal — refund mode + exchange mode; exchange: POST sale first, return second (prevents inconsistent state); fetches `/api/return-reasons` on mount; supports Phase 2 `policyQuote` + `approvalEventId` fields; calls `api.get/post` directly |
-| `POSReceiptModal` | context | Embeds `POSEmailReceiptModal` (props-driven); shows returned items section for exchange receipts; WhatsApp share uses `wa.me/?text=` link |
-| `POSParkedModal` | context | Calls `api.del()` directly for delete action — not purely context-driven |
-| `POSCloseShiftModal` | context | POSTs to `/api/shifts/:id/close`; uses `useCurrency().denominations` (not hardcoded); shows variance result after close |
-| `POSOpeningGateModal` | context | 3-state gate: needsOutlet → needsShift → needsClockIn. Only shown when one of these conditions is true. Non-admin cashiers see read-only outlet name (no switcher). Manager opens shift with float + denominations. |
+| `POSReturnExchangeModal` | context | Most complex — refund + exchange mode; exchange: POST sale first, return second; fetches `/api/return-reasons` on mount; 409 `duplicate_return` → opens `POSCartCollisionModal`; supports `policyQuote`/`approvalEventId` |
+| `POSReceiptModal` | context | Embeds `POSEmailReceiptModal` (props); shows returned items for exchange receipts; WhatsApp share via `wa.me/?text=` |
+| `POSParkedModal` | context | Calls `api.del()` directly for delete — not purely context |
+| `POSCloseShiftModal` | context | `POST /api/shifts/:id/close`; uses `useCurrency().denominations` (not hardcoded); shows variance after close |
+| `POSOpeningGateModal` | context | 3-state gate: needsOutlet → needsShift → needsClockIn. Non-admin cashiers see read-only outlet name |
 | `POSNoteModal` | context | Simple textarea → `orderNote` |
-| `POSSessionExpiredModal` | context | PIN re-auth via `POST /api/employees/validate-pin` (always PIN, even if employee has password). On success: calls `retryPendingSale()`. On cancel: parks the pending sale then navigates to `/login`. |
-| `POSLockScreen` | context | Full-page overlay (not fixed modal). `handleUnlock` validates PIN via `POST /api/employees/validate-pin`; checks that unlocked employee matches logged-in employee. |
-| `POSShortcutsOverlay` | context | Uses **CSS variable tokens** (`--ui-surface`, `--ui-text`, `--ui-border`) — **NOT** standard POS `#8066FF`/slate styling |
-| `POSApprovalModal` | **props** | Props: `actionType`, `referenceType`, `referenceId`, `outletId`, `metadata`, `onApproved`, `onDenied`, `onClose`. POSTs to `/api/approvals/pos-authorize`. Usable outside POS. |
-| `EndlessAisleModal` | context | POSTs to `POST /api/orders/endless-aisle`. Pre-fills from `selectedCustomer`. Supports ship-to-customer or in-store pickup. Uses **`dark:` Tailwind variants + generic gray classes** — **NOT** standard POS styling. |
-| `POSEmailReceiptModal` | **props** | Props: `{ saleId, customerEmail, onClose }`. POSTs to `POST /api/email/send-receipt-v2`. Auto-closes 1.5s after success. |
+| `POSSessionExpiredModal` | context | PIN re-auth via `POST /api/employees/validate-pin`. On success: `retryPendingSale()`. On cancel: parks pending sale then navigates to `/login` |
+| `POSLockScreen` | context | Full-page overlay (not fixed modal). Validates PIN via `POST /api/employees/validate-pin`; checks unlocked employee matches logged-in employee |
+| `POSShortcutsOverlay` | context | Uses CSS variable tokens — NOT hardcoded POS colors |
+| `POSModifierModal` | context | Product modifier groups — `single` (radio-style) / `multi` (checkbox-style) selection. Each option has `price_delta`. Context provides `modifierModalState`, `confirmModifiers`, `cancelModifiers`. Defaults pre-selected from `is_default` flag. |
+| `POSVariantMatrixModal` | context | Opens when `pendingVariantProductId` is set. Matrix selection of variants. On confirm → `addToCart`. |
+| `POSSerialEntryModal` | context | Opens when `pendingSerialContext` is set. Collects N serial number slots (one per quantity). Commits to cart line on success. |
+| `POSPriceOverrideModal` | context | Opens when `priceOverrideLineId` is set. Manager can override price on a cart line. |
+| `POSHoldCreateModal` | context | Create a layaway hold — `POST /api/holds`. Fields: deposit amount, deposit method, hold days (default 14), customer name/phone, notes. Clears cart on success. |
+| `POSHoldPickupModal` | context | Pick up a held order. Fetches holds list, selects one, loads items to cart. |
+| `POSBarcodeMissModal` | context | Only shown when cashier has inventory perms. `barcodeMissPrompt = { barcode }`. Quick-create product link. Others get a toast. |
+| `POSInsufficientStockModal` | context | `insufficientStockPrompt = { product_id, product_name, requested, available }`. Shown when `/api/sales` returns `{ code: "insufficient_stock" }`. |
+| `POSStuckQueueModal` | props: `{ open, onClose }` | Reads failed offline queue entries via `getQueueByState(employeeId, "failed")`. Retry = `markPending(key)` + `syncQueue()`. Shows total + formatted amount. |
+| `POSCartCollisionModal` | context | `collisionModal = { existing: {...} }`. Opened when returns API returns 409 `duplicate_return`. Shows existing return info so cashier can see who/when. |
+| `POSCartResumeModal` | context | `cartResumePrompt = { cart, selectedOutletId, customer, timestamp }`. Prompts after page load if checkpoint found. |
+| `POSShiftRecoveryModal` | context | `shiftRecoveryOpen` set when shift >20h old. Dismiss = `setShiftRecoveryDismissed(true)`. |
+| `POSRefundThresholdModal` | **props** | Props: `{ open, threshold, refundAmount, currency, error, loading, onSubmit(pin), onClose }`. Shown when `/api/returns` returns `{ code: "manager_pin_required" }`. Caller re-posts with `manager_pin`. |
+| `POSNoSaleReasonModal` | context | Reason for opening cash drawer without a sale. |
+| `POSReceiptRetryModal` | context | Shown when receipt email/print fails after sale. Retry options. |
+| `POSApprovalModal` | **props** | Props: `{ actionType, referenceType, referenceId, outletId, metadata, onApproved, onDenied, onClose }`. `POST /api/approvals/pos-authorize`. Usable outside POS. |
+| `EndlessAisleModal` | context | `POST /api/orders/endless-aisle`. Uses `dark:` Tailwind variants + gray classes — NOT POS styling. |
+| `POSEmailReceiptModal` | **props** | Props: `{ saleId, customerEmail, onClose }`. `POST /api/email/send-receipt-v2`. Auto-closes 1.5s after success. |
+
+---
 
 ## Layout Components
 
-| Component | Context reads | Notes |
-|-----------|--------------|-------|
-| `POSHeader` | outlets, selectedOutletId, employee, slip, activeShift, canOpenShift | Outlet switcher only for `canSwitchOutlet` (all_access) users. Shows Last Receipt, Recent Sales, Return, Close Shift, Help (F1), Lock, Logout buttons. |
-| `POSSubHeader` | taxInclusive, cart, parkedSales, selectedOutletId | Tax Inclusive toggle + Park Sale + Parked Sales badge |
-| `POSSearchArea` | search, barcodeSearch, skuSearch, priceSearch, results, showResults | 4 inputs: barcode, SKU, price, general. Enter on focused general search adds first result to cart. Inputs clear each other (only one active at a time). |
-| `POSCartTable` | cart, updateQty, removeFromCart, money | Shows Bundle badge + "Special Price" badge when price list price differs from original. Mobile hides Unit column + delete button (inline trash per row instead). |
-| `POSSidebar` | customer search, totals, discount, promoDiscount, appliedPromotions | Dark `#0A0A0A` background. `data-pos-customer-search` attribute on input for F4 focus. Shows promotion discount + promo name if applied. |
-| `POSRecentSalesPanel` | recentSales, openReturnFromSale, printSlip | Slide-in from right. Fetches today's sales (`/api/sales?date_from=today&limit=50`). Reprint fetches `/api/sales/:id` for full detail. Uses `fmtDateTime` + `fmtTime` (not `fmtUtcDateTime`) for timestamps. |
+| Component | Notes |
+|-----------|-------|
+| `POSHeader` | Outlet switcher (all_access only). Last Receipt, Recent Sales, Return, Close Shift, Help (F1), Lock, Logout |
+| `POSSubHeader` | Tax Inclusive toggle + Park Sale + Parked Sales badge |
+| `POSSidebar` | Dark `#0A0A0A` background. `data-pos-customer-search` attr on input for F4 focus. Shows promo discount + name |
+| `POSCartTable` | Bundle badge + "Special Price" badge when price list price differs. Mobile hides Unit column |
+| `POSSearchArea` | 4 inputs (barcode, SKU, price, general search) — inputs clear each other |
+| `POSOmniInput` | Single smart search bar (replaces POSSearchArea in wave-C layout). `classifyOmniInput` routing |
 
-## API Calls Made by This Module
+---
 
-| Component | Endpoint | Notes |
-|-----------|---------|-------|
-| `POSContext` | `GET /api/outlets` | Bootstrap |
-| `POSContext` | `GET /api/customers` | Bootstrap — all customers loaded at once |
-| `POSContext` | `GET /api/receipt-templates/active` | Silent fail if none |
-| `POSContext` | `GET /api/feature-flags` | One-shot, into `posFlags` map |
-| `POSContext` | `GET /api/shifts/active?outlet_id=X` | Gate status |
-| `POSContext` | `GET /api/attendance/my-status?outlet_id=X` | Gate status |
-| `POSContext` | `GET /api/parked-sales?outlet_id=X` | On outlet select + after park/restore |
-| `POSContext` | `GET /api/sales?date_from=today&outlet_id=X&limit=50` | Recent sales panel |
-| `POSContext` | `GET /api/products/search?query=X&outlet_id=X&field=X` | 250ms debounce |
-| `POSContext` | `api.raw GET /api/products/scan/:barcode` | Barcode scanner |
-| `POSContext` | `GET /api/customers/:id/wallet` | On checkout customer select |
-| `POSContext` | `GET /api/price-lists/:id/items` | Customer or outlet price list |
-| `POSContext` | `GET /api/price-list-assignments?scope_type=outlet&scope_id=X` | Outlet price list assignment |
-| `POSContext` | `GET /api/pos-layouts?outlet_id=X` | Phase 2B |
-| `POSContext` | `GET /api/pos/suggestions?product_ids=X` | Phase 2B, 500ms debounce |
-| `POSContext` | `POST /api/promotions/quote` | Auto-apply promos, 400ms debounce |
-| `POSContext` | `POST /api/parked-sales` or `POST /api/draft-orders` | Park sale (flag-gated) |
-| `POSContext` | `GET /api/parked-sales/:id` + `DELETE /api/parked-sales/:id` | Restore |
-| `POSContext` | `POST /api/shifts/open` | Open shift |
-| `POSContext` | `POST /api/customers` | Quick-create at checkout |
-| `POSContext` | `api.raw POST /api/sales` | Complete sale (uses raw for 401 detection) |
-| `POSContext` | `POST /api/pos/customer-display` | Customer display sync, 500ms debounce |
-| `POSContext` | `POST /api/employees/validate-pin` | Lock unlock + session re-auth |
-| `POSCheckoutModal` | (all via context) | — |
-| `POSCloseShiftModal` | `POST /api/shifts/:id/close` | Direct `api.post` call |
-| `POSReturnExchangeModal` | `GET /api/return-reasons` | On mount |
-| `POSReturnExchangeModal` | `GET /api/sales/:id` | Load sale by ID |
-| `POSReturnExchangeModal` | `GET /api/sales?search=X&limit=5` | Invoice search |
-| `POSReturnExchangeModal` | `GET /api/products/search` | No-bill return + exchange item search |
-| `POSReturnExchangeModal` | `POST /api/sales` | Exchange sale (direct) |
-| `POSReturnExchangeModal` | `POST /api/returns` | Return (direct) |
-| `POSRecentSalesPanel` | `GET /api/sales/:id` | Reprint detail |
-| `POSParkedModal` | `DELETE /api/parked-sales/:id` | Direct delete (not via context) |
-| `POSApprovalModal` | `POST /api/approvals/pos-authorize` | Direct |
-| `POSEmailReceiptModal` | `POST /api/email/send-receipt-v2` | Direct |
-| `EndlessAisleModal` | `POST /api/orders/endless-aisle` | Direct |
-| `POSSessionExpiredModal` | `POST /api/employees/validate-pin` | Direct |
+## Restaurant Subdirectory (`restaurant/`)
 
-## Styling Exception
+12 files — full restaurant/table-service mode. Gated by `phase4_restaurant` flag. Integrated with POS checkout hook via `draftOrderId`, `orderContext`, `tableSessionId`, `seatCount`.
 
-POS does NOT use design system tokens or CSS variables for most components. Uses:
-- Hardcoded **`#8066FF`** for accent color (brand violet)
+| File | Role |
+|------|------|
+| `cartGrouping.js` | Pure helper. `groupCartBySeatAndCourse(cart)` → `[{ seat, course, items, subtotal, itemCount }]`. Seat 0 = un-seated. Course parsed from `"course_N"` string (DB column is `course_name`). |
+| `RestaurantCartGrouped.jsx` | Cart view grouped by seat + course |
+| `RestaurantHeader.jsx` | Table/check header strip |
+| `SeatCoursePicker.jsx` | Picker for assigning seat number and course to a cart item |
+| `RestaurantGuestModeModal.jsx` | Guest count + optional signature capture modal |
+| `SplitCheckModal.jsx` | Split bill across guests/seats |
+| `TransferTableModal.jsx` | Move check to another table |
+| `RestaurantAvailabilityModal.jsx` | Table availability view |
+| `RestaurantOverflowMenu.jsx` | Extra restaurant actions (void, comp, etc.) |
+| `VoidCompModal.jsx` | Void or comp an item |
+| `PayAtTableQRModal.jsx` | QR code for pay-at-table flow |
+| `ReservationBadge.jsx` | Shows reservation status on table |
+| `RestaurantActionBar.jsx` | Action buttons bar for restaurant mode |
+| `RestaurantCheckView.jsx` | Full check detail view |
+| `RestaurantFloorGrid.jsx` | Floor plan grid of tables |
+
+---
+
+## Hooks Summary
+
+### `useShiftGate`
+Returns: `outlets`, `selectedOutletId`, `setSelectedOutletId`, `activeShift`, `attendanceStatus`, `attendanceCode`, `gateLoading`, `canOpenShift` (`manage_orders` perm), `canSwitchOutlet` (`all_access` perm), `isReadyForCheckout`, `openingDenoms`, `setOpeningDenoms`, `openingFloat`, `openingShiftBusy`, `openShiftFromPOS`, `closeShiftOpen`, `setCloseShiftOpen`, `refreshGateStatus`.
+
+`OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10]` hardcoded here.
+
+### `useCart`
+Returns all cart state including: `cart`, `setCart`, `taxInclusive`, `setTaxInclusive`, `search`, `setSearch`, `barcodeSearch`, `setBarcodeSearch`, `skuSearch`, `setSkuSearch`, `priceSearch`, `setPriceSearch`, `results`, `setResults`, `showResults`, `setShowResults`, `searchRef`, `discountType`, `discountInput`, `orderNote`, `showDiscountModal`, `showNoteModal`, `priceListItems`, `posLayout`, `suggestions`, `appliedPromotions`, `promoDiscount`, and computed totals: `grossTotal`, `discountValue`, `taxTotal`, `total`, plus `addToCart`, `updateQty`, `setQty`, `removeFromCart`, `triggerSearch`, `handleSearchChange`, `loadParked`.
+
+`taxInclusive` default syncs from `taxMode` (passed in). Re-syncs when `taxMode` loads if cart is empty.
+
+### `useLoyaltyWallet`
+Reads loyalty config from `GET /api/loyalty/config` (in POSContext). Receives `loyaltyConfig` as prop. Falls back to `earnRate=1`, `redeemRate=10` if null.
+
+Returns: `checkoutWalletBalance`, `checkoutWalletLoading`, `redeemPointsOn`, `setRedeemPointsOn`, `payWithWalletOn`, `setPayWithWalletOn`, `checkoutCustomerPoints`, `checkoutCustomerTier`, `pointsEarned`, `pointsDiscount`, `pointsRedeemed`, `LOYALTY_EARN_RATE`, `LOYALTY_REDEEM_RATE`.
+
+### `useOfflineQueue`
+IndexedDB-backed via `utils/offlineQueue.js`. Migrates old `localStorage` format on mount.
+
+Returns: `offlineQueueCount` (total), `queuedSalesCount`, `queuedReturnsCount`, `offlineSyncing`, `offlineSyncResult`, `syncQueue`, `enqueueSale`, `enqueueReturn`.
+
+Routes sync by `row.type` (`"return"` → `POST /api/returns`, else → `POST /api/sales`).
+
+### `useReceipt`
+Returns: `slip`, `setSlip`, `slipOpen`, `setSlipOpen`, `receiptTemplate`, `recentSalesOpen`, `setRecentSalesOpen`, `recentSales`, `recentSalesLoading`, `recentSalesSearch`, `setRecentSalesSearch`, `loadRecentSales`, `printSlip`.
+
+`printSlip` calls `printToHardware` (from `utils/receipt.js`), falls back to browser popup.
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| F1 | Help overlay |
+| F2 | Discount modal |
+| F3 | Park sale |
+| F4 | Focus customer search (via `data-pos-customer-search` attribute) |
+| F5 | Parked sales |
+| F8 | Remove last cart item |
+| F9 | Open checkout |
+| F10 | Clear cart |
+| Esc | Close modal |
+| `/` | Focus omni-input (when no input active) |
+
+F-keys work even when focus is in an input field.
+
+---
+
+## Styling Convention
+
+POS does NOT use design system tokens for most components. Uses:
+- Hardcoded **`#8066FF`** for accent color
 - **`slate-*`** Tailwind classes throughout
-- **`#0A0A0A`** / `#111` for the sidebar dark background
+- **`#0A0A0A`** / `#111` for sidebar dark background
 
-Three exceptions:
-- `POSShortcutsOverlay` — uses CSS variable tokens (`--ui-surface`, `--ui-text`, `--ui-text-muted`, `--ui-border`, `--ui-muted-surface`)
-- `EndlessAisleModal` — uses `dark:` Tailwind variants + generic `gray-*` classes (added later, does not follow POS conventions)
-- `POSApprovalModal` — uses `slate-800` dark background (manager PIN UI intentionally styled differently)
+**Exceptions** (use CSS variable tokens):
+- `POSShortcutsOverlay` — `--ui-surface`, `--ui-text`, `--ui-text-muted`, `--ui-border`, `--ui-muted-surface`
+- `EndlessAisleModal` — `dark:` Tailwind variants + generic `gray-*`
+- `POSApprovalModal` — `slate-800` dark background
 
-When adding new POS components, follow the majority convention (`#8066FF` + `slate-*`).
+When adding new POS components, follow the majority convention.
+
+---
+
+## `completeSale` Payload
+
+```js
+POST /api/sales:
+{
+  outlet_id, shift_id, employee_id, customer_id?,
+  cartItems: [{ id, variant_id?, price, quantity, modifier_ids?, serial_numbers?, seat_number?, course_name?, staff_id? }],
+  payments: [{ method, amount }],
+  discount_type, discount_value,
+  tax_inclusive, tax_total,
+  order_note?,
+  redeem_points?, points_redeemed?,
+  wallet_payment_amount?,
+  charge_to_room_folio_id?, charge_to_treatment_folio_id?,
+  promo_discount?, applied_promotions?,
+  idempotency_key,
+  // restaurant fields:
+  draft_order_id?, order_context?, table_session_id?, seat_count?, signature_svg?
+}
+```

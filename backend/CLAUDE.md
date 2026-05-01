@@ -1,452 +1,316 @@
 # Backend — Claude Guide
 
+Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant routing via AsyncLocalStorage proxy. Deployed on Railway.
+
+---
+
 ## DO NOT READ These Files
 
-### Stale Directories (skip)
 - `backups/`, `archive/legacy/`, `tenants/`, `exports/`, `uploads_test/`, `uploads_tmp/`
+- `schema.sql` — SQLite legacy DDL. Superseded by `schema-pg.sql`
+- `schema_dump.txt` — corrupted SQLite dump artifact
+- `_endpoint_list.txt` — generated endpoint list, likely stale
+- `BACKEND-AUDIT.md` — historical audit doc, may contradict current state
 
-### Stale Root Files (skip — do not read)
-- `schema.sql` — SQLite legacy DDL (858 lines, `AUTOINCREMENT` syntax). Superseded by `schema-pg.sql`
-- `schema_dump.txt` — corrupted UTF-16 SQLite dump artifact. No value
-- `_endpoint_list.txt` — generated flat endpoint list, likely stale. Use `registerAllRoutes.js` or grep instead
-- `BACKEND-AUDIT.md` — March 15 2026 audit doc written before Phase 5 cleanup. Historical only, may contradict current state
+---
 
-> **Note:** All SQLite infrastructure files (db.js, master-db.js, tenant-db-manager.js, etc.), 74 SQLite migration files (migrate1.js–migrate74.js), and one-off scripts (cleanup-public-schema.js, reset-production.js) were deleted in the Phase 5 audit cleanup (commit `3227600`). The codebase is Postgres-only. Schema source of truth: `schema-pg.sql`.
+## Entry Point — `index.js`
 
-## Where to Look Instead
+~293-line orchestrator. Key responsibilities:
+- Loads dotenv (line 1, before any `require`) — `db-pg.js` does NOT load dotenv itself
+- Initialises Sentry if `SENTRY_DSN` is set
+- Bootstraps multi-tenant proxy when `MULTI_TENANT=1`
+- Calls `tenantAuth.init(mtDeps)` and `featureFlags.init(mtDeps)` to inject shared deps
+- Registers all routes via `registerAllRoutes.js`
+- Starts workers via `boot/workers.js`
+- Calls `ensureCriticalRoutesRegistered()` — crashes boot if 4 routes are missing
 
-| Need | Read This |
-|------|-----------|
-| Database connection / queries | `db-pg.js` — exports `query`, `transaction`, `getClient`, `end`, `pool`. Pool size: 20. SSL disabled in non-prod. Dotenv NOT loaded here. |
-| Full table schema (DDL) | `schema-pg.sql` (3,788 lines, 244 tables) |
-| Postgres migrations | `migrate-pg.js` — exports `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags). Migrates public schema first, then all `status='active'` tenants sequentially. Each tenant has its own `schema_version` table. Tenant failures are caught per-tenant and logged (don't abort the run). |
-| Multi-tenant DB routing | `tenant-db-proxy-pg.js` (primary Proxy — exports `asyncStore`, `createDbProxy`, `getCurrentDb`; proxies `query`/`transaction`/`getClient`) + `tenant-db-manager-pg.js` (60s tenant cache, per-query search_path reset — exports `init`, `getDb`, `healthCheck`, `clearCache`, `closeDb`, `closeAll`) or `tenant-db-pg.js` (older — checks out ONE pool client per request via `runWithTenant`; exports `asyncStore`, `getProxy`, `getStore`, `runWithTenant`; `getProxy()` has `query`+`transaction` only, no `getClient`) |
-| Master tenant registry | `master-db-pg.js` — exports `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`. Manages 10 public tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing` (seeded: pro/monthly 8000 PKR, pro/annual 80000 PKR), `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`. `query()` always sets search_path to public. `init()` is idempotent (CREATE TABLE IF NOT EXISTS). |
-| Tenant provisioning | `tenant-provisioner-pg.js` — exports `provision(db, opts)` and `validateSlug(slug)`. 6-step sequence: CREATE SCHEMA → run DDL → seed (outlet, admin role + 10 perms, admin employee, employee-outlet link, company_profile with 48h setupToken, default 0% tax) → register in public.tenants + audit log. On failure: DROP SCHEMA CASCADE. Slug regex: `^[a-z0-9_]{3,40}$` (no hyphens). Returns `{ tenantId, employeeId, outletId, setupToken }`. |
-| Super-admin seeding | `seed-admin-pg.js` — CLI flags: `--email`, `--password` (min 8 chars), `--name` (default: "Super Admin"). Idempotent — prints existing ID and exits cleanly if email already exists. Email stored lowercased+trimmed. |
-| JWT auth utilities | `jwt-auth.js` — 6 exports: `signAccessToken`, `signRefreshToken`, `verifyAccessToken`, `verifyRefreshToken`, `hashToken`, `defaults`. Access token payload: `{ tid, eid, rid, oid, scope, jti }` (jti=random UUID per token). Refresh token: SHA-256 hashed before DB storage; raw token → httpOnly cookie. Default TTLs: 24h access, 7d refresh (overridable via env). |
-| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; scans `./routes/*.js` + `./routes/**/*.js` for `@openapi` JSDoc. 5 inline schemas: Product, Sale, Customer, Order, Error. 8 tags. Bearer auth scheme. Served at `/api-docs?key=API_DOCS_KEY` — returns 404 if `API_DOCS_KEY` unset, 401 if wrong key. |
-| Production startup script | `start.sh` — Railway entrypoint: sets `TZ`, runs `migrate-pg.js`, then `exec node index.js`. SQLite branch is dead code |
-| Railway deployment config | `railway.toml` — Dockerfile builder, healthcheck `/api/health` (120s timeout), restart on failure (max 3), `/data` volume mount |
-| Plan limit enforcement | `middleware/plan-limits.js` |
-| Server entry + middleware | `index.js` |
-| Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
-| Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
-| Super-admin + infra monitoring | `routes/admin/` (10 files: auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
-| Report endpoints | `routes/reports/` (15 files, modular) |
-| Shopify integration | `routes/shopify/` (9 files) + `shopify/` (4 files: client.js, crypto.js, order-service.js, utils.js) |
-| Integrations hub | `routes/integrations/` (hub, credentials, daraz, facebook, whatsapp, google-merchant) |
-| Marketplace clients | `services/marketplace/` (base, daraz, meta-commerce, whatsapp, google-merchant) |
-| Courier adapters | `services/couriers/` (13 adapters: leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, bykea, pakpost, dhl, fedex) |
-| Generalized crypto | `services/crypto.js` — AES-256-GCM for all integration secrets |
-| Tier4 features | `routes/tier4/` (7 files) |
-| Timezone utilities | `utils/tz.js` |
-| Receipt email builder | `utils/receiptEmail.js` |
-| Postgres backup/restore | `utils/backup-pg.js` |
-| Category tree logic | `category-tree.js` — 17 exports: `resolveInheritedField` (walks parent chain for tax_id/hs_code), `enrichCategories` (adds depth/path_ids/path_names/path_label/child_count/product_count_direct/product_count_rollup/is_leaf), `fetchEnrichedCategories`, `fetchCategoryIndexes`, `buildCategoryIndexes`, `getCategoryById`, `getAncestorIds`, `getDescendantIds`, `getDescendantLeafIds`, `getDescendantLeafIdsFromIndexes`, `isLeafCategory`, `isLeafCategoryFromIndexes`, `wouldCreateCycle`, `fetchCategoryRows`, `fetchDirectProductCounts`, `dbAllAsync`, `dbGetAsync` |
-| Printer service | `services/printer.js` |
-| Structured logging | `services/logger.js` (Pino) |
-| Alert system | `services/alerting.js` (error spikes, DB pressure) |
-| Request ID middleware | `middleware/request-id.js` (UUID + Pino per-request) |
-| Alert emails | `utils/alertEmail.js` (Resend-based) |
-| Support tickets | `routes/support.js` |
-| Billing routes | `routes/billing.js` — status, pricing, checkout, payment history, upgrade requests |
-| Payment gateway | `services/payment-gateway.js` — adapter (xPay impl, extensible to Stripe/JazzCash) |
-| Payment webhooks | `routes/webhooks.js` — mounted before tenant middleware, no auth |
-| Subscription enforcement | `middleware/plan-limits.js` — `requireActiveSubscription` + `requirePlanLimit` |
-| Dead tenant cleanup | `workers/cleanup-worker-boss.js` (pg-boss backed, removes tenants with no setup after 7 days, toggle via `CLEANUP_WORKER_ENABLED=1`) |
-| FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
-| FBR background worker | `workers/fbr-worker-boss.js` (pg-boss backed) — legacy inline worker (`fbr-worker.js`) no longer exists |
-| pg-boss job queue | `services/boss.js` — shared pg-boss instance factory |
-| Upload validation | `middleware/upload-validation.js` — centralized MIME + extension whitelist |
-| Tenant-aware file uploads | `tenant-multer.js` — 3 factories: `createProductImageStorage` (→ `uploads/products/`, safe-ext whitelist), `createCompanyLogoStorage` (→ `uploads/company/`), `createRestoreStorage` (→ `uploads/restore_{ts}.db`). No size limits enforced here — set limit in the `multer()` call that uses the storage. Requires `req.tenantDir` set by tenant middleware. |
-| Rate limiting | `middleware/rate-limit.js` — global, auth endpoint, webhook limiters |
-| JWT auth + tenant resolution | `middleware/tenant-auth.js` — loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveContext |
-| Permissions | `middleware/permissions.js` — requirePerm, requireAnyPerm, PERMISSION_RULES |
-| Feature flags | `middleware/feature-flags.js` — requireFeature, flag cache, notification helpers |
-| Input validation | `middleware/validate.js` + `schemas/` — Zod schemas for auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations |
-| Worker startup | `boot/workers.js` — all worker init (email, FBR, cleanup, Shopify, scheduled tasks) |
-| Shopify crypto | `shopify/crypto.js` — secret encrypt/decrypt + event logging |
-| Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
-| Country packs | `routes/country-packs.js` — `GET /api/country-packs/:country` (no auth — mounted before tenant middleware); delivers pre-seeded tax rates + feature flags for a country |
-| Service tickets | `routes/service-tickets.js` — CRUD workflow tickets (phase4_workflow_tickets gated) |
-| Rentals management | `routes/rentals.js` — rental contracts, asset check-out/in, overdue tracking (phase4_rentals gated) |
-| Room management | `routes/rooms.js` — room CRUD, bookings, folio, check-in/check-out (phase4_room_management gated) |
-| Treatment plan templates | `routes/treatment-plan-templates.js` — reusable clinical plan templates (phase4_treatment_plans gated) |
-| Sandbox payments | `routes/sandbox.js` — test payment endpoints (sandbox mode only, `SANDBOX_WEBHOOK_SECRET` required) |
-
-## Efficiency Rules
-
-- **Read only the specific route file needed** — never read the whole `routes/` directory. If adding a sales feature, read `routes/sales.js` only
-- **Grep schema-pg.sql** — it's ~3,100 lines (214 tables). Grep for the specific table name (`CREATE TABLE orders`) instead of reading the whole file
-- **Don't read registerAllRoutes.js** — route mounting is documented in the root CLAUDE.md. Skip it for all domain-level tasks
-- **Don't read index.js** — middleware order is documented in root CLAUDE.md. Only read it if the task is explicitly about server boot or middleware config
-- **One reference route** — when adding a new route file, read ONE similar existing route as a pattern reference, not multiple
-- **Grep before read** — use Grep to find the exact function/query/column before opening any file
-
-## Database is Postgres
-
-- All queries use `await db.query(sql, [params])` with `$1, $2` placeholders
-- Results: `{ rows, rowCount }` — access data via `rows[0]`, `rows`, `rowCount`
-- Transactions: `await db.transaction(async (client) => { ... })`
-- Raw pool access: `db.pool`, dedicated client: `await db.getClient()`
-- Booleans: use `true`/`false` (not `1`/`0`)
-- Case-insensitive search: use `ILIKE` (not `LIKE`)
-- Date extraction: use `col::date` (not `date(col)`)
-- String aggregation: use `string_agg()` (not `GROUP_CONCAT`)
-- JSON aggregation: use `json_agg(json_build_object(...))` (not `json_group_array`)
-- ROUND requires numeric cast: `ROUND(expr::numeric, 2)`
-- All non-aggregated SELECT columns MUST appear in GROUP BY
-
-## Test Suites
-
-### Postgres Integration Tests (74 files — primary) + unit tests
-- Location: `tests/integration/` (74 files): 19 pg-batch files (16 numbered + 3 phase batches), 39 full-audit domain tests, 15 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `tests/unit/` (20 files — middleware, services, tz, utils + routes-admin-worker-status, routes-orders-transactions, services-booking-reminders, services-catalog-scheduler, workers-email-worker-boss, workers-tenant-job-context + customer-portal-auth, feature-flags-modes, industry-config, mode-registry, portal-presets, rentals, rooms, treatment-folio, treatment-plans, utils-ics)
-- Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`) — NOT Jest
-- Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
-- Schema: `tests/helpers/seedSchema-pg.js`
-- Run: `npx vitest run tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`) — NOT `npx jest`
-- **Local vs production DB**: `tests/helpers/vitest-setup.js` prefers `backend/.env.test` when present (local Postgres), falls back to `backend/.env` (production Supabase). `.env.test` keeps tests off prod and ~20× faster. Both files gitignored.
-
-### Production E2E Tests (28 specs, ~329 tests — full system audit)
-- Location: `frontend/tests/*.spec.js` (28 self-contained Playwright specs)
-- Config: `frontend/playwright.config.js` (single config, production target)
-- Target: `https://sanopos.com` (tenant `packagesmall`)
-- Run: `cd frontend && npx playwright test tests/auth.spec.js`
-- Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json`
-- Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
-- Includes 6 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`, `onboard-dental-clinic`, `onboard-physiotherapy`, `onboard-veterinary`) — create real test tenants, delete from `/admin` after each run
-- **Key gotcha**: clock-in uses `/api/attendance/pin-checkin?tenant=${slug}` (NOT `/clock-in`) — writes `attendance_sessions` which POS checkout validates
-
-### Legacy (do not use)
-- SQLite tests (`tests/integration/*.test.js`) — do not modify or run unless explicitly asked
-
-## Common Gotchas
-
-### Timezone architecture
-- All business-critical timestamps (`sales`, `returns`, `cash_shifts`, `stock_adjustments`, `inventory_transfers`) stored as **UTC** via `CURRENT_TIMESTAMP`
-- `attendance_sessions` and `employee_attendance` store **local time** — intentional, do NOT change their write paths
-- `utils/tz.js` provides `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` — converts local `YYYY-MM-DD` to UTC boundary strings
-- `req.company.timezone` (IANA string) set by `loadCompanyProfile` middleware — use it in all date filter queries
-- **CRITICAL**: `session_start` and `check_in` are already local — use `date(col)` with NO modifier. `date(col,'localtime')` double-converts and breaks UTC+ timezones
-
-### Auth on GET routes (Apr 1 2026)
-- **ALL data-returning GET endpoints now require auth** — `requirePerm` or `requireAnyPerm` on every GET across sales, returns, customers, products, POs, GRN, inventory, employees
-- Permission mapping: sales/returns/customers → `view_reports`, products → `view_reports`+`manage_inventory`, POs/GRN → `manage_orders`+`view_reports`, transfers/adjustments → `manage_inventory`+`view_reports`, employees → `all_access`
-- When adding new GET routes, **always add auth middleware** — no unprotected data endpoints
-
-### Stock check — FOR UPDATE (Apr 1 2026)
-- `POST /api/sales` stock validation runs INSIDE `db.transaction()` with `SELECT ... FOR UPDATE` row locks
-- Prevents TOCTOU race condition (two concurrent sales overselling)
-- If stock insufficient, throws with `statusCode: 400` — caught by outer try/catch
-- Void handler restores both `outlet_stock` AND `product_variants.stock`
-
-### Sales table schema
-- The sale timestamp column is named `timestamp`, NOT `created_at` — using `created_at` silently returns undefined
-
-### reports_accuracy.test.js
-- Uses Jest syntax (`describe`, `beforeEach`, `afterEach`) — run with `npx jest`
-
-### PO credit limit
-- `POST /api/purchase-orders` warns (but allows) when credit supplier exceeds `credit_limit` — response includes `{ warning: "..." }`
-- `running_balance` counts only invoiced/received POs, not draft POs
-
-### Postgres-Specific Gotchas
-- **Boolean columns are strict**: `is_active`, `is_primary`, `is_default`, `voided`, `show_barcode`, `show_logo` — MUST use `= true`/`= false`, never `= 1`/`= 0`
-- **NUMERIC returns strings**: Always wrap with `Number()` before arithmetic (e.g. gift card `remaining_value`)
-- **Reserved words**: `read` → `is_read` (in notifications table)
-- **HAVING clause**: Postgres does not allow column aliases in HAVING — must repeat the full expression
-- **FK constraints on bulk delete**: Must explicitly delete from referencing tables before deleting from parent tables
-
-### Infrastructure Monitoring Endpoint
-- `GET /api/admin/infra` — gated by `requireAllowedIp` + `requireSuperAdmin`
-- Queries: `pg_stat_activity` (connections), `pg_database_size` (DB size), `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples/vacuum), schema sizes, active slow queries (>1s)
-- Optional: `pg_stat_statements` (historical slow queries) — try/catch, skipped if extension unavailable
-
-### Boot Guard (index.js)
-- `index.js` is now Postgres-only (~293-line orchestrator). SQLite fallback removed.
-- `require("dotenv").config(...)` must remain line 1 so `DATABASE_URL` is set before any require
-
-### migrate-pg.js tenant migration gotcha
-- Existing tenants need a `schema_version` table with prior versions already inserted before first run — otherwise migrate sees version 0 and tries to re-apply v1 (full DDL), which is idempotent but slow
-- Migration order: public schema → all `status='active'` tenants sequentially (not parallel)
-- Per-tenant failures are caught and logged — one failed tenant doesn't block others
-- `module.exports = { migrate, MIGRATIONS }` — `migrate(scopedDb)` can be called standalone for a single schema
-
-### db-pg.js dotenv isolation
-- `db-pg.js` does NOT load dotenv — callers are responsible. This is intentional: tests use `process.env` set by the Vitest runner, avoiding re-injection of `MULTI_TENANT` after tests deliberately delete it (Decision II, Batch 3B)
-
-### Worker Heartbeat Pattern
-- Email, FBR, cleanup, and marketplace sync workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`
-- Each object: `{ lastPollAt, processedToday, queueDepth }`
-- `queueDepth` is now a real `SELECT COUNT(*)` from the queue table — no longer always 0
-- `GET /api/admin/worker-status` reads these globals to determine running/stopped state
-- Workers are pg-boss backed — jobs survive server crashes and don't block the HTTP event loop
-
-## Common Patterns (checklists — don't re-research these)
-
-### Adding a new API route
-1. Create route handler in `routes/<domain>.js`
-2. Add Zod schema in `schemas/<domain>.js` (if validating request body)
-3. Register in `routes/registerAllRoutes.js` — one `app.use('/api/<prefix>', require('./routes/<domain>')(deps))` line
-4. Add permission string to `middleware/permissions.js` if introducing a new permission
-5. Add permission rule to `middleware/permissions.js` PERMISSION_RULES array if needed
-6. Update `DOMAIN-MAP.md` with the new domain entry
-
-### Adding a new feature-flagged route
-1. Follow "Adding a new API route" steps 1–6
-2. Add `requireFeature('<flag_name>')` middleware to the route
-3. Add the flag key to `middleware/feature-flags.js` DEFAULT_FEATURE_FLAGS if new
-4. Seed the flag in `schema-pg.sql` DEFAULT_FEATURE_FLAGS and in migration
-5. Frontend: check flag via `useFeatureFlags()` hook and redirect if off
-
-### Adding a new admin route
-1. Create module in `routes/admin/<module>.js`
-2. Register in `routes/admin/index.js` (or registerAllRoutes.js admin section)
-3. Guard with `requireSuperAdmin` — these mount BEFORE tenant middleware
-4. Log mutations to `admin_activity_log` via `logAdminActivity()`
-
-### Adding a new worker
-1. Create worker in `workers/<name>-worker-boss.js` (use pg-boss pattern)
-2. Register startup in `boot/workers.js`
-3. Add env var toggle: `<NAME>_WORKER_ENABLED=1`
-4. Expose heartbeat global: `global.__<name>WorkerStatus`
-5. Add to `GET /api/admin/worker-status` in `routes/admin/system.js` (NOT monitoring.js)
-
-## Middleware Chain (request lifecycle order)
+**Middleware chain (request lifecycle order):**
 
 ```
-1. helmet               — security headers (CSP + COEP disabled)
-2. cors                 — CORS_ORIGIN (CSV) or localhost:5173
-3. express.json(10mb)   — rawBody captured for /api/webhooks/* and /api/integrations/shopify/webhooks/*
-4. malformed JSON handler — 400 instead of Sentry bubble for entity.parse.failed
-5. /uploads static      — single-tenant static file serving
-6. /r2/*key proxy       — streams R2 object (only when R2_PUBLIC_URL not set)
-7. compression
-8. cookieParser
-9. globalLimiter        — global rate limit (600/min default)
-10. requestId           — UUID per request (X-Request-Id header)
+1.  helmet               — security headers (CSP + COEP disabled)
+2.  cors                 — CORS_ORIGIN CSV or localhost:5173
+3.  express.json(10mb)   — rawBody captured for /api/webhooks/* and Shopify webhooks
+4.  malformed JSON → 400 — prevents Sentry bubble on entity.parse.failed
+5.  /uploads static      — single-tenant static file serving
+6.  /r2/*key proxy       — streams R2 object (when R2_PUBLIC_URL not set)
+7.  compression
+8.  cookieParser
+9.  globalLimiter        — 600/min default (skips POS burst paths)
+10. requestId            — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
 --- webhook routes (routes/webhooks.js) mount here — NO auth, signature-verified ---
 
-11. loadTenantAndPerms  — decode JWT, look up tenant, attach req.employee + req.permissions
-12. resolveTenant       — SET search_path to tenant schema, attach deps.db proxy
-13. tenant /uploads     — serve tenant-specific uploaded files
-14. loadCompanyProfile  — cache company_profile row → req.company (currency, timezone, FBR config)
-15. resolveContext      — attach req.context (outlet, employee context from headers)
+11. loadTenantAndPerms   — decode JWT, attach req.employee + req.employeePerms + req.tenantId
+12. resolveTenant        — SET search_path, run asyncStore, wire deps.db proxy
+13. tenant /uploads      — serve tenant-specific uploaded files
+14. loadCompanyProfile   — query company_profile → req.company (timezone, currency, FBR config)
+15. resolveContext       — read x-outlet-id / x-scope-mode headers → req.context
 
 --- all tenant routes mount here ---
 
 16. requirePerm / requireAnyPerm  — per-route permission check
-17. requireFeature                — per-route feature flag check
-18. validate(schema)              — per-route Zod request body validation
-19. requirePlanLimit(resource)    — per-route plan cap check (POST only)
-20. requireActiveSubscription     — blocks all writes if payment_status = 'expired'
+17. requireFeature / requireMode  — per-route feature flag / mode check
+18. validate(schema)              — per-route Zod body validation
+19. requirePlanLimit(resource)    — plan cap enforcement (POST only)
+20. requireActiveSubscription     — blocks writes when payment_status = 'expired'
 ```
 
-### Boot-time assertions (index.js)
+**Boot-time assertions:**
+- `ensureCriticalRoutesRegistered()` verifies: `POST /api/products/bulk-import`, `POST /api/products/bulk-delete`, `POST /api/products/bulk-status`, `DELETE /api/integrations/shopify/import/products`
+- `ADMIN_ALLOWED_IPS` unset in prod → logs `[SECURITY]` error at boot
 
-- `ensureCriticalRoutesRegistered()` — verifies 4 routes exist on the Express router at startup; throws (crashes boot) if any missing: `POST /api/products/bulk-import`, `POST /api/products/bulk-delete`, `POST /api/products/bulk-status`, `DELETE /api/integrations/shopify/import/products`
-- `ADMIN_ALLOWED_IPS` warning — logs `[SECURITY]` error (prod) or warn (dev) if unset at startup
+---
 
-## Feature Flags Registry
+## Database
 
-| Flag | Routes | Frontend |
-|------|--------|----------|
-| `fbr_integration` | `routes/fbr.js` | FBRSettingsRedesign, FBRDashboardRedesign |
-| `ai_insights` | `routes/insights-ai.js` | AIChatPanel (dashboard) |
-| `accounting_core` | `routes/tier4/accounting.js` | ChartOfAccounts, JournalEntries, CreditDebitNotes, PostdatedCheques |
-| `backup_restore` | backup endpoints | BackupRestoreRedesign |
-| `supplier_payables` | `routes/grn.js` | SupplierPayablesRedesign |
-| `approvals` | `routes/tier4/approvals.js` | ApprovalsRedesign |
-| `notifications` | `routes/tier4/notifications.js` | NotificationsRedesign |
-| `crm_quotations` | `routes/tier4/crm.js` | CRMRedesign, QuotationsRedesign |
-| `advanced_hr` | `routes/tier4/hr.js` | HRManagementRedesign |
-| `multi_company` | (future) | — |
-| `e_invoicing_export` | `routes/reports/fbr-export.js` | FBRExportTab |
-| `reports_profit_layer` | `routes/reports/sales.js`, `analytics.js` | ReportsSalesDetail |
-| `reports_inventory_health_plus` | `routes/reports/inventory.js` | ReportsInventoryHealth |
-| `reports_exceptions` | `routes/reports/analytics.js` | ReportsAnalytics |
-| `reports_scheduled_exports` | `routes/reports/governance.js` | ReportsGovernance |
-| `marketplace_integrations` | `routes/integrations/*` | IntegrationsHubRedesign |
-| `phase2_draft_orders` | `routes/draft-orders.js` | (feature-gated in POS) |
-| `phase2_pos_approvals` | `routes/approval-policies.js` | POSApprovalModal |
-| `phase2_smart_collections` | `routes/smart-collections.js` | SmartCollectionsRedesign |
-| `phase2_commissions` | `routes/commissions.js` | CommissionPlansRedesign, ReportsCommissions |
-| `phase2_item_suggestions` | `routes/item-suggestions.js` | (POS affinity suggestions) |
-| `phase2_outlet_pricing` | `routes/price-list-assignments.js` | PriceListsRedesign |
-| `phase2_outlet_tax` | `routes/outlet-tax-profiles.js` | OutletTaxProfilesRedesign |
-| `phase2_outlet_visibility` | `routes/outlet-visibility.js` | (per-product visibility) |
-| `phase2_pos_layouts` | `routes/pos-layouts.js` | POSLayoutsRedesign |
-| `phase2_report_builder` | `routes/report-builder.js` | ReportBuilderRedesign |
-| `phase2_returns_policy` | `routes/return-policies.js` | ReturnPoliciesRedesign |
-| `phase2_scheduled_changes` | `routes/scheduled-changes.js` | ScheduledChangesRedesign |
-| `phase2_scheduling` | `routes/schedules.js` | SchedulingRedesign |
-| `phase4_restaurant` | `routes/restaurant.js` | RestaurantFloorRedesign, RestaurantChecksRedesign |
-| `phase4_restaurant_kds` | `routes/kds.js` | KDSRedesign |
-| `phase4_restaurant_qr` | `routes/public-restaurant.js` | (QR menu) |
-| `phase4_restaurant_preauth` | `routes/restaurant.js` | (card preauth tabs) |
-| `phase4_appointments` | `routes/bookings.js` | AppointmentsRedesign, AppointmentsCalendarRedesign, AppointmentServicesRedesign |
-| `phase4_appointments_waitlists` | `routes/bookings.js` | (waitlists) |
-| `phase4_appointments_classes` | `routes/bookings.js` | (class sessions) |
-| `phase4_google_calendar_sync` | `routes/bookings.js` | (Google Calendar sync) |
-| `phase4_service_projects` | `routes/projects.js` | ProjectsRedesign |
-| `phase4_service_contracts` | `routes/contracts.js` | ContractsRedesign |
-| `phase4_contract_ai` | `routes/contracts.js` | (AI contract analysis) |
-| `phase4_workflow_tickets` | `routes/service-tickets.js` | ServiceTicketsRedesign |
-| `phase4_rentals` | `routes/rentals.js` | RentalsRedesign |
-| `phase4_room_management` | `routes/rooms.js` | RoomManagementRedesign |
-| `phase4_treatment_plans` | `routes/treatment-plans.js`, `routes/treatment-plan-templates.js` | TreatmentPlansRedesign |
-| `phase5_shipping_automation` | `routes/fulfillment.js` | FulfillmentRedesign |
-| `phase5_cod_reconciliation` | `routes/fulfillment.js` | CODSettlementsRedesign |
-| `phase5_payment_gateways` | `routes/webhooks.js` | (multi-gateway) |
-| `phase5_sms_providers` | `services/sms.js` | (SMS adapters) |
-| `customer_invoicing` | `routes/customer-invoices.js` | CustomerInvoicesRedesign |
-| `customer_messaging` | `routes/messaging.js` | MessagingInboxRedesign |
-| `marketing_campaigns` | `routes/marketing.js` | MarketingCampaignsRedesign |
-| `payment_links` | `routes/customer-invoices.js` | (payment link on invoices) |
-| `subscription_billing` | `routes/subscriptions.js` | SubscriptionsRedesign |
-| `subscription_autocharge` | (flag-only — no route gate; read by subscription workers) | (auto-charge renewals) |
-| `sms_campaigns` | (flag-only — no route gate; read in `routes/marketing.js` at runtime) | (SMS campaign sends) |
-| `context_selection_required` | context middleware | ContextSelect page |
-| `context_header_enforced` | context middleware | — |
-| `kiosk_context_locked` | kiosk context | KioskRedesign |
-| `reports_enhanced_filters` | `routes/reports/*` | Enhanced report filter UI |
+### `db-pg.js`
+Direct Postgres pool (size: 20). Exports: `query`, `transaction`, `getClient`, `end`, `pool`.
+- Does NOT load dotenv — callers are responsible
+- SSL disabled in non-prod
+- Results: `{ rows, rowCount }` — access via `rows[0]`, `rows`, `rowCount`
 
-> **Notes**: `fbr_integration` is DB-seeded in `migrate-pg.js` v9 + `schema-pg.sql`, not in `DEFAULT_FEATURE_FLAGS`. `ai_insights` is a soft DB check in `routes/insights-ai.js`, not enforced via `requireFeature()`. The `shopify_integration` flag was removed — Shopify routes are gated by the connection check in `routes/shopify/*`, not a feature flag.
+**Postgres query conventions:**
+- Placeholders: `$1, $2` (not `?`)
+- Booleans: `true`/`false` (not `1`/`0`)
+- Case-insensitive search: `ILIKE`
+- Date extraction: `col::date`
+- String agg: `string_agg()` — not `GROUP_CONCAT`
+- JSON agg: `json_agg(json_build_object(...))`
+- ROUND requires numeric cast: `ROUND(expr::numeric, 2)`
+- NUMERIC columns return strings from pg — wrap with `Number()` before arithmetic
+- All non-aggregated SELECT columns must appear in GROUP BY
+- Reserved word: `read` column is named `is_read` in the notifications table
 
-### Plan Limits
+### `tenant-db-proxy-pg.js`
+AsyncLocalStorage-based Proxy. Exports: `asyncStore`, `createDbProxy`, `getCurrentDb`.
+- Proxies `query`, `transaction`, `getClient` — delegates to whichever tenant DB is in the ALS context
+- `resolveTenant` middleware runs `asyncStore.run({ db: tenantDb }, () => next())` to wire context
+- This is what makes `deps.db` route queries to the correct tenant schema
 
-| Plan | Outlets | Employees | Products |
-|------|---------|-----------|----------|
-| Free | 1 | 3 | 100 |
-| Pro | 1 (code default) | unlimited | unlimited |
+### `tenant-db-manager-pg.js`
+Per-tenant DB manager. Exports: `init`, `getDb`, `healthCheck`, `clearCache`, `closeDb`, `closeAll`.
+- 60-second tenant cache; resets `search_path` on every query
+- Called by `resolveTenant` middleware to get a scoped DB handle
 
-- Enforced by `requirePlanLimit(resource)` on POST routes
-- `requireActiveSubscription()` blocks all writes when `payment_status = 'expired'`
-- Trial: 45 days → Grace: 7 days → Expired (read-only)
+### `tenant-db-pg.js`
+Older ALS proxy (checks out one pool client per request via `runWithTenant`). Exports: `asyncStore`, `getProxy`, `getStore`, `runWithTenant`. Proxy only has `query` + `transaction` — no `getClient`. Use `tenant-db-proxy-pg.js` for new code.
 
-## Environment Variables
+### `schema-pg.sql`
+DDL source of truth (~3,788 lines, 244 tables). Grep for table names rather than reading the full file.
 
-### Core
-- `DATABASE_URL` — Postgres connection string (required)
-- `JWT_SECRET` — JWT signing key (required)
-- `JWT_REFRESH_SECRET` — Refresh token signing key (required)
-- `JWT_EXPIRES_IN` — Access token TTL (default: "24h")
-- `JWT_REFRESH_EXPIRES_IN` — Refresh token TTL (default: "7d")
-- `PORT` — HTTP listen port (default: 5000, Railway overrides to 8080)
-- `NODE_ENV` — "development" or "production"
-- `CORS_ORIGIN` — Allowed origins CSV
-- `MULTI_TENANT` — "1" enables multi-tenant mode
-- `SELF_SERVICE_SIGNUP` — "1" enables public signup
-- `DATA_DIR` — Local data directory (default: backend/)
-- `LOG_LEVEL` — Pino log level (default: "info")
-- `FRONTEND_URL` — Frontend base URL for email links
-- `APP_PUBLIC_BASE_URL` — Shopify health check base URL
+### `migrate-pg.js`
+Exports: `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags).
+- Migrates public schema first, then all `status='active'` tenant schemas sequentially
+- Each tenant has its own `schema_version` table
+- Per-tenant failures are caught and logged — one failure does not abort the run
+- Existing tenants need `schema_version` pre-populated or migrate will attempt to re-apply v1
+- Current version: 49
 
-### Email
-- `RESEND_API_KEY` — Resend API key for system emails
-- `RESEND_FROM_EMAIL` — Sender address (default: "SanoPOS <noreply@sanopos.com>")
-- `EMAIL_WORKER_ENABLED` — "1" enables email queue processing
+### `master-db-pg.js`
+Master tenant registry. Exports: `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`.
+- Manages 10 public tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`
+- `query()` always sets `search_path` to public
 
-### Monitoring
-- `SENTRY_DSN` — Sentry error tracking
-- `ALERT_EMAIL` — Receives error spike / DB pressure alerts
-- `API_DOCS_KEY` — Auth key for /api-docs endpoint (returns 404 if unset; pass as `?key=` query param)
+---
 
-### Workers
-- `FBR_WORKER_ENABLED` — "1" enables FBR invoice worker
-- `FBR_WORKER_PORT` — FBR worker HTTP port (default: 8081)
-- `CLEANUP_WORKER_ENABLED` — "1" enables dead tenant cleanup (24h cycle)
-- `SHOPIFY_SYNC_WORKER_DISABLED` — "1" disables Shopify sync polling
-- `REPORT_SCHEDULE_WORKER_DISABLED` — "1" disables scheduled report generation
-- `REPORT_RUNS_RETENTION_DAYS` — Days to keep old report runs (default: 45)
-- `REPORT_DELIVERY_RETENTION_DAYS` — Days to keep deliveries (default: 60)
-- `REPORT_EXPORT_FILES_RETENTION_DAYS` — Days to keep export files (default: 30)
-- `MARKETPLACE_SYNC_WORKER_ENABLED` — "1" enables marketplace sync worker
-- `RESERVATION_WORKER_ENABLED` — "1" enables inventory reservation expiry worker (5-min cron)
-- `BOOKING_REMINDER_WORKER_ENABLED` — "1" enables appointment reminder worker (Phase 4)
-- `SCHEDULED_CATALOG_WORKER_ENABLED` — "1" enables scheduled catalog changes worker (Phase 2)
-- `RENTAL_OVERDUE_WORKER_ENABLED` — "1" enables rental overdue checker (daily 8 AM UTC)
-- `ROOM_OVERDUE_WORKER_ENABLED` — "1" enables room checkout overdue checker (daily 11 AM UTC)
-- `SUBSCRIPTION_GRACE_WORKER_ENABLED` — "1" enables customer subscription grace period transitions (hourly)
-- `TREATMENT_PLAN_WORKER_ENABLED` — "1" enables treatment plan session reminder + overdue checker (daily 9 AM UTC)
+## Middleware
 
-### Customer Portal
-- `CUSTOMER_PORTAL_JWT_SECRET` — JWT signing key for customer portal sessions (separate from employee `JWT_SECRET`)
-- `CUSTOMER_PORTAL_ACCESS_TTL` — Portal access token TTL (default: "1h")
-- `CUSTOMER_PORTAL_REFRESH_TTL` — Portal refresh token TTL (default: "30d")
+All middleware in `backend/middleware/`. Chain order documented above.
 
-### Sandbox
-- `SANDBOX_WEBHOOK_SECRET` — HMAC secret for sandbox payment webhook verification (only required in sandbox/dev mode)
+### `tenant-auth.js`
+Exports: `init(deps)`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`, `loadEmployeePerms`, `invalidateCompanyProfileCache`
 
-### Payments
-- `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "sandbox"
-- `XPAY_API_KEY` — xPay merchant API key
-- `XPAY_WEBHOOK_SECRET` — xPay HMAC verification secret
+Requires `init({ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore })` at boot.
 
-### AI
-- `ANTHROPIC_API_KEY` — Claude API key for AI insights
+- **`loadTenantAndPerms`** — JWT auth. Sets `req.employee`, `req.employeePerms`, `req.tenantId`, `req.tokenScope`, `req.isImpersonating`. No auth header → sets empty perms and calls `next()` (does not reject). Kiosk scope restricts to attendance/auth paths. Token revocation checked against `revoked_tokens` table + `employees.tokens_revoked_before`. Permission load retries once on transient DB failure; both failures → 503 instead of silent empty-perms.
+- **`resolveTenant`** — No-op in ST mode. In MT: resolves tenant, calls `tenantDbManager.getDb()`, runs `asyncStore.run(...)` to wire `deps.db`. Sets `req.tenantSlug`, `req.tenantDir`. Error codes: `TENANT_NOT_FOUND`, `TENANT_SUSPENDED`, `TENANT_DELETED` (all 403).
+- **`loadCompanyProfile`** — Reads `company_profile WHERE id = 1`. 5-minute cache per tenant (stale-while-revalidate). Sets `req.company`. Blocks with 503 `SETUP_REQUIRED` if `setup_complete` is falsy and path is not `/api/setup*` or `/api/health*`.
+- **`resolveContext`** — Reads `x-outlet-id`, `x-company-id`, `x-scope-mode` headers. Sets `req.context`. When `context_header_enforced` flag is on, non-admin employees without `x-outlet-id` get 428 `CONTEXT_REQUIRED` (exempt: auth, context, feature-flags, attendance, roles, outlets paths).
 
-### Cloud Storage (R2)
-- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_PUBLIC_URL`
+### `permissions.js`
+Exports: `requirePerm`, `requireAnyPerm`, `requireContextOutlet`, `DEFAULT_ROLE_PERMISSIONS`, `PERMISSION_RULES`, `ensureDefaultRolePermissions`
 
-### Shopify
-- `SHOPIFY_SECRET_KEY` — Webhook signature verification
-- `SHOPIFY_MAX_RETRY_ATTEMPTS` — Inventory sync retries (default: 5)
+- **`requirePerm(permission)`** — `all_access` bypasses everything. Returns 403 on failure.
+- **`requireAnyPerm(permissions[])`** — passes if employee has `all_access` OR any one listed.
+- **`requireContextOutlet`** — backfills `req.query.outlet_id` from `req.context.outletId` if absent.
+- **`DEFAULT_ROLE_PERMISSIONS`**: Administrator = `all_access`; Manager = 21 permissions (manage_inventory, manage_orders, view_reports, manage_employees, pos_discount, void_sales, pos_park, pos_void, manage_restaurant, manage_kds, manage_bookings, manage_projects, manage_contracts, manage_tickets, manage_rentals, manage_rooms, manage_treatment_plans, manage_tips, override_void_comp, manage_gift_cards, override_price); Cashier = view_reports, pos_discount, pos_park.
+- **`PERMISSION_RULES`** — declarative array covering common route-level guards; consumed by test helpers and route registration.
 
-### Integrations
-- `INTEGRATION_SECRET_KEY` — AES-256-GCM key for integration credential encryption (falls back to SHOPIFY_SECRET_KEY)
-- `META_WEBHOOK_VERIFY_TOKEN` — Meta/Facebook webhook verification token
-- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — WhatsApp webhook verification token
+### `feature-flags.js`
+Exports: `init(deps)`, `DEFAULT_FEATURE_FLAGS`, `requireFeature`, `requireMode`, `getFeatureFlagsMap`, `getModesMap`, `invalidateFeatureFlagCache`, `invalidateModeCache`, `createNotification`, `notifyLowStockForSale`
 
-### Rate Limiting
-- `RATE_LIMIT_WINDOW_MS` — Sliding window (default: 60000ms)
-- `RATE_LIMIT_GLOBAL_MAX` — Global limit (default: 600/window)
-- `RATE_LIMIT_AUTH_MAX` — Auth endpoint limit (default: 20/window)
-- `RATE_LIMIT_WEBHOOK_MAX` — Webhook limit (default: 120/window)
+Requires `init({ db, IS_MULTI_TENANT, tenantDbManager, dbProxy })` at boot.
 
-### Admin
-- `ADMIN_ALLOWED_IPS` — Comma-separated IPs for /api/admin (empty = all IPs allowed; warning logged at startup if unset in prod)
+- **`requireFeature(flagKey)`** — 403 if flag is off. 500 on DB error.
+- **`requireMode(modeName)`** — 403 if mode row is absent. Falls through if modes table is empty (pre-migration).
+- Flags: 60s cache per tenant. Merges `DEFAULT_FEATURE_FLAGS` with DB rows. Gracefully degrades if `feature_flags` table is missing.
+- **Gotchas**: `fbr_integration` is NOT in `DEFAULT_FEATURE_FLAGS` (DB-seeded by migration v9). `ai_insights` is a soft check in the route, not enforced via `requireFeature`. Shopify routes are gated by connection check, not a flag.
 
-## Error Conventions
+### `plan-limits.js`
+Exports: `requirePlanLimit`, `requireActiveSubscription`, `PLAN_DEFAULTS`
 
-- **Success**: `res.json({ ... })` or `res.status(201).json({ ... })`
-- **Client error**: `res.status(4xx).json({ error: "Human-readable message" })`
-- **Validation error**: `validate(schema)` middleware returns `400` with `{ error: "...", details: [...] }` automatically
-- **Auth failures**: `401` (no/expired token), `403` (insufficient permissions or feature not enabled)
-- **Not found**: `res.status(404).json({ error: "X not found" })`
-- **Never throw raw strings** — always `{ error: string }`
-- **Transaction errors**: Use `try/catch` inside `db.transaction()`, re-throw with statusCode for custom HTTP codes
+- **`requirePlanLimit(resource)`** — resource must be `"employees"`, `"outlets"`, or `"products"`. No-op in ST mode. `0` or `null` in DB = unlimited. Returns 403 `{ code: "PLAN_LIMIT_REACHED" }` at cap. DB failure → best-effort, calls `next()`.
+- **`requireActiveSubscription`** — no-op for: GET/OPTIONS/HEAD, ST mode, auth/billing/support/setup/health/receipts paths, free plan tenants. `payment_status = 'expired'` → 403 `{ code: "SUBSCRIPTION_EXPIRED" }`. Uses `.then()` not `await` — outer function is synchronous.
+- **Plan defaults**: Free = 1 outlet / 3 employees / 100 products; Pro = 1 outlet / unlimited employees / unlimited products.
+- **Subscription lifecycle**: Trial (45 days) → Grace (7 days) → Expired (read-only).
 
-## Production Environment
+### `rate-limit.js`
+Exports: `globalLimiter`, `authLimiter`, `webhookLimiter`, `reviewLimiter`, `publicBookingLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`
 
-- **Database**: Supabase Postgres (production is Postgres-only)
-- **Mode**: `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
-- **Boot**: `index.js` line 15 loads `db-pg` (Postgres)
-- **Frontend**: Vercel at `sanopos.com` (custom domain; `sanopos.vercel.app` fallback still active)
-- **Backend**: Railway at `api.sanopos.com` (custom domain; `oneshoppos-production.up.railway.app` fallback still active)
-- **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.com,https://www.sanopos.com,https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `FBR_WORKER_ENABLED=1`, `EMAIL_WORKER_ENABLED=1`, `CLEANUP_WORKER_ENABLED=1`
-- **Payment gateway env vars** (optional, set when xPay account ready): `PAYMENT_GATEWAY=xpay`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET`. Without these, system uses manual admin payments only.
-- **Railway gotchas**: `PORT` env var is overridden by Railway (binds to 8080); this is fine
-- To seed super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
-- To provision tenant: use super-admin dashboard at `/admin` or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`
+All return 429 with `Retry-After` header and `{ error, retry_after_seconds }`. `globalLimiter` skips POS burst paths (`/api/sales`, `/api/products/search`, `/api/products/scan/`, `/api/orders`). Portal limiters key on `?tenant=` / `x-tenant-slug` header (no `req.tenantSlug` at that point).
 
-## Stale Documentation Notes
+### `validate.js`
+Exports: `{ validate }`
 
-As of Apr 16 2026, the following sections in this guide have been verified as current and accurate:
-- Postgres is the active backend (SQLite code is deleted)
-- Migration runner (migrate-pg.js) and routing (tenant-db-proxy-pg.js + tenant-db-manager-pg.js)
-- Integration tests use Vitest, NOT Jest (package.json verified)
-- Payment gateway adapters: manual, xpay, sandbox (stripe reference removed — never implemented)
-- Worker status endpoint is in routes/admin/system.js (NOT monitoring.js)
-- Admin IP allow-list: unset = all IPs allowed, not blocked
+- `validate(schema)` — Zod middleware factory. On success, replaces `req.body` with parsed result. On `ZodError`: 400 `{ error, details: [{ field, message }] }`. Field is dot-joined path (e.g. `"items.0.price"`).
 
-**Always verify against actual source files when in doubt:**
-- Test runner: check `backend/package.json:12` (should say `vitest`)
-- Payment adapters: check `backend/services/payment-gateway.js:267`
-- Worker status endpoint: check `backend/routes/admin/system.js:8`
-- Cleanup worker: check `backend/boot/workers.js:258`
-- Index.js boot line: check actual `require("./db-pg")` line number (was 5, verified as 15)
+### `upload-validation.js`
+Exports: `imageFileFilter`, `rasterImageFileFilter`, `safeExtension`, `detectImageType`, `verifyImageMagicBytes`, `ALLOWED_IMAGE_MIMES`, `ALLOWED_IMAGE_EXTS`
+
+- `imageFileFilter` — multer fileFilter, checks mimetype + extension, allows SVG.
+- `rasterImageFileFilter` — stricter, excludes SVG (prevents XSS on same-origin serving). Use for support screenshots.
+- `verifyImageMagicBytes` — catches faked Content-Type after upload (e.g. exe renamed to jpg).
+
+### `request-id.js`
+Exports: default `requestId`, named `requestId.enrichReqLog`
+
+- Wraps `pino-http`. UUID per request (honours `X-Request-Id` header). Sets `X-Request-Id` response header, `req.log`, `req.id`, `req._startTime`.
+- `enrichReqLog` — wire after `loadTenantAndPerms` to rebind `req.log` with `{ tenantSlug, employeeId }`.
+- Log levels: error for 5xx/thrown, warn for 4xx/>2000ms, info otherwise.
+
+### `customer-auth.js`
+Customer portal auth (separate JWT secret from employee auth). Exports: `loadCustomerAuth(deps)`, `signCustomerTokens`, `verifyCustomerToken`, `hashRefreshToken`, `getSecret`.
+
+- Portal routes use: `customerPortalAuthLimiter` → `loadCustomerAuth(deps)` → handler (never sets `req.employee`)
+- Token scope must be `"customer"` — rejects staff tokens
+- Cross-tenant replay guard: `payload.tid` must match resolved tenant
+- Per-customer revocation via `customers.portal_tokens_revoked_before`
+- Env vars: `CUSTOMER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), `CUSTOMER_PORTAL_ACCESS_TTL` (default `"30m"`), `CUSTOMER_PORTAL_REFRESH_TTL` (default `"30d"`)
+
+---
+
+## Subdirectories
+
+### `routes/`
+All API route handlers. See `routes/CLAUDE.md` for the full table of route files, mounting order, and conventions.
+
+Key conventions:
+- Routes mounted before tenant middleware (no `req.employee`, no `deps.db` proxy): `admin/`, `webhooks.js`, `receipts.js`, `customer-portal/`, `storefront.js`, `public-restaurant.js`, `public-bookings.js`, `country-packs.js`, `gift-cards-public.js`, `public-reservations.js`, `sandbox.js`
+- `deps.db` is the tenant DB proxy — always use it in route handlers (never `db` directly)
+- Transactions: `deps.db.transaction(async (client) => {...})` — client inherits `search_path`
+- Error conventions: success `res.json({...})`, client error `res.status(4xx).json({ error: "..." })`, server error `res.status(500).json({ error: err.message })`
+
+### `services/`
+Business logic, external API clients, infrastructure services. See `services/CLAUDE.md`.
+
+Key services:
+- `logger.js` — Pino singleton; always `require` this, never create another instance
+- `boss.js` — pg-boss singleton; always use `getBoss()`, never `new PgBoss()`
+- `crypto.js` — AES-256-GCM for integration credentials; stored as `enc:v1:{iv}:{tag}:{ciphertext}`
+- `email.js` — `sendEmail()` (immediate) and `enqueueEmail()` (pg-boss, 3 retries)
+- `payment-gateway.js` — adapter pattern; `isEnabled()` checks `XPAY_API_KEY`, not just `PAYMENT_GATEWAY`
+- `fbr.js` — FBR API client + payload builders + exponential backoff (60s → 5m → 15m → 1h → 4h)
+
+### `tests/`
+See `tests/CLAUDE.md` for full test file list and helper API.
+
+- Runner: **Vitest** (not Jest). `reports_accuracy.test.js` is the lone exception — uses Jest syntax
+- Integration tests require `DATABASE_URL`. Prefer `backend/.env.test` (local Postgres) to keep tests off production
+- `smoke-gate.test.js` has pre-existing failures — do not run or investigate
+- Test isolation: `createTestApp-pg.js` creates a fresh `test_<hex>` schema per test; `cleanup()` drops it
+
+### `workers/`
+All background workers use pg-boss. Each requires an env var to enable. Workers survive server crashes; jobs do not block the HTTP event loop.
+
+| Worker file | Env var to enable | Schedule |
+|---|---|---|
+| `email-worker-boss.js` | `EMAIL_WORKER_ENABLED=1` | continuous |
+| `fbr-worker-boss.js` | `FBR_WORKER_ENABLED=1` | continuous |
+| `cleanup-worker-boss.js` | `CLEANUP_WORKER_ENABLED=1` | 24h |
+| `marketplace-sync-worker-boss.js` | `MARKETPLACE_SYNC_WORKER_ENABLED=1` | 10 min (orders), 6h (feed) |
+| `rental-overdue-worker-boss.js` | `RENTAL_OVERDUE_WORKER_ENABLED=1` | daily 8 AM UTC |
+| `room-overdue-checkout-worker-boss.js` | `ROOM_OVERDUE_WORKER_ENABLED=1` | daily 11 AM UTC |
+| `subscription-grace-worker-boss.js` | `SUBSCRIPTION_GRACE_WORKER_ENABLED=1` | hourly |
+| `treatment-plan-worker-boss.js` | `TREATMENT_PLAN_WORKER_ENABLED=1` | daily 9 AM UTC |
+
+Each worker exposes `global.__<name>WorkerStatus = { lastPollAt, processedToday, queueDepth }`. `GET /api/admin/worker-status` (in `routes/admin/system.js`) reads these globals. `queueDepth` is a real `SELECT COUNT(*)`.
+
+### `schemas/`
+Zod validation schemas for all domains. Imported by `validate(schema)` middleware. One file per domain (auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions, customer-portal, rentals, rooms, service-tickets, treatment-plans).
+
+### `boot/workers.js`
+All worker startup. Imported by `index.js`. Registers pg-boss workers, scheduled jobs, Shopify sync polling, report schedule worker. Do not start workers elsewhere.
+
+### `utils/`
+- `tz.js` — `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` — converts local `YYYY-MM-DD` to UTC boundaries. Use for all date filter queries. See timezone gotcha below.
+- `r2.js` — Cloudflare R2 upload/download helpers
+- `receiptEmail.js` — `buildReceiptEmailHtml()` for customer receipt emails
+- `digestEmail.js` — daily digest email builder
+- `backup-pg.js` — `pg_dump` to R2 for tenant self-export
+- `resendEmail.js` — direct Resend API call (used by alertEmail.js)
+- `alertEmail.js` — sends ops alerts via Resend
+
+---
+
+## Key Conventions
+
+### Postgres only
+SQLite code is deleted. `schema-pg.sql` is the DDL source of truth. All queries use `$1, $2` placeholders.
+
+### Multi-tenant DB routing
+`deps.db` in route handlers is a Proxy that delegates to the tenant's scoped DB via AsyncLocalStorage. `resolveTenant` middleware wires the ALS context before any route handler runs. Never use `db` (the pool) directly in tenant route handlers.
+
+### `deps.db` pattern
+Routes receive a `deps` object containing `db` (the tenant proxy), plus references to middleware functions and external clients. Routes are factory functions: `module.exports = (app, deps) => { ... }`.
+
+### Feature flags
+Apply `requireFeature('flag_name')` as per-route middleware. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql`. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes.
+
+### Permission guards
+All data-returning GET endpoints require auth — `requirePerm` or `requireAnyPerm` on every GET. No unprotected data endpoints.
+
+### Workers — adding a new one
+1. Create `workers/<name>-worker-boss.js` using the pg-boss pattern
+2. Register startup in `boot/workers.js`
+3. Add env var toggle: `<NAME>_WORKER_ENABLED=1`
+4. Expose `global.__<name>WorkerStatus`
+5. Add slot to `GET /api/admin/worker-status` in `routes/admin/system.js`
+
+### Adding a new route
+1. Create `routes/<domain>.js`
+2. Add Zod schema in `schemas/<domain>.js` (if validating request body)
+3. Register in `routes/registerAllRoutes.js` — one `app.use('/api/<prefix>', require('./routes/<domain>')(deps))` line
+4. Add permissions to `middleware/permissions.js` if introducing new permission strings
+
+### Encryption
+Integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. Always call `decryptSecret()` before passing config to adapters. Courier adapters receive pre-decrypted config — decryption happens in the route layer.
+
+### Timezone
+- Business-critical timestamps (`sales`, `returns`, `cash_shifts`, `stock_adjustments`, `inventory_transfers`) stored as UTC via `CURRENT_TIMESTAMP`
+- `attendance_sessions` and `employee_attendance` store local time — do NOT change their write paths
+- `sales.timestamp` is the column name — NOT `created_at`
+- `req.company.timezone` (IANA string) set by `loadCompanyProfile` — use in all date filter queries
+- `session_start` and `check_in` are already local — use `date(col)` with no modifier; `date(col,'localtime')` double-converts and breaks UTC+ timezones
+
+### Test runner
+**Vitest** — not Jest. Check `backend/package.json` to confirm. Exception: `reports_accuracy.test.js` uses Jest syntax.
+
+### Production
+- Backend: Railway at `api.sanopos.com` (`oneshoppos-production.up.railway.app` fallback)
+- Database: Supabase Postgres (`MULTI_TENANT=1` on Railway)
+- Railway `PORT` is overridden to 8080 — this is expected
+- `start.sh` — Railway entrypoint: sets `TZ`, runs `migrate-pg.js`, then `exec node index.js`
+
+---
+
+## Environment Variables (quick reference)
+
+### Required
+`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`
+
+### Common optional
+`MULTI_TENANT`, `PORT` (default 5000), `NODE_ENV`, `CORS_ORIGIN`, `LOG_LEVEL`, `FRONTEND_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `EMAIL_WORKER_ENABLED`, `SENTRY_DSN`, `ALERT_EMAIL`, `FBR_WORKER_ENABLED`, `CLEANUP_WORKER_ENABLED`, `MARKETPLACE_SYNC_WORKER_ENABLED`, `PAYMENT_GATEWAY`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `SHOPIFY_SECRET_KEY`, `INTEGRATION_SECRET_KEY`, `ADMIN_ALLOWED_IPS`, `SELF_SERVICE_SIGNUP`, `CUSTOMER_PORTAL_JWT_SECRET`
+
+See existing `backend/CLAUDE.md` environment variable section for the full list with defaults.
