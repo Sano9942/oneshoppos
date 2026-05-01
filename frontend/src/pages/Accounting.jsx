@@ -75,7 +75,7 @@ export default function Accounting() {
         api.get("/api/accounting/tax-ledger", { from, to }),
         api.get("/api/accounting/supplier-payments", { from, to }),
         api.get("/api/accounting/periods"),
-        api.get("/api/accounting/cashflow/daily", { from, to }),
+        api.get("/api/accounting/cashflow/daily", { date_from: from, date_to: to, ...(outletId ? { outlet_id: outletId } : {}) }),
         api.get("/api/accounting/ap-ar"),
       ]);
       setPnl(a);
@@ -87,7 +87,7 @@ export default function Accounting() {
       setTaxLedger(g || null);
       setSupPay(h || { payments: [], total: 0 });
       setPeriods(i?.periods || []);
-      setCashflowDaily(j?.entries || []);
+      setCashflowDaily(j?.cashflow || []);
       setApArSummary(k || null);
     } catch { /* ignore */ }
   }, [from, to, outletId]);
