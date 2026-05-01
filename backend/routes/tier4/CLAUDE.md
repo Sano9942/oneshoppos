@@ -13,13 +13,13 @@ Feature flag: `requireFeature("notifications")` on all routes. No `requirePerm` 
 - `GET /api/notifications` — list last 50, ordered by `created_at DESC`. Supports `?unread_only=1`. Uses `is_read = false` filter (column is `is_read`, NOT `read` — Postgres reserved word).
 - `GET /api/notifications/count` — returns `{ unread: N }`, count of `is_read = false`.
 - `PUT /api/notifications/:id/read` — sets `is_read = true` on one notification.
-- `PUT /api/notifications/read-all` — sets `is_read = true` on all unread. **This path must be registered BEFORE `/:id/read` in Express or "read-all" would be treated as an ID — the factory function registers `read-all` first, so don't reorder.**
+- `PUT /api/notifications/read-all` — sets `is_read = true` on all unread. **Note: the current code registers `PUT /:id/read` first and `PUT /read-all` after it. This is safe because Express matches `/read-all` as a literal path before treating it as a dynamic `:id` segment only when the routes are distinct static/dynamic paths — but the ordering is opposite to what older comments suggested. Do not swap the registration order without verifying Express path precedence rules.**
 
 Tables: `notifications`.
 
 ## company-profile.js
 
-Deps used: `db`, `requireFeature`, `requirePerm`, `COMPANY_UPLOADS_DIR`. Also imports from `config/industry-config`, `config/mode-registry`, `middleware/feature-flags`, `middleware/tenant-auth`.
+Deps used: `db`, `requireFeature`, `requirePerm`. `COMPANY_UPLOADS_DIR` is destructured in the file but is NOT actually used — the logo upload path uses R2 via `uploadToR2`, not `COMPANY_UPLOADS_DIR`. Also imports from `config/industry-config`, `config/mode-registry`, `middleware/feature-flags`, `middleware/tenant-auth`.
 
 - `GET /api/company-profile` — `requireFeature("multi_company")`. Returns `company_profile WHERE id = 1`.
 - `GET /api/company-profile/currency` — **no auth, no feature flag** — public endpoint. Used by `CurrencyProvider` on mount. In MT mode, accepts `?tenant=<slug>` to resolve the correct schema by calling `masterDb.getTenantBySlug` + `tenantDbMgr.getDb`. Returns `{ symbol, code, denominations }`. `cash_denominations` column is JSON-parsed; falls back to `[100,50,20,10,5,1]` on parse error.
@@ -71,7 +71,7 @@ Auth: `requireAnyPerm(["all_access"])` + `requireFeature("accounting_core")`.
 
 - `GET /api/accounting/coa` — returns flat `accounts` array + nested `tree` (built by `buildCoaTree()`). Sorted by `code` at each level.
 - `GET /api/accounting/coa/:id` — single account with computed balance from posted journal entry lines. `balance = (normal_balance==='debit') ? debits - credits : credits - debits`.
-- `GET /api/accounting/coa/next-code/:type` — suggests next account code for a type. Uses `MAX(code)` matching `^{prefix}\d+$` regex, increments by 10.
+- `GET /api/accounting/coa/next-code/:type` — suggests next account code for a type. Uses `MAX(code)` matching `^{prefix}\d+$` regex, increments by 10. **Route order note**: `next-code/:type` is registered after `/:id` in the file. This is currently safe because `/next-code/asset` has a different segment count (three segments) than `/:id` (two segments) so there is no shadowing. However, if you add any new `/api/accounting/coa/*` routes with two path segments, verify they are not shadowed by `/:id`.**
 - `POST /api/accounting/coa` — validates `code`, `name`, `type` (must be asset/liability/equity/revenue/expense). Checks code uniqueness. `normal_balance` auto-derived: asset/expense → debit, others → credit.
 - `POST /api/accounting/coa/seed` — idempotent seed of 21 Pakistan-standard accounts. Skips if any accounts exist. Uses `ON CONFLICT (code) DO NOTHING`.
 - `PUT /api/accounting/coa/:id` — system accounts (`is_system=true`) can only have `name` and `description` updated. User accounts: full update with code uniqueness check and parent cycle prevention.

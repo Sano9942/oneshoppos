@@ -76,7 +76,7 @@ Exports `PresetProvider` + `usePreset()`.
 | `pos_search_config` | `object` | `{ show_barcode, show_sku, show_price }` |
 | `enabled_modes` | `string[]` | Active tenant modes (e.g. `"restaurant"`, `"appointments"`) |
 | `unit_vocabulary` | `string[]` | Units available in product quantity fields |
-| `presetLoaded` | `boolean` | `false` until first `/api/context/bootstrap` completes |
+| `presetLoaded` | `boolean` | `false` until first `/api/context/bootstrap` completes. Also stays `false` (and no fetch is attempted) when `employee?.id` is absent after bootstrapping finishes — `PresetProvider` sets it back to `false` in that case |
 | `updatePreset(data)` | `fn` | Merges `data` over `DEFAULT_PRESET`, sets `presetLoaded = true` |
 | `hasMode(modeName)` | `fn → boolean` | Returns `true` if `enabled_modes` includes the mode. Returns `true` before preset loads (fail-open — feature flags remain the sole gate until preset is ready) |
 | `label(key)` | `fn → string` | Returns `preset.labels[key] \|\| key` — use for industry-aware UI text (e.g. `label("customer")` → `"Patient"` in clinic mode) |

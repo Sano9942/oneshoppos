@@ -8,24 +8,24 @@
 
 ### `redesign/` — Primary tenant UI
 
-All active tenant pages are `*Redesign.jsx` files here. The real implementations — edit these, not the `*Route.jsx` wrappers.
+Most active tenant pages are `*Redesign.jsx` files here. Active routes also include wrapper files with meaningful logic such as `POSRoute.jsx`, direct redesign imports from `appRoutes.jsx`, and standalone `redesign/ProductFormPage.jsx`. The real implementations — edit these, not the thin `*Route.jsx` wrappers (where applicable).
 
 **Conventions:**
 - Use `PageShell` (props: `title`, `subtitle`, `right`) and `SectionCard` (props: `children`, `className` only — no `title` prop) from `ui/primitives.jsx`
-- All API calls via `api.js` (`api.get/post/put/del`) — never raw `fetch()`
+- All API calls via `api.js` (`api.get/post/put/del`) — never raw `fetch()`. Exception: `redesign/restaurant/VoidReasonsAdminRedesign.jsx` uses raw `fetch()` for void-reason mutations
 - Feature flag gating: `const { flags, loading } = useFeatureFlags(authHeaders)` → check flag → `<Navigate to="/" replace />` if off. Do NOT pass inline `{}` as `authHeaders` each render (causes infinite loop). No `RequireFeature` wrapper component exists.
 - Currency: `const { fmt } = useCurrency()` — never hardcode symbols
 - Timestamps: `fmtUtcDateTime`/`fmtLocalDateTime` from `utils/dates.js` — never raw `new Date()`. Exception: `KioskRedesign` uses `fmtLocalTime` + `parseLocalDate` (attendance is LOCAL time)
 - CSV export: `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`. Exception: `ReportsPowerUpPanel` has its own inline `toCsv()` with metadata headers.
 
 **Key pages:**
-- `POSRedesign.jsx` — POS entry point. Wraps `POSContent` with `<POSProvider>` + `<ErrorBoundary>`. All 12 modals mounted here. `completeSale` uses `api.raw` — do not refactor to `api.post`.
+- `POSRedesign.jsx` — POS entry point. Wraps `POSContent` with `<POSProvider>` + `<ErrorBoundary>`. Imports and mounts 22+ modal/error-state components including receipt retry, shift recovery, cart collision/resume, barcode miss, insufficient stock, and endless aisle modals (22 imports). `completeSale` uses `api.raw` — do not refactor to `api.post`.
 - `DashboardRedesign.jsx` — role-aware orchestrator, auto-refreshes every 60s. `isAdmin`=`all_access`, `isManager`=`view_reports` without `all_access`.
 - `ReportsRedesign.jsx` — thin wrapper. Exports default `ReportsRedesign` + named `ReportsTabStandaloneRedesign({ tabId })` for deep-linked tab routes.
 - `BillingRedesign.jsx` — polls `GET /api/billing/status` every 2s up to 15 attempts after payment gateway redirect.
 - `KioskRedesign.jsx` — public route (no auth). Reads `?tenant=<slug>` + `?outlet=<id>`. PIN entry via `POST /api/attendance/pin-status`.
 - `ProfileRedesign.jsx` — self-service, no admin perm required. PIN (`PUT /api/employees/:id/change-pin`) + password change.
-- `IntegrationsHubRedesign.jsx` — 12 providers in `PROVIDER_META`. Shopify + WooCommerce use `link` to navigate to dedicated pages rather than inline form.
+- `IntegrationsHubRedesign.jsx` — 13 providers in `PROVIDER_META`. Shopify + WooCommerce use `link` to navigate to dedicated pages rather than inline form.
 - `ImportRedesign.jsx` — 5 tabs (products, customers, suppliers, expenses, payments). Template download uses `API_BASE` directly (raw file download, not `api.js`). Resets file input on tab switch.
 - `CODSettlementsRedesign.jsx` — 3-view state machine (list → import → detail). Feature-flagged `phase5_cod_settlements`. Approve requires `all_access` perm only.
 - `ProductFormPage.jsx` — standalone product create/edit. NOT a `*Redesign.jsx`. Uses `useParams()` for edit mode.
@@ -36,7 +36,8 @@ All active tenant pages are `*Redesign.jsx` files here. The real implementations
 | Pages | Flag |
 |-------|------|
 | `AppointmentsRedesign`, `AppointmentsCalendarRedesign`, `AppointmentServicesRedesign` | `phase4_appointments` |
-| `RestaurantChecksRedesign`, `RestaurantFloorRedesign`, `KioskOrderingRedesign` | `phase4_restaurant` |
+| `RestaurantChecksRedesign`, `RestaurantFloorRedesign` | `phase4_restaurant` |
+| `KioskOrderingRedesign` | `phase4_restaurant_qr` |
 | `KDSRedesign` | `phase4_restaurant_kds` |
 | `TreatmentPlansRedesign` | `phase4_treatment_plans` + `manage_treatment_plans` perm |
 | `ContractsRedesign` | `phase4_service_contracts` |
@@ -52,7 +53,7 @@ All active tenant pages are `*Redesign.jsx` files here. The real implementations
 | `ReportBuilderRedesign` | `phase2_report_builder` |
 
 **Subdirectories inside `redesign/`:**
-- `pos/` — `POSContext.jsx` (~143 exports, all POS state), `POSShortcutsOverlay.jsx`, `cartMath.js` (pure cart math, extracted for testability)
+- `pos/` — `POSContext.jsx` (1,087 lines, ~143 exports, all POS state), `POSShortcutsOverlay.jsx`, `cartMath.js` (pure cart math, extracted for testability)
 - `cod/` — 7 files for COD settlement sub-views (BatchList, BatchDetail, BatchHeaderCard, LineTable, ManualMatchModal, ApproveConfirmModal, ImportWizard)
 - `treatment/` — `DentalChart`, `BodyChart` used by `TreatmentPlansRedesign`
 
@@ -84,7 +85,7 @@ Routes at `/admin/*`. Separate auth system — uses `adminFetch` from `AdminLogi
 Routes at `/portal/:tenantSlug`. Fully self-contained auth: `PortalAuthProvider` + `../../auth/customerPortalStore`. No main-app `useAuth`, no permissions system, no `ui/primitives`, no `useCurrency`.
 
 **Key facts:**
-- All API calls use `portalApi` from `../../api/portalApi` (NOT `api.js`). Attaches portal JWT, appends `?tenant=<slug>`, handles silent 401 refresh (retries once after refresh; clears session on second 401).
+- All API calls use `portalApi` from `../../api/portalApi` (NOT `api.js`). Attaches portal JWT, appends `?tenant=<slug>`, handles silent 401 refresh (retries once after refresh; clears session on second 401). Exception: `PortalAppointments.jsx` also uses raw public `fetch()` for booking config and availability (unauthenticated public endpoints).
 - All fetches use `credentials: "include"` for the httpOnly refresh cookie.
 - Tab visibility is server-driven: `PortalLayout` fetches `GET /api/portal/config` → `enabled_tabs` array passed via `<Outlet context>`. Never assume a tab is available.
 - Currency via `toLocaleString()` (not `useCurrency`). All UI is inline Tailwind.
@@ -117,9 +118,9 @@ All report tab components orchestrated by `pages/Reports.jsx`. All use `{ api }`
 
 ## Top-Level Pages
 
-### `*Route.jsx` wrappers — never edit
+### `*Route.jsx` wrappers — rarely edit
 
-Every `*Route.jsx` file is a 5-line thin wrapper that lazy-loads the corresponding `*Redesign.jsx`. They exist only to satisfy the route tree. The actual code lives in `redesign/`. Do not edit these files — edits belong in the corresponding `*Redesign.jsx`.
+Most `*Route.jsx` files are 5-line thin wrappers that lazy-load the corresponding `*Redesign.jsx`. They exist only to satisfy the route tree. Do not edit these files — edits belong in the corresponding `*Redesign.jsx`. Exception: `POSRoute.jsx` and `ReportsRoute.jsx` contain meaningful routing/standalone-tab logic and should not be treated as disposable boilerplate.
 
 Example pattern:
 ```js
@@ -204,5 +205,5 @@ Public tenant storefront at `/store/:tenantSlug`. Unauthenticated, no `api.js`, 
 - **Legacy originals** (`Accounting.jsx`, `Approvals.jsx`, `Attendance.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`, `ShopifyIntegration.jsx`, `InvoiceView.jsx`) are imported by their `*Redesign.jsx` wrappers — do not delete or edit these directly unless the task is specifically about the wrapped legacy component.
 - **`Reports.jsx` is NOT legacy** — it is the active orchestrator for all report tabs.
 - **Admin pages use `adminFetch`**, not `api.js`. Do not replace with `api.js` in admin files.
-- **Portal pages use `portalApi`**, not `api.js`. Do not replace with `api.js` in portal files.
+- **Portal pages use `portalApi`**, not `api.js`. Do not replace with `api.js` in portal files. Exception: `PortalAppointments.jsx` uses raw public `fetch()` for unauthenticated booking endpoints.
 - **Public pages** (`public/`, `storefront/`) use raw `fetch()` intentionally — no auth context available.

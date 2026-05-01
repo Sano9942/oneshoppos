@@ -1,6 +1,6 @@
 # UI — Claude Guide
 
-**14 files** — shared design system components, layout helpers, and theme tokens. All use CSS custom property classes (`text-(--ui-text)`) for dark mode. **Exception: POS uses hardcoded colors.**
+**14 files** — shared design system components, layout helpers, and theme tokens. Most use CSS custom property classes (`text-(--ui-text)`) for dark mode. **Exceptions with hardcoded Tailwind colors:** POS; and within `ui/`, several files also use fixed colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop use fixed colors.
 
 ---
 
@@ -100,7 +100,7 @@ CSS custom property definitions for light and dark themes. Applied via `[data-th
 
 ## `nav-config.js`
 
-Single export: `SHOPIFY_NAV_GROUPS` — array of 18 nav group objects.
+Single export: `SHOPIFY_NAV_GROUPS` — array of 19 nav group objects.
 
 Each group: `{ label, items[] }`. Each item: `{ name, path, icon, requiredPerm?, requiredFlag?, requiredMode?, newTab? }`.
 
@@ -142,6 +142,7 @@ Props: `{ level?, onReset?, children }`
 - "Try Again" calls `handleReset` + `props.onReset`. "Reload" calls `window.location.reload()`
 - In dev (`IS_DEV`): shows `error.message` + `error.stack` in a `<pre>` block
 - **Sentry:** `componentDidCatch` calls `Sentry.captureException` when `SENTRY_DSN` is set
+- **`Button` prop note:** action buttons here pass `variant="secondary"` but `Button` does not interpret a `variant` prop — it accepts `tone`, not `variant`. The `variant` prop is silently ignored by the primitive.
 
 ---
 
@@ -212,7 +213,7 @@ Two named exports:
 | Export | Props | Notes |
 |--------|-------|-------|
 | `StarDisplay` | `{ rating, size=16, className? }` | Read-only. Rounds `rating` to nearest integer |
-| `StarPicker` | `{ value, onChange, size=24, className? }` | Interactive. Stars highlight yellow on hover. Calls `onChange(n)` on click |
+| `StarPicker` | `{ value, onChange, size=24, className? }` | Interactive. Selected stars (≤ `value`) are highlighted yellow. Only the individual unselected star under the pointer gets `hover:text-yellow-300` — hover state is not maintained across all stars. Calls `onChange(n)` on click |
 
 ---
 

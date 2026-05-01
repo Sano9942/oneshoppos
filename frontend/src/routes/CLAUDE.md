@@ -1,6 +1,6 @@
 # Routes — Claude Guide
 
-**5 files** — React Router route definitions split by access level. All `lazy()`-loaded unless noted.
+**5 files** — React Router route definitions split by access level. Most components are `lazy()`-loaded, but several are NOT lazy, including `HomeRedirect`, `SetupWizard`, `AccessDenied`, `ContextSelect`, `RequireAuth`, `RequireContext`, `RequirePerm`, `AppLayoutRedesign`, `PlaceholderPage`, and `RouteLoading`.
 
 ---
 
@@ -40,7 +40,7 @@ Routes accessible without authentication (or with special auth handling):
 | `/menu/:token` | `PublicRestaurantMenuPage` | Public restaurant QR menu |
 | `/pay/:token` | `RestaurantPayPage` | Restaurant table self-pay |
 | `/reserve/:tenantSlug` | `ReservationBookingPage` | Public restaurant reservation |
-| `/portal/:tenantSlug` | `PortalLayout` | M8 customer portal — 16 nested routes. Uses `PortalAuthProvider` (NOT the main `AuthProvider`) |
+| `/portal/:tenantSlug` | `PortalLayout` | M8 customer portal — 16 nested routes. Portal pages do not use the main app auth/session flow (`PortalAuthProvider` handles portal auth). Note: `main.jsx` still wraps the entire app including public routes in the main `AuthProvider` — the isolation is at the portal-page level, not the root level |
 
 ### Portal nested routes (`/portal/:tenantSlug/...`)
 
@@ -206,4 +206,4 @@ All routes nested under `/admin`. Auth is checked **inside `AdminLayout`** via `
 `Suspense` fallback — centered white card with `"Loading..."`:
 - Container: `min-h-[40vh]`, centered flex
 - Card: `rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm`
-- Used by both `appRoutes.jsx` and `adminRoutes.jsx` via their local `wrap()` helpers
+- Used by `appRoutes.jsx`, `adminRoutes.jsx`, and `publicRoutes.jsx` via their local `wrap()` helpers

@@ -1,7 +1,7 @@
 # POS Module — Claude Guide
 
 - **62 files** — entire POS terminal, driven by a single React Context (`POSContext`) that is composed from 8 domain hooks
-- **`POSContext.jsx`** — orchestrator only (~400 lines). Composes hooks, wires state between them, provides `POSContext` value. ~165 exports (wave-C snapshot list at top of file). `usePOS()` hook — throws if used outside `POSProvider`.
+- **`POSContext.jsx`** — orchestrator only (1,087 lines). Composes hooks, wires state between them, provides `POSContext` value. ~165 exports (wave-C snapshot list at top of file). `usePOS()` hook — throws if used outside `POSProvider`.
 - **`cartMath.js`** — pure utility, zero React. `calcGrossTotal`, `calcDiscountValue` (percent/flat), `calcTaxTotal` (both inclusive and exclusive — inclusive backs tax out, exclusive adds on top), `calcTotal` (always ≥ 0)
 - **`omniInputRouter.js`** — pure pattern classifier. `classifyOmniInput(raw)` returns `{ kind, value?, format? }`. Kinds: `noop`, `barcode` (EAN-8/12/13/14 by digit length), `plu` (4-5 digit numeric), `customer` (`#`-prefixed), `text` (everything else).
 
@@ -80,12 +80,12 @@ All modals null-guard with `if (!open) return null` at top, using `usePOS()` —
 | `POSBarcodeMissModal` | context | Only shown when cashier has inventory perms. `barcodeMissPrompt = { barcode }`. Quick-create product link. Others get a toast. |
 | `POSInsufficientStockModal` | context | `insufficientStockPrompt = { product_id, product_name, requested, available }`. Shown when `/api/sales` returns `{ code: "insufficient_stock" }`. |
 | `POSStuckQueueModal` | props: `{ open, onClose }` | Reads failed offline queue entries via `getQueueByState(employeeId, "failed")`. Retry = `markPending(key)` + `syncQueue()`. Shows total + formatted amount. |
-| `POSCartCollisionModal` | context | `collisionModal = { existing: {...} }`. Opened when returns API returns 409 `duplicate_return`. Shows existing return info so cashier can see who/when. |
-| `POSCartResumeModal` | context | `cartResumePrompt = { cart, selectedOutletId, customer, timestamp }`. Prompts after page load if checkpoint found. |
-| `POSShiftRecoveryModal` | context | `shiftRecoveryOpen` set when shift >20h old. Dismiss = `setShiftRecoveryDismissed(true)`. |
+| `POSCartCollisionModal` | **props** | Props: `{ open, collisionData, onClose }`. Opened when returns API returns 409 `duplicate_return`. Shows existing return info so cashier can see who/when. |
+| `POSCartResumeModal` | **props** | Props: `{ open, cartResumePrompt, onRestore, onDiscard }`. Prompts after page load if checkpoint found. |
+| `POSShiftRecoveryModal` | **props** | Props: `{ open, onDismiss }`. Shown when shift >20h old. Dismiss = `setShiftRecoveryDismissed(true)`. |
 | `POSRefundThresholdModal` | **props** | Props: `{ open, threshold, refundAmount, currency, error, loading, onSubmit(pin), onClose }`. Shown when `/api/returns` returns `{ code: "manager_pin_required" }`. Caller re-posts with `manager_pin`. |
-| `POSNoSaleReasonModal` | context | Reason for opening cash drawer without a sale. |
-| `POSReceiptRetryModal` | context | Shown when receipt email/print fails after sale. Retry options. |
+| `POSNoSaleReasonModal` | **props** | Props: `{ open, onSubmit, onClose }`. Reason for opening cash drawer without a sale. |
+| `POSReceiptRetryModal` | **props** | Props: `{ open, slip, onClose }`. Shown when receipt email/print fails after sale. Retry options. |
 | `POSApprovalModal` | **props** | Props: `{ actionType, referenceType, referenceId, outletId, metadata, onApproved, onDenied, onClose }`. `POST /api/approvals/pos-authorize`. Usable outside POS. |
 | `EndlessAisleModal` | context | `POST /api/orders/endless-aisle`. Uses `dark:` Tailwind variants + gray classes — NOT POS styling. |
 | `POSEmailReceiptModal` | **props** | Props: `{ saleId, customerEmail, onClose }`. `POST /api/email/send-receipt-v2`. Auto-closes 1.5s after success. |
@@ -100,14 +100,14 @@ All modals null-guard with `if (!open) return null` at top, using `usePOS()` —
 | `POSSubHeader` | Tax Inclusive toggle + Park Sale + Parked Sales badge |
 | `POSSidebar` | Dark `#0A0A0A` background. `data-pos-customer-search` attr on input for F4 focus. Shows promo discount + name |
 | `POSCartTable` | Bundle badge + "Special Price" badge when price list price differs. Mobile hides Unit column |
-| `POSSearchArea` | 4 inputs (barcode, SKU, price, general search) — inputs clear each other |
-| `POSOmniInput` | Single smart search bar (replaces POSSearchArea in wave-C layout). `classifyOmniInput` routing |
+| `POSSearchArea` | 4 inputs (barcode, SKU, price, general search) — inputs clear each other. Still present; older search inputs remain active below when omni-input is not shown |
+| `POSOmniInput` | Single smart search bar rendered INSIDE `POSSearchArea` only when `phase2g_omni_input` flag is enabled. Does not replace `POSSearchArea`; the older inputs still exist below it. `classifyOmniInput` routing |
 
 ---
 
 ## Restaurant Subdirectory (`restaurant/`)
 
-12 files — full restaurant/table-service mode. Gated by `phase4_restaurant` flag. Integrated with POS checkout hook via `draftOrderId`, `orderContext`, `tableSessionId`, `seatCount`.
+15 files — full restaurant/table-service mode. Gated by `phase4_restaurant` flag. Integrated with POS checkout hook via `draftOrderId`, `orderContext`, `tableSessionId`, `seatCount`.
 
 | File | Role |
 |------|------|

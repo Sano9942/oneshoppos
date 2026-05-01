@@ -8,7 +8,7 @@
 
 ### `AuthEmployee`
 
-Shape of the employee object stored in `AuthProvider` after login (from `POST /api/auth/login` or `/api/auth/mt-login`):
+Shape of the employee object stored in `AuthProvider` after login (from `POST /api/auth/login` or `/api/auth/mt-login`). Note: the actual `AuthProvider` stores `permissions` and `token` on the session object, not inside `session.employee`; `AuthEmployee.token` and `AuthEmployee.permissions` being required in this type does not match single-tenant sessions — treat as a loose reference shape.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -61,4 +61,4 @@ isApiError(res: ApiResponse): res is ApiError
 // Returns true if res.error is a string
 ```
 
-Use to narrow an `ApiResponse` to the error case. Import and call directly.
+Use to narrow an `ApiResponse` to the error case. Import and call directly. Note: a current source search found no imports or calls of `ApiOk`, `ApiError`, `ApiResponse`, `AuthEmployee`, `JwtPayload`, or `isApiError` in the frontend source — these type files are reference-only for editor tooling and are not actively consumed at runtime.

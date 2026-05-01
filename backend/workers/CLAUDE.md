@@ -1,8 +1,6 @@
 # Workers — Claude Guide
 
-All workers are pg-boss backed unless noted as legacy. Every worker must call
-`boss.createQueue(name)` before `boss.work()` or `boss.schedule()` — pg-boss v12+
-requirement. Heartbeat shape is always `{ lastPollAt: number|null, processedToday: number, queueDepth: number }`.
+Workers mix pg-boss jobs with `setInterval` pollers in `boot/workers.js`. Not all workers are pg-boss — `boot/workers.js` also starts inline `setInterval` workers for sync cleanup, report cleanup, stale attendance sessions, Shopify sync, report schedules, catalog scheduling, and booking reminders. Several current worker files call `boss.schedule()`/`boss.work()` directly without a visible `createQueue()` call. Heartbeat shape is always `{ lastPollAt: number|null, processedToday: number, queueDepth: number }`.
 
 ---
 
@@ -201,7 +199,7 @@ reflects current overdue held rows.
 ## `kds-load-snapshot-worker-boss.js`
 
 Export: `registerKdsSnapshotWorker(boss, pool)`, `snapshotForTenant(db, logger, tenantSlug)`
-Env: (no dedicated toggle — registered from `boot/workers.js` when KDS feature is active)
+Env: `KDS_SNAPSHOT_WORKER_ENABLED=1` — current boot code registers it only by this env toggle, not by a feature-active check
 Heartbeat: `global.__kdsSnapshotWorkerStatus`
 Queue: `kds-load-snapshot`
 Schedule: `*/15 * * * *` (every 15 minutes)
@@ -218,7 +216,7 @@ after each sweep. Silently skips tenants missing the snapshot table (pre-migrati
 ## `abc-worker-boss.js`
 
 Export: `registerAbcWorker(boss, pool)`, `runAbcWorkerForDb({ db, windowDays })`
-Env: (no dedicated toggle — registered from `boot/workers.js`)
+Env: `ABC_WORKER_ENABLED=1`
 Heartbeat: `global.__abcWorkerStatus`
 Queue: `abc-daily`
 Schedule: `0 2 * * *` (daily 2 AM UTC)
@@ -239,7 +237,7 @@ pg-boss or tenant context.
 ## `anomaly-worker-boss.js`
 
 Export: `registerAnomalyWorker(boss, pool)`, `runAnomalyWorkerForDb({ db, windowDays })`
-Env: (no dedicated toggle — registered from `boot/workers.js`)
+Env: `ANOMALY_WORKER_ENABLED=1`
 Heartbeat: `global.__anomalyWorkerStatus`
 Queue: `anomaly-daily`
 Schedule: `30 2 * * *` (daily 2:30 AM UTC — 30 min after ABC to reduce DB contention)
@@ -262,7 +260,7 @@ samples.
 ## `retail-digest-worker-boss.js`
 
 Export: `registerRetailDigestWorker(boss, pool)`, `runRetailDigestForDb({ db, tenantId, tenant, force })`
-Env: (no dedicated toggle — registered from `boot/workers.js`)
+Env: `RETAIL_DIGEST_WORKER_ENABLED=1`
 Heartbeat: `global.__retailDigestWorkerStatus`
 Queue: `retail-weekly-digest`
 Schedule: `0 8 * * 1` (Monday 8 AM UTC)
@@ -395,7 +393,7 @@ Two tasks per run:
 3. Add env var toggle: `<NAME>_WORKER_ENABLED=1`.
 4. Expose heartbeat: `global.__<name>WorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 }`.
 5. Add to `GET /api/admin/worker-status` in `routes/admin/system.js`.
-6. Call `await boss.createQueue(name)` before `boss.work()` or `boss.schedule()`.
+6. Several existing worker files call `boss.schedule()`/`boss.work()` directly without a visible `createQueue()` call; new workers should follow the same pattern as the nearest similar worker file.
 7. Use `withTenantContext(pool, tenantSlug, fn)` for tenant-scoped operations rather
    than raw schema string interpolation — except where the service already does its own
    schema routing (e.g. FBR worker).

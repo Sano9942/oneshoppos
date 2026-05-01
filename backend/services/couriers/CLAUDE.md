@@ -4,7 +4,7 @@
 
 Adapter pattern for courier API integration. `index.js` exports `getAdapter(adapterKey, config)` — the sole entry point. It maps a courier slug string to a class and returns a constructed instance. Falls back to `GenericAdapter` for unrecognized keys.
 
-`config` comes from the `courier_integrations` DB row. Shape: `{ api_key, api_secret, api_base_url?, config_json? }`.
+`config` comes from the `courier_integrations` DB row. Shape: `{ api_key, api_secret, api_base_url?, config_json? }`. **Warning**: `config_json` is a TEXT column in the DB. `backend/routes/couriers.js` currently passes `courier.config_json` directly into adapters WITHOUT calling `JSON.parse()` first. Adapters access it like an object (e.g. `this.config.config_json?.cost_center`), so all nested fields will be `undefined` when the DB returns a raw JSON string. Callers should be aware that `config_json` may arrive as a raw string rather than a parsed object due to this missing parse in the route layer.
 
 ---
 
@@ -254,9 +254,9 @@ If a `courier_integrations` row has `supports_booking = false`, the route skips 
 
 1. Create `<name>-adapter.js`. If the courier has a booking API, extend `BaseCourierAdapter`. If not, extend `GenericAdapter` and override `bookShipment` to throw `501 / COURIER_NO_BOOKING_API`.
 2. Implement `bookShipment`, `getTracking`, `cancelShipment`.
-3. Register in `index.js` `ADAPTERS` map with the slug key matching the `courier_integrations.slug` DB value.
+3. Register in `index.js` `ADAPTERS` map with the adapter key matching the `courier_integrations.adapter_key` DB column (not `slug` — the relevant column is `adapter_key`).
 4. Add a seed row to `courier_integrations` in `schema-pg.sql` and a migration.
-5. If `config_json` extra fields are required, document them in the courier's row and handle with `this.config.config_json?.field || default`.
+5. If `config_json` extra fields are required, document them in the courier's row and handle with `this.config.config_json?.field || default`. **Note**: due to the missing `JSON.parse()` in the route layer, `config_json` may reach your adapter as a raw JSON string; access like `this.config.config_json?.field` will yield `undefined` in that case. Until the route layer is fixed, add a defensive parse: `const extra = typeof this.config.config_json === 'string' ? JSON.parse(this.config.config_json) : (this.config.config_json || {})`.
 
 Standard `bookShipment` contract:
 - Throw on booking failure (the route catches and returns 500 / passes status code from `err.statusCode`).

@@ -99,7 +99,10 @@ Feature flag: `reports_inventory_health_plus` gates some routes.
 - `GET /api/reports/returns-by-reason` — return reasons aggregated
 
 **`requireFeature("reports_profit_layer")`:**
-- `GET /api/reports/revenue-leaks` — voids/discounts/returns leakage analysis
+- `GET /api/reports/discount-leakage` — discount leakage analysis (gated by `reports_profit_layer`)
+
+**Unguarded (no feature gate):**
+- `GET /api/reports/revenue-leaks` — voids/discounts/returns leakage analysis; this route is ungated in `analytics.js`
 
 **`requireFeature("reports_exceptions")`:**
 - Route exists in analytics.js for exception detection (specific name varies — check line 654)
@@ -146,7 +149,7 @@ No perm/feature guards.
 
 ## governance.js — Scheduled Reports & Saved Views
 
-**Feature: `reports_scheduled_exports` + perm: `manage_employees`** gates all schedule mutation routes. Read-only schedule/run history routes use `requireAnyPerm(["view_reports","manage_employees"])`.
+**Feature: `reports_scheduled_exports` + perm: `manage_employees`** gates all schedule mutation routes. `GET /api/reports/schedules` also uses `requirePerm("manage_employees")` (not `requireAnyPerm`). Saved view read routes use `requireAnyPerm(["view_reports","manage_employees"])` — that broader permission applies to saved views only, not schedule listing.
 
 Tables: `report_schedules`, `report_schedule_runs`, `report_delivery_log`, `saved_report_views`, `report_definition_versions`, `custom_report_definitions`.
 
@@ -156,7 +159,7 @@ Tables: `report_schedules`, `report_schedule_runs`, `report_delivery_log`, `save
 - `PUT /api/reports/schedules/:id` — update schedule
 - `DELETE /api/reports/schedules/:id`
 - `POST /api/reports/schedules/:id/run-now` — immediate manual trigger
-- `GET /api/reports/schedule-runs` — run history
+- `GET /api/reports/schedules/:id/runs` — run history for a specific schedule
 - `POST /api/reports/schedule-runs/:id/deliver` — re-deliver a past run
 
 **Saved views routes:**
@@ -175,6 +178,8 @@ Tables: `report_schedules`, `report_schedule_runs`, `report_delivery_log`, `save
 ## stock-aging.js — Stock Aging
 
 **`GET /api/reports/stock-aging`** — `requireAnyPerm(["view_reports","manage_inventory"])`. Accepts: `outlet_id`, `bucket` (age bucket filter), `category_id`, `brand_id`, `supplier_id`, `search`. Age based on most recent GRN received date; products with no GRN get `age_days = 0`.
+
+**Route shadow gotcha**: `stock-aging` routes exist in both `inventory.js` (registered earlier, ungated) and `stock-aging.js` (registered later). Because Express uses first-match registration order, the earlier ungated route in `inventory.js` may shadow the standalone `stock-aging.js` route if the paths collide. Verify actual registration order in `index.js` before assuming the feature-guarded version is the one serving requests.
 
 ## multichannel.js — Multi-Channel Reports
 

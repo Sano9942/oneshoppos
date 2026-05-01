@@ -1,8 +1,8 @@
 # Unit Tests — Claude Guide
 
-- **Vitest** with ESM imports (`import { describe, it, expect, vi }`), no DB/network hits
+- **Vitest**, no DB/network hits. Most files use ESM imports (`import { describe, it, expect, vi }`), but several use CommonJS `require()` directly or via `createRequire()` (e.g. `dockerfile-pg-dump.test.js`, `inventory-intelligence.test.js`, `pricing-service.test.js`, `tenant-auth-employee-email.test.js`)
 - **Run**: `npx vitest run backend/tests/unit/`
-- **Pattern**: pure function testing with `vi.fn()` / `vi.spyOn()`. No supertest, no Express — except `routes-orders-transactions.test.js`, `routes-admin-worker-status.test.js`, and `routes-admin-monitoring-infra-cache.test.js` which mount mini-Express apps
+- **Pattern**: pure function testing with `vi.fn()` / `vi.spyOn()`. No supertest, no Express — except `routes-orders-transactions.test.js` and `routes-admin-worker-status.test.js` which mount real mini-Express apps. `routes-admin-monitoring-infra-cache.test.js` uses a minimal app object stub and calls the handler directly (not a real Express app or supertest)
 
 ---
 
@@ -329,12 +329,6 @@ Tests `services/printer.js` — `withRetry`, `openDrawer`, factory behavior
 
 ---
 
-## `routes-admin-monitoring-infra-cache.test.js`
-
-See above (covered under that section).
-
----
-
 ## `workers-orphan-schema-scan.test.js`
 
 Tests `workers/orphan-schema-scan-worker-boss.js` — `runScan(db)`
@@ -377,6 +371,7 @@ Tests `workers/anomaly-worker-boss.js` — `runAnomalyWorkerForDb({ db })`
 - Returns 0 when no sales rows
 - Skips outlets with fewer than 3 peer employees (peer sample too small to flag)
 - Flags outlier when z-score exceeds threshold from `company_settings.anomaly_z_score_threshold` — inserts to `retail_anomaly_flags` with `(employee_id, outlet_id, metric, ..., z_score)`; `metric = "voids_pct"` for void rate, `"refunds_pct"` for refund rate
+- Also tests that refunds aggregated from the returns table can flag a `refunds_pct` anomaly (return-path coverage)
 - Respects caller-supplied z-score threshold override (canned from company_settings row)
 
 ---

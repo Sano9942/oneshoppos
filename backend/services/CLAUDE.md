@@ -41,7 +41,7 @@ Applies one pending scheduled change per call. Export: `applyScheduledChange(db,
 ## Subdirectory Modules
 
 ### `couriers/`
-Adapter pattern for courier API integration. Single entry point: `index.js` exports `getAdapter(adapterKey, config)` — maps a slug string to a class instance. Config comes from the `courier_integrations` DB row (credentials already decrypted by `services/crypto.js` upstream).
+Adapter pattern for courier API integration. Single entry point: `index.js` exports `getAdapter(adapterKey, config)` — maps a slug string to a class instance. Config nominally comes from the `courier_integrations` DB row, but `routes/couriers.js` passes `courier.config_json` as raw text into adapters; adapters expect a nested object but may receive an unparsed string. Decryption of credentials via `services/crypto.js` is expected to happen upstream, but verify the route layer before assuming config is already parsed and decrypted.
 
 **Class hierarchy**: `BaseCourierAdapter` (abstract, all methods throw) → named adapters; `GenericAdapter` (manual-entry no-ops, never throws) → `BykeaAdapter`, `PakPostAdapter`.
 
@@ -58,12 +58,12 @@ Five files — abstract base + four platform adapters for the Integrations Hub. 
 **Base class** (`base-marketplace.js`): four abstract methods — `testConnection()`, `syncProducts(products)`, `pullOrders(since)`, `pushInventory(updates)` — all throw "Not implemented".
 
 **Adapters**:
-- `daraz-client.js` — HMAC-SHA256 signed requests. N+1 pattern on `pullOrders`: one extra API call per order to fetch items. SKU fallback: `sku || barcode || "SP-${id}"`.
+- `daraz-client.js` — HMAC-SHA256 signed requests. N+1 pattern on `pullOrders`: one extra API call per order to fetch items. `pushInventory()` only sends caller-supplied SKUs; the Daraz route (`routes/integrations/daraz.js`) filters mapped rows to `daraz_sku IS NOT NULL` before calling `pushInventory`, using `daraz_product_map.daraz_sku || products.sku` — there is no broad client-side fallback to `barcode || "SP-${id}"` in the inventory push path.
 - `meta-commerce.js` — Graph API v19.0, access token as query param. Price format in `syncProducts`: integer cents as string (`"PKR 1000"`). `pullOrders` only fetches `FB_PROCESSING` state orders; prices in response are in cents (÷100 on ingest).
 - `whatsapp-client.js` — Not a marketplace; `syncProducts`/`pullOrders`/`pushInventory` are silent no-ops returning `[]`/`[]`/`{ updated: 0 }`. Real methods: `sendTemplate`, `sendTextMessage`, `sendOrderConfirmation`, `sendTrackingUpdate`. Uses `api_key` (not `oauth_token`) as bearer token.
 - `google-merchant.js` — Content API v2.1. `pullOrders()` always returns `[]` (Google sends traffic to your site, doesn't process orders). `pushInventory` silently swallows per-update errors but always returns `{ updated: N }`. Extra method `checkFeedStatus()` (not on base class) — called by 6-hour worker job.
 
-**Background sync**: `workers/marketplace-sync-worker-boss.js` — `marketplace-order-poll` every 10 min, `marketplace-feed-check` every 6h (Google only). Inbound webhooks: `POST /api/webhooks/{daraz,meta,whatsapp}` mounted before tenant middleware, HMAC-verified. See `marketplace/CLAUDE.md` for full config shape per adapter.
+**Background sync**: `workers/marketplace-sync-worker-boss.js` — `marketplace-order-poll` every 10 min, `marketplace-feed-check` every 6h (Google only). Both worker handlers are currently stubs; they schedule jobs and log intent but do not call DarazClient, MetaCommerceClient, or GoogleMerchantClient. Inbound webhooks: `POST /api/webhooks/{daraz,meta,whatsapp}` mounted before tenant middleware. Only `POST /api/webhooks/xpay` is HMAC-verified; Meta and WhatsApp GET handlers check verify tokens but their POST handlers, and the Daraz POST handler, are not HMAC-verified. See `marketplace/CLAUDE.md` for full config shape per adapter.
 
 ### `import/mappers/`
 Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.js` and `square.js` map platform-specific export formats to internal schema shape. Used by `routes/import.js`.

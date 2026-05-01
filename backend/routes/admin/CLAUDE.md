@@ -1,6 +1,6 @@
 # Admin Routes — Claude Guide
 
-All routes in this directory are under `/api/admin/*` and are mounted **before** tenant middleware. There is no `deps.db` tenant proxy, no `req.company`, and no `req.employee`. Every route requires both `requireAllowedIp` and `requireSuperAdmin` (except `GET /api/announcements/active` which is public/no-auth).
+All routes in this directory are under `/api/admin/*` and are mounted **before** tenant middleware. There is no `deps.db` tenant proxy, no `req.company`, and no `req.employee`. Most routes require both `requireAllowedIp` and `requireSuperAdmin`. The two exceptions are: `POST /api/admin/auth/login`, which uses `requireAllowedIp` and `authLimiter` but NOT `requireSuperAdmin` (it is the route that creates the admin token); and `GET /api/announcements/active`, which is public/no-auth.
 
 ## index.js — Orchestrator
 
@@ -155,6 +155,6 @@ Tables: `public.tax_rate_reference`, `tenant_{slug}.tax_rate_suggestions`, `tena
 ## Cross-Cutting Concerns
 
 - **DB access pattern**: `db` (direct pool) for queries that set schema prefix like `tenant_{slug}.tablename`. `masterDb` for public-schema-only tables (`plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`). `tenantDbManager.getDb(tenantId)` for tenant-scoped queries using the proxy pattern.
-- **All mutations** call `logAdminAction()`. Major lifecycle events also call `auditLog()`.
+- **Most mutations** call `logAdminAction()`, but some do not — including tax/compliance mutations in `compliance.js`, `POST /api/admin/email-queue/:id/retry`, `PUT /api/admin/announcements/:id`, and `POST /api/admin/backup/verify`. Major lifecycle events also call `auditLog()`.
 - **Frontend**: admin pages use `adminFetch()` (not `api.js`). Token stored in `adminAuthStore.js` (separate from tenant token).
 - **Tenant slug safety**: any route doing `DROP SCHEMA` or dynamic SQL with the slug validates it against `/^[a-z0-9_]+$/` before use.

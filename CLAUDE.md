@@ -8,7 +8,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 - Backend: Node.js + Express v5 + PostgreSQL (via `pg` pool, `backend/db-pg.js`)
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
-- **Database: Postgres ONLY (active)** — SQLite archives exist (`backend/archive/`, `backend/legacy/`) for historical purposes, but all active code uses Postgres only. Schema source of truth: `backend/schema-pg.sql`.
+- **Database: Postgres ONLY (active)** — SQLite archives exist (`backend/archive/`, `backend/archive/legacy/`) for historical purposes, but all active code uses Postgres only. Schema source of truth: `backend/schema-pg.sql`.
 - **Multi-tenant is LIVE** — `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
 - Schema source of truth: `backend/schema-pg.sql`
 
@@ -35,7 +35,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - `backend/index.js` — middleware order and boot sequence are documented in `backend/CLAUDE.md`; don't read unless task is specifically about server config
 - `backend/routes/registerAllRoutes.js` — route mounting is documented here; never read for domain-level changes
 - `frontend/src/App.jsx` — composition only; route definitions in `frontend/src/routes/*.jsx`. Don't read unless task is about routing guards
-- `backend/schema-pg.sql` — 244 tables, grep for specific table names instead of reading the whole file
+- `backend/schema-pg.sql` — 271 tables, grep for specific table names instead of reading the whole file
 
 ### Response Style
 - No trailing summaries ("Here's what I did...") — the diff speaks for itself
@@ -46,9 +46,9 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ```
 oneshoppos/
 ├── backend/
-│   ├── index.js                  # Main Express server (~293 lines — orchestrator; worker startup in boot/workers.js, auth/perms/flags in middleware/)
+│   ├── index.js                  # Main Express server (319 lines — orchestrator; worker startup in boot/workers.js, auth/perms/flags in middleware/)
 │   ├── db-pg.js                  # Postgres connection pool (query, transaction, getClient, end, pool). Pool size: 20. SSL disabled in non-prod. Does NOT load dotenv.
-│   ├── schema-pg.sql             # Full DDL — single source of truth (244 tables)
+│   ├── schema-pg.sql             # Full DDL — single source of truth (271 tables)
 │   ├── migrate-pg.js             # Postgres migration runner (v1-v84). exports { migrate, MIGRATIONS }. CLI: node backend/migrate-pg.js
 │   ├── jwt-auth.js               # JWT sign/verify — 6 exports: signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken, defaults
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR HS code/tax inheritance). 17 exports.
@@ -57,7 +57,7 @@ oneshoppos/
 │   ├── start.sh                  # Railway entrypoint: sets TZ, runs migrate-pg.js, then exec node index.js
 │   ├── railway.toml              # Dockerfile builder, healthcheck /api/health, restart config, /data volume mount
 │   ├── routes/
-│   │   ├── registerAllRoutes.js  # Orchestrator only — no route logic here
+│   │   ├── registerAllRoutes.js  # 674 lines — contains inline health check routes, feature-flag routes, middleware wiring, and outlet-assignment enforcement
 │   │   ├── admin/                # /api/admin/* — 10 files (auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
@@ -106,7 +106,7 @@ oneshoppos/
 │   │   ├── upload-validation.js  # Centralized MIME + extension whitelist for file uploads
 │   │   └── request-id.js         # UUID per request (X-Request-Id header) + Pino logging
 │   ├── schemas/                  # Zod schemas (28 files): auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions, customer-portal, rentals, rooms, service-tickets, treatment-plans
-│   ├── boot/workers.js           # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
+│   ├── boot/workers.js           # Worker startup — mixes pg-boss jobs with `setInterval` pollers; not all workers are pg-boss
 │   ├── shopify/                  # 4 files: client.js, crypto.js (secret encrypt/decrypt + event logging), order-service.js, utils.js
 │   ├── services/
 │   │   ├── crypto.js             # Generalized AES-256-GCM encryption (all integrations). Format: enc:v1:{iv}:{tag}:{ciphertext}
@@ -205,7 +205,7 @@ oneshoppos/
 ## Key Architecture Facts
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
-- `registerAllRoutes.js` is an orchestrator only — no route logic
+- `registerAllRoutes.js` is 674 lines — contains inline health check routes, feature-flag routes, middleware wiring, and outlet-assignment enforcement
 - **Super-admin routes** (`routes/admin/` — 10 files) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
 - **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
 - Internal product categories are hierarchical; leaf-only assignment
@@ -226,7 +226,7 @@ oneshoppos/
 10. requestId           — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
---- webhook routes (routes/webhooks.js) mount here — NO auth, signature-verified ---
+--- webhook routes (routes/webhooks.js) mount here — NO auth; only `/api/webhooks/xpay` is HMAC/signature verified via `paymentGateway.verifyWebhook`; Meta, WhatsApp, and Daraz POST handlers are rate-limited but not signature-verified ---
 
 11. loadTenantAndPerms  — decode JWT, look up tenant, attach req.employee + req.permissions
 12. resolveTenant       — SET search_path to tenant schema, attach deps.db proxy
@@ -291,7 +291,7 @@ oneshoppos/
 - **Support tickets**: `POST /api/support/tickets` + `POST /api/support/upload` (R2). Floating widget on all authenticated pages. Admin viewer at `/admin/support`.
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
 - **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
-- **Admin activity logging**: All admin mutations logged to `admin_activity_log` table. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
+- **Admin activity logging**: Most admin mutations call `logAdminAction()`, but some routes (tax/compliance mutations, email queue retry, announcement updates, backup verify) do not. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
 - **Worker monitoring**: `GET /api/admin/worker-status` (in `routes/admin/system.js`) reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`, `__reservationWorkerStatus`, `__bookingReminderWorkerStatus`, `__rentalOverdueWorkerStatus`, `__roomOverdueWorkerStatus`, `__treatmentPlanWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table. Dashboard shows running/stopped status, real queue depth, processed today.
 - **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Removes tenants with no setup after 7 days.
 - **Orphaned schema detection**: `GET /api/admin/orphaned-schemas` + `POST /api/admin/orphaned-schemas/cleanup`.
@@ -342,11 +342,11 @@ oneshoppos/
 
 ## Permission System
 
-- **Roles**: Administrator (`all_access`), Manager (17 permissions), Cashier (3 permissions)
+- **Roles**: Administrator (`all_access`), Manager (21 permissions), Cashier (3 permissions)
 - **Middleware**: `requirePerm("perm")` and `requireAnyPerm(["perm1", "perm2"])` in route handlers
 - **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission
 - **Admin-only routes**: employees CRUD, outlets, email config, printer config, roles, action-history logging
-- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`), service tickets (`manage_tickets`), rentals (`manage_rentals`), room management (`manage_rooms`), treatment plans (`manage_treatment_plans`)
+- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`), service tickets (`manage_tickets`), rentals (`manage_rentals`), room management (`manage_rooms`), treatment plans (`manage_treatment_plans`), tips (`manage_tips`), void/comp override (`override_void_comp`), gift cards (`manage_gift_cards`), price override (`override_price`)
 - **All authenticated**: view reports, read-only data, send receipts, POS operations
 - **All GET routes require auth** — `requirePerm` or `requireAnyPerm` on every data-returning GET
 

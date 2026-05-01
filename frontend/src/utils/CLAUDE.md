@@ -17,8 +17,8 @@ Dual timestamp system: Postgres columns store timestamps two ways.
 
 | Export | Notes |
 |--------|-------|
-| `parseDbDate(str)` | Handles native `Date` objects (Postgres), ISO strings, SQLite `"2026-03-06 08:56:04"` format. Returns `null` on empty/invalid |
-| `parseLocalDate(str)` | Same but treats the value as local time (no `Z` suffix appended) |
+| `parseDbDate(str)` | Handles native `Date` objects (Postgres), ISO strings, SQLite `"2026-03-06 08:56:04"` format. Returns `null` only for empty inputs or invalid native `Date` objects; invalid strings produce an `Invalid Date` object (formatters may display `"Invalid Date"` rather than `"—"`) |
+| `parseLocalDate(str)` | Same but treats the value as local time (no `Z` suffix appended). Same `null`-vs-`Invalid Date` caveat applies |
 | `fmtUtcDateTime(str)` | → locale date+time string |
 | `fmtUtcDate(str)` | → locale date string |
 | `fmtUtcTime(str, opts?)` | → locale time string; `opts` passed to `toLocaleTimeString` |
@@ -148,7 +148,7 @@ Opens a browser popup (`window.open`) with the receipt rendered as HTML, then ca
 
 `async → { ok: true } | { error: string, fallback: true }`
 
-Posts to `/api/print/receipt` (relative URL — `AuthProvider` injects auth headers). Returns `{ fallback: true }` if printer offline or not configured. Caller must then call `buildReceiptHtml()` as fallback — this is the pattern in `POSContext.printSlip`.
+Posts to `/api/print/receipt` (relative URL — `AuthProvider` injects auth headers). Returns `{ fallback: true }` if printer offline or not configured. On failure, `useReceipt.printSlip()` sets `retryPrompt` rather than opening the browser fallback directly; `buildReceiptHtml()` is exposed separately via `printBrowserFallback()` or used by retry actions.
 
 ---
 
@@ -205,7 +205,7 @@ Dark mode management. Storage key: `localStorage["sanopos_theme"]`. Applied via 
 | `getTheme()` | Returns `"light"` or `"dark"` (defaults `"light"` if unset) |
 | `setTheme(theme)` | Persists to localStorage AND sets `dataset.theme` immediately |
 | `toggleTheme()` | Toggles + returns the new theme value |
-| `initTheme()` | Reads + applies persisted theme — call at app boot (`main.jsx`) |
+| `initTheme()` | Reads + applies persisted theme — called from `frontend/src/App.jsx` at module load (before rendering the app component), not from `main.jsx` |
 
 ---
 
@@ -215,7 +215,7 @@ Stale-chunk recovery. After a deploy, clients holding an old Vite bundle hash tr
 
 | Export | Notes |
 |--------|-------|
-| `looksLikeChunkLoadFailure(err)` | Returns `true` for missing-chunk errors; `false` for genuine network errors (avoids reload-loop during outages) |
+| `looksLikeChunkLoadFailure(err)` | Returns `true` for missing-chunk errors. The matcher includes `"failed to fetch"` which can also match real network failures — detection is broader than the name implies. The 30-second sessionStorage guard limits reload loops but does not fully exclude network outage scenarios |
 | `reloadOnceForChunkFailure(opts?)` | Reloads at most once per 30s (persisted in `sessionStorage`). Returns `true` if reload triggered. Accepts `{ storage, reload, now }` for testability |
 | `__test__` | `{ RELOAD_KEY, RELOAD_GUARD_MS }` — test internals |
 

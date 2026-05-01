@@ -14,7 +14,7 @@ ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → Preset
 Initializes Sentry from `SENTRY_DSN` (no-op if unset). Registers service worker in prod only. Installs stale-chunk recovery handlers (`vite:preloadError`, `unhandledrejection`) via `utils/chunkReload.js`.
 
 ### `App.jsx`
-Composition only — spreads `publicRoutes`, `appRoutes`, `adminRoutes` into a single `<Routes>`. Renders `ImpersonationBanner` outside the router. `SubscriptionBanner` is inside the router. Catch-all `path="*"` redirects to `/`. Do not add route logic here.
+Not purely composition-only — also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. Spreads `publicRoutes`, `appRoutes`, `adminRoutes` into a single `<Routes>`. Renders `ImpersonationBanner` outside the router. `SubscriptionBanner` is inside the router. Catch-all `path="*"` redirects to `/`. Do not add route logic here.
 
 ### `api.js`
 Centralized API client. Named export `api` object with 6 methods:
@@ -35,7 +35,7 @@ Centralized API client. Named export `api` object with 6 methods:
 - On 403 with `code: "PLAN_LIMIT_REACHED"`, dispatches `CustomEvent("sanopos:plan-limit-reached")` before throwing — `PlanLimitModalInterceptor` in `AppLayoutRedesign` catches this.
 - `api.raw` does NOT throw on non-ok — caller must check `res.ok`.
 - Admin pages use `adminFetch` from `AdminLogin.jsx`, NOT `api.js`. Do not replace.
-- `CurrencyContext` and `useFeatureFlags` use raw `fetch()` intentionally — they run before the interceptor may be wired.
+- `CurrencyContext`, `useFeatureFlags`, admin pages (use `adminFetch`), `NotificationBell`, `ContextSwitcher`, `AuthProvider` (the interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware`), and at least one restaurant admin redesign file use raw `fetch()` or non-`api.js` paths intentionally — they run before the interceptor may be wired, bypass it by design, or live outside tenant auth scope. Do not replace these with `api.js`.
 
 ### `config.js`
 Single source for all `import.meta.env` reads. Never read `import.meta.env` directly anywhere else.
@@ -145,7 +145,7 @@ Additional named exports: `WEIGHTED_UNITS`, `DEFAULT_UNIT_VOCABULARY`, `isWeight
 
 **`categoryTree.js`** — `sortCategories(rows)`, `leafCategories(rows)`, `parentOptions(rows, currentId?)` (circular-safe), `indentLabel(row)`.
 
-**`theme.js`** — dark mode. Storage: `localStorage["sanopos_theme"]`. Applied via `document.documentElement.dataset.theme`. Exports: `getTheme()`, `setTheme(theme)`, `toggleTheme()`, `initTheme()` (call at boot in `main.jsx`).
+**`theme.js`** — dark mode. Storage: `localStorage["sanopos_theme"]`. Applied via `document.documentElement.dataset.theme`. Exports: `getTheme()`, `setTheme(theme)`, `toggleTheme()`, `initTheme()`. Called at module load in `frontend/src/App.jsx` (not `main.jsx`) — runs before the component renders.
 
 **`chunkReload.js`** — stale-chunk recovery after deploys. `looksLikeChunkLoadFailure(err)`, `reloadOnceForChunkFailure(opts?)`. Guard: reloads at most once per 30s (sessionStorage). Installed in `main.jsx`.
 
@@ -155,7 +155,7 @@ Additional named exports: `WEIGHTED_UNITS`, `DEFAULT_UNIT_VOCABULARY`, `isWeight
 
 ### `ui/`
 
-All components use CSS custom property classes (`text-(--ui-text)`, `bg-(--ui-surface)`) for dark mode. Exception: POS uses hardcoded colors.
+Most components use CSS custom property classes (`text-(--ui-text)`, `bg-(--ui-surface)`) for dark mode. Exception: POS uses hardcoded colors. Several `ui/` files still use fixed Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors.
 
 **`primitives.jsx`** — core design system. Named exports:
 - Layout: `PageShell({ title, subtitle?, right?, children })`, `SectionCard({ children, className? })`
@@ -169,7 +169,7 @@ All components use CSS custom property classes (`text-(--ui-text)`, `bg-(--ui-su
 
 **`tokens.css`** — CSS custom property definitions (`--ui-bg`, `--ui-surface`, `--ui-border`, `--ui-text`, `--ui-primary`, `--ui-danger`, etc.). Dark theme overrides via `[data-theme="dark"]`.
 
-**`nav-config.js`** — single export `SHOPIFY_NAV_GROUPS` (18 nav group objects). Each item: `{ name, path, icon, requiredPerm?, requiredFlag?, requiredMode?, newTab? }`. `__STOREFRONT__` path resolved to `/store/${tenantSlug}` at render time by `AppLayoutRedesign`.
+**`nav-config.js`** — single export `SHOPIFY_NAV_GROUPS` (19 nav group objects). Each item: `{ name, path, icon, requiredPerm?, requiredFlag?, requiredMode?, newTab? }`. `__STOREFRONT__` path resolved to `/store/${tenantSlug}` at render time by `AppLayoutRedesign`.
 
 **`Breadcrumbs.jsx`** — default export. Auto-derived from `useLocation().pathname`. Skipped on `/`, `/dashboard`, `/pos`, `/kiosk`, `/customer-display`, `/retail/home`. When adding a new route, add `"path-segment": "Display Name"` to the `LABELS` map.
 
@@ -229,7 +229,7 @@ TypeScript declaration files. `tsconfig` uses `allowJs + noEmit` — reference-o
 
 ### API Calls
 - Use `api.js` for all authenticated tenant API calls — `api.get("/api/products")`, `api.post("/api/sales", body)`, etc.
-- Never use raw `fetch()` in redesign pages. Exceptions: `storefront/` pages, `pages/public/` pages, `hooks/useFeatureFlags.js`, `CurrencyContext`.
+- Never use raw `fetch()` in redesign pages. Exceptions: `storefront/` pages, `pages/public/` pages, `hooks/useFeatureFlags.js`, `CurrencyContext`, admin pages (use `adminFetch`), `NotificationBell`, `ContextSwitcher`, `AuthProvider` (the interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware`), and at least one restaurant admin redesign file.
 - Admin pages use `adminFetch` from `AdminLogin.jsx`. Do not replace with `api.js`.
 - Never manually set `x-employee-id` or `Authorization` — the interceptor does it.
 - Do NOT add `token` to `useEffect` deps wrapping the interceptor — causes re-registration loop.

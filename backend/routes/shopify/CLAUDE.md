@@ -50,7 +50,7 @@ Permission: `manage_inventory` on all routes.
 
 ## mappings.js — Product, Location & Customer Mappings
 
-Permission: `manage_inventory` on all routes.
+Permission: `manage_inventory` on product and location mapping routes. Customer mapping routes use `manage_orders` instead (see below).
 
 **Product mappings:**
 - `GET /api/integrations/mappings/products` — list all `shopify_product_map` rows joined with `products` and `product_variants`.
@@ -60,11 +60,14 @@ Permission: `manage_inventory` on all routes.
 
 **Location mappings:**
 - `GET /api/integrations/mappings/locations` — list `shopify_location_map` joined with `outlets`.
-- `PUT /api/integrations/mappings/locations/:id` — upsert location mapping.
+- `PUT /api/integrations/mappings/locations/:outletId` — upsert location mapping (param is `:outletId`, not `:id`).
 
-**Customer mappings:**
-- `GET /api/integrations/mappings/customers/:customerId` — get Shopify customer mapping for a local customer.
+**Customer mappings** (permission: `manage_orders`):
+- `GET /api/integrations/mappings/customers` — list all Shopify customer mappings (no GET by individual customer ID).
 - `PUT /api/integrations/mappings/customers/:customerId` — upsert `shopify_customer_map`.
+
+**Auto-mapping:**
+- `POST /api/integrations/mappings/products/auto` — auto-match local products to Shopify products by barcode/SKU using locally-cached data (distinct from `auto-live` which fetches from Shopify API live).
 
 ## webhooks.js — Inbound Webhook
 
@@ -81,7 +84,7 @@ Tables: `inventory_reconciliation`, `action_history`.
 - **`GET /api/integrations/shopify/reconciliation`** — `requireAnyPerm(["view_reports","manage_inventory"])`. Accepts `?status=` and `?resolution_status=`. Joins `products` and `outlets`. Maps `local_qty` → `pos_qty`, `external_qty` → `shopify_qty` in response.
 - **`POST /api/integrations/shopify/reconciliation`** — `requirePerm("manage_inventory")`. Runs a live check: fetches inventory levels from Shopify via `fetchInventoryLevelsBatch`, compares with `outlet_stock`, inserts/updates `inventory_reconciliation`. Records action history.
 - **`PUT /api/integrations/shopify/reconciliation/:id`** — `requirePerm("manage_inventory")`. Updates `resolution_status`, `notes`.
-- **`POST /api/integrations/shopify/reconciliation/:id/fix`** — `requirePerm("manage_inventory")` + **`requireFeature("approvals")`** (only feature-flagged route in all of shopify/). Calls `adjustShopifyInventory` to push the POS quantity to Shopify. Creates notification via `createNotification`.
+- **`POST /api/integrations/shopify/reconciliation/:id/fix`** — `requirePerm("manage_inventory")` + **`requireFeature("approvals")`** (only feature-flagged route in all of shopify/). Creates an `approval_requests` row and returns `{ approval_request_id }`. Does NOT call `adjustShopifyInventory` or `createNotification` directly — the approval flow handles the actual inventory adjustment after approval.
 - **`POST /api/integrations/shopify/reconciliation/bulk`** — `requirePerm("manage_inventory")`. Bulk action on multiple reconciliation rows.
 
 `logActionHistory(req, actionType, description)` — fire-and-forget local helper; reads `x-employee-id` header, looks up employee name, inserts into `action_history`.
@@ -105,6 +108,7 @@ Tables: `inventory_reconciliation`, `action_history`.
 |-------|-----------|
 | Most config/import/sync routes | `manage_inventory` |
 | `sync/pull-orders` | `manage_orders` |
+| `mappings/customers` (GET + PUT) | `manage_orders` |
 | `status`, `events`, `uat-checklist` | `requireAnyPerm(["manage_inventory","manage_orders"])` |
 | `reconciliation` GET | `requireAnyPerm(["view_reports","manage_inventory"])` |
 | `reconciliation/:id/fix` | `manage_inventory` + `requireFeature("approvals")` |

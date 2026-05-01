@@ -16,12 +16,12 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 
 ## Entry Point — `index.js`
 
-~293-line orchestrator. Key responsibilities:
+319-line orchestrator. Key responsibilities:
 - Loads dotenv (line 1, before any `require`) — `db-pg.js` does NOT load dotenv itself
 - Initialises Sentry if `SENTRY_DSN` is set
 - Bootstraps multi-tenant proxy when `MULTI_TENANT=1`
 - Calls `tenantAuth.init(mtDeps)` and `featureFlags.init(mtDeps)` to inject shared deps
-- Registers all routes via `registerAllRoutes.js`
+- Registers all routes via `registerAllRoutes.js` (674 lines — contains inline health check routes, feature-flag routes, middleware wiring, outlet-assignment enforcement, and restore guard; not a pure orchestrator)
 - Starts workers via `boot/workers.js`
 - Calls `ensureCriticalRoutesRegistered()` — crashes boot if 4 routes are missing
 
@@ -40,7 +40,7 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 10. requestId            — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
---- webhook routes (routes/webhooks.js) mount here — NO auth, signature-verified ---
+--- webhook routes (routes/webhooks.js) mount here — NO auth; only /api/webhooks/xpay is HMAC-verified; Meta, WhatsApp, Daraz POST handlers are rate-limited but not signature-verified ---
 
 11. loadTenantAndPerms   — decode JWT, attach req.employee + req.employeePerms + req.tenantId
 12. resolveTenant        — SET search_path, run asyncStore, wire deps.db proxy
@@ -98,7 +98,7 @@ Per-tenant DB manager. Exports: `init`, `getDb`, `healthCheck`, `clearCache`, `c
 Older ALS proxy (checks out one pool client per request via `runWithTenant`). Exports: `asyncStore`, `getProxy`, `getStore`, `runWithTenant`. Proxy only has `query` + `transaction` — no `getClient`. Use `tenant-db-proxy-pg.js` for new code.
 
 ### `schema-pg.sql`
-DDL source of truth (~3,788 lines, 244 tables). Grep for table names rather than reading the full file.
+DDL source of truth (~4,463 lines, 271 tables). Grep for table names rather than reading the full file.
 
 ### `migrate-pg.js`
 Exports: `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags).
@@ -106,7 +106,7 @@ Exports: `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags)
 - Each tenant has its own `schema_version` table
 - Per-tenant failures are caught and logged — one failure does not abort the run
 - Existing tenants need `schema_version` pre-populated or migrate will attempt to re-apply v1
-- Current version: 49
+- Current version: 84
 
 ### `master-db-pg.js`
 Master tenant registry. Exports: `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`.
@@ -222,7 +222,7 @@ See `tests/CLAUDE.md` for full test file list and helper API.
 - Test isolation: `createTestApp-pg.js` creates a fresh `test_<hex>` schema per test; `cleanup()` drops it
 
 ### `workers/`
-All background workers use pg-boss. Each requires an env var to enable. Workers survive server crashes; jobs do not block the HTTP event loop.
+Background workers are started from `boot/workers.js`, which mixes pg-boss jobs with setInterval pollers — not all workers are pg-boss. Each requires an env var to enable. pg-boss workers survive server crashes; setInterval pollers do not.
 
 | Worker file | Env var to enable | Schedule |
 |---|---|---|
@@ -241,7 +241,7 @@ Each worker exposes `global.__<name>WorkerStatus = { lastPollAt, processedToday,
 Zod validation schemas for all domains. Imported by `validate(schema)` middleware. One file per domain (auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions, customer-portal, rentals, rooms, service-tickets, treatment-plans).
 
 ### `boot/workers.js`
-All worker startup. Imported by `index.js`. Registers pg-boss workers, scheduled jobs, Shopify sync polling, report schedule worker. Do not start workers elsewhere.
+All worker startup. Imported by `index.js`. Mixes pg-boss workers with setInterval pollers (e.g. Shopify sync polling, report schedule worker). Do not start workers elsewhere.
 
 ### `utils/`
 - `tz.js` — `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` — converts local `YYYY-MM-DD` to UTC boundaries. Use for all date filter queries. See timezone gotcha below.
@@ -269,7 +269,7 @@ Routes receive a `deps` object containing `db` (the tenant proxy), plus referenc
 Apply `requireFeature('flag_name')` as per-route middleware. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql`. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes.
 
 ### Permission guards
-All data-returning GET endpoints require auth — `requirePerm` or `requireAnyPerm` on every GET. No unprotected data endpoints.
+Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (e.g. receipts, country-packs, public bookings/storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute.
 
 ### Workers — adding a new one
 1. Create `workers/<name>-worker-boss.js` using the pg-boss pattern
@@ -281,7 +281,7 @@ All data-returning GET endpoints require auth — `requirePerm` or `requireAnyPe
 ### Adding a new route
 1. Create `routes/<domain>.js`
 2. Add Zod schema in `schemas/<domain>.js` (if validating request body)
-3. Register in `routes/registerAllRoutes.js` — one `app.use('/api/<prefix>', require('./routes/<domain>')(deps))` line
+3. Register in `routes/registerAllRoutes.js` — most route files use `require('./routes/<domain>')(app, deps)` and register their own paths directly; only a few use the `app.use('/api/<prefix>', ...)` mount style
 4. Add permissions to `middleware/permissions.js` if introducing new permission strings
 
 ### Encryption

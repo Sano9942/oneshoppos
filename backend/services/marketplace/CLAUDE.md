@@ -2,7 +2,7 @@
 
 ## Overview
 
-Five files — abstract base class plus four platform adapters for the Integrations Hub (`routes/integrations/`). Gated by the `marketplace_integrations` feature flag per tenant. Credentials live in `integration_settings`, encrypted via `services/crypto.js` (AES-256-GCM). The background worker is `workers/marketplace-sync-worker-boss.js` (`MARKETPLACE_SYNC_WORKER_ENABLED=1`): `marketplace-order-poll` every 10 minutes, `marketplace-feed-check` every 6 hours (Google only). Inbound webhooks hit `/api/webhooks/{daraz,meta,whatsapp}` — mounted before tenant middleware, HMAC-verified.
+Five files — abstract base class plus four platform adapters for the Integrations Hub (`routes/integrations/`). Gated by the `marketplace_integrations` feature flag per tenant. Credentials live in `integration_settings`, encrypted via `services/crypto.js` (AES-256-GCM). The background worker is `workers/marketplace-sync-worker-boss.js` (`MARKETPLACE_SYNC_WORKER_ENABLED=1`): `marketplace-order-poll` every 10 minutes, `marketplace-feed-check` every 6 hours (Google only). Both worker handlers are currently stubs — they find tenants/integrations and log placeholder messages but do NOT call `DarazClient.pullOrders()`, `MetaCommerceClient.pullOrders()`, or `GoogleMerchantClient.checkFeedStatus()`. Inbound webhooks hit `/api/webhooks/{daraz,meta,whatsapp}` — mounted before tenant middleware. Only `POST /api/webhooks/xpay` is HMAC-verified; Meta and WhatsApp GET handlers check verify tokens, but the Meta, WhatsApp, and Daraz POST handlers in `routes/webhooks.js` are NOT HMAC-verified.
 
 ---
 
@@ -54,7 +54,7 @@ Common params added automatically: `app_key`, `timestamp` (ms epoch), `sign_meth
 - `syncProducts(products)` — POST to `/product/create` per product using Lazada XML-in-JSON nested format (`Request.Product.Skus.Sku[]`, `Request.Product.Attributes`). Per-product errors are caught; returns `[{ product_id, success, daraz_item_id }]`.
 - `pushInventory(updates)` — single batch call to `/product/stock/sellable/update` with `Request.Product.Skus.Sku[]` of `{ SellerSku, Quantity }` entries.
 
-**SKU fallback**: all three write methods use `product.sku || product.barcode || "SP-${product.id}"` as the Daraz seller SKU.
+**SKU fallback**: `syncProducts()` uses `product.sku || product.barcode || "SP-${product.id}"` as the Daraz seller SKU. `pushInventory()` only sends the SKU values supplied by its caller; the Daraz route (`routes/integrations/daraz.js`) filters to `daraz_sku IS NOT NULL` before calling `pushInventory` — there is no broad client-side fallback in the inventory push path.
 
 **Order shape returned by `pullOrders`**:
 ```js
@@ -169,10 +169,10 @@ No adapter writes directly to `external_sync_events` — that is handled at the 
 1. Create `services/marketplace/<name>-client.js` extending `BaseMarketplace`
 2. Implement all four base methods (`testConnection`, `syncProducts`, `pullOrders`, `pushInventory`); stub any that don't apply as silent no-ops
 3. Add extra methods (e.g. `checkFeedStatus`) if the platform has non-standard polling needs
-4. Register the adapter in `routes/integrations/<name>.js` and `routes/integrations/hub.js`
+4. Register the new route in `routes/integrations/index.js` (not `hub.js`); `hub.js` only needs changes for special hub display behavior — it reads rows from `integration_settings` generically and does not require per-adapter registration
 5. Add a webhook handler in `routes/webhooks.js` if the platform sends push events
 6. Extend `workers/marketplace-sync-worker-boss.js` to include the new platform in poll/feed-check loops
 7. Gate all routes with `requireFeature('marketplace_integrations')`
 8. Store credentials in `integration_settings` via `services/crypto.js` — never raw in DB
 
-**Config convention**: primary auth token goes in `oauth_token` (for OAuth flows) or `api_key` (for static keys). Extra IDs (catalog, merchant, phone number) go in `config_json` as a JSONB object.
+**Config convention**: primary auth token goes in `oauth_token` (for OAuth flows) or `api_key` (for static keys). Extra IDs (catalog, merchant, phone number) go in `config_json`. Note: the Zod schema in `backend/schemas/integrations.js` validates `config_json` as a string (matching the TEXT DB column), not as a JSON object — serialise/parse at the route layer. Only `api_key`, `api_secret`, `oauth_token`, and `oauth_refresh_token` are encrypted by `credentials.js`; `config_json` is stored as raw text.

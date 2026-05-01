@@ -66,8 +66,9 @@ Applied to all calls where URL contains `${API}/api/` or starts with `/api/`. Sk
 2. If existing session has `isImpersonation: true` — restore impersonation state
 3. No session → set `isBootstrapping = false`, done
 4. Existing session → **re-fetch permissions** fresh from `GET /api/roles/:roleId/permissions` (localStorage permissions not trusted)
-5. In MT mode → fetch `GET /api/billing/status` to populate `subscriptionStatus` + `subscriptionDaysLeft`
-6. If permission fetch fails → `clearSession()`, logout
+5. Also calls `GET /api/auth/me` best-effort to refresh `session.company` — result merged back via `writeSession` before the refreshed session is used (outside the impersonation verification path)
+6. In MT mode → fetch `GET /api/billing/status` to populate `subscriptionStatus` + `subscriptionDaysLeft`
+7. If permission fetch fails → `clearSession()`, logout
 
 ### Login flows
 
@@ -85,7 +86,7 @@ Applied to all calls where URL contains `${API}/api/` or starts with `/api/`. Sk
 
 ## `authStore.js`
 
-localStorage key: `"authSession"`. All reads/writes go through these helpers — never access `localStorage` directly for auth data.
+localStorage key: `"authSession"`. All reads/writes go through these helpers — never access `localStorage` directly for auth data. **Exceptions:** `CurrencyContext.jsx` reads `"authSession"` directly to extract `tenant_slug`; `ImpersonationBanner.jsx` reads `"adminSession"` and removes `"authSession"` and `"currentEmployee"` directly during exit.
 
 **Exports:**
 
@@ -139,4 +140,4 @@ localStorage key: `customerPortalSession:${slug}` (slug-scoped — one browser c
 | `getPortalToken(slug)` | Returns `session.access_token \| null` |
 | `getPortalCustomer(slug)` | Returns `session.customer \| null` |
 
-Used exclusively by `PortalAuthProvider` in `pages/portal/`. NOT interchangeable with `authStore.js` (tenant app) or `adminAuthStore.js` (super-admin).
+Used by `PortalAuthProvider` in `pages/portal/` and by `frontend/src/api/portalApi.js` (which imports and uses `readPortalSession`, `writePortalSession`, and `clearPortalSession` directly). NOT interchangeable with `authStore.js` (tenant app) or `adminAuthStore.js` (super-admin).

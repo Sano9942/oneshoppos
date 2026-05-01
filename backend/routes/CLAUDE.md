@@ -9,7 +9,7 @@ This directory contains all Express route handlers for the backend API. Most fil
 Each subdirectory has its own CLAUDE.md. Summary:
 
 ### admin/
-Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Every route requires `requireAllowedIp` + `requireSuperAdmin`. Uses `db` (direct pool) for cross-schema queries and `masterDb` for public-schema-only tables. Sub-modules: `auth.js` (login), `tenants.js` (CRUD, flags, notes, migration), `monitoring.js` (global stats, infra, cleanup), `billing.js` (plan pricing, payments), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup). All mutations log to `admin_activity_log`. Frontend uses `adminFetch()` (not `api.js`).
+Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Most routes require `requireAllowedIp` + `requireSuperAdmin`; the exception is `POST /api/admin/auth/login` itself, which uses `requireAllowedIp` and `authLimiter` but NOT `requireSuperAdmin` (it is the route that creates the admin token). Uses `db` (direct pool) for cross-schema queries and `masterDb` for public-schema-only tables. Sub-modules: `auth.js` (login), `tenants.js` (CRUD, flags, notes, migration), `monitoring.js` (global stats, infra, cleanup), `billing.js` (plan pricing, payments), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup). Most mutations call `logAdminAction()`, but some routes (tax/compliance mutations, email queue retry, announcement updates, backup verify) do not. Frontend uses `adminFetch()` (not `api.js`).
 
 ### integrations/
 Routes at `/api/integrations/*`. Feature flag `marketplace_integrations` required on every route. Sub-modules: `hub.js` (unified dashboard), `credentials.js` (BYOK connect/disconnect/test/status — test is DB-only, not a live API call), `daraz.js`, `facebook.js`, `whatsapp.js`, `google-merchant.js`. Credentials stored AES-256-GCM encrypted in `integration_settings`. Inbound webhooks (Meta, Daraz, WhatsApp) are handled in `webhooks.js` (mounted before tenant middleware), not here. DB provider key for Google is `google_merchant` (underscore); URL path is `/google-merchant/` (hyphen) — don't mix them.
@@ -172,10 +172,10 @@ Sub-router under `routes/restaurant/`. Gated by `requireFeature("phase4_restaura
 Routes mounted **before** tenant middleware (no standard session context): `admin/`, `webhooks.js`, `receipts.js`, `customer-portal/`, `storefront.js`, `public-restaurant.js`, `public-bookings.js`, `public-reservations.js`, `country-packs.js`, `sandbox.js`, `gift-cards-public.js`. Never add `req.employee`-dependent logic to these files.
 
 ### registerAllRoutes.js
-Pure orchestrator (~607 lines, no route logic). Mounts every file under `/api/<domain>`. Only edit it when adding a new route module — never for domain-level changes.
+674 lines — contains inline health check routes, feature-flag routes, middleware wiring, outlet-assignment enforcement, and restore guard; not a pure orchestrator. Mounts every route module under `/api/<domain>`. Only edit it when adding a new route module — never for domain-level changes.
 
-### Auth on all GET routes
-All data-returning GET endpoints require auth — `requirePerm` or `requireAnyPerm` on every GET. No unprotected data endpoints.
+### Auth on GET routes
+Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (e.g. receipts, country-packs, public bookings, storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute.
 
 ### Error conventions
 Success: `res.json({...})` or `res.status(201).json({...})`. Client errors: `res.status(4xx).json({ error: "..." })`. Server errors: `res.status(500).json({ error: err.message })` in catch blocks. `validate(schema)` middleware returns `400` with `{ error, details }` automatically.

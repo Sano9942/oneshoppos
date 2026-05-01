@@ -21,7 +21,7 @@ cd frontend && npx playwright show-report
 
 ## Architecture
 
-- **E2E (Playwright)**: all specs hit `https://sanopos.com` + `https://api.sanopos.com` — production only
+- **E2E (Playwright)**: Playwright specs hit `https://sanopos.com` + `https://api.sanopos.com` — production only. Unit tests also live under `frontend/tests/` and do not hit a server.
 - **Unit (Vitest)**: no server; mocks all network dependencies via `vi.mock`
 - **Self-contained**: each E2E spec sets up its own data via API helper calls, no shared fixtures
 - **Global setup**: `global-setup.js` logs in once, writes `auth.json` (browser storage state) + `token.json` (Bearer token) — both gitignored. Token used by `helpers/api.js` for API helper calls
@@ -170,9 +170,9 @@ Playwright `page.route()` stubs for external services. Each returns a capture ba
 
 ---
 
-## Smoke Spec Files (`smoke/` — 17 specs)
+## Smoke Spec Files (`smoke/` — 24 specs)
 
-All smoke specs call `skipIfFlagOff` in `beforeAll` to skip when the required feature flag is off on `packagesmall`. All use `trackForCleanup` + `cleanupAll` for teardown.
+Most smoke specs do not call `skipIfFlagOff` and rely on other checks or cleanup patterns instead. All use `trackForCleanup` + `cleanupAll` for teardown.
 
 | Spec | Feature area |
 |------|-------------|

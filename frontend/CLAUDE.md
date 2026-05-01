@@ -12,7 +12,7 @@ React 19 + Vite 7 + Tailwind CSS v4. Dev server runs on port 5173.
 ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App (BrowserRouter)
 ```
 
-`src/App.jsx` is composition only — it spreads three route arrays into a single `<Routes>`, renders `ImpersonationBanner` outside the router, and `SubscriptionBanner` + `PwaInstallPrompt` inside. Catch-all `path="*"` redirects to `/`. Do not add route logic here. Route definitions live in `src/routes/`.
+`src/App.jsx` is not purely composition-only — it also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. It spreads three route arrays into a single `<Routes>`, renders `ImpersonationBanner` outside the router, and `SubscriptionBanner` + `PwaInstallPrompt` inside. Catch-all `path="*"` redirects to `/`. Do not add route logic here. Route definitions live in `src/routes/`.
 
 ---
 
@@ -28,7 +28,7 @@ Named export `api` with 6 methods: `api.get(path, query?)`, `api.post(path, data
 - On 403 with `code: "PLAN_LIMIT_REACHED"`, dispatches `CustomEvent("sanopos:plan-limit-reached")` before throwing.
 - Admin pages use `adminFetch` from `pages/admin/AdminLogin.jsx` — not `api.js`. Do not replace.
 - Portal pages use `portalApi` from `api/portalApi` — not `api.js`. Do not replace.
-- `CurrencyContext` and `useFeatureFlags` use raw `fetch()` intentionally (run before interceptor may be wired).
+- `CurrencyContext`, `useFeatureFlags`, admin pages (use `adminFetch`), `NotificationBell`, `ContextSwitcher`, `AuthProvider` (fetch interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware` posts directly), and at least one restaurant admin redesign file use raw `fetch()` or non-`api.js` paths intentionally. Do not replace these with `api.js`.
 
 ### `src/config.js` — sole env reader
 Never read `import.meta.env` directly anywhere else. Exports: `API_BASE` (no trailing slash, no `/api` suffix), `IS_MULTI_TENANT`, `SENTRY_DSN`, `TURNSTILE_SITE_KEY`, `ENV_MODE`, `IS_PROD`, `IS_DEV`.
@@ -46,7 +46,7 @@ Key files: `AuthProvider.jsx` (exports `AuthProvider` + `useAuth()`), `authStore
 - `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded }`.
 
 ### `src/ui/` — see `src/CLAUDE.md`
-Design system primitives, banners, and shared components. All components use CSS custom property classes for dark mode (exception: POS uses hardcoded colors).
+Design system primitives, banners, and shared components. Most components use CSS custom property classes for dark mode (exception: POS uses hardcoded colors). However, several `ui/` files still use fixed Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors.
 
 Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `SectionCard({ children, className? })`, `Button`, `Input`, `Select`, `Badge`, `Modal`, `ConfirmDialog`, `TabBar`. `PageShell` has no `actions` prop; `SectionCard` has no `title` prop.
 
@@ -84,6 +84,7 @@ CSS-first config — no `tailwind.config.js`. Rules:
 ### API Calls
 - Always use `api.js` for authenticated tenant pages. Never raw `fetch()` in `redesign/` pages.
 - Admin pages: `adminFetch` from `AdminLogin.jsx`. Portal pages: `portalApi`. Public pages (`public/`, `storefront/`): raw `fetch()` is intentional.
+- Additional intentional raw-`fetch()` / non-`api.js` callers: `CurrencyContext`, `useFeatureFlags`, `NotificationBell`, `ContextSwitcher`, `AuthProvider` (the interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware`), and at least one restaurant admin redesign file. Do not replace these.
 - Never manually set `x-employee-id` or `Authorization` — the interceptor does it.
 
 ### Timestamps (recurring bug source)
@@ -127,7 +128,7 @@ Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`. Do not wri
 ### Unit Tests
 Location: `frontend/tests/unit/` — Vitest with `@vitest/coverage-v8`.
 Run: `npx vitest run tests/unit/`
-Tests cover: `auth_guards`, `contexts` (includes `cartMath.js` functions), `layout`, `primitives`, `dental_chart`. No POSContext hook unit tests exist.
+Tests cover: `auth_guards`, `contexts` (includes `cartMath.js` functions), `layout`, `primitives`, `dental_chart`, POS/offline/omni/loyalty tests including `pos-context-open-check.test.jsx`.
 
 ### E2E Tests (Playwright)
 Location: `frontend/tests/*.spec.js` — targets `https://sanopos.com` (tenant `packagesmall`).
@@ -137,7 +138,7 @@ Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json` (
 Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation).
 
 Key gotchas:
-- Login form is `LandingPage.jsx` — placeholders are `"e.g. aceshardware"` / `"Enter your password"` / button `"Sign In"`.
+- Login form (`helpers/auth.js`): store-code placeholder matches `aceshardware`, employee placeholder `/employee name/i`, password placeholder `/password/i`, submit button `"Sign In"`.
 - Clock-in: use `POST /api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`.
 - Onboarding specs create real test tenants — delete from `/admin` after each run.
 

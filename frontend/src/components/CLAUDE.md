@@ -53,7 +53,7 @@ Dropdown in the top bar for switching active outlet/branch without going to `/co
 - `switchOutlet(id)` validates the outlet is in the allowed list before writing — prevents unauthorized context writes
 - `switchToAll()` gated by `hasPerm("all_access")` — silently returns if not admin
 - Returns `null` (renders nothing) if no context is set yet
-- Context written via `writeContext()` from `authStore` — updates both state and localStorage atomically
+- Context written via `writeContext()` from `authStore` — calls `writeContext(next)` then `setCtx(next)` as two separate operations; synchronized for normal UI use but not literally atomic
 - "Change context..." link navigates to `/context-select`
 
 **Context modes:**

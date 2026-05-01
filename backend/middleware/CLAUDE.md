@@ -1,6 +1,6 @@
 # Middleware — Claude Guide
 
-All middleware requires `init(deps)` at boot (where noted). Middleware chain order is in `backend/CLAUDE.md`.
+Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — all other middleware files export plain functions. Middleware chain order is in `backend/CLAUDE.md`.
 
 ---
 
@@ -101,7 +101,7 @@ If `req.context.outletId` is set and `req.query.outlet_id` is absent, backfills 
 ### `DEFAULT_ROLE_PERMISSIONS`
 Canonical permission sets:
 - `Administrator`: `["all_access"]`
-- `Manager`: 17 permissions — `manage_inventory`, `manage_orders`, `view_reports`, `manage_employees`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`
+- `Manager`: 21 permissions — `manage_inventory`, `manage_orders`, `view_reports`, `manage_employees`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`
 - `Cashier`: `["view_reports", "pos_discount", "pos_park"]`
 
 ### `ensureDefaultRolePermissions(db)`
@@ -307,8 +307,8 @@ Returns a validated extension from the filename, falling back to a MIME-derived 
 ## Application Order (required)
 
 ```
-requestId                  ← first, gives req.log + req.id to everything after
-globalLimiter              ← before auth (rate-limit unauthenticated requests)
+globalLimiter              ← first, rate-limits before requestId (applied before requestId in backend/index.js)
+requestId                  ← gives req.log + req.id to everything after
 authLimiter                ← on /api/auth/* routes only
 
 [admin routes mount here — no tenant context]

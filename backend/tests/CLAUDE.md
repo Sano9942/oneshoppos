@@ -138,7 +138,7 @@ Each file is a focused, self-contained test for a specific subsystem:
 
 ## Unit Tests (`tests/unit/`)
 
-Vitest with ESM imports (`import { describe, it, expect, vi }`). No DB or network — pure functions and injected fake deps. Exception: `routes-orders-transactions.test.js`, `routes-admin-worker-status.test.js`, and `routes-admin-monitoring-infra-cache.test.js` mount mini-Express apps.
+Vitest. No DB or network — pure functions and injected fake deps. Most files use ESM imports (`import { describe, it, expect, vi }`), but several use CommonJS `require()` directly or via `createRequire()`: `dockerfile-pg-dump.test.js`, `inventory-intelligence.test.js`, `pricing-service.test.js`, `tenant-auth-employee-email.test.js`. Exception: `routes-orders-transactions.test.js`, `routes-admin-worker-status.test.js`, and `routes-admin-monitoring-infra-cache.test.js` mount mini-Express apps.
 
 ### Coverage map
 
@@ -206,7 +206,7 @@ Supertest wrapper that auto-sets `x-employee-id` on every call via Proxy.
 Exports: `seedSchema(client)` — reads `backend/schema-pg.sql` at module load and runs full DDL.
 
 ### `globalTeardown.js`
-Jest global teardown — drops orphaned `test_*` schemas left by crashes/timeouts.
+Global teardown — drops orphaned `test_*` schemas left by crashes/timeouts. The active test config is Vitest-based per `backend/package.json` and `backend/vitest.config.js`; there is no active Jest runner.
 
 ### `vitest-setup.js`
 Loads `backend/.env` before any test imports so `DATABASE_URL` is available. Prefers `backend/.env.test` (local Postgres) when present — keeps integration tests off production Supabase and ~20× faster.
@@ -220,6 +220,6 @@ Loads `backend/.env` before any test imports so `DATABASE_URL` is available. Pre
 - **"Decision II trap"**: deleting env vars inside `beforeAll` is safe only *after* `createTestApp()` has run. Deleting at module scope or before `createTestApp()` breaks module-level env reads
 - **`require.cache` eviction pattern**: some unit tests (plan-limits, feature-flags, alerting, tenant-auth) evict and re-require modules between test cases because those modules hold module-level mutable state (connection caches, sliding windows, etc.)
 - **`vi.mock()` vs CJS**: `vi.mock()` is unreliable for CommonJS `require()` inside closures — use `require.cache` eviction + re-require instead
-- **`reports_accuracy.test.js`** is the only integration file that uses Jest syntax — run with `npx jest` not `npx vitest`
+- **`reports_accuracy.test.js`** uses CommonJS plus global `describe`/`it` which Vitest can also run; there is no active Jest script in `backend/package.json` — run with `npx vitest` like all other tests
 - **Schema isolation**: each `createTestApp()` call creates a new `test_<hex>` schema; `cleanup()` drops it. No shared state between files
 - **Upload dirs in tests**: `backend/uploads_test/products/` and `backend/uploads_test/company/` — NOT `backend/uploads/`
