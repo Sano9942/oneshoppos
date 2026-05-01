@@ -245,15 +245,20 @@ async function loadCompanyProfile(req, res, next) {
   // Cold start: AWAIT the first load. The placeholder profile lacks
   // `setup_complete`, so the post-wizard auto-login (and any first request
   // after a server restart) would race the fire-and-forget load and 503
-  // with SETUP_REQUIRED even though setup is actually complete.
+  // with SETUP_REQUIRED even though setup is actually complete. The
+  // `_placeholder` flag below distinguishes a not-yet-loaded entry from a
+  // genuinely-incomplete tenant — only the latter should trip SETUP_REQUIRED.
   if (!entry) {
-    entry = { profile: { timezone: "UTC" }, lastCheck: now };
+    entry = { profile: { timezone: "UTC" }, lastCheck: now, _placeholder: true };
     _companyCache.set(cacheKey, entry);
     try {
       const { rows: [row] } = await _getCompanyDb(req).query(
         "SELECT * FROM company_profile WHERE id = 1"
       );
-      if (row) entry.profile = row;
+      if (row) {
+        entry.profile = row;
+        entry._placeholder = false;
+      }
     } catch { /* tolerated — fall through with placeholder profile */ }
   } else if (now - entry.lastCheck > COMPANY_CACHE_MS) {
     // Periodic refresh stays async — cache is already warm.
@@ -261,6 +266,7 @@ async function loadCompanyProfile(req, res, next) {
     _getCompanyDb(req).query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
       if (row) {
         entry.profile = row;
+        entry._placeholder = false;
         _companyCache.set(cacheKey, entry);
       }
     }).catch(() => {});
@@ -269,6 +275,7 @@ async function loadCompanyProfile(req, res, next) {
 
   if (
     entry.profile &&
+    !entry._placeholder &&
     !entry.profile.setup_complete &&
     !req.path.startsWith("/api/setup") &&
     !req.path.startsWith("/api/health") &&
@@ -341,11 +348,11 @@ function _warmCaches() {
           console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
         }
       } else {
-        _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now() });
+        _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now(), _placeholder: true });
       }
     } catch (err) {
       console.error("[loadCompanyProfile startup]", err.message);
-      _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now() });
+      _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now(), _placeholder: true });
     }
   })();
 

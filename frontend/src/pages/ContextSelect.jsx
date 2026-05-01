@@ -30,7 +30,23 @@ export default function ContextSelect() {
 
   useEffect(() => {
     if (shouldSkip) return;
-    api.get("/api/context/bootstrap")
+
+    // Transient 503s — typically SETUP_REQUIRED races on a cold company-profile
+    // cache after a backend restart — self-recover within a few hundred ms.
+    // Auto-retry once silently before surfacing the error card to the user.
+    const fetchWithRetry = async () => {
+      try {
+        return await api.get("/api/context/bootstrap");
+      } catch (err) {
+        const isTransient =
+          err?.status === 503 || err?.body?.code === "SETUP_REQUIRED";
+        if (!isTransient) throw err;
+        await new Promise((r) => setTimeout(r, 600));
+        return api.get("/api/context/bootstrap");
+      }
+    };
+
+    fetchWithRetry()
       .then((data) => {
         setBootstrap(data);
 
