@@ -35,7 +35,7 @@ After Phase 8 cleanup, production has **one active tenant** plus the platform su
 
 | Tenant | Role | Plan | Status | Note |
 |---|---|---|---|---|
-| `livetest1` (id 95) | Demo / internal testing | Pro (annual) | active | **Kept on purpose.** Used for post-launch testing of bugfixes and demoing paid features. Has 2 outlets (Branch 2 was added Phase 6.7), 4 employees, ~9 products incl. Test Coffee with image, 6 sales (id 25 through 31, sale 26 voided), 1 customer group, 1 open shift since 2026-04-27, multi-outlet flags ON, all 19 retail flags ON via `seedRetailFlags`. |
+| `livetest1` (id 95) | Demo / internal testing | Pro (annual) | active | **Kept on purpose.** Used for post-launch testing of bugfixes and demoing paid features. Has 2 outlets (Branch 2 was added Phase 6.7), 4 employees, ~9 products incl. Test Coffee with image, **10 valid POS sales (ids 1–4 + 25 + 27–31) + 1 voided POS sale (id 26) + 1 storefront order (`web_orders.id=1`)** = 12 sales records total, 1 customer group, 1 open shift since 2026-04-27, multi-outlet flags ON, all 19 retail flags ON via `seedRetailFlags`. |
 | `livetest2` (id 96) | Half-completed signup | — | **deleted** 2026-04-30 22:08 UTC | Schema dropped + `tenants` row marked `deleted`. Audit row 208 in `tenant_audit_log`. |
 
 Important operator notes for livetest1:
@@ -227,6 +227,26 @@ Important operator notes for livetest1:
 - **🟡 medium-low**: ~32 — fix when touching the area
 - **⚪ low**: ~38 — true polish, no urgency
 
+### Super-admin parity gaps (G1–G9) — assessment, not bugs
+
+Logged in [phase3-findings-WIP.md](phase3-findings-WIP.md) §5.5 ("Super-admin parity assessment vs mature SaaS") on 2026-04-30. Not bugs — features that mature SaaS admin panels (Stripe, Vercel, Linear, Auth0, PostHog) all have, that we don't. None launch-blocking. **Top 3 (G3, G5, G6)** are flagged as the priority cluster if/when this gets polished — bundle with Phase 5 M-tier (M39, M41–M47) into a focused 1-week super-admin polish sweep when ready.
+
+| ID | Gap | Cost | Priority |
+|---|---|---|---|
+| G1 | No global "find user by email across all tenants" search — must ask customer for store code first | 1 day | ⚪ low |
+| G2 | Tenant Audit Log only shows creation event (data exists in `admin_activity_log`, `tenant_audit_log`, `action_history` but no unified per-tenant timeline) | 1–2 days | ⚪ low |
+| **G3** | **No per-tenant metrics sparklines** — tenant detail shows static numbers, no trend graphs. Recharts is already in package.json. | **1 day** | **🟡 top-3** |
+| G4 | No cohort/segment builder for "Needs Attention" — hardcoded categories, can't ad-hoc filter | 3–5 days | ⚪ low |
+| **G5** | **No bulk actions on tenant list** — can suspend/activate/delete one at a time, no multi-select | **1 day** | **🟡 top-3** |
+| **G6** | **No tenant data export before deletion** — first GDPR / data-portability request triggers a panic. One-click "Export Tenant Snapshot" → zip of CSVs + JSON metadata. | **2 days** | **🟡 top-3** |
+| G7 | Broadcast composer is bare-bones — raw HTML textarea, recipient = "all active". No template library, no live preview, no segment targeting, no test send, no schedule, no `{{tenant.name}}` substitution | 3–4 days | ⚪ low |
+| G8 | No webhook event explorer (only Dead Letters shows failed webhooks) — when customer asks "did your system get my xPay webhook?" no admin answer | 1 day (extends `dead_letter_events` table) | ⚪ low |
+| G9 | Single-destination alert routing (`ALERT_EMAIL` env → one inbox) — mature SaaS routes per category to engineering Slack / finance email / etc. | 2 days | ⚪ low |
+
+Verified against actual source 2026-05-01: zero hits for `users/search`, `sparkline`, `bulk.*tenant`, or `tenant.*data.*export` across `backend/routes/admin/` + `frontend/src/pages/admin/` — confirms all 9 are genuinely unimplemented, not just undocumented.
+
+**Explicitly NOT needed yet** (per phase3-findings-WIP.md:1661): multi-admin RBAC, super-admin 2FA, SSO/SAML for super-admins, in-admin runbook links. Skip until ops hire / 3+ admins / first incident.
+
 ### Phase 2 walkthrough — un-ID'd findings (also deferred, NOT launch-blocking)
 
 The Phase 2 sidebar walkthrough captured several findings as **named bundles in prose** rather than discrete M-tier IDs. They live in [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026-04-27.md) "Phase 2 — Day 2" section + [phase2-day2-findings-detailed.md](phase2-day2-findings-detailed.md). Pulled in here for completeness.
@@ -315,7 +335,7 @@ Priority: 🟡 medium-low. Standardize on green-fill primary + slate-outline sec
 | # | What | Status |
 |---|---|---|
 | V1 | Fresh-tenant signup to verify provisioner inserts Default Tax 0% with `is_default=true` (Day-1 fix #3 verification on livetest1 was inconclusive — pre-fix residue) | Not yet run. Easy: signup throwaway tenant, query `taxes` table, verify, delete. |
-| V2 | Investigate making v69 migration idempotent against partial-schema state before onboarding any real existing tenants | Investigation deferred — livetest1 will get nuked eventually so it's not blocking. Hidden trap for any future migration that touches the same area. |
+| V2 | ~~Investigate making v69 migration idempotent against partial-schema state~~ | **CLOSED** — already shipped in commit `5e3b60f` (Apr 28 2026). v69 now wraps `ADD CONSTRAINT product_serial_numbers_status_check` in `SAVEPOINT v69_psn_status_check` + catches Postgres error code `42710` (duplicate_object) + `ROLLBACK TO SAVEPOINT`. Verified live at `backend/migrate-pg.js:5189`. Same SAVEPOINT pattern was applied to v83 multi-step migration (Apr 29) so the antipattern that trapped livetest1 at v68 is gone. |
 
 ### Phase 1 walkthrough — closed clean
 
@@ -341,6 +361,7 @@ Per [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026
 | 8.4 close shift / clear attendance | **SKIPPED** by decision | Open shift on outlet 1 stays for ongoing testing |
 | 8.5 R2 + DB walk-test artifacts | DONE | 1 email_queue orphan + 1 notification + 3 support tickets + 13 R2 support uploads + 2 R2 backup `.dump` files. Total: **5 DB rows + 15 R2 objects deleted.** |
 | 8.6 launch-ready doc | This file | — |
+| 8.7 Walkthrough debug scripts + fixtures | **PENDING** — log only | 6 helper scripts + 2 probe fixtures still tracked in git: `backend/scripts/3-13-{check-pgboss-jobs,cleanup-orphan-drip-jobs,inspect-remaining,inspect-stuck-jobs,test-fresh-intent}.js` (5 files), `backend/scripts/3-14-inspect-sale-tax.js` (1 file), `docs/phase3-fixtures/{customers-3-12-probe.xlsx,products-3-12-probe.csv}` (2 files). Kept "as debug tools" per `phase3-findings-WIP.md:951-956`. Either move to `backend/scripts/walkthrough-archive/` or `git rm` once replayability isn't needed. **Not blocking launch.** |
 
 `backup_log` row 1 deliberately **kept** as live evidence the audit pipeline works after P33.
 
