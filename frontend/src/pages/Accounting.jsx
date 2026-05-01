@@ -65,17 +65,18 @@ export default function Accounting() {
     const q = new URLSearchParams({ from, to });
     if (outletId) q.set("outlet_id", outletId);
     try {
+      const outletQ = outletId ? { outlet_id: outletId } : {};
       const [a, b, c, d, e, f, g, h, i, j, k] = await Promise.all([
         api.get(`/api/accounting/pnl?${q}`),
-        api.get("/api/accounting/cashflow", { from, to }),
+        api.get("/api/accounting/cashflow", { from, to, ...outletQ }),
         api.get("/api/accounting/ap"),
-        api.get("/api/accounting/balance-sheet"),
+        api.get("/api/accounting/balance-sheet", outletQ),
         api.get(`/api/accounting/expenses?from=${from}&to=${to}${outletId ? `&outlet_id=${outletId}` : ""}`),
         api.get("/api/accounting/ap-aging"),
-        api.get("/api/accounting/tax-ledger", { from, to }),
+        api.get("/api/accounting/tax-ledger", { from, to, ...outletQ }),
         api.get("/api/accounting/supplier-payments", { from, to }),
         api.get("/api/accounting/periods"),
-        api.get("/api/accounting/cashflow/daily", { date_from: from, date_to: to, ...(outletId ? { outlet_id: outletId } : {}) }),
+        api.get("/api/accounting/cashflow/daily", { date_from: from, date_to: to, ...outletQ }),
         api.get("/api/accounting/ap-ar"),
       ]);
       setPnl(a);

@@ -50,22 +50,34 @@ module.exports = function createAccountingRouter({
           cogsParams
         );
 
+        const returnsParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
+        let returnsOutletSql = "";
+        if (outlet_id) {
+          returnsOutletSql = ` AND r.outlet_id = $${returnsParams.length + 1}`;
+          returnsParams.push(outlet_id);
+        }
         const { rows: [returnsRow] } = await db.query(
           `SELECT COALESCE(SUM(ri.refund_price * ri.quantity), 0) AS returns
            FROM return_items ri
            JOIN returns r ON r.id = ri.return_id
-           WHERE r.timestamp >= $1 AND r.timestamp < $2`,
-          [toUtcStart(from, tz), toUtcEnd(to, tz)]
+           WHERE r.timestamp >= $1 AND r.timestamp < $2${returnsOutletSql}`,
+          returnsParams
         );
 
+        const expBreakParams = [from, to];
+        let expBreakOutletSql = "";
+        if (outlet_id) {
+          expBreakOutletSql = ` AND e.outlet_id = $${expBreakParams.length + 1}`;
+          expBreakParams.push(outlet_id);
+        }
         const { rows: expenseRows } = await db.query(
           `SELECT COALESCE(ec.name, 'Uncategorized') AS name, COALESCE(SUM(e.amount), 0) AS total
            FROM expenses e
            LEFT JOIN expense_categories ec ON ec.id = e.category_id
-           WHERE e.expense_date >= $1::date AND e.expense_date <= $2::date
+           WHERE e.expense_date >= $1::date AND e.expense_date <= $2::date${expBreakOutletSql}
            GROUP BY COALESCE(ec.name, 'Uncategorized')
            ORDER BY total DESC`,
-          [from, to]
+          expBreakParams
         );
 
         const grossSales = Number(salesRow?.gross_sales || 0);
@@ -105,26 +117,39 @@ module.exports = function createAccountingRouter({
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
-        const { from, to } = req.query || {};
+        const { from, to, outlet_id } = req.query || {};
         if (!from || !to)
           return res.status(400).json({ error: "from and to are required" });
 
         const tz = req.company?.timezone || "UTC";
+        const inflowParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
+        let inflowOutletSql = "";
+        if (outlet_id) {
+          inflowOutletSql = ` AND s.outlet_id = $${inflowParams.length + 1}`;
+          inflowParams.push(outlet_id);
+        }
         const { rows: inflowsRows } = await db.query(
           `SELECT LOWER(sp.payment_method) AS payment_method, COALESCE(SUM(sp.amount), 0) AS total
            FROM sale_payments sp
            JOIN sales s ON s.id = sp.sale_id
-           WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2
+           WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2${inflowOutletSql}
            GROUP BY LOWER(sp.payment_method)
            ORDER BY total DESC`,
-          [toUtcStart(from, tz), toUtcEnd(to, tz)]
+          inflowParams
         );
 
+        const expParams = [from, to];
+        let expOutletSql = "";
+        if (outlet_id) {
+          expOutletSql = ` AND outlet_id = $${expParams.length + 1}`;
+          expParams.push(outlet_id);
+        }
         const { rows: [expenseRow] } = await db.query(
-          "SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE expense_date >= $1::date AND expense_date <= $2::date",
-          [from, to]
+          `SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE expense_date >= $1::date AND expense_date <= $2::date${expOutletSql}`,
+          expParams
         );
 
+        // supplier_payments has no outlet_id column — never per-outlet
         const { rows: [supplierRow] } = await db.query(
           "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE paid_at::date >= $1::date AND paid_at::date <= $2::date",
           [from, to]
@@ -374,19 +399,35 @@ module.exports = function createAccountingRouter({
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
+        const { outlet_id } = req.query || {};
+
         // Assets: inventory at cost
+        const invParams = [];
+        let invOutletSql = "";
+        if (outlet_id) {
+          invOutletSql = ` AND os.outlet_id = $${invParams.length + 1}`;
+          invParams.push(outlet_id);
+        }
         const { rows: [invRow] } = await db.query(
           `SELECT COALESCE(SUM(p.cost_price * COALESCE(os.quantity, 0)), 0) AS inventory_value
            FROM products p
            LEFT JOIN outlet_stock os ON os.product_id = p.id
-           WHERE COALESCE(os.quantity, 0) > 0`
+           WHERE COALESCE(os.quantity, 0) > 0${invOutletSql}`,
+          invParams
         );
         const inventoryValue = Number(invRow?.inventory_value || 0);
 
         // Assets: cash in open shifts
+        const cashParams = [];
+        let cashOutletSql = "";
+        if (outlet_id) {
+          cashOutletSql = ` AND outlet_id = $${cashParams.length + 1}`;
+          cashParams.push(outlet_id);
+        }
         const { rows: [cashRow] } = await db.query(
           `SELECT COALESCE(SUM(opening_float), 0) AS cash_on_hand
-           FROM cash_shifts WHERE status = 'open'`
+           FROM cash_shifts WHERE status = 'open'${cashOutletSql}`,
+          cashParams
         );
         const cashOnHand = Number(cashRow?.cash_on_hand || 0);
 
@@ -517,9 +558,15 @@ module.exports = function createAccountingRouter({
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
-        const { from, to } = req.query || {};
+        const { from, to, outlet_id } = req.query || {};
         if (!from || !to) return res.status(400).json({ error: "from and to are required" });
         const tz = req.company?.timezone || "UTC";
+        const taxParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
+        let taxOutletSql = "";
+        if (outlet_id) {
+          taxOutletSql = ` AND s.outlet_id = $${taxParams.length + 1}`;
+          taxParams.push(outlet_id);
+        }
         const { rows } = await db.query(
           `SELECT t.name AS tax_name, t.rate,
                   COUNT(DISTINCT s.id) AS transaction_count,
@@ -529,10 +576,10 @@ module.exports = function createAccountingRouter({
            JOIN sales s ON s.id = si.sale_id AND s.voided = false
            JOIN products p ON p.id = si.product_id
            JOIN taxes t ON t.id = p.tax_id
-           WHERE s.timestamp >= $1 AND s.timestamp < $2
+           WHERE s.timestamp >= $1 AND s.timestamp < $2${taxOutletSql}
            GROUP BY t.id, t.name, t.rate
            ORDER BY tax_collected DESC`,
-          [toUtcStart(from, tz), toUtcEnd(to, tz)]
+          taxParams
         );
         const total_tax = (rows || []).reduce((s, r) => s + Number(r.tax_collected || 0), 0);
         res.json({ rows: rows || [], total_tax });
