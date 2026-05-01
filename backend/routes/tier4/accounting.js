@@ -582,16 +582,16 @@ module.exports = function createAccountingRouter({
           taxParams.push(outlet_id);
         }
         const { rows } = await db.query(
-          `SELECT t.name AS tax_name, t.rate,
+          `SELECT CONCAT(si.tax_rate_at_sale::text, '%') AS tax_name,
+                  si.tax_rate_at_sale AS rate,
                   COUNT(DISTINCT s.id) AS transaction_count,
                   COALESCE(SUM(si.quantity * si.price_at_sale), 0) AS taxable_amount,
-                  COALESCE(SUM(si.quantity * si.price_at_sale * t.rate / 100.0), 0) AS tax_collected
+                  COALESCE(SUM(si.tax_amount_at_sale), 0) AS tax_collected
            FROM sale_items si
            JOIN sales s ON s.id = si.sale_id AND s.voided = false
-           JOIN products p ON p.id = si.product_id
-           JOIN taxes t ON t.id = p.tax_id
-           WHERE s.timestamp >= $1 AND s.timestamp < $2${taxOutletSql}
-           GROUP BY t.id, t.name, t.rate
+           WHERE s.timestamp >= $1 AND s.timestamp < $2
+             AND si.tax_rate_at_sale IS NOT NULL AND si.tax_rate_at_sale > 0${taxOutletSql}
+           GROUP BY si.tax_rate_at_sale
            ORDER BY tax_collected DESC`,
           taxParams
         );
@@ -800,6 +800,49 @@ module.exports = function createAccountingRouter({
               `UPDATE suppliers SET running_balance = COALESCE(running_balance, 0) + $1 WHERE id = $2`,
               [delta, note.supplier_id]
             );
+          }
+
+          // Post journal entry if COA accounts exist (best-effort — note approves even without COA)
+          // Sales type:   CN → Dr Sales Revenue (4000), Cr AR (1100)
+          //               DN → Dr AR (1100),            Cr Sales Revenue (4000)
+          // Purchase type: CN → Dr AP (2000), Cr COGS (5000)
+          //                DN → Dr COGS (5000), Cr AP (2000)
+          const { rows: acctRows } = await client.query(
+            `SELECT id, code FROM chart_of_accounts WHERE code = ANY($1) AND is_active = true`,
+            [["1100", "2000", "4000", "5000"]]
+          );
+          if (acctRows.length >= 2) {
+            const byCode = Object.fromEntries(acctRows.map((r) => [r.code, r.id]));
+            let debitAccountId, creditAccountId;
+            if (note.type === "sales") {
+              debitAccountId  = isCreditNote ? byCode["4000"] : byCode["1100"];
+              creditAccountId = isCreditNote ? byCode["1100"] : byCode["4000"];
+            } else {
+              debitAccountId  = isCreditNote ? byCode["2000"] : byCode["5000"];
+              creditAccountId = isCreditNote ? byCode["5000"] : byCode["2000"];
+            }
+            if (debitAccountId && creditAccountId) {
+              const tag = prefix === "credit-notes" ? "CN" : "DN";
+              const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+              const likePattern = `JE-${today}-%`;
+              const { rows: [jeCount] } = await client.query(
+                `SELECT COUNT(*) AS cnt FROM journal_entries WHERE entry_number LIKE $1`,
+                [likePattern]
+              );
+              const seq = String(Number(jeCount.cnt) + 1).padStart(3, "0");
+              const entryNumber = `JE-${today}-${seq}`;
+              const { rows: [je] } = await client.query(
+                `INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by, posted_by, posted_at)
+                 VALUES ($1, CURRENT_DATE, $2, 'posted', $3, $3, NOW())
+                 RETURNING id`,
+                [entryNumber, `${tag}-${note.note_number}: ${note.reason}`, employeeId]
+              );
+              await client.query(
+                `INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit, description)
+                 VALUES ($1, $2, $3, 0, $4), ($1, $5, 0, $6, $4)`,
+                [je.id, debitAccountId, amt, note.note_number, creditAccountId, amt]
+              );
+            }
           }
         });
 
@@ -1318,6 +1361,41 @@ module.exports = function createAccountingRouter({
              VALUES (NULL, $1, 'cheque', $2, NOW())`,
             [amt, `PDC cleared: ${cheque.cheque_number}`]
           );
+        }
+
+        // Post journal entry if COA accounts exist (best-effort — cheque clears even without COA)
+        // Receivable: Dr Cash (1000), Cr AR (1100)
+        // Payable:    Dr AP (2000),  Cr Cash (1000)
+        const neededCodes = cheque.type === "receivable" ? ["1000", "1100"] : ["2000", "1000"];
+        const { rows: acctRows } = await client.query(
+          `SELECT id, code FROM chart_of_accounts WHERE code = ANY($1) AND is_active = true`,
+          [neededCodes]
+        );
+        if (acctRows.length >= 2) {
+          const byCode = Object.fromEntries(acctRows.map((r) => [r.code, r.id]));
+          const debitAccountId  = cheque.type === "receivable" ? byCode["1000"] : byCode["2000"];
+          const creditAccountId = cheque.type === "receivable" ? byCode["1100"] : byCode["1000"];
+          if (debitAccountId && creditAccountId) {
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            const likePattern = `JE-${today}-%`;
+            const { rows: [jeCount] } = await client.query(
+              `SELECT COUNT(*) AS cnt FROM journal_entries WHERE entry_number LIKE $1`,
+              [likePattern]
+            );
+            const seq = String(Number(jeCount.cnt) + 1).padStart(3, "0");
+            const entryNumber = `JE-${today}-${seq}`;
+            const { rows: [je] } = await client.query(
+              `INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by, posted_by, posted_at)
+               VALUES ($1, CURRENT_DATE, $2, 'posted', $3, $3, NOW())
+               RETURNING id`,
+              [entryNumber, `PDC cleared: ${cheque.cheque_number}`, cheque.created_by]
+            );
+            await client.query(
+              `INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit, description)
+               VALUES ($1, $2, $3, 0, $4), ($1, $5, 0, $6, $4)`,
+              [je.id, debitAccountId, amt, cheque.cheque_number, creditAccountId, amt]
+            );
+          }
         }
       });
 
