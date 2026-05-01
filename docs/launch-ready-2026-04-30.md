@@ -46,8 +46,8 @@ Important operator notes for livetest1:
 
 ## Phase 7 walkthrough — final scoreboard
 
-14 P-tier critical bugs found and shipped during the Phase 7 walkthrough (P22 through P35; full P-tier history of the audit reaches P21 → P35).
-71 M-tier follow-ups deferred across all 7 phases of the audit. None are launch-blocking. All listed below.
+14 P-tier critical bugs found and shipped during the Phase 7 walkthrough (P22 through P35; full P-tier history of the audit reaches P1 → P35, all shipped).
+71 ID-tagged M-tier follow-ups + 4 Phase-2 outstanding-medium issues + 5 Phase-2 polish bundles + 8 cosmetic nits + 2 pre-launch verifications still pending. **None are launch-blocking.** All listed below.
 
 ### P-tier (critical) — all FIXED + LIVE-VERIFIED
 
@@ -226,6 +226,100 @@ Important operator notes for livetest1:
 - **🔴 medium-elevated**: 1 (M72 — gate before any tenant flips `phase4_company_profile_upload` or `phase4_treatment_plans` flags on)
 - **🟡 medium-low**: ~32 — fix when touching the area
 - **⚪ low**: ~38 — true polish, no urgency
+
+### Phase 2 walkthrough — un-ID'd findings (also deferred, NOT launch-blocking)
+
+The Phase 2 sidebar walkthrough captured several findings as **named bundles in prose** rather than discrete M-tier IDs. They live in [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026-04-27.md) "Phase 2 — Day 2" section + [phase2-day2-findings-detailed.md](phase2-day2-findings-detailed.md). Pulled in here for completeness.
+
+#### 4 Phase-2 outstanding medium issues (functional)
+
+| # | Page | Issue | Priority |
+|---|---|---|---|
+| P2-MED-1 | Insights → Accounting | `GET /api/accounting/cashflow/daily?from=…&to=…` returns **400** on page load. Possible feature-flag gap or validation bug. Cash Flow tab data broken on first hit. | 🟡 medium-low |
+| P2-MED-2 | Stock Control → Inventory Audit | Page largely blank below title — no KPIs, no table, no empty state. Plus breadcrumb/title mismatch ("Stock Counts" vs "Inventory Audit") and outline-style CTA. Half-finished page. | 🟡 medium-low |
+| P2-MED-3 | Online Store → Storefront | Empty-state copy says "Try adjusting your search or filters" but real issue is products aren't published (need rows in `channel_publications`). UX trap for new tenants who see 5 sample products in Inventory but empty storefront. Misleading copy + no clear path from Inventory to publish. | 🟡 medium-low |
+| P2-MED-4 | Admin → Billing | "BEST VALUE" pill on Annual (17% off, save PKR 16k) but **Quarterly** card is pre-selected with green border. Default cycle should match the recommended pill. Code comment says "Annual cycle is RECOMMENDED_CYCLE" — UI doesn't match. | 🟡 medium-low |
+
+#### Subtitle pattern bundle — lowercase-leading on 9 pages
+
+| Page | Source | Current text |
+|---|---|---|
+| Brands | `BrandsRedesign.jsx:103` | "**brand** taxonomy with consistent CRUD and search behavior." |
+| Taxes | `TaxesRedesign.jsx:105` | "**tax** profiles with default control and fast editing." |
+| Attribute Sets | `AttributeSetsRedesign.jsx:176` | "**variant** schema management with nested attributes and options." |
+| Promotions | `PromotionsRedesign.jsx:312` | "**manage** discount rules and test promotion outcomes on sample carts." |
+| Purchase Orders | — | "**manage** supplier ordering lifecycle from draft to GRN." |
+| Stock Adjustments | — | "**auditable** shrink/gain adjustments per outlet." |
+| Transfers | — | "**stock** movement between outlets with full traceability." |
+| Returned Stock | — | "**supplier** return (RMA) workflow and stock-out tracking." |
+| Supplier Payables | — | "**monitor** supplier outstanding balances and record invoice payments." |
+
+Priority: ⚪ low. Single-commit cleanup. Capitalize the leading word.
+
+#### Subtitle pattern bundle — missing trailing period (10 pages)
+
+Inventory Audit, Approvals, Reports, Chart of Accounts, Credit/Debit Notes, Post-Dated Cheques, Attendance, Integrations, Tax Lookup, Courier Settings, Barcode Templates, Receipt Templates, FBR Settings, My Tickets. Priority: ⚪ low. Single-commit cleanup.
+
+#### Nav-vs-title mismatch bundle (6 pages + 2 breadcrumb-case)
+
+| Sidebar/breadcrumb | Page title |
+|---|---|
+| "Stock Counts" (URL slug) | "Inventory Audit" |
+| "HR" | "HR Management" |
+| "Company Profile" | "Company **Settings**" |
+| "Barcode Templates" | "Barcode Label Designer" |
+| "Backup" (breadcrumb) | "Backup & Restore" |
+| "Tax Lookup" | "Tax Rate Lookup" |
+| FBR breadcrumb shows **"Fbr"** | should be "FBR" |
+| Chart of Accounts breadcrumb shows **"Chart Of Accounts"** | should be "Chart of Accounts" |
+
+Priority: 🟡 medium-low (visible everywhere, looks unpolished). Pick canonical name per page; update both nav-config + page heading.
+
+#### Layout drift bundle — older pages with no design-system adoption (4 pages)
+
+| Page | Drift |
+|---|---|
+| Price Lists | No KPI strip, simpler search-only layout, outline-style CTA |
+| Review Moderation | No subtitle, no KPIs, no primary CTA — most stripped-down page in Inventory |
+| Inventory Audit | Largely blank below title, no KPIs, no table, no empty state |
+| Printer Settings | Bare HTML form, no design-system primitives, blue Save Settings CTA |
+
+Priority: 🟡 medium-low. Each is a half-day rewrite to match the redesign system.
+
+#### CTA color drift bundle (5+ button styles across primary actions)
+
+- **Green-fill** (correct, design-system standard): Add Product, Add Category, Save Profile, Add Lead, etc.
+- **Green-outline**: Print Labels (Barcode Templates)
+- **Blue**: New Template (Barcode Templates), Add Custom Courier (Courier Settings), Apply (Attendance), Save Settings (Printer Settings), Connect (Integrations)
+- **Purple/violet**: New Template (Receipt Templates), Shop Now (Storefront)
+- **White-outline**: Refresh (multiple)
+- **Outline-style "+ New X" that should be green-fill**: Price Lists, Inventory Audit, Chart of Accounts, Credit/Debit Notes, Post-Dated Cheques
+
+Priority: 🟡 medium-low. Standardize on green-fill primary + slate-outline secondary. ~1 day cleanup commit.
+
+#### Cosmetic nits (8 standalone observations)
+
+| Observation | Where | Priority |
+|---|---|---|
+| Stock display `100.000` (trailing zeros from v45 NUMERIC widening) | Products list | ⚪ low |
+| `GST %` hardcoded label (country-coupled to PK) | Add Product → Pricing | 🟡 medium-low |
+| `outlet #1` ID leak in body text instead of outlet name | Notifications row | 🟡 medium-low |
+| Login bootstrap 401 on `/api/context/bootstrap` | Login → dashboard redirect | ⚪ low |
+| Reports subtitle missing space ("acrosssales") + lists "restaurant" reports for retail | Reports page | ⚪ low |
+| Revenue Forecast chart width(-1)/height(-1) sizing race | Reports page | ⚪ low |
+| Post-Dated Cheques 3 silent 503s on bootstrap (suppliers, customers, cheques/upcoming) | Post-Dated Cheques | 🟡 medium-low — same fix-pattern as Day-1 fix #5 |
+| Action History blank Action/Entity columns for login events | Action History | ⚪ low |
+
+#### Pre-launch verifications still pending (deferred)
+
+| # | What | Status |
+|---|---|---|
+| V1 | Fresh-tenant signup to verify provisioner inserts Default Tax 0% with `is_default=true` (Day-1 fix #3 verification on livetest1 was inconclusive — pre-fix residue) | Not yet run. Easy: signup throwaway tenant, query `taxes` table, verify, delete. |
+| V2 | Investigate making v69 migration idempotent against partial-schema state before onboarding any real existing tenants | Investigation deferred — livetest1 will get nuked eventually so it's not blocking. Hidden trap for any future migration that touches the same area. |
+
+### Phase 1 walkthrough — closed clean
+
+Per [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026-04-27.md) Phase 1 section: 11 critical/important findings discovered during signup + setup-wizard walkthrough. All 11 shipped same-day in commit `d517d56` and one follow-up commit. Doc explicitly states "_None outstanding — all Phase 1 items fixed and deployed_". No deferred items from Phase 1.
 
 ### Phase 7.14 decisions (5 items, all closed)
 
