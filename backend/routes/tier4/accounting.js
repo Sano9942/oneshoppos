@@ -8,6 +8,20 @@ module.exports = function createAccountingRouter({
 }) {
   const router = express.Router();
 
+  // Returns the closed-period row that contains entryDate (YYYY-MM-DD), or null.
+  // accounting_periods.start_date and end_date are TEXT — cast for safe comparison.
+  async function findClosedPeriodFor(entryDate) {
+    const { rows } = await db.query(
+      `SELECT id, period_name FROM accounting_periods
+       WHERE status = 'closed'
+         AND start_date::date <= $1::date
+         AND end_date::date   >= $1::date
+       LIMIT 1`,
+      [entryDate]
+    );
+    return rows[0] || null;
+  }
+
   router.get(
     "/api/accounting/pnl",
     requireAnyPerm(["view_reports", "manage_employees"]),
@@ -345,7 +359,7 @@ module.exports = function createAccountingRouter({
 
   router.post(
     "/api/accounting/periods",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["manage_employees", "all_access"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -366,7 +380,7 @@ module.exports = function createAccountingRouter({
 
   router.put(
     "/api/accounting/periods/:id",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["manage_employees", "all_access"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -1475,6 +1489,15 @@ module.exports = function createAccountingRouter({
         }
       }
 
+      // Block back-dating into a closed accounting period
+      const closedPeriod = await findClosedPeriodFor(entry_date);
+      if (closedPeriod) {
+        return res.status(409).json({
+          error: `Cannot create entry: accounting period "${closedPeriod.period_name}" is closed`,
+          code: "PERIOD_CLOSED",
+        });
+      }
+
       // Generate entry_number: JE-YYYYMMDD-NNN
       const dateStr = entry_date.replace(/-/g, "");
       const { rows: [seqRow] } = await db.query(
@@ -1549,6 +1572,15 @@ module.exports = function createAccountingRouter({
         }
       }
 
+      // Block re-dating a draft into a closed accounting period
+      const closedPeriod = await findClosedPeriodFor(entry_date);
+      if (closedPeriod) {
+        return res.status(409).json({
+          error: `Cannot save entry: accounting period "${closedPeriod.period_name}" is closed`,
+          code: "PERIOD_CLOSED",
+        });
+      }
+
       await db.transaction(async (client) => {
         await client.query(
           `UPDATE journal_entries SET entry_date = $1, description = $2 WHERE id = $3`,
@@ -1575,11 +1607,23 @@ module.exports = function createAccountingRouter({
     try {
       const { id } = req.params;
       const { rows: [entry] } = await db.query(
-        "SELECT id, status FROM journal_entries WHERE id = $1", [id]
+        "SELECT id, status, entry_date FROM journal_entries WHERE id = $1", [id]
       );
       if (!entry) return res.status(404).json({ error: "Journal entry not found" });
       if (entry.status === "posted") return res.status(400).json({ error: "Entry is already posted" });
       if (entry.status === "voided") return res.status(400).json({ error: "Cannot post a voided entry" });
+
+      // Block posting into a closed accounting period (draft existed before close)
+      const entryDateStr = entry.entry_date instanceof Date
+        ? entry.entry_date.toISOString().slice(0, 10)
+        : String(entry.entry_date).slice(0, 10);
+      const closedPeriod = await findClosedPeriodFor(entryDateStr);
+      if (closedPeriod) {
+        return res.status(409).json({
+          error: `Cannot post entry: accounting period "${closedPeriod.period_name}" is closed`,
+          code: "PERIOD_CLOSED",
+        });
+      }
 
       const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
       await db.query(
