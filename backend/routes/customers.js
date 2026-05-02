@@ -256,13 +256,11 @@ module.exports = function registerCustomerRoutes(app, deps) {
     try {
       const { rows } = await db.query(
         `SELECT s.*, o.name as outlet_name, e.name as employee_name,
-              COUNT(si.id) as item_count
+              (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as item_count
        FROM sales s
        LEFT JOIN outlets o ON s.outlet_id = o.id
        LEFT JOIN employees e ON s.employee_id = e.id
-       LEFT JOIN sale_items si ON s.id = si.sale_id
        WHERE s.customer_id = $1
-       GROUP BY s.id
        ORDER BY s.timestamp DESC`,
         [id],
       );
