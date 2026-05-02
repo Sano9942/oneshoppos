@@ -197,7 +197,8 @@
       "WebFetch(domain:download1.fbr.gov.pk)",
       "WebFetch(domain:www.ezinvoice.pk)",
       "mcp__claude_ai_Supabase__search_docs",
-      "mcp__claude_ai_Vercel__deploy_to_vercel"
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "mcp__plugin_playwright_playwright__browser_network_request"
     ],
     "additionalDirectories": [
       "\\tmp",
