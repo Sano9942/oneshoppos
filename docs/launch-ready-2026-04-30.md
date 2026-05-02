@@ -380,6 +380,32 @@ Per [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026
 
 None. As of writing, `origin/main` is at `d00fd29`. All Phase 7 + Phase 8 commits are pushed and deployed.
 
+## Accounting section audit — 2026-05-02
+
+Full code audit of Accounting / Chart of Accounts / Journal Entries / Credit-Debit Notes / Post-Dated Cheques. 6 issues found; 5 fixed across 2 commits (`39712e4`, `213249f`); 1 deferred (needs migration).
+
+### Fixed
+
+| # | What | Fix |
+|---|---|---|
+| 1 | All accounting tabs showed Rs 0.00 — root cause: `cashflow/daily` called with wrong params (`from`/`to` instead of `date_from`/`date_to`) → 400 → `Promise.all` with silent `catch {}` wiped all 11 tab results. Also `j?.entries` should have been `j?.cashflow`. | Frontend `Accounting.jsx` param names + key corrected. |
+| 2 | Cashflow inflows showed "Cash" and "cash" as two separate rows (case split). Daily cashflow sum was ~17% short of headline because it filtered `payment_method = 'Cash'` only, dropping gift_card/card. Daily buckets also used UTC date instead of tenant timezone. | Backend: `LOWER(payment_method)` in GROUP BY; removed Cash-only filter; switched to `AT TIME ZONE $tz` bucketing. |
+| 3 | Outlet picker silently ignored — frontend wasn't passing `outlet_id` to cashflow / balance-sheet / tax-ledger; backend wasn't filtering on it for P&L returns/expenses, cashflow, and balance-sheet even when passed. | Both sides fixed. |
+| 4 | Accounting periods writable by Cashier (`view_reports`) — POST + PUT periods required only `view_reports \| manage_employees`. | Tightened to `manage_employees \| all_access`. |
+| 5 | Closed-period protection missing — Journal Entry POST, PUT (edit draft), and POST `/post` had no check; entries could be posted into a locked historical period. | `findClosedPeriodFor()` helper added; all three JE write routes return `409 PERIOD_CLOSED` if entry date falls in a closed period. |
+| 6 | Credit/Debit Note approval and Cheque clear didn't post journal entries — balance adjustments happened with no double-entry trail in `journal_entries`. | Approve and clear routes now insert a posted JE + two lines inside the same transaction (best-effort — operation succeeds even if COA not seeded). Note CN/DN: Dr 4000↔Cr 1100 (sales) or Dr 2000↔Cr 5000 (purchase). Cheque: Dr 1000/Cr 1100 (receivable) or Dr 2000/Cr 1000 (payable). |
+| 7 | Tax Ledger joined `sale_items → products → taxes` to get the tax rate — stale after any retroactive tax rate change. | Replaced with `si.tax_rate_at_sale` + `si.tax_amount_at_sale` (v83 per-line snapshot). |
+
+### Deferred — needs migration v85
+
+| # | What | Why deferred |
+|---|---|---|
+| 8 | Journal entry / note number race condition — `JE-YYYYMMDD-NNN`, `CN-`, `DN-` are generated with a `COUNT(*) LIKE` pattern inside a transaction; two concurrent approvals on the same day can get the same number. `journal_entries` has no `UNIQUE` constraint on `entry_number`. | Needs: add `UNIQUE` constraint on `journal_entries.entry_number`, `credit_notes.note_number`, `debit_notes.note_number`; switch to a `sequence` or `FOR UPDATE` advisory lock approach. Schema migration required — safe to defer until first real accounting usage. |
+
+### AP/AR outlet scope — design constraint, not a bug
+
+`purchase_orders`, `supplier_invoices`, `supplier_payments`, `customers.balance`, `credit_notes`, `debit_notes`, `postdated_cheques`, `journal_entries` have no `outlet_id` column. AP/AR, COA, Journal Entries, Credit/Debit Notes, and Post-Dated Cheques are intentionally company-wide. Only P&L, cashflow, expenses, balance-sheet (inventory + cash shifts), and tax-ledger are outlet-scoped.
+
 ## Next session
 
 The walkthrough plan and `phase3-findings-WIP.md` are the canonical record of the audit. Any post-launch incident should reference back to those. New work belongs in a fresh phase doc, not appended here.
