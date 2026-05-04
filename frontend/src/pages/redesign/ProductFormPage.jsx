@@ -7,7 +7,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { usePreset, DEFAULT_UNIT_VOCABULARY, isWeightedUnit } from "../../contexts/PresetContext";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
@@ -72,6 +72,7 @@ export default function ProductFormPage() {
   const unitOptions = preset.unit_vocabulary || DEFAULT_UNIT_VOCABULARY;
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [outletVisibility, setOutletVisibility] = useState([]);
+  const [outletPrices, setOutletPrices] = useState([]);
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -218,6 +219,18 @@ export default function ProductFormPage() {
 
       if (isEdit) {
         await api.put(`/api/products/${id}`, payload);
+        // Persist per-outlet price overrides (only when the feature flag is on
+        // and we're editing — outletPrices is empty/unfetched on create).
+        if (flags?.phase2_outlet_pricing && outletPrices.length > 0) {
+          await api.put(`/api/products/${id}/outlet-prices`, {
+            prices: outletPrices.map((op) => ({
+              outlet_id: op.outlet_id,
+              price: op.price === "" || op.price === null || op.price === undefined
+                ? null
+                : Number(op.price),
+            })),
+          });
+        }
       } else {
         await api.post("/api/products", payload);
       }
@@ -334,6 +347,11 @@ export default function ProductFormPage() {
         // Fetch outlet visibility
         api.get(`/api/products/${id}/outlet-visibility`).then((d) => {
           setOutletVisibility(d.visibility || []);
+        }).catch(() => {});
+        // Fetch per-outlet price overrides (auto-managed system price lists).
+        // 503 = phase2_outlet_pricing flag is off → silent.
+        api.get(`/api/products/${id}/outlet-prices`).then((d) => {
+          setOutletPrices(d.prices || []);
         }).catch(() => {});
       }
     }).catch(console.error).finally(() => setLoading(false));
@@ -618,6 +636,37 @@ export default function ProductFormPage() {
                         } catch (err) { console.error(err); }
                       }} />
                     </label>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Outlet Pricing — phase2_outlet_pricing */}
+          {isEdit && flags?.phase2_outlet_pricing && outletPrices.length > 0 && (
+            <SectionCard>
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted) flex items-center gap-1"><Tag size={12} /> Outlet Pricing</p>
+                <p className="text-xs text-(--ui-text-muted)">Set a custom price per outlet. Leave blank to use the base price ({Number(form.price || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).</p>
+                {outletPrices.map((op, idx) => (
+                  <div key={op.outlet_id} className="flex items-center justify-between gap-3 text-sm py-1 border-b border-(--ui-border) last:border-0">
+                    <span className="text-(--ui-text)">{op.outlet_name}</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder={Number(form.price || 0).toFixed(2)}
+                      value={op.price === null || op.price === undefined ? "" : op.price}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setOutletPrices((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], price: val === "" ? null : val };
+                          return next;
+                        });
+                      }}
+                      className="max-w-35 text-right"
+                    />
                   </div>
                 ))}
               </div>

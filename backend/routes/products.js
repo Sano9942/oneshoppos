@@ -215,7 +215,8 @@ module.exports = function registerProductRoutes(app, deps) {
                  t.name as tax_name, t.rate as tax_rate,
                  s.name as supplier_name,
                  b.name as brand_name,
-                 ${stockExpr} as total_stock
+                 ${stockExpr} as total_stock,
+                 COALESCE(opc.override_count, 0)::int as outlet_override_count
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
           LEFT JOIN taxes t ON p.tax_id = t.id
@@ -228,6 +229,13 @@ module.exports = function registerProductRoutes(app, deps) {
           LEFT JOIN (
               SELECT product_id, SUM(stock) as total FROM product_variants GROUP BY product_id
           ) pv_sum ON p.id = pv_sum.product_id
+          LEFT JOIN (
+              SELECT pli.product_id, COUNT(*) as override_count
+              FROM price_list_items pli
+              JOIN price_lists pl ON pl.id = pli.price_list_id
+              WHERE pl.name LIKE '\\_\\_outlet\\_%' ESCAPE '\\'
+              GROUP BY pli.product_id
+          ) opc ON p.id = opc.product_id
           ${where}
           ORDER BY ${sortCol} ${sortDir}
       `;
@@ -1211,6 +1219,9 @@ module.exports = function registerProductRoutes(app, deps) {
   // ── Price Lists ────────────────────────────────────────────────────────────
 
   // GET /api/price-lists
+  // Hides system-managed lists (auto-created for per-product outlet overrides
+  // by the Outlet Pricing UI on the product edit page; named like
+  // `__outlet_<id>_overrides`). Tenants only see lists they explicitly created.
   app.get(
     "/api/price-lists",
     requirePerm("manage_inventory"),
@@ -1220,6 +1231,7 @@ module.exports = function registerProductRoutes(app, deps) {
           `SELECT pl.*, COUNT(pli.id)::int AS item_count
            FROM price_lists pl
            LEFT JOIN price_list_items pli ON pli.price_list_id = pl.id
+           WHERE pl.name NOT LIKE '\\_\\_outlet\\_%' ESCAPE '\\'
            GROUP BY pl.id
            ORDER BY pl.name ASC`,
         );

@@ -830,7 +830,17 @@ export default function InventoryRedesign() {
                     {p.sku || "-"}
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text)">
-                    {fmt(p.price)}
+                    <span className="inline-flex items-center justify-end gap-1.5">
+                      {fmt(p.price)}
+                      {p.outlet_override_count > 0 && (
+                        <span
+                          title={`Has ${p.outlet_override_count} outlet price override${p.outlet_override_count === 1 ? "" : "s"}`}
+                          className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                        >
+                          +{p.outlet_override_count}
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text-muted)">
                     {fmt(p.cost_price)}
