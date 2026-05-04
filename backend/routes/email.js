@@ -171,12 +171,17 @@ module.exports = function emailRoutes(app, deps) {
         // template errors are non-fatal — proceed without it
       }
 
+      const portalUrl = req.tenantSlug
+        ? `${process.env.FRONTEND_URL || "https://sanopos.com"}/portal/${req.tenantSlug}`
+        : null;
+
       const html = buildReceiptEmailHtml(
         sale,
         items || [],
         payments || [],
         template,
-        req.company?.currency_symbol || "$"
+        req.company?.currency_symbol || "$",
+        portalUrl
       );
 
       const transport = makeTransport(cfg);
@@ -243,12 +248,17 @@ module.exports = function emailRoutes(app, deps) {
       const currencySymbol = req.company?.currency_symbol || "PKRs";
       const storeName = req.company?.company_name || "Store";
 
+      const portalUrl = req.tenantSlug
+        ? `${process.env.FRONTEND_URL || "https://sanopos.com"}/portal/${req.tenantSlug}`
+        : null;
+
       const html = buildReceiptEmailHtml(
         sale,
         items || [],
         payments || [],
         template,
-        currencySymbol
+        currencySymbol,
+        portalUrl
       );
 
       const subject = `Receipt #${sale.invoice_number || sale.id} from ${storeName}`;

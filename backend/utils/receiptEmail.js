@@ -30,7 +30,7 @@ function formatPaymentMethodLabel(method) {
     .join(" ");
 }
 
-function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$") {
+function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$", portalUrl = null) {
   const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
   const footerText = template?.footer_text || "Thank you for your purchase!";
 
@@ -154,6 +154,13 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
           ${showQr && sale.fbr_qr_code && (String(sale.fbr_qr_code).startsWith("data:") || String(sale.fbr_qr_code).startsWith("http"))
             ? `<div style="margin-top:8px;"><img src="${sale.fbr_qr_code}" alt="FBR QR" style="max-width:120px;max-height:120px;" /></div>`
             : ""}
+        </td></tr>` : ""}
+
+        ${portalUrl ? `
+        <!-- Portal CTA -->
+        <tr><td style="padding:16px 0;text-align:center;border-top:1px solid #eee;">
+          <a href="${portalUrl}" style="display:inline-block;padding:10px 24px;background:#4f46e5;color:#ffffff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600;">View your account</a>
+          <div style="margin-top:6px;font-size:11px;color:#888;">Track orders, view invoices &amp; manage your loyalty points</div>
         </td></tr>` : ""}
 
         <!-- Footer -->

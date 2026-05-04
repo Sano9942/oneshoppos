@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Clock, Download, Package, Pencil, Plus, Search, ShieldCheck, Tag, Trash2, UserRound, Wallet, X } from "lucide-react";
 import { api } from "../../api";
+import { readTenantSlug } from "../../auth/authStore";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { usePreset } from "../../contexts/PresetContext";
@@ -707,6 +708,7 @@ export default function CustomersRedesign() {
                   <th className="px-3 py-2 text-center">Points</th>
                   <th className="px-3 py-2 text-center">Orders</th>
                   <th className="px-3 py-2 text-right">Total Spent</th>
+                  <th className="px-3 py-2 text-center">Portal</th>
                   <th className="px-3 py-2 text-center">Actions</th>
                 </tr>
               </thead>
@@ -759,6 +761,15 @@ export default function CustomersRedesign() {
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                         {money(r.total_spent)}
+                      </td>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {r.portal_enabled_at ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-xs text-(--ui-text-muted)">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <div className="flex justify-center gap-1">
@@ -1240,6 +1251,29 @@ export default function CustomersRedesign() {
                         ))
                       )}
                     </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-(--ui-border)">
+                    <h4 className="mb-1 text-sm font-semibold text-(--ui-text)">
+                      Customer Portal
+                    </h4>
+                    <p className="mb-2 text-xs text-(--ui-text-muted)">
+                      {detail?.portal_enabled_at
+                        ? "This customer has activated their portal account."
+                        : "This customer hasn't set up a portal account yet."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/portal/${readTenantSlug() || ""}/signup`
+                        );
+                        toast.success("Invite link copied!");
+                      }}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Copy portal invite link
+                    </button>
                   </div>
                 </>
               )}

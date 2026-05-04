@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { api } from "../../api";
+import { readTenantSlug } from "../../auth/authStore";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { usePreset } from "../../contexts/PresetContext";
+import { useToast } from "../../contexts/ToastContext";
 import {
   Button,
   Input,
@@ -68,6 +70,7 @@ function FormField({ label, children }) {
 export default function CompanySettingsRedesign() {
   const { refresh } = useCurrency();
   const { updatePreset } = usePreset();
+  const { success } = useToast();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
@@ -562,6 +565,36 @@ export default function CompanySettingsRedesign() {
                 onChange={(e) => upd("tenant_default_safety_stock_days", e.target.value)}
               />
             </FormField>
+          </div>
+        </SectionCard>
+
+        {/* Customer Portal */}
+        <SectionCard className="p-5">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-(--ui-text)">Customer Portal</h3>
+              <p className="text-xs text-(--ui-text-muted) mt-1">
+                Share this link with your customers so they can view invoices, track orders, and manage their loyalty points.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={`${window.location.origin}/portal/${readTenantSlug() || ""}`}
+                onFocus={(e) => e.target.select()}
+                className="grow text-xs bg-(--ui-bg) border border-(--ui-border) rounded px-3 py-2 text-(--ui-text) font-mono"
+              />
+              <Button
+                type="button"
+                tone="default"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/portal/${readTenantSlug() || ""}`);
+                  success("Portal link copied!");
+                }}
+              >
+                Copy
+              </Button>
+            </div>
           </div>
         </SectionCard>
       </form>
