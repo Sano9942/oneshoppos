@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useAuth } from "../../../auth/AuthProvider";
+import { readTenantSlug } from "../../../auth/authStore";
+import { IS_MULTI_TENANT } from "../../../config";
 import { getQueueByState } from "../../../utils/offlineQueue";
 import POSStuckQueueModal from "./POSStuckQueueModal";
 
@@ -111,6 +113,20 @@ export default function POSHeader() {
             <RotateCcw size={14} /> <span className="hidden sm:inline">Return</span>
           </button>
         )}
+        <button
+          onClick={() => {
+            if (!activeShift?.id) return;
+            const slug = readTenantSlug();
+            const tenantParam = IS_MULTI_TENANT && slug ? `&tenant=${encodeURIComponent(slug)}` : "";
+            const url = `${window.location.origin}/customer-display?shift_id=${activeShift.id}${tenantParam}`;
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+          disabled={!activeShift?.id}
+          title={activeShift?.id ? "Open customer-facing display in a new window" : "Open a shift to enable the customer-facing display"}
+          className="flex items-center gap-1 font-medium transition text-sm disabled:cursor-not-allowed disabled:text-slate-300 text-slate-500 hover:text-[#8066FF]"
+        >
+          <Monitor size={14} /> <span className="hidden sm:inline">Customer Display</span>
+        </button>
         {isAdmin && stuckCount > 0 && (
           <button
             onClick={() => setStuckOpen(true)}

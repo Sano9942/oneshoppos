@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { API_BASE as API, IS_MULTI_TENANT } from "../../config";
 import { api } from "../../api";
 import { readTenantSlug } from "../../auth/authStore";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -595,6 +595,49 @@ export default function CompanySettingsRedesign() {
                 Copy
               </Button>
             </div>
+          </div>
+        </SectionCard>
+
+        {/* Customer Display */}
+        <SectionCard className="p-5">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-(--ui-text)">Customer Display</h3>
+              <p className="text-xs text-(--ui-text-muted) mt-1">
+                Open this URL on a second monitor or tablet facing the customer. The display updates automatically when a cashier rings up a sale.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={`${window.location.origin}/customer-display?shift_id=<your_shift_id>${IS_MULTI_TENANT && readTenantSlug() ? `&tenant=${readTenantSlug()}` : ""}`}
+                onFocus={(e) => e.target.select()}
+                className="grow text-xs bg-(--ui-bg) border border-(--ui-border) rounded px-3 py-2 text-(--ui-text) font-mono"
+              />
+              <Button
+                type="button"
+                tone="default"
+                onClick={() => {
+                  const url = `${window.location.origin}/customer-display?shift_id=<your_shift_id>${IS_MULTI_TENANT && readTenantSlug() ? `&tenant=${readTenantSlug()}` : ""}`;
+                  navigator.clipboard.writeText(url);
+                  success("URL copied!");
+                }}
+              >
+                Copy
+              </Button>
+              <Button
+                type="button"
+                tone="default"
+                onClick={() => {
+                  window.open(`${window.location.origin}/customer-display`, "_blank", "noopener,noreferrer");
+                }}
+              >
+                Open Preview
+              </Button>
+            </div>
+            <p className="text-[11px] text-(--ui-text-muted)">
+              Tip: use the <span className="font-semibold">Customer Display</span> button in the POS header — it fills in the shift ID for you.
+            </p>
           </div>
         </SectionCard>
       </form>
