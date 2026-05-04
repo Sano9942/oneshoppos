@@ -1,3 +1,4 @@
+import { API_BASE } from "../config";
 import { PAPER_SIZES as _PAPER_SIZES, pxForChars as _pxForChars } from "./paperSizes";
 
 // Re-export so existing callers that already import from utils/receipt.js
@@ -404,7 +405,10 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
  * Returns { ok: true } on success, { error, fallback: true } if printer
  * is offline or not configured — caller should then fire buildReceiptHtml().
  *
- * Uses relative URL /api/print/receipt so AuthProvider injects auth headers.
+ * Uses absolute URL via API_BASE so the request reaches the backend in
+ * production (where the frontend at sanopos.com is on a different origin
+ * from the API at api.sanopos.com). AuthProvider's fetch interceptor
+ * injects auth headers for both relative and absolute /api/ URLs.
  *
  * @param {object} slip      - The sale slip object
  * @param {object|null} template - Active receipt template
@@ -412,7 +416,7 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
  */
 export async function printToHardware(slip, template, labels = {}) {
   try {
-    const res = await fetch("/api/print/receipt", {
+    const res = await fetch(`${API_BASE}/api/print/receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slip, template: template || null, labels }),
