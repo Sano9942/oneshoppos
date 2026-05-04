@@ -67,15 +67,15 @@ export default function MultiOutletEnabledBanner() {
         <p className="font-medium text-emerald-900">Multi-outlet features enabled</p>
         <p className="mt-0.5 text-xs text-emerald-800">
           We turned on outlet selection, per-outlet pricing, outlet-level product visibility, and price books.
-          You can adjust these in Settings → Security if you don't need them.
+          You can manage price lists in the Inventory section. Outlet visibility appears on each product's edit page.
         </p>
       </div>
       <button
         type="button"
-        onClick={() => navigate("/settings/security")}
+        onClick={() => navigate("/price-lists")}
         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
       >
-        Settings
+        Manage price lists
       </button>
       <button
         type="button"
