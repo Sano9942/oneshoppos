@@ -286,11 +286,17 @@ export default function POSHoldPickupModal() {
                 <button
                   onClick={addPayment}
                   disabled={submitting}
+                  title="Record a partial payment toward this hold. The hold stays open with the remaining balance until fully paid."
                   className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50"
                 >
-                  Part-pay
+                  Take Deposit
                 </button>
               </div>
+              {Number(hold?.balance_due || 0) > 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Tip: Use <span className="font-semibold">Take Deposit</span> to record a partial payment now and leave the hold open. Use <span className="font-semibold">Complete &amp; Print</span> to settle in full.
+                </p>
+              )}
             </>
           )}
         </div>
