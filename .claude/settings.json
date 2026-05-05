@@ -198,7 +198,9 @@
       "WebFetch(domain:www.ezinvoice.pk)",
       "mcp__claude_ai_Supabase__search_docs",
       "mcp__claude_ai_Vercel__deploy_to_vercel",
-      "mcp__plugin_playwright_playwright__browser_network_request"
+      "mcp__plugin_playwright_playwright__browser_network_request",
+      "PowerShell($files = git log --since=\"30 days ago\" --name-only --pretty=format: | Sort-Object -Unique | Where-Object { $_ -ne \"\" }; $files | Out-File -Encoding utf8 d:\\\\newprojects\\\\oneshoppos\\\\ORPHAN_AUDIT.tmp.txt; \"Touched files in last 30d: $\\($files.Count\\)\")",
+      "PowerShell(cd d:\\\\newprojects\\\\oneshoppos; git log --since=\"30 days ago\" --diff-filter=A --name-only --pretty=format: | Sort-Object -Unique | Where-Object { $_ -ne \"\" })"
     ],
     "additionalDirectories": [
       "\\tmp",
