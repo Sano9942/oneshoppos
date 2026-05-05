@@ -16,7 +16,7 @@ const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config")
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
-const { seedRetailFlags } = require("../services/retail-flag-preset");
+const { seedRetailFlags, seedRestaurantFlags } = require("../services/retail-flag-preset");
 const { signAccessToken, signRefreshToken } = require("../jwt-auth");
 
 const ROLE_PERMISSIONS = {
@@ -271,11 +271,13 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
-        // 1f. Retail-only flag bundle. Only fires for general_retail today —
-        // other industries skip this entirely until their own preset bundles
-        // ship. See services/retail-flag-preset.js for the 19-flag list.
+        // 1f. Per-industry flag bundles. See services/retail-flag-preset.js
+        // for the per-industry flag lists. Other industries (salon, clinic,
+        // rentals, etc.) skip this entirely until their own bundles ship.
         if (industry_type === "general_retail") {
           await seedRetailFlags(client);
+        } else if (industry_type === "restaurant" || industry_type === "cafe") {
+          await seedRestaurantFlags(client);
         }
 
         // 2. Create/update outlet

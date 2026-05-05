@@ -6,6 +6,7 @@ const MODE_REGISTRY = Object.freeze({
     feature_flags_to_enable: [
       "phase4_restaurant",
       "phase4_restaurant_kds",
+      "phase4_restaurant_qr",
       "phase4_restaurant_86",
       "phase4_restaurant_void_comp",
       "phase4_restaurant_pay_at_table",

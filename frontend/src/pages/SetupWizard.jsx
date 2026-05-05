@@ -4,9 +4,9 @@ import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, 
 import { api } from "../api";
 import { writeSession } from "../auth/authStore";
 
-// At launch only `general_retail` is selectable; the other 21 tiles render as
-// "Coming soon" — disabled, grayscale icon, badge in the corner. Keeping all
-// tiles visible lets prospects see the roadmap.
+// Tiles flagged `comingSoon: true` render disabled with a grayscale icon and
+// a badge — keeps them visible so prospects see the roadmap. Currently
+// selectable: general_retail, restaurant, cafe.
 const BUSINESS_TYPE_CATEGORIES = [
   {
     label: "Retail",
@@ -27,8 +27,8 @@ const BUSINESS_TYPE_CATEGORIES = [
   {
     label: "Food & Beverage",
     types: [
-      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600", comingSoon: true },
-      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600", comingSoon: true },
+      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600" },
     ],
   },
   {
@@ -451,7 +451,7 @@ export default function SetupWizard() {
                                 type="button"
                                 disabled={disabled}
                                 onClick={() => { if (!disabled) set("industry_type", bt.value); }}
-                                title={disabled ? "Coming soon — only Retail Store is available at launch" : undefined}
+                                title={disabled ? "Coming soon — not yet available" : undefined}
                                 className={`relative flex flex-col items-start gap-2 rounded-xl border-2 p-3 text-left transition ${
                                   disabled
                                     ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
