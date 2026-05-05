@@ -34,8 +34,8 @@ Both modes use the same `PublicRestaurantMenuPage` surface; the difference is wh
 | Frontend approach | Delete `KioskOrderingRedesign.jsx`, `KioskOrderingRoute.jsx`, and the shadow route in `appRoutes.jsx:256`. Existing `PublicRestaurantMenuPage` becomes the kiosk surface, with a "Place Order" CTA + post-submit auto-reset. |
 | Launcher location | New "Order Kiosks" page under the Restaurant nav group |
 | Token lifecycle | Never expire, manager-revocable |
-| Counter tokens | Per-outlet (one token shared across all counter tablets at that outlet) |
-| Table tokens | Per-table (one token per `restaurant_tables` row) |
+| Counter tokens | Per-outlet kiosk **slot**, with rotating per-customer tokens behind a stable redirect URL (option A — see "Counter tablet URL stability" below) |
+| Table tokens | Per-table (one stable token per `restaurant_tables` row) |
 | Counter→KDS routing | Lands in Restaurant Inbox; staff Accept fires to KDS via existing `sendToKitchen()` (matches `services/online-inbox.js:153`). No public fire-to-kitchen endpoint. |
 | Table→KDS routing | Lands as check tied to table session; server fires from Checks page (existing flow) |
 | Payment | Out of scope. Counter = pay at counter when collecting. Table = pay at end of meal via existing `/pay/:token` or server. |
@@ -65,12 +65,14 @@ Change `JOIN restaurant_tables` to `LEFT JOIN restaurant_tables`. The endpoint m
 
 - `POST /api/restaurant/kiosk-tokens`
   Body: `{ outlet_id, table_id?: null, label? }`
-  Action: insert a `draft_orders` row with `status='open'`, `source_token_id=randomUUID()`, `table_id` from body or NULL, `order_context = 'kiosk_counter'` (when table_id NULL) or `'dine_in'` (when table_id present), `outlet_id` validated against tenant.
-  Returns: `{ token, url }` where `url = ${FRONTEND_BASE}/menu/${token}`.
+  Action:
+  - If `table_id` is NULL → insert a `restaurant_kiosk_slots` row with `slot_token=randomUUID()`, `current_draft_order_id=NULL`. First menu hit lazily mints the draft.
+  - If `table_id` is set → insert a `draft_orders` row with `status='open'`, `source_token_id=randomUUID()`, `table_id` from body, `order_context='dine_in'`, `outlet_id` validated against tenant.
+  - Returns: `{ token, url, type }` where `url = ${FRONTEND_BASE}/menu/${token}` and `type` is `"counter"` or `"table"`.
 - `GET /api/restaurant/kiosk-tokens?outlet_id=N`
-  Returns: list of open kiosk-context draft_orders for the outlet, with table info if any.
-- `DELETE /api/restaurant/kiosk-tokens/:tokenId`
-  Soft-revokes by setting `status='cancelled'`. The UNIQUE partial index allows new tokens to be issued for the same table afterwards.
+  Returns: unified list of active counter slots and open table-mode draft tokens for the outlet, each tagged with `type` and (for table mode) table info.
+- `DELETE /api/restaurant/kiosk-tokens/:id`
+  Counter slot → set `revoked_at=NOW()`. Table-mode draft → set `status='cancelled'`. ID disambiguation via type tag in the URL or row prefix; details in implementation plan.
 
 All three gated by `phase4_restaurant_qr` flag + `manage_restaurant` perm.
 
@@ -79,14 +81,17 @@ All three gated by `phase4_restaurant_qr` flag + `manage_restaurant` perm.
 **File**: `backend/routes/public-restaurant.js`, mounted before tenant middleware (it's public)
 
 - `POST /api/public/restaurant/checks/:token/submit`
-  Action:
-  - Look up the draft order by token (must be `status='open'`)
-  - For **counter-mode tokens** (`order_context = 'kiosk_counter'`):
-    - Set `submitted_at = NOW()` on the draft order so the Inbox query picks it up
-    - Mint a fresh `source_token_id` on a new draft order so the next customer can place an order from the same tablet (the same URL works because the new token replaces the old one in the lookup)
-    - Wait — that's wrong. The URL is per-token, not per-tablet. Re-think: the **launcher table row holds the "active" token for that counter slot**. Submitting closes the current draft and opens a new one with the same `outlet_id`/null `table_id`, and the launcher page's "current URL" updates to the new token. **Tablet bookmark must point to a stable URL that resolves to "current open counter token for outlet N."** This is a meaningful design refinement — captured in "Open question 1" below.
-  - For **table-mode tokens**: set `submitted_at = NOW()` so the order shows up in the Inbox and on the Checks page; the existing draft remains open so additional items can be added (matching today's behavior where multiple courses get added to one check).
-  - Return `{ order_number, items, total }` for counter mode, `{ check_id, total }` for table mode.
+  Action depends on whether `:token` resolves to a slot (counter mode) or a draft directly (table mode):
+  - **Counter mode** (`:token` matches `restaurant_kiosk_slots.slot_token`):
+    - Resolve `current_draft_order_id` — must be non-null and `status='open'` (else 409: customer cleared their cart without ordering, or token is misused)
+    - Set `submitted_at = NOW()` on the current draft so the Inbox query picks it up
+    - Set `restaurant_kiosk_slots.current_draft_order_id = NULL` — next `/menu/:slotToken` hit will lazily mint a fresh draft for the next customer
+    - The slot's `slot_token` does not change. The tablet's bookmark URL stays valid forever.
+    - Return `{ order_number, items, total }`
+  - **Table mode** (`:token` matches `draft_orders.source_token_id` directly):
+    - Set `submitted_at = NOW()` on the draft so the Inbox query picks it up
+    - Leave the draft open so the customer can add more courses to the same check (matches existing table-service behavior)
+    - Return `{ check_id, total }`
 
 This endpoint does NOT call `sendToKitchen()`. The Restaurant Inbox Accept action remains the kitchen trigger.
 
@@ -100,17 +105,47 @@ Confirm the inbox query includes draft orders with `order_context = 'kiosk_count
 
 `app.use("/api/public/restaurant", publicLimiter)` if not already in place. 60 requests/min per IP for the customer-facing endpoints. Manager-facing token endpoints inherit the global limiter.
 
-### Open question 1 — counter-mode tablet URL stability
+### Counter-mode tablet URL stability — decided: option A (stable slot URL + rotating tokens)
 
-**Issue**: A tablet at the counter has a URL bookmarked. If submitting an order rotates the token, the bookmark goes stale.
+**Problem**: a counter token represents one open draft order. Once a customer submits, that draft is closed (no longer accepting new items). If the URL bookmarked on the tablet *is* the token URL, it goes stale immediately after the first order.
 
-**Resolution options to evaluate during implementation planning**:
+**Decision**: a counter kiosk is modeled as a **stable per-outlet slot** with a rotating draft order behind it.
 
-- **A. Stable per-outlet URL like `/order-kiosk/counter/<outlet-token>`** that resolves server-side to the currently-open counter token. Most stable; requires a small redirect endpoint.
-- **B. Don't rotate the token on submit**. Keep the same token, mark items as submitted. Then re-use the same draft for the next customer. Simpler but means the draft accumulates state across customers; needs schema thinking.
-- **C. Rotate token, but the launcher page URL is bookmarked, which redirects to current**. Same as A in effect.
+**Schema**: a new table `restaurant_kiosk_slots`:
 
-The implementation plan must pick one. **Tentative recommendation: A** (stable URL with server-side resolution).
+| column | notes |
+|---|---|
+| `id` | PK |
+| `tenant_id`, `outlet_id` | scope |
+| `slot_token` | UUID, generated on slot creation, **never rotates** — this is what the tablet bookmarks |
+| `current_draft_order_id` | FK to `draft_orders`. NULL when no open draft (manager just revoked, or app boot). Backend lazily mints a new draft when needed. |
+| `revoked_at` | NULL while active |
+
+Table-mode tokens stay on `draft_orders.source_token_id` as today (one stable token per `restaurant_tables` row). Only counter mode uses the slot indirection.
+
+**Public endpoints**:
+
+- `GET /menu/:slotToken` is extended (or paired with a sibling endpoint) so that when `:slotToken` matches a `restaurant_kiosk_slots.slot_token` (counter mode):
+  - If `current_draft_order_id` is NULL or the draft is no longer `open`, the backend opens a new draft order with `order_context = 'kiosk_counter'`, `outlet_id` from the slot, `table_id = NULL`, and updates `current_draft_order_id` to the new row.
+  - The endpoint returns the menu payload (categories + products + null `table_label`) the same way the table-mode menu fetch returns one.
+- `POST /api/public/restaurant/checks/:slotToken/items` and `.../submit` are also slot-aware: they look up the *current* draft via the slot, not directly via `source_token_id`.
+- Lookup precedence: try `restaurant_kiosk_slots.slot_token` first; fall through to `draft_orders.source_token_id` for table-mode tokens. (Or use disjoint UUID namespaces; collision risk is zero.)
+
+**On submit (counter mode)**: set `submitted_at = NOW()` on the current draft, then null out `restaurant_kiosk_slots.current_draft_order_id`. Next customer load on the same `:slotToken` lazily mints a fresh draft. The submitted draft is now inbox-visible to staff; the tablet's bookmark URL never changed.
+
+**On revoke**: set `revoked_at = NOW()` on the slot; subsequent menu loads return 404. Re-launching counter kiosk for the same outlet creates a new slot row (and new `slot_token`). Old bookmarks remain dead — exactly what we want for stolen tablets.
+
+**Why this is option A and not B**:
+- Option B (single reusable draft) would have one draft accumulating multiple customers' orders, which conflicts with the `draft_orders` row representing one customer's check (used everywhere else in restaurant ops). Inbox display would show a single unbounded "order" that staff would have to mentally split.
+- Option A keeps the existing `draft_orders` semantics intact: one draft = one customer's order. The `restaurant_kiosk_slots` table is the only new state, and it's small and dedicated.
+- Cost: one new tiny table + one migration. Worth it.
+
+**Token mint endpoint behavior** (from the "Backend changes" section above) updates accordingly:
+
+- `POST /api/restaurant/kiosk-tokens` with `table_id: null` creates a row in `restaurant_kiosk_slots` (not in `draft_orders`) and returns `{ token: slotToken, url: ${FRONTEND_BASE}/menu/${slotToken} }`. The first draft order is minted lazily on first `/menu/:slotToken` hit.
+- `POST /api/restaurant/kiosk-tokens` with a `table_id` continues to mint a `draft_orders` row directly with a stable `source_token_id` (table-mode unchanged).
+- `GET /api/restaurant/kiosk-tokens` returns both slot rows and table-mode draft tokens, unified by type column.
+- `DELETE /api/restaurant/kiosk-tokens/:id` distinguishes slot vs. table token by ID prefix or table column and revokes accordingly.
 
 ## Frontend changes
 
@@ -171,6 +206,7 @@ To read **before** implementing:
 - `backend/services/online-inbox.js:153` (reference for how Accept-from-Inbox calls sendToKitchen)
 - `backend/services/restaurant-checks.js:14-20` (token generation pattern, reuse `crypto.randomUUID()`)
 - `backend/schema-pg.sql:3140-3154` (`draft_orders.source_token_id` column + UNIQUE partial index)
+- `backend/migrate-pg.js` (new migration adding `restaurant_kiosk_slots` table — see schema in "Counter-mode tablet URL stability" section)
 - `backend/routes/restaurant-inbox.js` (verify the Inbox query picks up kiosk submissions)
 - `frontend/src/pages/public/PublicRestaurantMenuPage.jsx` (the surface that becomes the kiosk)
 - `frontend/src/components/AppLayoutRedesign.jsx:79-99` (nav filter logic — verify gate semantics)
@@ -195,9 +231,10 @@ To read **before** implementing:
 
 ## Risk
 
-Medium. Touches public endpoints (rate-limit posture matters), modifies a SQL JOIN that current tests rely on (regression risk on existing QR-menu flow), and adds new database state via tokens. Mitigations:
+Medium. Touches public endpoints (rate-limit posture matters), modifies a SQL JOIN that current tests rely on (regression risk on existing QR-menu flow), and adds one new table (`restaurant_kiosk_slots`). Mitigations:
 
 - Sidebar PR ships first, so this PR's diff is smaller and reviewer attention isn't split
 - Existing QR-menu integration tests (`backend/tests/integration/pg-batch13-restaurant.test.js`) cover the LEFT JOIN change — must remain green
 - Public submit endpoint is rate-limited and inbox-gated, so abuse impact is "staff sees junk in inbox," not "kitchen wastes food"
-- `phase4_restaurant_qr` is the kill switch — flag off = entire feature dormant, no migrations to roll back
+- `phase4_restaurant_qr` is the kill switch — flag off = entire feature dormant. The new `restaurant_kiosk_slots` table is empty for any tenant who never enables the flag.
+- The migration is purely additive (new table, no column changes on existing tables). Rollback is `DROP TABLE restaurant_kiosk_slots` — no data loss risk to existing QR-menu flow.
