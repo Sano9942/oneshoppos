@@ -67,6 +67,7 @@ frontend/eslint_json.txt
 frontend/eslint_output.txt
 frontend/kiosk_out.txt
 backend/_endpoint_list.txt
+*-snapshot.yml
 
 # Playwright test artifacts (auth tokens, reports)
 frontend/tests/auth.json
