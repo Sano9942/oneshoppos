@@ -166,6 +166,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./storefront")(app, deps);
 
   // Public restaurant QR ordering — no auth required, manually resolves tenant DB
+  // Tighter rate limit than globalLimiter so public submit can't be spammed.
+  const { publicRestaurantLimiter } = require("../middleware/rate-limit");
+  app.use("/api/public/restaurant", publicRestaurantLimiter);
   require("./public-restaurant")(app, deps);
 
   // Public pay-at-table (2-R.3) — bill view + confirm, no auth
@@ -652,6 +655,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./kds")(app, deps);
   require("./modifiers")(app, deps);
   require("./restaurant-inbox")(app, deps);
+  require("./restaurant-kiosk")(app, deps);
   require("./bookings")(app, deps);
   require("./projects")(app, deps);
   require("./contracts")(app, deps);

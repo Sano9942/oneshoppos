@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config";
 
@@ -6,6 +6,8 @@ function stripHtml(html) {
   if (!html) return "";
   return String(html).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
+
+const COUNTER_RESET_MS = 5000;
 
 export default function PublicRestaurantMenuPage() {
   const { token } = useParams();
@@ -19,11 +21,24 @@ export default function PublicRestaurantMenuPage() {
   const [submittingId, setSubmittingId] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // Cart state — frontend mirror of what was added. Backend is the source of
+  // truth (draft_order_items rows), but we keep a shadow for the cart panel
+  // so the customer sees what they've added without an extra round-trip.
+  const [cart, setCart] = useState([]);
+
+  // Confirmation screen state. After successful submit, we render a
+  // full-page confirmation. Counter mode auto-resets to the menu after 5s;
+  // table mode stays until the customer taps "Back to menu".
+  const [confirmation, setConfirmation] = useState(null);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const resetTimerRef = useRef(null);
+
+  const buildUrl = (suffix) =>
+    `${API_BASE}/api/public/restaurant${suffix}${tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : ""}`;
+
   useEffect(() => {
     let cancelled = false;
-    const url = `${API_BASE}/api/public/restaurant/menu/${encodeURIComponent(token)}${
-      tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : ""
-    }`;
+    const url = buildUrl(`/menu/${encodeURIComponent(token)}`);
     fetch(url)
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
@@ -41,7 +56,13 @@ export default function PublicRestaurantMenuPage() {
         setLoading(false);
       });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, tenantSlug]);
+
+  // Tear down auto-reset timer on unmount.
+  useEffect(() => () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+  }, []);
 
   const categories = useMemo(() => {
     if (!menu?.items) return [];
@@ -61,6 +82,15 @@ export default function PublicRestaurantMenuPage() {
     return menu.items.filter((i) => (i.category_id || "uncat") === activeCategory);
   }, [menu, activeCategory]);
 
+  const cartTotal = useMemo(
+    () => cart.reduce((acc, c) => acc + Number(c.price || 0) * Number(c.quantity || 0), 0),
+    [cart],
+  );
+  const cartCount = useMemo(
+    () => cart.reduce((acc, c) => acc + Number(c.quantity || 0), 0),
+    [cart],
+  );
+
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2500);
@@ -69,22 +99,66 @@ export default function PublicRestaurantMenuPage() {
   const handleAddItem = async (product) => {
     setSubmittingId(product.id);
     try {
-      const url = `${API_BASE}/api/public/restaurant/checks/${encodeURIComponent(token)}/items${
-        tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : ""
-      }`;
-      const res = await fetch(url, {
+      const res = await fetch(buildUrl(`/checks/${encodeURIComponent(token)}/items`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product_id: product.id, quantity: 1 }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add item");
-      showToast(`${product.name} added to your order`);
+      // Mirror in local cart. Coalesce repeats by product id.
+      setCart((prev) => {
+        const idx = prev.findIndex((c) => c.product_id === product.id);
+        if (idx >= 0) {
+          const next = prev.slice();
+          next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+          return next;
+        }
+        return [...prev, { product_id: product.id, name: product.name, price: Number(product.price || 0), quantity: 1 }];
+      });
+      showToast(`${product.name} added`);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
       setSubmittingId(null);
     }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!cart.length || submittingOrder) return;
+    setSubmittingOrder(true);
+    try {
+      const res = await fetch(buildUrl(`/checks/${encodeURIComponent(token)}/submit`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to place order");
+      setConfirmation(data);
+
+      // Counter mode: short auto-reset so the next customer gets a fresh
+      // menu. Table mode: stay on the confirmation until the customer
+      // taps "Back to menu" — they may want to add another course.
+      if (data.mode === "counter") {
+        resetTimerRef.current = setTimeout(() => {
+          setConfirmation(null);
+          setCart([]);
+          // Re-fetch menu so the slot gets a new draft minted lazily on
+          // the next /menu hit.
+          window.location.reload();
+        }, COUNTER_RESET_MS);
+      }
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setSubmittingOrder(false);
+    }
+  };
+
+  const handleBackToMenu = () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    setConfirmation(null);
+    setCart([]);
   };
 
   if (loading) {
@@ -116,6 +190,54 @@ export default function PublicRestaurantMenuPage() {
   const logoUrl = menu?.logo_url;
   const currencySymbol = menu?.currency_symbol || "Rs";
   const tableLabel = menu?.table_label;
+
+  // ── Confirmation screen ───────────────────────────────────────────────
+  if (confirmation) {
+    const isCounter = confirmation.mode === "counter";
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white border border-gray-200 rounded-2xl p-8 text-center shadow-sm">
+          <div className="mx-auto h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center mb-5">
+            <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Order placed</h1>
+
+          {isCounter ? (
+            <>
+              <p className="text-sm text-gray-500 mb-5">
+                Show this number when you collect your order at the counter.
+              </p>
+              <div className="text-5xl font-bold tracking-tight text-amber-600 mb-6">
+                {confirmation.order_number}
+              </div>
+              <p className="text-xs text-gray-400">
+                Returning to menu in a few seconds…
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mb-2">
+                Sent to your server — please wait.
+              </p>
+              <p className="text-xs text-gray-400 mb-6">
+                Need to add another course? Tap below.
+              </p>
+              <button
+                type="button"
+                onClick={handleBackToMenu}
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-5 py-3 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                Back to menu
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -172,7 +294,7 @@ export default function PublicRestaurantMenuPage() {
       </header>
 
       {/* Menu items */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-24">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-32">
         {filteredItems.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-500">No items in this category.</div>
         ) : (
@@ -217,9 +339,32 @@ export default function PublicRestaurantMenuPage() {
         <p className="mt-8 text-center text-xs text-gray-400">Powered by SanoPOS</p>
       </main>
 
+      {/* Sticky Place Order CTA */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-30 border-t border-gray-200 bg-white shadow-lg">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-gray-500">{cartCount} item{cartCount === 1 ? "" : "s"} in your order</div>
+              <div className="text-base font-semibold text-gray-900">
+                {currencySymbol} {cartTotal.toFixed(2)}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handlePlaceOrder}
+              disabled={submittingOrder}
+              data-testid="place-order"
+              className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-5 py-3 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {submittingOrder ? "Placing…" : "Place Order"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
           <div
             className={`rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
               toast.type === "error" ? "bg-red-600 text-white" : "bg-gray-900 text-white"

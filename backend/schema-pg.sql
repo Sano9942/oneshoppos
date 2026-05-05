@@ -2298,7 +2298,9 @@ CREATE TABLE IF NOT EXISTS draft_orders (
   id SERIAL PRIMARY KEY,
   outlet_id INTEGER NOT NULL REFERENCES outlets(id),
   customer_id INTEGER REFERENCES customers(id),
-  created_by INTEGER NOT NULL REFERENCES employees(id),
+  -- created_by is nullable to allow anonymous kiosk-counter drafts. Migration
+  -- v85 also drops NOT NULL on existing schemas.
+  created_by INTEGER REFERENCES employees(id),
   claimed_by INTEGER REFERENCES employees(id),
   claimed_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled','merged')),
@@ -3136,7 +3138,7 @@ CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item ON kds_ticket_items(draft_o
 -- sourced checks converted from web_orders. The first-pass constraint is
 -- kept inline below; migrate-pg.js v55 drops + recreates it to add 'online'.
 ALTER TABLE draft_orders
-  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online','drive_thru')),
+  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online','drive_thru','kiosk_counter')),
   ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id),
   ADD COLUMN IF NOT EXISTS table_session_id INTEGER REFERENCES restaurant_table_sessions(id),
   ADD COLUMN IF NOT EXISTS tab_id INTEGER REFERENCES restaurant_tabs(id),
@@ -3144,7 +3146,26 @@ ALTER TABLE draft_orders
   ADD COLUMN IF NOT EXISTS dining_option TEXT CHECK (dining_option IN ('dine_in','takeout','delivery')),
   ADD COLUMN IF NOT EXISTS source_token_id TEXT,
   -- Phase 2.1 B2 — channel stamp for online inbox conversions.
-  ADD COLUMN IF NOT EXISTS source_channel TEXT DEFAULT 'pos';
+  ADD COLUMN IF NOT EXISTS source_channel TEXT DEFAULT 'pos',
+  -- Customer order kiosk — set when guest hits "Place Order" on /menu/:token.
+  -- Counter mode also writes a web_orders row; table mode only stamps this.
+  ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+
+-- Customer order kiosk slots — stable per-outlet bookmark URL with rotating
+-- drafts behind it. Counter mode only; table mode keeps using
+-- draft_orders.source_token_id directly. See routes/public-restaurant.js.
+CREATE TABLE IF NOT EXISTS restaurant_kiosk_slots (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  slot_token TEXT NOT NULL UNIQUE,
+  label TEXT,
+  current_draft_order_id INTEGER REFERENCES draft_orders(id),
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_restaurant_kiosk_slots_outlet_active
+  ON restaurant_kiosk_slots(outlet_id) WHERE revoked_at IS NULL;
 
 -- Partial UNIQUE index for QR public menu lookup (routes/public-restaurant.js).
 -- Enforces one-token-to-one-check and speeds up the WHERE source_token_id = $1 query.

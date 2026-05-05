@@ -6212,6 +6212,59 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 85,
+    description:
+      "Customer order kiosk — restaurant_kiosk_slots table + draft_orders.submitted_at + 'kiosk_counter' order_context",
+    up: async (client) => {
+      // Counter-mode kiosks need a stable per-outlet bookmark URL while the
+      // draft order behind it rotates per customer. The slot row holds the
+      // stable token; current_draft_order_id swings to a fresh draft on each
+      // /menu hit when the previous one is null. See
+      // docs/plans/2026-05-06-order-kiosk-design.md "Counter-mode tablet URL
+      // stability" for the full rationale.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS restaurant_kiosk_slots (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+          slot_token TEXT NOT NULL UNIQUE,
+          label TEXT,
+          current_draft_order_id INTEGER REFERENCES draft_orders(id),
+          revoked_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_restaurant_kiosk_slots_outlet_active
+          ON restaurant_kiosk_slots(outlet_id) WHERE revoked_at IS NULL;
+      `);
+
+      // submitted_at marks the moment a customer hit "Place Order" on the
+      // kiosk surface. Counter-mode submissions also write a web_orders row
+      // (so the existing inbox accept flow handles them); stamping this is
+      // belt-and-braces. Table-mode submissions only stamp this column —
+      // they don't insert a web_orders row, the server fires from Checks.
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+      `);
+
+      // Widen order_context CHECK to include 'kiosk_counter'. Drop+recreate
+      // because IF NOT EXISTS doesn't update an existing constraint.
+      await client.query(`
+        ALTER TABLE draft_orders DROP CONSTRAINT IF EXISTS draft_orders_order_context_check;
+        ALTER TABLE draft_orders ADD CONSTRAINT draft_orders_order_context_check
+          CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online','drive_thru','kiosk_counter'));
+      `);
+
+      // Counter-mode kiosk drafts have no logged-in employee at mint time
+      // (the customer is anonymous). Existing rows always carry a
+      // created_by, so this is safe — it only loosens the schema for the
+      // new kiosk path.
+      await client.query(`
+        ALTER TABLE draft_orders ALTER COLUMN created_by DROP NOT NULL;
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

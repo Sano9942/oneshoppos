@@ -111,6 +111,22 @@ const publicBookingLimiter = rateLimit({
   },
 });
 
+// Public restaurant kiosk endpoints (menu fetch, add item, submit). Sized
+// so a busy tablet round (browse + add 6 items + submit) fits comfortably,
+// while still throttling abusive scrapers / submit-spammers per IP+tenant.
+const publicRestaurantLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const tenantKey = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `pubrest:${tenantKey}:${req.ip}`;
+  },
+});
+
 // ── M8 Customer Portal ────────────────────────────────────────────────
 // These limiters key on identifiers visible before auth runs — the portal
 // routes mount BEFORE tenant middleware, so req.tenantSlug is not set; we
@@ -165,6 +181,7 @@ module.exports = {
   webhookLimiter,
   reviewLimiter,
   publicBookingLimiter,
+  publicRestaurantLimiter,
   customerPortalAuthLimiter,
   customerPortalOtpLimiter,
   customerPortalDataLimiter,

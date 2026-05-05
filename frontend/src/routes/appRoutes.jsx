@@ -100,7 +100,6 @@ const WaitlistRoute = lazy(() => import("../pages/WaitlistRoute"));
 const ModifierGroupsRoute = lazy(() => import("../pages/ModifierGroupsRoute"));
 const RestaurantInboxRoute = lazy(() => import("../pages/RestaurantInboxRoute"));
 const KDSRoute = lazy(() => import("../pages/KDSRoute"));
-const KioskOrderingRoute = lazy(() => import("../pages/KioskOrderingRoute"));
 const AppointmentServicesRoute = lazy(() => import("../pages/AppointmentServicesRoute"));
 const AppointmentsCalendarRoute = lazy(() => import("../pages/AppointmentsCalendarRoute"));
 const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
@@ -110,6 +109,7 @@ const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
 const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
 const RoomManagementRoute = lazy(() => import("../pages/RoomManagementRoute"));
 const TreatmentPlansRoute = lazy(() => import("../pages/TreatmentPlansRoute"));
+const OrderKiosksRoute = lazy(() => import("../pages/OrderKiosksRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -253,7 +253,7 @@ export const appRoutes = [
     <Route path="/restaurant/modifiers" element={perm("manage_restaurant", wrap(ModifierGroupsRoute))} />
     <Route path="/restaurant/inbox" element={perm("manage_restaurant", wrap(RestaurantInboxRoute))} />
     <Route path="/kds" element={perm("manage_kds", wrap(KDSRoute))} />
-    <Route path="/kiosk" element={wrap(KioskOrderingRoute)} />
+    <Route path="/order-kiosks" element={perm("manage_restaurant", wrap(OrderKiosksRoute))} />
     {/* Phase 4 — Appointments */}
     <Route path="/appointments/services" element={perm("manage_bookings", wrap(AppointmentServicesRoute))} />
     <Route path="/appointments/calendar" element={perm("manage_bookings", wrap(AppointmentsCalendarRoute))} />

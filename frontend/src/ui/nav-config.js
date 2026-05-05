@@ -155,6 +155,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Void/Comp Reasons", path: "/restaurant/void-reasons", icon: Ban, requiredPerm: "all_access", requiredFlag: "phase4_restaurant_void_comp", requiredMode: "restaurant" },
       { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds", requiredMode: "restaurant" },
       { name: "Tip Pools", path: "/tips", icon: Banknote, requiredPerm: "manage_tips", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
+      { name: "Order Kiosks", path: "/order-kiosks", icon: Monitor, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_qr", requiredMode: "restaurant" },
     ],
   },
   {
