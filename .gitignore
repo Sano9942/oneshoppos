@@ -26,6 +26,10 @@ Thumbs.db
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Codex / other AI tool local config (contains secrets — never commit)
+.codex/
+.agents/
+
 # Review scaffolding (one-shot reviewer prompts + file lists — findings are committed)
 .claude/reviews/_reviewer-prompt-*.md
 .claude/reviews/phase*-files.txt
