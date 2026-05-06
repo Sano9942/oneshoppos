@@ -26,11 +26,30 @@
  *
  * Returns the inserted row, or null if no row was written.
  */
+// W24: keep this in sync with the tip_captures.tip_method CHECK constraint.
+// Adding a value here without a migration is a guaranteed silent-drop bug.
+const ALLOWED_TIP_METHODS = ["cash", "card", "split"];
+
 async function captureTipOnSale(db, { sale_id, draft_order_id, tip_amount, tip_method, server_id }) {
   const amount = Number(tip_amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
   if (!sale_id) throw new Error("sale_id required");
   if (!tip_method) throw new Error("tip_method required");
+
+  // W24: normalise tip_method to lowercase + validate against the DB CHECK
+  // before attempting the INSERT. Caught upstream by the route's catch
+  // block, which (post-fix) surfaces a Sentry event so silent drops are
+  // observable. Previously the frontend sent capitalised "Cash" / "Card" /
+  // "Wallet"; the INSERT then failed on the CHECK and the catch swallowed
+  // the error, losing the tip without any user-visible signal.
+  const normalisedMethod = String(tip_method).toLowerCase();
+  if (!ALLOWED_TIP_METHODS.includes(normalisedMethod)) {
+    throw Object.assign(
+      new Error(`tip_method '${tip_method}' is not in [${ALLOWED_TIP_METHODS.join(", ")}]`),
+      { code: "INVALID_TIP_METHOD", statusCode: 400 }
+    );
+  }
+  tip_method = normalisedMethod;
 
   // Idempotency: skip if we already captured this sale's tip.
   const { rows: existing } = await db.query(

@@ -283,8 +283,11 @@ export function useCheckout({
       folio_id: chargeToRoomFolioId ? Number(chargeToRoomFolioId) : null,
       treatment_folio_id: chargeToTreatmentFolioId ? Number(chargeToTreatmentFolioId) : null,
       // Phase 2.1 C1 tip capture — backend requires both fields or skips tips.
+      // W24: tip_method must be lowercase to satisfy the tip_captures CHECK
+      // constraint (cash|card|split). The UI buttons store the capitalised
+      // label for display; lowercase at the wire so DB inserts succeed.
       tip_amount: tipNum > 0 ? tipNum : 0,
-      tip_method: tipNum > 0 ? tipMethod : null,
+      tip_method: tipNum > 0 ? String(tipMethod).toLowerCase() : null,
       server_id: serverNum,
       // Phase 2-R.0 — restaurant shell context. All nullable; backend at
       // routes/sales.js:445,1007 already accepts draft_order_id. The other

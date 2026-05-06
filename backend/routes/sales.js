@@ -1825,6 +1825,8 @@ module.exports = function registerSalesRoutes(app, deps) {
         // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-
         // and-forget; failure shouldn't block the sale response. Only runs
         // when the caller actually passed a tip — non-restaurant sales skip.
+        // W24: surface failures to Sentry so silent drops (e.g. wrong-cased
+        // tip_method) become observable instead of vanishing into Pino logs.
         if (Number(tip_amount) > 0 && tip_method) {
           const tipsService = require("../services/tips");
           tipsService
@@ -1835,9 +1837,16 @@ module.exports = function registerSalesRoutes(app, deps) {
               tip_method,
               server_id: server_id || null,
             })
-            .catch((err) =>
-              logger.error({ err, saleId }, "[tips] captureTipOnSale failed (non-blocking)")
-            );
+            .catch((err) => {
+              logger.error({ err, saleId, tip_method, tip_amount }, "[tips] captureTipOnSale failed (non-blocking)");
+              try {
+                const Sentry = require("@sentry/node");
+                Sentry.captureException(err, {
+                  tags: { component: "tips", saleId: String(saleId) },
+                  extra: { tip_method, tip_amount, server_id, draft_order_id },
+                });
+              } catch { /* Sentry not initialised in tests; ignore */ }
+            });
         }
 
         // Auto-calculate commissions (fire-and-forget, don't block sale response)
