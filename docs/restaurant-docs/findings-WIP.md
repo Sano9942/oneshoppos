@@ -22,11 +22,11 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 3 | 2 | 0 |
-| 🟡 Issue | 1 | 1 | 0 |
-| 🔵 Polish | 11 | 0 | 0 |
-| **Total** | **15** | **3** | **0** |
+| 🟡 Issue | 2 | 1 | 0 |
+| 🔵 Polish | 13 | 0 | 0 |
+| **Total** | **18** | **3** | **0** |
 
-Last update: 2026-05-07 (Phase 1 + partial Phase 2 walkthrough — W1/W2/W3 blockers filed in Restaurant section before pausing the sweep; W4 polish for sidebar flicker).
+Last update: 2026-05-07 (post-walkthrough W5/W6/W7 backfill — observations caught during Phase 1+2 but not initially formalized: W5 confirms P10 live, W6 latent perm-array gap for Owner, W7 transient 401 on /api/context/bootstrap).
 
 ---
 
@@ -392,6 +392,95 @@ React error #310 = "Rendered more hooks than during the previous render" — i.e
 **Suspected root cause:** This is the surface symptom of W1; not a separate bug. Worth flagging because the merchant experiences "the sidebar lies to me" before they understand it's an outlet-context bug.
 
 **Suggested fix:** Resolved by W1 fix.
+
+---
+
+### W5 — P10 confirmed live: provisioner role name "Admin" wins over setup.js "Administrator"
+
+**Status:** OPEN (live confirmation of pre-existing P10)
+**Severity:** 🔵 POLISH
+**Surfaces affected:** anywhere code joins on role.name or matches `DEFAULT_ROLE_PERMISSIONS` keys by name
+**Found via:** Playwright walkthrough 2026-05-07, Phase 1 — `/api/context/bootstrap` response inspection
+
+**Live verification:** GET `/api/context/bootstrap` for `sanoposlivetest1778021564659` returns:
+```json
+"employee": { "id": 1, "name": "Test Owner", "role_id": 1, "role_name": "Admin" }
+```
+
+Confirms P10 is live: provisioner-set role name `"Admin"` persists despite setup.js seeding `"Administrator"`. Functionally fine because:
+- Profile dropdown text "Administrator" is hardcoded by `role_id` in `frontend/src/components/AppLayoutRedesign.jsx` ProfileDropdown (verified by reading source line ~50-70 area), NOT by reading the role.name DB column
+- Permissions resolve via `role_id`, not `role.name`
+- No surface visibly shows "Admin" today
+
+**No new fix path needed** — supersedes nothing; just records that P10's "what is the live state" question is answered. Same fix path applies (pick canonical name in provisioner + heal existing tenants).
+
+---
+
+### W6 — Owner's `permissions` array lacks literal Phase 4 perms; `hasPerm("all_access")` short-circuit is the only thing keeping Restaurant routes accessible
+
+**Status:** OPEN
+**Severity:** 🟡 ISSUE (latent — depends on whether any code does `permissions.includes("manage_restaurant")` instead of `hasPerm("manage_restaurant")`)
+**Surfaces affected:** any route or component that bypasses `hasPerm()` and reads the `permissions` array directly
+**Found via:** Playwright walkthrough 2026-05-07, Phase 1 — `/api/auth/me` response inspection
+
+**Live verification:** GET `/api/auth/me` for the Owner returns:
+```json
+"permissions": [
+  "all_access","manage_customers","manage_employees","manage_inventory","manage_orders",
+  "pos_discount","pos_park","pos_void","view_reports","void_sales"
+]
+```
+
+10 perms only. **None of `manage_restaurant`, `manage_kds`, `manage_tips`, `override_void_comp`, `override_price`, `manage_gift_cards`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans` are present.**
+
+The Owner can still hit restaurant routes today because:
+- `frontend/src/auth/AuthProvider.jsx:159` — `hasPerm = (perm) => permissions.includes("all_access") || permissions.includes(perm)`
+- The `all_access` short-circuit makes the missing literal perms irrelevant for the gate.
+
+**Risk:** any code path that reads `useAuth().permissions` directly (rather than via `hasPerm()`) will fail for the Owner on Phase 4 features. Examples to grep for: `permissions.includes(`, `perms.includes(`, `permissions.indexOf(`. Not yet audited.
+
+**Compare with B2 fix:** B2 added the 13 Phase 4 perms to the **Manager** role explicitly via `DEFAULT_ROLE_PERMISSIONS.Manager`. The Admin role gets `all_access` + 9 baseline perms via `tenant-provisioner-pg.js`'s own `ALL_PERMISSIONS` array — which does NOT include the Phase 4 perms. B2's import of `DEFAULT_ROLE_PERMISSIONS` doesn't help the Admin row because the role_name mismatch (W5) means the seed loop never matches `id=1` to a `DEFAULT_ROLE_PERMISSIONS.Administrator` entry.
+
+**Fix path:** either (a) make the Admin perm list include the Phase 4 perms explicitly, or (b) keep relying on the `all_access` short-circuit and add a lint rule / grep-check in CI that bans direct `permissions.includes(...)` outside `AuthProvider`. Option (b) is the cheaper fix but option (a) is more honest about what the Admin actually has.
+
+**Source citations:**
+- `backend/tenant-provisioner-pg.js` — `ALL_PERMISSIONS` array seeded for role_id=1
+- `backend/middleware/permissions.js` — `DEFAULT_ROLE_PERMISSIONS.Administrator` (newly relevant after B2 import in `0212ccc`)
+- `frontend/src/auth/AuthProvider.jsx:157-159` — `hasPerm` definition
+
+---
+
+### W7 — Transient 401 on `/api/context/bootstrap` during first render after login
+
+**Status:** OPEN
+**Severity:** 🔵 POLISH (cosmetic console noise + Sentry pollution)
+**Surfaces affected:** every authenticated session — fires once per fresh login
+**Found via:** Playwright walkthrough 2026-05-07, Phase 1 — console inspection after login
+
+**Steps to reproduce:**
+1. Clear localStorage
+2. Log in
+3. Land on /dashboard
+4. Console shows: `[ERROR] Failed to load resource: the server responded with a status of 401 () @ https://api.sanopos.com/api/context/bootstrap:0`
+5. The bootstrap call retries successfully a moment later (preset loads correctly — verified by checking that restaurant labels arrive)
+
+**Observed:** Single 401 logged then ignored. PresetContext sets `presetLoaded=true` regardless (per `frontend/src/contexts/PresetContext.jsx:93-96` catch-and-continue) so user never sees a problem.
+
+**Expected:** No 401. The first bootstrap call should already have headers attached.
+
+**Source / root cause** (verified against code, not docs):
+- `frontend/src/contexts/PresetContext.jsx:54-98` — explicitly waits for `!isBootstrapping && employee?.id` before calling `api.get("/api/context/bootstrap")`. The comment at line 71-77 even calls this race out: "the auth fetch interceptor is wired in an AuthProvider useEffect, and child useEffects run before parent useEffects in React. Without this guard, the first /api/context/bootstrap call goes through unpatched fetch and 401s."
+- The guard prevents PresetContext's call from racing — but **something else is calling `/api/context/bootstrap` before the interceptor is wired**. Likely culprit: `ContextSwitcher.jsx` or `RequireContext.jsx`. Did not source-verify the actual caller this session.
+
+**Console error (raw):**
+```
+Failed to load resource: the server responded with a status of 401 ()
+@ https://api.sanopos.com/api/context/bootstrap:0
+```
+
+**Why it's polish-only:** PresetContext recovers silently. But every fresh login pollutes Sentry with a 401 that is operationally meaningless, which trains operators to ignore Sentry 401s — bad signal hygiene.
+
+**Fix path:** grep for all `/api/context/bootstrap` callers, identify the early one, apply the same `isBootstrapping` guard PresetContext uses. Or: serve `/api/context/bootstrap` as a public endpoint when called without auth (server returns a stub) — riskier.
 
 ---
 
