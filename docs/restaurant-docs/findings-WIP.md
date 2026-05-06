@@ -488,7 +488,7 @@ Failed to load resource: the server responded with a status of 401 ()
 
 ### W8 — Order Kiosks page crashes with React error #310 (rendered more hooks than previous render) ✅ FIXED
 
-**Status:** ✅ FIXED — commit (next push) (2026-05-08). Hoisted the `useMemo` above the `flagsLoading`/`!flags.phase4_restaurant_qr`/`!hasPerm` early-return block in `OrderKiosksRedesign.jsx`. Verified locally that JSX file parses cleanly. Will live-verify after deploy.
+**Status:** ✅ FIXED — commit `9a737e8` (2026-05-08). Hoisted the `useMemo` above the `flagsLoading`/`!flags.phase4_restaurant_qr`/`!hasPerm` early-return block in `OrderKiosksRedesign.jsx`. Live-verified 2026-05-06T18:45 against `sanoposlivetest1778021564659`: `/order-kiosks` renders heading "Order Kiosks", outlet picker (Main Store), counter label input, "Launch counter kiosk" + "Launch table kiosk" buttons, "0 active kiosks / No active kiosks for this outlet" empty state. 0 console errors. Screenshot: `restaurant-walkthrough-fix-order-kiosks-loaded-2026-05-08.png`.
 **Severity:** 🔴 BLOCKER
 **Surfaces affected:** `/order-kiosks` (entire admin-side counter/table kiosk launcher)
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Restaurant section sweep (resumption)
@@ -534,7 +534,11 @@ Error: Minified React error #310; visit https://react.dev/errors/310
 
 ### W9 — Six restaurant routes typo `req.context?.outlet_id` (snake_case) but middleware writes `req.context.outletId` (camelCase) ✅ FIXED
 
-**Status:** ✅ FIXED — commit (next push) (2026-05-08). All 6 sites updated: `restaurant.js:23, 114, 162`, `restaurant-inbox.js:24`, `kds.js:15, 79`. Replaced `req.context?.outlet_id` with `req.context?.outletId`. `node -c` syntax-checked all three files. Verified by `grep -nE "req\.context\?\.outlet_id|req\.context\.outlet_id" backend` returns no matches.
+**Status:** ✅ FIXED — commit `9a737e8` (2026-05-08). All 6 sites updated: `restaurant.js:23, 114, 162`, `restaurant-inbox.js:24`, `kds.js:15, 79`. Replaced `req.context?.outlet_id` with `req.context?.outletId`. `node -c` syntax-checked all three files. Verified by `grep -nE "req\.context\?\.outlet_id|req\.context\.outlet_id" backend` returns no matches.
+
+Live-verified 2026-05-06T18:45 against `sanoposlivetest1778021564659`:
+- `/pos` (auto-redirected to `/pos/restaurant`) → console clean, 0 errors. Network: `GET /api/restaurant/floor-plans` returns **200** (was 400).
+- Direct fetch with `x-outlet-id: 1` header but NO `?outlet_id=` query: status 200, body `{ floor_plans: [] }`. Confirms the `req.context.outletId` fallback path now works.
 **Severity:** 🟡 ISSUE (functional latently — masked because frontend almost always passes `outlet_id` query)
 **Surfaces affected:** any code path that hits restaurant/KDS/inbox routes WITHOUT `?outlet_id=` query — currently the POS Restaurant initial floor-plan fetch
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Commerce/Catalog/Inventory sweep, observed 400 in console while opening `/pos/restaurant`
@@ -576,7 +580,12 @@ Failed to load resource: the server responded with a status of 400 ()
 
 ### W10 — Restaurant preset label drift: page heading says "Guests" but sidebar nav, breadcrumb, and Customer Groups link all say "Customers" ✅ FIXED
 
-**Status:** ✅ FIXED — commit (next push) (2026-05-08). Added a `translateNavLabel` helper in `AppLayoutRedesign.jsx` that consults `usePreset().labels.customer / customers / product / products` and rewrites group names + nav item names accordingly. Same helper inlined into `Breadcrumbs.jsx`. Replace order is plurals-then-singulars to avoid "Customer" inside "Customers" being substituted first. JSX parse-checked; existing layout unit tests still pass. Will live-verify by reloading the dashboard on the restaurant tenant after deploy — sidebar should show "Guests" and "Guest Groups".
+**Status:** ✅ FIXED — commit `9a737e8` (2026-05-08). Added a `translateNavLabel` helper in `AppLayoutRedesign.jsx` that consults `usePreset().labels.customer / customers / product / products` and rewrites group names + nav item names accordingly. Same helper inlined into `Breadcrumbs.jsx`. Replace order is plurals-then-singulars to avoid "Customer" inside "Customers" being substituted first. JSX parse-checked; existing layout unit tests still pass.
+
+Live-verified 2026-05-06T18:46 against `sanoposlivetest1778021564659`:
+- Sidebar group header now reads **"Guests"** (was "Customers"), with items **"Guests" / "Guest Groups" / "Guest Invoices"** (was Customers / Customer Groups / Customer Invoices).
+- `/customers` page: breadcrumb says **"Guests"** and h1 heading says **"Guests"** — fully consistent now.
+- All 15 sidebar group labels enumerated: Overview / Sell / **Guests** / Catalog / Inventory / Procurement / Fulfillment / Online Store / Restaurant / Finance / Insights / People / Compliance / Setup / Account.
 **Severity:** 🔵 POLISH
 **Surfaces affected:** sidebar nav (`Customers`, `Customer Groups`, `Customer Invoices`), breadcrumb on /customers, breadcrumb on /customer-groups, label inconsistency between page heading vs nav
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Customers item
