@@ -536,6 +536,10 @@ module.exports = function registerSalesRoutes(app, deps) {
       // Phase 2.1 C1 — tip capture inputs (restaurant flow). draft_order_id
       // links the sale back to the check; non-restaurant sales pass nothing.
       draft_order_id = null,
+      // W17 — when settling a check tied to a seated table, the sale needs
+      // to flip the table session to 'dirty' (busser cleanup state) so the
+      // floor view stops showing the table as occupied.
+      table_session_id = null,
       tip_amount = 0,
       tip_method = null,
       // Phase 2.1 C1 wiring — server-of-record override from POS checkout
@@ -1798,6 +1802,24 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         } catch (fbrErr) {
           logger.error({ err: fbrErr, saleId }, "FBR enqueue failed (non-blocking)");
+        }
+
+        // W17 — restaurant settle: flip the linked draft to completed and
+        // mark the table session 'dirty' so the busser sees it on the floor
+        // view and can clear it. Best-effort: failures don't block the sale
+        // response. Only runs when the caller actually passed a draft id —
+        // retail sales / walk-in tabs without a table session skip.
+        if (draft_order_id) {
+          db.query(
+            "UPDATE draft_orders SET status = 'completed', updated_at = NOW() WHERE id = $1 AND status IN ('open','claimed')",
+            [draft_order_id]
+          ).catch((err) => logger.error({ err, draft_order_id }, "[settle] draft_orders complete failed (non-blocking)"));
+        }
+        if (table_session_id) {
+          db.query(
+            "UPDATE restaurant_table_sessions SET status = 'dirty', updated_at = NOW() WHERE id = $1 AND status NOT IN ('closed','dirty')",
+            [table_session_id]
+          ).catch((err) => logger.error({ err, table_session_id }, "[settle] table_session dirty flip failed (non-blocking)"));
         }
 
         // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-

@@ -18,6 +18,7 @@ const STATUS_TONE = {
   ordering:        "bg-amber-500/15 text-amber-300 border-amber-500/30",
   served:          "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
   check_requested: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  dirty:           "bg-violet-500/15 text-violet-300 border-violet-500/30",
   closed:          "bg-slate-500/15 text-slate-300 border-slate-500/30",
 };
 
@@ -114,10 +115,52 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     return true;
   }, [cart, orderContext, tableSessionId]);
 
-  const performOpen = useCallback((next) => {
+  const performOpen = useCallback(async (next) => {
     openCheck(next);
     onOpenCheck?.();
-  }, [openCheck, onOpenCheck]);
+    // W16: when re-entering a seated table, rehydrate the cart from the
+    // existing open draft so the cashier sees what's already been sent to
+    // the kitchen. Without this, the cart shows empty and items can be
+    // accidentally re-added. Best-effort — failures are silent because
+    // openCheck already cleared the cart and that's a usable empty state.
+    if (next?.tableSessionId) {
+      try {
+        const list = await api.get("/api/draft-orders", {
+          table_session_id: next.tableSessionId,
+          status: "open,claimed",
+        });
+        const draft = list?.draftOrders?.[0];
+        if (draft?.id) {
+          const detail = await api.get(`/api/draft-orders/${draft.id}`);
+          const items = detail?.items || [];
+          if (items.length) {
+            setCart(items.map((it) => ({
+              id: it.product_id,
+              variant_id: it.variant_id || null,
+              name: it.product_name,
+              price: Number(it.price),
+              originalPrice: Number(it.price),
+              quantity: Number(it.quantity),
+              seat_number: it.seat_number ?? null,
+              course_name: it.course_name || "main",
+              // W16: kitchen_status preserved so a future Send-to-Kitchen sync
+              // can skip items already 'sent' / 'fired' rather than re-firing
+              // them (current PUT delete-and-rebuilds — items keep going). The
+              // syncCartToDraft helper in RestaurantActionBar should filter
+              // these; until that filter ships, adding a NEW item then
+              // clicking Send-to-Kitchen will redundantly re-fire the
+              // restored ones. Visually fine for the cashier to see what's
+              // in the kitchen.
+              kitchen_status: it.kitchen_status || "pending",
+              availableStock: 99999,
+            })));
+          }
+        }
+      } catch {
+        // silent — empty cart is the safe default
+      }
+    }
+  }, [openCheck, onOpenCheck, setCart]);
 
   const requestOpen = useCallback((next) => {
     if (wouldCollide(next)) {
@@ -183,6 +226,19 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
       console.error("Failed to seat table:", e);
     } finally {
       setSeatBusy(false);
+    }
+  };
+
+  // W17 — busser action: a 'dirty' table is post-settle, awaiting clean-up.
+  // Clearing flips the session to 'closed' so the table card returns to the
+  // empty "Tap to seat" state and a new party can be seated.
+  const clearDirtyTable = async (sessionId) => {
+    if (!sessionId) return;
+    try {
+      await api.put(`/api/restaurant/table-sessions/${sessionId}`, { status: "closed" });
+      loadFloorDetail();
+    } catch (e) {
+      console.error("Failed to clear table:", e);
     }
   };
 
@@ -261,6 +317,7 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
                 reservation={reservationByTable.get(t.id)}
                 onSeat={() => { setSeatForm({ guest_count: Math.max(1, Math.min(t.capacity || 4, 2)) }); setSeatModalTableId(t.id); }}
                 onOpen={() => openTableCheck(t)}
+                onClear={() => clearDirtyTable(t.session_id)}
               />
             ))}
           </div>
@@ -376,26 +433,54 @@ function EntryButton({ icon: Icon, label, onClick }) {
   );
 }
 
-function TableTile({ table, onSeat, onOpen, reservation }) {
-  const seated = Boolean(table.session_id);
+function TableTile({ table, onSeat, onOpen, onClear, reservation }) {
+  const dirty = table.session_status === "dirty";
+  const seated = Boolean(table.session_id) && !dirty;
   const tone = STATUS_TONE[table.session_status] || STATUS_TONE.closed;
+
+  // W17: a 'dirty' table is post-settle, awaiting clean-up. The card stays
+  // visually distinct so a busser knows to clear it; click on the card itself
+  // is a no-op so a server doesn't accidentally open the closed check, but a
+  // dedicated "Clear" pill flips the session to closed.
+  const handleClick = () => {
+    if (dirty) return;
+    if (seated) onOpen?.(); else onSeat?.();
+  };
+
   return (
     <button
-      onClick={seated ? onOpen : onSeat}
+      onClick={handleClick}
       className={`relative text-left rounded-2xl border p-4 transition shadow-sm hover:shadow-md ${
-        seated
+        dirty
+          ? "bg-[#1E1B30] text-white border-violet-500/40 hover:border-violet-400"
+          : seated
           ? "bg-[#0F172A] text-white border-[#1E293B] hover:border-[#8066FF]"
           : "bg-white text-slate-900 border-slate-200 hover:border-[#8066FF]"
       }`}
     >
-      {!seated && reservation && <ReservationBadge reservation={reservation} />}
+      {!seated && !dirty && reservation && <ReservationBadge reservation={reservation} />}
       <div className="flex items-baseline justify-between">
         <span className="text-2xl font-black tracking-tight">{table.label}</span>
-        <span className={`text-[10px] uppercase tracking-wider opacity-70 ${seated ? "text-slate-300" : "text-slate-400"}`}>
+        <span className={`text-[10px] uppercase tracking-wider opacity-70 ${(seated || dirty) ? "text-slate-300" : "text-slate-400"}`}>
           Cap {table.capacity}
         </span>
       </div>
-      {seated ? (
+      {dirty ? (
+        <div className="mt-3 space-y-2">
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${tone}`}>
+            Needs Bussing
+          </span>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onClear?.(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClear?.(); } }}
+            className="block w-full text-center text-xs font-semibold py-1.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white"
+          >
+            Clear Table
+          </span>
+        </div>
+      ) : seated ? (
         <div className="mt-3 space-y-1.5">
           <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${tone}`}>
             {table.session_status}

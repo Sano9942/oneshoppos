@@ -58,8 +58,16 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
   // the cashier has on screen — including 86'd lines, qty bumps, etc. Without
   // this, ensureDraftOrder() leaves an empty draft and fire-course fires
   // nothing (the draft has zero items to advance to "fired").
+  //
+  // W16 follow-up: when the cart is fully composed of items already
+  // 'sent'/'fired' (post-rehydrate, no new additions), skip the PUT — there's
+  // nothing new to send. Without this skip, re-clicking Send-to-Kitchen on a
+  // rehydrated cart would delete-and-rebuild the same items, re-firing them.
   const syncCartToDraft = async (draftId) => {
     if (!draftId) return;
+    if (cart.every((i) => i.kitchen_status === "sent" || i.kitchen_status === "fired")) {
+      return;
+    }
     const items = cart.map((i) => ({
       product_id: i.id,
       variant_id: i.variant_id || null,

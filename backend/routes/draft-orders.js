@@ -6,7 +6,7 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
   // List draft orders
   app.get("/api/draft-orders", feat, async (req, res) => {
     try {
-      const { outlet_id, status, created_by } = req.query;
+      const { outlet_id, status, created_by, table_session_id } = req.query;
       let sql = `
         SELECT d.*, e.name AS created_by_name, cl.name AS claimed_by_name,
                c.name AS customer_name, o.name AS outlet_name,
@@ -28,6 +28,10 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
         params.push(statuses);
       }
       if (created_by) { sql += ` AND d.created_by = $${idx++}`; params.push(created_by); }
+      // W16: filter by table_session_id so the restaurant POS can find the
+      // open draft tied to a seated table when a cashier re-enters the check
+      // mid-service. Returns latest-updated first; caller picks rows[0].
+      if (table_session_id) { sql += ` AND d.table_session_id = $${idx++}`; params.push(Number(table_session_id)); }
       sql += " GROUP BY d.id, e.name, cl.name, c.name, o.name ORDER BY d.updated_at DESC";
       const { rows } = await db.query(sql, params);
       res.json({ draftOrders: rows });
