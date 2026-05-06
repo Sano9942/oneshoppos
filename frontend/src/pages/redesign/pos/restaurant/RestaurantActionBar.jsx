@@ -52,12 +52,33 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
 
   const cartEmpty = cart.length === 0;
 
+  // Sync the local cart into draft_order_items via PUT before any kitchen
+  // action. The backend PUT handler delete-and-rebuilds the items array, so
+  // calling this each fire/send keeps the backend draft in step with whatever
+  // the cashier has on screen — including 86'd lines, qty bumps, etc. Without
+  // this, ensureDraftOrder() leaves an empty draft and fire-course fires
+  // nothing (the draft has zero items to advance to "fired").
+  const syncCartToDraft = async (draftId) => {
+    if (!draftId) return;
+    const items = cart.map((i) => ({
+      product_id: i.id,
+      variant_id: i.variant_id || null,
+      name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      seat_number: i.seat_number ?? null,
+      course_name: i.course_name || "main",
+    }));
+    await api.put(`/api/draft-orders/${draftId}`, { items });
+  };
+
   const sendToKitchen = async () => {
     if (cartEmpty || !online) return;
     setSending(true);
     try {
       const draftId = await ensureDraftOrder();
       if (!draftId) throw new Error("Could not create draft order");
+      await syncCartToDraft(draftId);
       await api.post(`/api/restaurant/checks/${draftId}/send-to-kitchen`, {});
       showNotice?.("Sent to kitchen.");
     } catch (e) {
@@ -73,6 +94,7 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
     try {
       const draftId = await ensureDraftOrder();
       if (!draftId) throw new Error("Could not create draft order");
+      await syncCartToDraft(draftId);
       const courseName = `course_${activeCourse || 1}`;
       await api.post(`/api/restaurant/checks/${draftId}/fire-course`, {
         course_name: courseName,
@@ -104,6 +126,7 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
     try {
       const draftId = await ensureDraftOrder();
       if (!draftId) throw new Error("Could not create draft order");
+      await syncCartToDraft(draftId);
       onOpenPayAtTable?.(draftId);
     } catch (e) {
       setError?.(e.message || "Failed to open QR payment");
