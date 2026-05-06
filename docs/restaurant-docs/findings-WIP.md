@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 3 | 2 | 0 |
-| 🟡 Issue | 2 | 1 | 0 |
-| 🔵 Polish | 13 | 0 | 0 |
-| **Total** | **18** | **3** | **0** |
+| 🔴 Blocker | 0 | 4 | 0 |
+| 🟡 Issue | 1 | 1 | 0 |
+| 🔵 Polish | 11 | 2 | 0 |
+| **Total** | **12** | **7** | **0** |
 
-Last update: 2026-05-07 (post-walkthrough W5/W6/W7 backfill — observations caught during Phase 1+2 but not initially formalized: W5 confirms P10 live, W6 latent perm-array gap for Owner, W7 transient 401 on /api/context/bootstrap).
+Last update: 2026-05-07 (fix-it session shipped — W1/W2/W3/W4 fixed in commit 119a466, W7 retry shipped in 8f5c9ba, all four verified live on https://sanopos.com against `sanoposlivetest1778021564659`).
 
 ---
 
@@ -247,9 +247,9 @@ Provisioner runs first and wins via ON CONFLICT, so the fix should land in provi
 
 ## Walkthrough findings (Wn)
 
-### W1 — Floor / Checks / KDS bounce to /dashboard on every navigation
+### W1 — Floor / Checks / KDS bounce to /dashboard on every navigation ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — auto-seed shipped in commit `119a466`, executed correctly after W7 retry shipped in `8f5c9ba`. Verified live on `sanoposlivetest1778021564659` 2026-05-07 — session.context now contains `{ scope_mode: "single_branch", active_outlet_id: 1, active_company_id: null }` after login; Floor Plan, Checks, KDS all load without bouncing.
 **Severity:** 🔴 BLOCKER
 **Surfaces affected:** `/restaurant/floor`, `/restaurant/checks`, `/kds` (any restaurant page that gates on `readContext()?.active_outlet_id`)
 **Found via:** Playwright walkthrough 2026-05-07, Phase 2 — Restaurant section sweep
@@ -286,9 +286,9 @@ Pre-existing live tenants like `livetest1` work because they went through `/cont
 
 ---
 
-### W2 — Menu Schedules crashes with React error #310 (rendered more hooks than previous render)
+### W2 — Menu Schedules crashes with React error #310 (rendered more hooks than previous render) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `119a466` hoisted the `useMemo` above the early-return block in `frontend/src/pages/redesign/restaurant/MenuSchedulesRedesign.jsx`. Verified live 2026-05-07 — page now renders the 7×24 weekly grid + editor pane cleanly, zero console errors. Five sibling restaurant files were grepped during the fix; none had the same hook-after-early-return pattern.
 **Severity:** 🔴 BLOCKER
 **Surfaces affected:** `/restaurant/menu-schedules` (and likely any page following the same conditional-hook order pattern)
 **Found via:** Playwright walkthrough 2026-05-07, Phase 2 — 🆕 Menu Schedules check
@@ -336,9 +336,9 @@ React error #310 = "Rendered more hooks than during the previous render" — i.e
 
 ---
 
-### W3 — Sidebar restaurant section invisible for ~1.5s after every navigation
+### W3 — Sidebar restaurant section invisible for ~1.5s after every navigation ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `119a466` warm-caches resolved feature flags in `localStorage["sanopos_feature_flags_cache_v1"]`; `useFeatureFlags` now seeds initial state from cache (preserving `phase4_*` truth across reloads) and revalidates in background. `clearSession` also wipes the cache to prevent leakage between tenants on the same browser. Verified live 2026-05-07 — Restaurant section visible on first paint after login (initial DOM probe shows "Restaurant" group present, no 1.5s flicker).
 **Severity:** 🔵 POLISH (UX flicker, not functional)
 **Surfaces affected:** every page with the sidebar (so: every authenticated page after Phase 0 nav-config regroup `25def3a`)
 **Found via:** Playwright walkthrough 2026-05-07, Phase 1 + Phase 2
@@ -373,9 +373,9 @@ React error #310 = "Rendered more hooks than during the previous render" — i.e
 
 ---
 
-### W4 — Sidebar nav links to restaurant routes are React-Router clickable but bounced (W1 cascade)
+### W4 — Sidebar nav links to restaurant routes are React-Router clickable but bounced (W1 cascade) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — resolved automatically by W1 fix. Verified live 2026-05-07 — clicking Floor Plan from the sidebar now lands on `/restaurant/floor` instead of bouncing back to `/dashboard`.
 **Severity:** 🔵 POLISH (downstream of W1)
 **Surfaces affected:** Restaurant sidebar links (Floor Plan, Checks, KDS specifically)
 **Found via:** Playwright walkthrough 2026-05-07, Phase 2 — sidebar click + hard-nav both reproduce
@@ -450,10 +450,12 @@ The Owner can still hit restaurant routes today because:
 
 ---
 
-### W7 — Transient 401 on `/api/context/bootstrap` during first render after login
+### W7 — Transient 401 on `/api/context/bootstrap` during first render after login ✅ FIXED (in PresetContext path)
 
-**Status:** OPEN
-**Severity:** 🔵 POLISH (cosmetic console noise + Sentry pollution)
+**Status:** ✅ FIXED — commit `8f5c9ba` adds a single 600ms-delayed retry on 401 inside PresetContext's bootstrap fetch (mirrors ContextSelect's existing transient-error retry pattern). Surfaced as a critical dependency during W1 verification: the original 401 was silently swallowed by `.catch()`, which meant the W1 `writeContext` call (in `.then()`) never fired. With the retry in place, the .then() runs and W1's auto-seed works as intended. Verified live 2026-05-07.
+
+Note: this fix only addresses the PresetContext caller. Other callers of `/api/context/bootstrap` (ContextSelect, ContextSwitcher) had their own retry logic already. The Sentry-pollution side effect is also reduced since fewer 401s bubble up — but if any other early caller exists upstream of the PresetContext useEffect, it could still log a single 401 per session. Future work could move the retry into the `api.js` interceptor itself.
+**Severity:** 🔵 POLISH (cosmetic console noise + Sentry pollution) → became 🔴-blocker-via-cascade because W1 depended on the .then() running
 **Surfaces affected:** every authenticated session — fires once per fresh login
 **Found via:** Playwright walkthrough 2026-05-07, Phase 1 — console inspection after login
 
@@ -637,6 +639,44 @@ Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Own
 - W2: move `useMemo` before the early-return block in `MenuSchedulesRedesign.jsx`
 
 After those ship, the next walkthrough sitting can resume Phase 2 from the unwalked Restaurant items (Modifiers, Online Inbox, Tip Pools, Order Kiosks) and proceed cross-vertical.
+
+### Session 2026-05-07 (continued) — Fix-it pass for W1/W2/W3/W4/W7
+
+**Operator:** Hassan + Claude
+**Scope:** Ship + verify fixes for blockers found in the morning walkthrough.
+
+**Commits shipped this pass:**
+- `e26ea92` — docs: walkthrough phase 1 closed, phase 2 paused (W1-W4 filed) [from morning sitting]
+- `8c1c265` — docs: backfill W5/W6/W7 (formalized observations from morning walkthrough that hadn't been filed as discrete findings)
+- `119a466` — fix(restaurant): unblock Floor/Checks/KDS, fix Menu Schedules crash, kill sidebar flicker (W1+W2+W3 code)
+- `8f5c9ba` — fix(preset): retry /api/context/bootstrap once on 401 (W7 → unblocks W1)
+
+**Why two fix commits:** First commit (`119a466`) was source-correct for W1 but didn't actually fix W1 in production. Live verification revealed the W7 race was silently swallowing the bootstrap response 401, which meant the `.then()` containing the W1 auto-seed code never ran. Reading the deployed bundle directly confirmed the W1 code was bundled correctly — it just never executed. Second commit (`8f5c9ba`) added a 600ms retry on the PresetContext bootstrap fetch (mirrors ContextSelect's existing pattern), which makes the .then() run on the retried successful response.
+
+**Verification (live, against `https://sanopos.com` tenant `sanoposlivetest1778021564659`):**
+
+| Finding | Live test | Result |
+|---|---|---|
+| W1 | After login, inspect `localStorage.authSession.context` | ✅ `{ scope_mode: "single_branch", active_outlet_id: 1, active_company_id: null }` — auto-seed worked |
+| W1 | Navigate to `/restaurant/floor` | ✅ stays on floor — page renders "Floor Plan" title + "+ New Plan" CTA, topbar shows "Main Store" outlet |
+| W1 | Navigate to `/restaurant/checks` | ✅ stays on checks |
+| W1 | Navigate to `/kds` | ✅ stays on KDS |
+| W2 | Navigate to `/restaurant/menu-schedules` | ✅ renders 7×24 weekly grid + editor pane — 0 console errors (was React #310) |
+| W3 | Capture sidebar groups on first paint AFTER reload | ✅ "Restaurant" group present immediately — no 1.5s flicker |
+| W4 | Click Floor Plan from sidebar (NavLink) | ✅ navigates to `/restaurant/floor` (was bouncing) |
+| W7 | Console after fresh login | Still shows one 401 from bootstrap (the retry catches it client-side) — Sentry pollution not fully eliminated, but PresetContext path now succeeds via retry |
+
+**Screenshots from this pass:**
+- `restaurant-walkthrough-fix-floor-plan-loaded-2026-05-07.png` — Floor Plan after W1 fix
+- `restaurant-walkthrough-fix-menu-schedules-loaded-2026-05-07.png` — Menu Schedules after W2 fix
+
+**Surprises:**
+- The W7 finding (filed as polish during the morning backfill because we thought it was just Sentry noise) turned out to be the keystone blocker for W1. If we hadn't filed W7 as a discrete entry, we might have shipped W1, declared victory, and left it broken in production. The discipline of filing observations as findings even when they look minor paid off.
+- Vite content-hashes the index bundle — changing PresetContext.jsx in `119a466` did not change the `index-3incCkd2.js` hash because PresetContext was tree-shaken into the `reports-CgKtW3aV.js` chunk (it shares the chunk with reports because the import graph crosses there). Took some bundle archaeology to confirm the W1 code WAS deployed before tracing the failure to W7.
+
+**Status updated:** W1, W2, W3, W4, W7 → ✅ FIXED. Status Summary: 0 open blockers, 1 open issue (W6 latent perm-array gap), 11 open polish (P1-P10 + W5).
+
+**Recommendation for next sitting:** Phase 2 can resume from `/restaurant/modifiers` with confidence the Restaurant section is fully walkable.
 
 ---
 
