@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 3 | 10 | 0 |
+| 🔴 Blocker | 2 | 11 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **16** | **19** | **0** |
+| **Total** | **15** | **20** | **0** |
 
-Last update: 2026-05-07 (Phase 3 flow 3.2 — sitting closed at the 3-blocker stop-rule. 7 findings filed, 2 fixed live. **W18** 🟡 (open) no Open-Tab CTA. **W19** 🔵 (open) header labels session_id. **W20** ✅ `5978622` cart split-by-seat. **W21** ✅ `870fa0e` SplitCheckModal sync. **W22** 🔴 (open) `/restaurant/checks` Close-check button → non-existent PUT route → 404. **W23** 🔴 (open) no UI path to pay split-children. **W24** 🔴 (open) tips silently dropped at sale settlement: frontend sends `tip_method:"Cash"` capitalised, DB CHECK requires lowercase `'cash'`; INSERT fails, fire-and-forget catch swallows, sale completes without tip. Sale `INV-2026-00003` written without its `tip_captures` row. W22+W23+W24 together make flow 3.2 step 5-7 (close + tip + pool) unreachable without backend/frontend fixes. **Stop-rule fired; sitting closing.**)
+Last update: 2026-05-07 (Phase 3 flow 3.2 fix-it loop — W24 ✅ FIXED `29e540c` (frontend lowercase + backend validation + Sentry alert). Live-verified: sale `INV-2026-00004` Rs 1,200 with 15% tip wrote `tip_captures.id=2 tip_amount=180.00 tip_method='cash' server_id=1`. **W22** 🔴 next (smallest remaining: add `PUT /api/restaurant/checks/:id`). **W23** 🔴 after (architectural: add Pay-from-Checks-list action). After all three ship + verify, resume flow 3.2 step 5 (split + pay each child + tip pool).)
 
 ---
 
@@ -1186,9 +1186,9 @@ This appears to be either (a) a backend route that was never written, or (b) a f
 
 ---
 
-### W24 — Tips silently dropped at sale settlement: frontend sends capitalised `tip_method`, DB CHECK requires lowercase
+### W24 — Tips silently dropped at sale settlement: frontend sends capitalised `tip_method`, DB CHECK requires lowercase ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `29e540c` (2026-05-07), Vercel `dpl_4z8a2ijVKDK9S5PH5GVvjikWAya1` + Railway redeploy of same commit. Three layers shipped together: (1) frontend lowercases `tip_method` at the wire in `useCheckout.js`; (2) backend `services/tips.js:captureTipOnSale` normalises + validates against `ALLOWED_TIP_METHODS = ['cash','card','split']` and throws `INVALID_TIP_METHOD` for anything else; (3) `routes/sales.js:1828` catch block now also pushes to Sentry so future silent drops in this fire-and-forget path become observable. Live-verified on `sanopos.com`: settled `INV-2026-00004` with `tip_amount:180, tip_method:"cash" (post-fix lowercase), server_id:1`. DB row `tip_captures.id=2` written: `tip_amount=180.00, tip_method='cash', server_id=1, outlet_id=1, sale_id=4`. Pre-fix sale `INV-2026-00003` still has no tip row (confirms the fix only affects post-deploy sales). Bundle hashes flipped: `POSRestaurantRoute-DVfJc7eg → DpuEHE3T`. Screenshot: `restaurant-walkthrough-w24-fixed-tip-captured-2026-05-07.png`. Unit tests: `services-tips-w24.test.js` (6 cases), all 6 backend + 44 frontend cart-related tests pass locally.
 **Severity:** 🔴 BLOCKER (silent data loss — every restaurant sale that captures a tip via the POSCheckoutModal saves the sale but loses the tip; merchant has no indication)
 **Surfaces affected:** `POSCheckoutModal` → "Tip via Cash / Tip via Card / Tip via Wallet" buttons → `POST /api/sales` settle path. Affects every restaurant sale (and any retail sale that uses the tip section of the checkout). Affects flow 3.2 step 5-7 (no `tip_captures` rows means the Tip Pool flow has nothing to distribute), every shift's Tip Pool, every server's earnings, every payroll computation that relies on tip_captures via `commission_earnings (earning_type='tip')`.
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5 (pivot 2b — tip-capture-on-pay verification). Sale `INV-2026-00003` (id=3, total=Rs 2,400) settled with `tip_amount: 360, tip_method: "Cash", server_id: 1` per the POST body. **DB shows `tip_captures` is empty.**

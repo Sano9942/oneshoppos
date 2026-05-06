@@ -76,6 +76,14 @@ const mergeChecksSchema = z.object({
   source_ids: z.array(z.number().int().positive()).min(1),
 });
 
+// W22 — non-payment status updates on a check. Mirrors the draft_orders.status
+// CHECK constraint (open|claimed|completed|cancelled|merged); the routes layer
+// only exposes 'cancelled' and 'completed' to operators (the others are
+// internal lifecycle states managed by sale settlement / split / merge).
+const updateCheckSchema = z.object({
+  status: z.enum(["cancelled", "completed"]),
+});
+
 const fireCourseSchema = z.object({
   course_name: z.string().min(1),
 });
@@ -154,7 +162,7 @@ module.exports = {
   createFloorPlanSchema, updateFloorPlanSchema,
   createTableSchema, updateTableSchema,
   createSessionSchema, createCheckSchema,
-  splitCheckSchema, mergeChecksSchema, fireCourseSchema,
+  splitCheckSchema, mergeChecksSchema, updateCheckSchema, fireCourseSchema,
   holdCourseSchema, expediteCourseSchema,
   createTabSchema,
   createKdsStationSchema, updateKdsStationSchema,

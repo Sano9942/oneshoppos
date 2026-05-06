@@ -9,6 +9,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     splitCheckSchema, mergeChecksSchema, fireCourseSchema,
     holdCourseSchema, expediteCourseSchema,
     createTabSchema,
+    updateCheckSchema,
   } = require("../schemas/restaurant");
   const floor = require("../services/restaurant-floor");
   const checks = require("../services/restaurant-checks");
@@ -346,6 +347,28 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       }
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: sourceId, type: req.body.split_type })]); } catch {}
       res.json({ new_checks: result });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // W22 — non-payment close/cancel a check. The Checks list page uses this
+  // to abandon zombie/empty checks at end-of-shift. Sale settlement (W17)
+  // already flips the parent draft to 'completed' transactionally, so the
+  // common flow doesn't go through here. Limited to 'cancelled' / 'completed'
+  // statuses by updateCheckSchema; the other draft_orders.status values
+  // (open / claimed / merged) are internal lifecycle and not exposed.
+  app.put("/api/restaurant/checks/:id", ...gate, validate(updateCheckSchema), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { status } = req.body;
+      const { rows } = await deps.db.query(
+        `UPDATE draft_orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status, total::text AS total, table_session_id`,
+        [status, id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: "Check not found" });
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_status_changed", JSON.stringify({ id, status })]); } catch {}
+      res.json(rows[0]);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

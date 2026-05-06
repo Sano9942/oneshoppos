@@ -89,9 +89,13 @@ export default function RestaurantChecksRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  // W22: send 'cancelled' to match the draft_orders.status CHECK constraint
+  // (open|claimed|completed|cancelled|merged). The button is intended for
+  // operational close-out (abandoned/zombie checks) — sale settlement uses
+  // a different path that flips status='completed' transactionally.
   const closeCheck = async (checkId) => {
     try {
-      await api.put(`/api/restaurant/checks/${checkId}`, { status: "closed" });
+      await api.put(`/api/restaurant/checks/${checkId}`, { status: "cancelled" });
       toast.success("Check closed");
       load();
     } catch (err) { toast.error(err.message); }
