@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 13 | 0 |
+| 🔴 Blocker | 1 | 13 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **13** | **22** | **0** |
+| **Total** | **14** | **22** | **0** |
 
-Last update: 2026-05-08 morning (W23 `a7cb54c` rehydrate live-verified end-to-end. Pay-this-check on a split child opens POS in check view AND the cart rehydrates with the correct draft items. Both split children of T1 (drafts #14 + #15) settled with 15% Cash tips → INV-2026-00005 + INV-2026-00006. Three tip_captures rows now in DB (id=2/3/4) all with `tip_method='cash'`. Total fixed: 22. 0 open blockers. Next: tip pool flow → distribute → flow 3.2 fully closes.)
+Last update: 2026-05-08 morning (flow 3.3 attempted, blocked at step 4 by **W25** 🔴 — the Reservations page Seat button only flips `reservations.status` from 'pending' to 'seated' via a generic PUT. There is no table-picker modal, no `reservations.table_id` update, no `restaurant_table_sessions` row creation. A "seated" reservation is functionally a status badge — the cashier still has to manually go to /pos/restaurant and tap a table like a walk-in. Reservation #1 healed via Cancel. Sitting paused. Flow 3.2 stays closed (tip pool round-trip from earlier sitting holds). Next sitting: ship W25 fix, then walk 3.3 fresh.)
 
 ---
 
@@ -1248,6 +1248,64 @@ Recommend **A + B** together: A fixes the immediate symptom (one-line frontend),
 
 ---
 
+### W25 — Reservation "Seat" button only flips status; no table picker, no session opens, no table_id stamped
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (flow 3.3 reservation→seat handoff is non-functional; reservation rows are visual-only sticky notes that don't participate in the floor / order / settle flow)
+**Surfaces affected:** `/restaurant/reservations` page Seat action; downstream blocks flow 3.3 (Reservation → seat → order → settle) and flow 3.11 (Reservation cancel/no-show — same data model, same gap).
+**Found via:** Playwright walkthrough 2026-05-08 morning, Phase 3 flow 3.3 step 4 ("Click Seat on the reservation → pick T2 → confirm"). Plan expected a table picker modal and a `restaurant_table_sessions` row to open. Neither happened.
+
+**Reproduction (live, today):**
+1. /restaurant/reservations → New → guest "Walk-in Test", party 2, default date/time → Create.
+2. DB confirms `reservations.id=1 status='pending' table_id=null reservation_start='2026-05-06 19:09 UTC'`.
+3. Click the row's **Seat** button.
+4. Toast says "Marked seated". Status pill updates to "Seated". DB confirms `reservations.id=1 status='seated' table_id=null` — no table id was set.
+5. SELECT on `restaurant_table_sessions WHERE closed_at IS NULL` returns 0 rows. **No table session was opened.**
+
+**Source-verified root cause:**
+- Frontend [`ReservationsRedesign.jsx:67-76`](frontend/src/pages/redesign/restaurant/ReservationsRedesign.jsx#L67-L76):
+  ```js
+  const transition = async (r, status) => {
+    setBusyId(r.id);
+    try {
+      await api.put(`/api/restaurant/reservations/${r.id}`, { status });
+      success(`Marked ${status.replace(/_/g, " ")}`);
+      await load();
+    } …
+  };
+  ```
+  The Seat button at line 178-182 calls `transition(r, "seated")` — only ships `{ status: "seated" }`. There is no table picker modal mounted on this page; no `restaurant_table_sessions` POST anywhere.
+- Backend [`routes/restaurant/reservations.js:105-133`](backend/routes/restaurant/reservations.js#L105-L133): the handler is a generic field-update PUT. It accepts arbitrary body keys (status, table_id, party_size, etc.) and writes them directly. There is no dedicated `/seat` endpoint that would open a session, link the reservation to it, and update both atomically.
+
+**Architectural gap (the bridge that doesn't exist):**
+
+A merchant who books a reservation expects: tap Seat on the reservation row → pick the table → POS opens that table's session with a marker that this party is "the X o'clock reservation". Today's UI delivers none of that:
+- No table picker modal.
+- No `restaurant_table_sessions` row created.
+- `reservations.table_id` left null (the column exists since v61, but nothing ever writes it from the UI).
+- Cashier has to *separately* navigate to /pos/restaurant and tap a table like a walk-in. The reservation row in /restaurant/reservations is a sticky note, not part of the floor data flow.
+
+**Plan implication for flow 3.3:** Steps 4-6 ("Seat → pick T2 → table session opens for T2 with linked reservation; add items, fire, settle") are unwalkable as written. Flow 3.3 cannot be closed without W25. Flow 3.11 (cancel/no-show) is also blocked because it depends on the same data model — if seating doesn't link `reservations` to `restaurant_table_sessions`, cancel/no-show has nothing real to act on either.
+
+**Suggested fix path:**
+- **Frontend:** add a table-picker modal that opens on Seat click. Lists outlet tables grouped by floor plan; filters out `seated` / `dirty` tables. On confirm: POST `/api/restaurant/reservations/:id/seat` with `{ table_id }`.
+- **Backend:** add `POST /api/restaurant/reservations/:id/seat` that runs in a transaction:
+  1. Insert into `restaurant_table_sessions` with the picked `table_id`, party size from the reservation, and `reservation_id` (column already exists in v61 schema if discovery report accurate; verify before writing the migration).
+  2. UPDATE `reservations` SET `status='seated', table_id = $1, table_session_id = $2`. (Add `reservations.table_session_id` if it doesn't exist — single-line v85 migration.)
+- **Floor view:** existing `RestaurantFloorGrid` should already render the new session as 'seated'. Optionally show a small badge "Reservation: Walk-in Test (12:09 AM)" on the table tile.
+
+**Reference for shape:** the existing seat-from-floor flow (tap empty table → modal asks party size → POST to `/api/restaurant/floor-plans/:id/tables/:id/seat` or similar opens the session). New `/seat` endpoint can mostly reuse that service helper, with the addition of stamping reservation→session linkage.
+
+**Estimated effort:** 30-60 min frontend + 15 min backend, comparable to W12 / W23.
+
+**Workaround for the walkthrough:** None that exercises the script as written. Skipping 3.3 is the only honest move; walking T2 manually as a walk-in just re-tests flow 3.1.
+
+**Console / network errors:** None — the gap is silent. PUT returns 200 with the mutated row.
+
+**Floor state after stop:** Reservation #1 cancelled via the Cancel button to heal. `reservations.id=1 status='cancelled'`. 0 open table sessions. T1-T4 all "Tap to seat".
+
+---
+
 ## Walkthrough session log
 
 > Append a dated entry per Playwright walkthrough session. Each entry: date, scope (which sections of the plan), findings IDs added (W1, W2, ...), commit refs of any fixes shipped that session.
@@ -1620,6 +1678,48 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 1. Pick up from **flow 3.3** (Reservation → seat → order → settle) per the plan. Floor is clean, tenant healthy, no carry-over fixes pending.
 2. Consider a brief "polish pass" follow-up later for W18 (Open-Tab CTA) and W19 (header label) since they're now the only outstanding restaurant-walkable findings — but neither blocks Phase 3 progression.
 3. The new outstanding follow-up worth tracking: payout date display in /tips renders ISO-shifted UTC (`2026-05-05T19:00:00.000Z` for a 2026-05-06 business date in PKT). Cosmetic — file as W25 if it bites a future merchant, otherwise leave for a polish pass.
+
+### Session 2026-05-08 morning (continuation) — Phase 3 flow 3.3 attempted; stopped at step 4 with W25 filed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.3 (Reservation → seat → order → settle); steps 1-3 walkable, stopped at step 4.
+**Duration:** ~15 min before stop-rule triggered.
+
+**Result:** 1 🔴 BLOCKER filed (W25); flow 3.3 cannot continue without it. Sitting paused for fix-it loop.
+
+| Flow | Step | Result |
+|---|---|---|
+| 3.3 | Step 1 — create reservation (Walk-in Test, party 2) | ✅ DB row id=1, status='pending' |
+| 3.3 | Step 2 — verify reservations DB row | ✅ confirmed |
+| 3.3 | Step 3 — adjust time to now | ⏭️ skipped (default time was already in past, server PKT 03:09 vs reservation 00:09) |
+| 3.3 | Step 4 — Seat → pick T2 → confirm | 🔴 W25 — no table picker shown, status flipped to 'seated' but `table_id=null`, no `restaurant_table_sessions` row created |
+| 3.3 | Steps 5-6 — verify session + add items + fire + settle | ⏸️ NOT WALKED — blocked by W25 |
+
+**Findings filed (1):**
+- **W25** 🔴 — Reservation Seat button is a status-only PUT. Frontend `transition(r, "seated")` at `ReservationsRedesign.jsx:67-76` ships only `{ status: "seated" }`. Backend `routes/restaurant/reservations.js:105-133` is a generic field PUT — no table picker, no session-creation logic, no `/seat` endpoint. Reservation rows are visual-only sticky notes. Blocks 3.3 + 3.11.
+
+**Stop-rule reasoning:** Step 4 is the actual *value* of flow 3.3 (the seat handoff) — it's the only thing 3.3 tests that flow 3.1 doesn't already cover. Continuing by walking T2 manually as a walk-in would be theatre — the merchant-visible feature is broken and that gets papered over if we mark 3.3 closed without it. Per stop-rule I paused to discuss before proceeding, and we agreed to file W25 + heal + close the sitting.
+
+**Source verification done before filing** (per memory `feedback_verify_before_fixing`):
+- Read `frontend/src/pages/redesign/restaurant/ReservationsRedesign.jsx:67-76` and `:178-182` — confirmed Seat button calls `transition(r, "seated")` with only `{ status }`.
+- Read `backend/routes/restaurant/reservations.js:105-133` — confirmed generic PUT, no `/seat` route exists.
+- DB confirmation: `reservations.id=1 status='seated' table_id=null` after click; `restaurant_table_sessions WHERE closed_at IS NULL` returned 0 rows.
+
+**Floor healed:** Reservation #1 → cancelled via UI Cancel button. DB confirms `status='cancelled'`. Floor: 0 open table sessions; T1-T4 all "Tap to seat". Test Owner still clocked in (session #2), shift #2 still open.
+
+**Surprises:**
+- The plan section 3.3 step 4 says "pick T2 → confirm" — that wording assumes a table picker exists. Discovery report didn't catch this either (the Reservations page wasn't deeply walked in discovery). **Lesson:** discovery should include "click each primary action button on every page once and verify it does what its label promises". Render ≠ work; status-flip ≠ workflow.
+- The `reservations` schema has `table_id` (since v61) but the frontend never writes to it. Classic case of "schema designed for a feature, UI never finished". Same shape as W12 (Floor Plan create button rendered but no-op), W22 (PUT route never registered), W23 (Pay button never wired).
+- W25 also retroactively explains why flow 3.11 (Reservations cancel/no-show) and flow 3.3 settle path were going to need the same fix — they both depend on `reservations.table_id` and `reservations.table_session_id` actually being populated.
+
+**Recommendation for next sitting:**
+1. **Ship W25 first.** Two-layer fix:
+   - Frontend: table-picker modal on Seat click. Lists outlet tables grouped by floor plan, filters out 'seated'/'dirty'. POST to new `/api/restaurant/reservations/:id/seat` endpoint with `{ table_id }`.
+   - Backend: `POST /api/restaurant/reservations/:id/seat` runs in a transaction — INSERT into `restaurant_table_sessions` (with `reservation_id` FK if it exists in v61, else add column in a v85 migration), UPDATE reservation with `status='seated', table_id=$1, table_session_id=$2`.
+2. Live-verify: book reservation → click Seat → pick T2 → confirm → DB shows new session linked + reservation row stamped → /pos/restaurant shows T2 seated → continue to add items → fire → settle (re-uses already-verified flow 3.1 from there).
+3. After W25 ships, walk 3.3 fresh end-to-end. Should be ~15 min if backend/frontend both clean.
+4. After 3.3 closes, 3.11 (cancel/no-show) becomes walkable — same page, same data model, just different status transitions.
 
 ---
 
