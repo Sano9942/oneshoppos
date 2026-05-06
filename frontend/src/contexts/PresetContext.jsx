@@ -85,23 +85,47 @@ export function PresetProvider({ children }) {
       return;
     }
     let cancelled = false;
-    api.get("/api/context/bootstrap")
+
+    // Local helper — applies a successful bootstrap response.
+    const apply = (data) => {
+      if (data?.preset) setPreset({ ...DEFAULT_PRESET, ...data.preset });
+      // W1 — auto-seed single-branch context for tenants that never visit
+      // /context-select (Free / single-outlet / context_selection_required=off).
+      // Without this, restaurant pages that gate on
+      // readContext()?.active_outlet_id (Floor / Checks / KDS) silently
+      // bounce because the session never gets a context object written.
+      if (!readContext() && data?.primary_outlet_id) {
+        writeContext({
+          scope_mode: "single_branch",
+          active_outlet_id: data.primary_outlet_id,
+          active_company_id: data?.companies?.[0]?.id ?? null,
+        });
+      }
+      setPresetLoaded(true);
+    };
+
+    // W7 — first-call retry on transient 401. PresetContext intentionally
+    // waits for !isBootstrapping before firing, but the auth fetch
+    // interceptor races: if AuthProvider's interceptor useEffect hasn't
+    // wired by the time api.get fires, the request goes through unpatched
+    // window.fetch and 401s. The same call retried 600ms later succeeds
+    // because the interceptor is now live. Without this retry the W1
+    // writeContext call also never fires (it's in the .then() that the
+    // 401 skips), leaving Floor/Checks/KDS pages bouncing on Free tenants.
+    const fetchWithRetry = () =>
+      api.get("/api/context/bootstrap").catch(async (err) => {
+        if (cancelled) throw err;
+        if (err?.status === 401) {
+          await new Promise((r) => setTimeout(r, 600));
+          return api.get("/api/context/bootstrap");
+        }
+        throw err;
+      });
+
+    fetchWithRetry()
       .then((data) => {
         if (cancelled) return;
-        if (data?.preset) setPreset({ ...DEFAULT_PRESET, ...data.preset });
-        // W1 — auto-seed single-branch context for tenants that never visit
-        // /context-select (Free / single-outlet / context_selection_required=off).
-        // Without this, restaurant pages that gate on
-        // readContext()?.active_outlet_id (Floor / Checks / KDS) silently
-        // bounce because the session never gets a context object written.
-        if (!readContext() && data?.primary_outlet_id) {
-          writeContext({
-            scope_mode: "single_branch",
-            active_outlet_id: data.primary_outlet_id,
-            active_company_id: data?.companies?.[0]?.id ?? null,
-          });
-        }
-        setPresetLoaded(true);
+        apply(data);
       })
       .catch(() => {
         if (cancelled) return;
