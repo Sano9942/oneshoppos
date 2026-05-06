@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 1 | 9 | 0 |
-| 🟡 Issue | 1 | 5 | 0 |
+| 🔴 Blocker | 0 | 10 | 0 |
+| 🟡 Issue | 2 | 5 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **14** | **17** | **0** |
+| **Total** | **14** | **18** | **0** |
 
-Last update: 2026-05-07 (Phase 3 flow 3.2 opened — pre-flight clean. Three findings filed: **W18** (🟡 no "Open Tab" / bar-tab CTA on Restaurant POS landing — backend `POST /api/restaurant/tabs` exists, frontend never calls it), **W19** (🔵 header labels `tableSessionId` as "Table N" instead of `tables.label`), and **W20** (🔴 BLOCKER — cart merges adds by `product_id` alone in `useCart.js:227`, ignoring `seat_number` / `course_name` overlay; second chicken added with Seat 2 selected merged into the Seat 1 group instead of creating a Seat 2 line; breaks split-by-seat). Sitting paused at flow 3.2 step 3 awaiting fix-or-workaround decision.)
+Last update: 2026-05-07 (Phase 3 flow 3.2 mid-walk: 4 findings filed, 1 fixed live. **W18** 🟡 no Open-Tab CTA. **W19** 🔵 header labels session_id as Table N. **W20** ✅ FIXED `5978622` — cart split-by-seat works. **W21** 🟡 (just filed) SplitCheckModal posts `/split` without first syncing cart to draft — same architectural class as the W14 fix that missed the Split path; clicking Split before Send-to-Kitchen returns `400 "Need items on at least 2 seats to split"`. Workaround: Send-to-Kitchen first, then Split; resuming the walkthrough under that workaround.)
 
 ---
 
@@ -1029,9 +1029,9 @@ The component comment on line 6 even says *"Shows table label + guest count + se
 
 ---
 
-### W20 — Restaurant cart merges adds by product_id alone, ignoring seat_number / course_name
+### W20 — Restaurant cart merges adds by product_id alone, ignoring seat_number / course_name ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `5978622` (2026-05-07), Vercel `dpl_8SiacA8Y6DPoJKAohVRCg9hTNFvR`, live-verified on `sanopos.com` against `sanoposlivetest1778021564659` (T1 / session 4): adding Grilled Chicken with Seat 1 then Seat 2 selected now produces TWO cart groups (Seat 1 · Course 3 — × 1 — Rs 1,200; Seat 2 · Course 3 — × 1 — Rs 1,200; total Rs 2,400). Pre-fix it was a single Seat 1 group with × 2. Bundle hashes flipped (`POSRestaurantRoute-CGb7lG-n` → `8hfWe1qh`). Screenshot: `restaurant-walkthrough-w20-fixed-2-seats-2-lines-2026-05-07.png`. Unit tests: 5 new W20 cases added to `cartMath.test.jsx`; full cart-related suite (44 tests across 5 files) passes locally.
 **Severity:** 🔴 BLOCKER (breaks split-bill-by-seat flow at the data layer; you cannot get two same-product items onto two different seats from the UI)
 **Surfaces affected:** Restaurant POS check view; flow 3.2 step 2-3 (assign first chicken to seat 1, second to seat 2). Also affects every restaurant flow where a cashier rings up the same item for multiple seats — which is most multi-guest tables ordering the same dish.
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2.
@@ -1079,6 +1079,39 @@ This preserves retail's "increment qty" behavior (where every line has `seat_num
 **Plan implication for flow 3.2:** Cannot exercise split-by-seat as scripted with this bug. Two options to keep the sitting moving:
 1. Fix W20 first (~10 min change + test), live-verify, then resume 3.2 step 3 cleanly.
 2. Use the `"new_line"` bulk-scan workaround for the walkthrough only — file W20 as found, and note the workaround in the session log so future reads know split-by-seat was exercised under non-default cart settings.
+
+---
+
+### W21 — SplitCheckModal posts to /split without first syncing cart items to the draft
+
+**Status:** OPEN
+**Severity:** 🟡 ISSUE (UX trap; not a hard blocker if cashier always Sends-to-Kitchen first, but a real merchant who clicks Split immediately on a fresh check gets a baffling 400)
+**Surfaces affected:** Restaurant POS check view → kebab → Split → "Split Check" modal in any of three modes (Equal / By Seat / By Item). Flow 3.2 step 4 ("Click 'Split bill by seat' → verify 2 separate checks").
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 4. Immediately after W20 verification — the very next click after confirming Seat 1 / Seat 2 cart lines.
+
+**Steps to reproduce:**
+1. Seat any table; add ≥1 item to ≥2 different seats so the cart shows two seat groups.
+2. **Do NOT click Send to Kitchen / Fire C{n} / Pay first.**
+3. Kebab menu → Split → choose "By Seat" → click Split.
+
+**Observed:** Backend returns `400 {"error":"Need items on at least 2 seats to split"}` (request body: `{"split_type":"by_seat"}`). Toast/error surfaces via `setError`. Cart stays as-is, no checks split.
+
+**Expected:** Either (a) the modal pre-syncs the cart to the draft so the persisted check actually has the items the user can see in the UI, or (b) the Split button is disabled until at least one item is on the server-side check, with a tooltip "Send to kitchen first to enable Split".
+
+**Suspected root cause file:line:** `frontend/src/pages/redesign/pos/restaurant/SplitCheckModal.jsx:42-71`. The `submit()` handler resolves a `checkId` via `ensureDraftOrder()` (creates an empty draft if none exists) but **never** calls `syncCartToDraft(checkId)` before POSTing `/checks/:id/split`. Backend `restaurant-checks.splitCheck` reads `draft_order_items` from the DB, which is empty because the cart was never pushed. Lines 56-58 of the same file even contain a docstring acknowledging the issue for `by_item` mode (*"For 2-R.0 the user would typically Send to Kitchen first, then split"*) — the author knew but didn't add the sync call.
+
+This is the same architectural class as W14 (`fix(restaurant): sync cart items to draft before fire/send/pay-at-table`, commit `bd3003d`): the W14 fix added `syncCartToDraft` before Send-to-Kitchen / Fire / Pay-at-Table, but the Split path was not in the audit and got left out.
+
+**Fix path (single small change):**
+1. Open `SplitCheckModal.jsx`. Find `submit()` line 42.
+2. After resolving `checkId` (line 49), add `await syncCartToDraft(checkId);` (the same helper W14 introduced — pulled from `usePOS()` next to `ensureDraftOrder`).
+3. No backend change. No new test needed (the helper already has its own; this just calls it). Optional: a unit test that mocks `usePOS` and asserts `syncCartToDraft` is called before `api.post('.../split', ...)`.
+
+**Console / network errors:** `1 error` per Split attempt: `Failed to load resource: the server responded with a status of 400 () @ https://api.sanopos.com/api/restaurant/checks/5/split:0`. Response body: `{"error":"Need items on at least 2 seats to split"}`. Request body: `{"split_type":"by_seat"}`.
+
+**Workaround for the walkthrough:** click Send to Kitchen first → that path already calls `syncCartToDraft`, so the items hit the DB. Then open Split → By Seat → confirm. This is the operator-intended flow anyway (fire the food, then split the bill once it's all in the kitchen pipeline), so flow 3.2 can proceed under this workaround.
+
+**Plan implication for flow 3.2:** Use the Send-to-Kitchen-first workaround. File W21 as found. The downstream steps (close both checks separately, tip pool) don't depend on the order of operations.
 
 ---
 

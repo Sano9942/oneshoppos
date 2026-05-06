@@ -39,6 +39,28 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
     setAssignments((prev) => ({ ...prev, [id]: target }));
   };
 
+  // W21: push the local cart to draft_order_items before splitting. The
+  // backend split route reads items from the draft, not the request body, so
+  // a Split clicked before any Send-to-Kitchen / Fire would 400 with "Need
+  // items on at least 2 seats to split". Same shape as the syncCartToDraft
+  // helper in RestaurantActionBar (W14 commit bd3003d).
+  const syncCartToDraft = async (draftId) => {
+    if (!draftId) return;
+    if (cart.every((i) => i.kitchen_status === "sent" || i.kitchen_status === "fired")) {
+      return;
+    }
+    const items = cart.map((i) => ({
+      product_id: i.id,
+      variant_id: i.variant_id || null,
+      name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      seat_number: i.seat_number ?? null,
+      course_name: i.course_name || "main",
+    }));
+    await api.put(`/api/draft-orders/${draftId}`, { items });
+  };
+
   const submit = async () => {
     if (!cart.length) {
       setError?.("Nothing to split — cart is empty.");
@@ -48,6 +70,7 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
     try {
       const checkId = draftOrderId || (await ensureDraftOrder());
       if (!checkId) throw new Error("Could not resolve draft order");
+      await syncCartToDraft(checkId);
       const body = { split_type: mode === "equal" ? "evenly" : mode };
       if (mode === "equal") body.parts = Number(parts) || 2;
       if (mode === "by_item") {
