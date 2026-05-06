@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 10 | 0 |
-| 🟡 Issue | 2 | 5 | 0 |
+| 🔴 Blocker | 3 | 10 | 0 |
+| 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **14** | **18** | **0** |
+| **Total** | **16** | **19** | **0** |
 
-Last update: 2026-05-07 (Phase 3 flow 3.2 mid-walk: 4 findings filed, 1 fixed live. **W18** 🟡 no Open-Tab CTA. **W19** 🔵 header labels session_id as Table N. **W20** ✅ FIXED `5978622` — cart split-by-seat works. **W21** 🟡 (just filed) SplitCheckModal posts `/split` without first syncing cart to draft — same architectural class as the W14 fix that missed the Split path; clicking Split before Send-to-Kitchen returns `400 "Need items on at least 2 seats to split"`. Workaround: Send-to-Kitchen first, then Split; resuming the walkthrough under that workaround.)
+Last update: 2026-05-07 (Phase 3 flow 3.2 — sitting closed at the 3-blocker stop-rule. 7 findings filed, 2 fixed live. **W18** 🟡 (open) no Open-Tab CTA. **W19** 🔵 (open) header labels session_id. **W20** ✅ `5978622` cart split-by-seat. **W21** ✅ `870fa0e` SplitCheckModal sync. **W22** 🔴 (open) `/restaurant/checks` Close-check button → non-existent PUT route → 404. **W23** 🔴 (open) no UI path to pay split-children. **W24** 🔴 (open) tips silently dropped at sale settlement: frontend sends `tip_method:"Cash"` capitalised, DB CHECK requires lowercase `'cash'`; INSERT fails, fire-and-forget catch swallows, sale completes without tip. Sale `INV-2026-00003` written without its `tip_captures` row. W22+W23+W24 together make flow 3.2 step 5-7 (close + tip + pool) unreachable without backend/frontend fixes. **Stop-rule fired; sitting closing.**)
 
 ---
 
@@ -1082,9 +1082,9 @@ This preserves retail's "increment qty" behavior (where every line has `seat_num
 
 ---
 
-### W21 — SplitCheckModal posts to /split without first syncing cart items to the draft
+### W21 — SplitCheckModal posts to /split without first syncing cart items to the draft ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `870fa0e` (2026-05-07), Vercel `dpl_3NTrWBtW2Tq35zgDJrz5wtu4THHr`, live-verified on `sanopos.com`. After re-entering T1 with cart in 2-seat state (Seat 1 + Seat 2 each with 1× Grilled Chicken), kebab → Split → By Seat → confirm now POSTs to `/api/restaurant/checks/6/split` and returns **200** with two child checks: `#7` (`split_parent_id=6, total=1200.00, table_session_id=4`) and `#8` (same shape, distinct `source_token_id`). Backend persists `split_strategy="by_item"` regardless of the requested `split_type` (canonical internal form — items end up assigned per child anyway; cosmetic). Bundle hashes flipped: `POSRestaurantRoute-8hfWe1qh → DVfJc7eg`. Screenshot: `restaurant-walkthrough-w21-fixed-split-by-seat-2026-05-07.png`. Modal exits to floor view on success per spec.
 **Severity:** 🟡 ISSUE (UX trap; not a hard blocker if cashier always Sends-to-Kitchen first, but a real merchant who clicks Split immediately on a fresh check gets a baffling 400)
 **Surfaces affected:** Restaurant POS check view → kebab → Split → "Split Check" modal in any of three modes (Equal / By Seat / By Item). Flow 3.2 step 4 ("Click 'Split bill by seat' → verify 2 separate checks").
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 4. Immediately after W20 verification — the very next click after confirming Seat 1 / Seat 2 cart lines.
@@ -1112,6 +1112,139 @@ This is the same architectural class as W14 (`fix(restaurant): sync cart items t
 **Workaround for the walkthrough:** click Send to Kitchen first → that path already calls `syncCartToDraft`, so the items hit the DB. Then open Split → By Seat → confirm. This is the operator-intended flow anyway (fire the food, then split the bill once it's all in the kitchen pipeline), so flow 3.2 can proceed under this workaround.
 
 **Plan implication for flow 3.2:** Use the Send-to-Kitchen-first workaround. File W21 as found. The downstream steps (close both checks separately, tip pool) don't depend on the order of operations.
+
+---
+
+### W22 — `/restaurant/checks` "Close check" button calls a non-existent PUT route
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (the only "close check" UI surface on the Checks list page is dead — every click 404s)
+**Surfaces affected:** `/restaurant/checks` list page → "Close check" icon button on every row. Affects the post-split flow (need to close split children individually) and any other operational close-from-list scenario.
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5. Immediately after W21 verified split: clicked "Close check" on row #7.
+
+**Steps to reproduce:**
+1. Have any open check on the Checks page (e.g. post-split children #7 + #8 from flow 3.2 step 4).
+2. Click the "Close check" icon button on the row.
+
+**Observed:** Toast "HTTP 404" (or `err.message`). Browser console: `PUT /api/restaurant/checks/7 → 404 (text/html)`. Check stays open.
+
+**Expected:** Check transitions to `closed` status (or, ideally, opens a settlement flow that captures payment + tip — see W23 below).
+
+**Suspected root cause file:line:** `frontend/src/pages/redesign/RestaurantChecksRedesign.jsx:92-98`:
+```js
+const closeCheck = async (checkId) => {
+  try {
+    await api.put(`/api/restaurant/checks/${checkId}`, { status: "closed" });
+    ...
+  } catch (err) { toast.error(err.message); }
+};
+```
+
+The frontend PUTs to `/api/restaurant/checks/:id`. Backend grep of `routes/restaurant.js` shows **no PUT route for that path** — only `POST :id/send-to-kitchen`, `POST :id/fire-course`, `POST :id/split`, `POST :id/courses/{hold,expedite}`, `POST :id/print-bill`, `POST :id/payment-session`. The plain `PUT /:id` doesn't exist. Express returns a default 404 (HTML body, not JSON), confirming no handler is registered.
+
+This appears to be either (a) a backend route that was never written, or (b) a frontend wiring against a planned route that didn't ship. There's no code path on the backend that flips `draft_orders.status='closed'` outside of the sales-completion path (W17 commit `7a16c8e` flips it via the sale insert).
+
+**Suggested fix paths:**
+- **Option A (smallest):** add `PUT /api/restaurant/checks/:id` accepting `{status}` to `routes/restaurant.js`. Just maps to `UPDATE draft_orders SET status = $1 WHERE id = $2` with permission gate. Useful for non-payment closures (e.g. void the whole check after manager approval, abandoned check at end of shift). Doesn't capture payment.
+- **Option B (correct):** redirect this button to the proper settlement flow. Per W23, closing a check the cashier-friendly way means going through `POSCheckoutModal` (or pay-at-table) which captures payment + tip. The Checks list page should either open the POS check view for that check on click, or open a mini-settlement modal. This is more architectural work.
+
+**Console / network errors:** `PUT /api/restaurant/checks/7 → 404` (Content-Type: text/html, default Express 404). One per click.
+
+**Workaround for the walkthrough:** None directly available. The post-split children #7 + #8 cannot be closed via this button. Possible alternative: switch the active table-session draft to each child via DB or API, then use POS Pay; but POS Pay flows through POSContext.draftOrderId which is the *parent's* draftOrderId, not the child. See W23 for the broader gap.
+
+---
+
+### W23 — No UI path to pay/settle a split-child check (post-split, the children are orphans in the POS)
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (split-bill-by-seat is functionally incomplete — the children get created but cannot be paid through the cashier UI)
+**Surfaces affected:** Restaurant POS settlement flow after a SplitCheckModal completion. Affects flow 3.2 step 5 ("close both checks separately, capture tip on each") and every restaurant flow that splits a bill before paying. Currently the only thing the cashier can *do* with split children is see them on the `/restaurant/checks` list (W22 makes even closing them broken).
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5. Trying to identify where to go next after a successful split.
+
+**Architectural gap:**
+- After SplitCheckModal succeeds, `onSplitComplete` exits to the floor view (`SplitCheckModal.jsx:73-74`).
+- The floor view's table tile re-opens *the* draft for the seated table session via `RestaurantFloorGrid.openTableCheck` — which uses the parent's `tableSessionId / table.session_id`. The split children inherit `table_session_id` but they are sibling rows, not the one resolved by `GET /api/restaurant/floor-plans/:id` per-table fetch.
+- POSContext `draftOrderId` is set once at table-open and stays as the parent's id. The Pay button settles `draftOrderId`, which is the parent (now total Rs 0.00 after split items moved to children).
+- `POSContext` has no concept of "switch to a different draft for this same table session". There is no UI affordance to choose between #7 and #8 after a split.
+- The Checks list page (`/restaurant/checks`) shows the children but its row actions are: Hold a course / Expedite a course / Split check / Close check. Three are course-level operations that don't apply post-split, and the fourth is W22-broken. **No "Settle this check" / "Pay this check" / "Open in POS" button exists on the row.**
+
+**Backend evidence settlement is possible:** `restaurant_payment_sessions` table exists (v61); `POST /api/restaurant/checks/:id/payment-session` route exists (per `routes/restaurant.js`, used by `PayAtTableQRModal.jsx:38`). So pay-at-table per-child *could* work — but the cashier UI never triggers it for split children. PayAtTableQRModal is opened from the action bar's Request QR button on the *currently-open* check, not from the Checks list.
+
+**Plan implication for flow 3.2:** With both W22 and W23 open, **flow 3.2 step 5 cannot be exercised end-to-end via real-cashier clicks.** This is a launch-blocker for split-bill-by-seat — restaurants that intend to split bills cannot complete the workflow.
+
+**Suggested fix paths:**
+- **Option A (smallest, partial):** add a "Settle / Pay" button to each row on `/restaurant/checks` that opens the POS check view with `draftOrderId` pre-set to the row's id (and `table_session_id` etc. carried). POSContext would need a "set active draft" entry point.
+- **Option B (correct):** after SplitCheckModal completes, route the cashier directly into a per-child settlement queue UI (one settlement modal per child, advancing one to the next). This matches restaurant operating reality: a split request is followed by paying each share.
+- **Option C (defer):** scope split-by-seat down to "post-payment audit feature" only — it splits the *receipts* after a single payment. Then the children are reporting/audit rows, not standalone payable entities. Re-frames the data model rather than building UI.
+
+**Workaround for the walkthrough:** None that exercises the script as written. Two alternatives:
+1. Skip step 5 and document that this path is blocked. Continue to step 6 (Tip Pools UI) which doesn't depend on having actually closed a check (we can manually seed tip_captures via DB if needed).
+2. Settle the *parent* check (#6 — currently total Rs 0 because items moved to children) via POS Pay, just to exercise the Pay flow + tip-capture UI itself; treat the split as separate from the settlement. Don't claim flow 3.2 is closed.
+3. Bypass the split entirely: don't split — just pay the original Rs 2,400 check with tip, then file W22+W23 to be revisited together as a "split-payment" feature work item. Document that the split-by-seat path was verified up to the point of children being created (W21), but settlement of children is not yet wired.
+
+**Console / network errors:** None inherent — the gap is "no UI button exists", which doesn't surface as an error event. W22's 404 is incidental.
+
+---
+
+### W24 — Tips silently dropped at sale settlement: frontend sends capitalised `tip_method`, DB CHECK requires lowercase
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (silent data loss — every restaurant sale that captures a tip via the POSCheckoutModal saves the sale but loses the tip; merchant has no indication)
+**Surfaces affected:** `POSCheckoutModal` → "Tip via Cash / Tip via Card / Tip via Wallet" buttons → `POST /api/sales` settle path. Affects every restaurant sale (and any retail sale that uses the tip section of the checkout). Affects flow 3.2 step 5-7 (no `tip_captures` rows means the Tip Pool flow has nothing to distribute), every shift's Tip Pool, every server's earnings, every payroll computation that relies on tip_captures via `commission_earnings (earning_type='tip')`.
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5 (pivot 2b — tip-capture-on-pay verification). Sale `INV-2026-00003` (id=3, total=Rs 2,400) settled with `tip_amount: 360, tip_method: "Cash", server_id: 1` per the POST body. **DB shows `tip_captures` is empty.**
+
+**Steps to reproduce:**
+1. POS Restaurant, seat any table, add any item.
+2. Click Pay. POSCheckoutModal opens.
+3. Click 15% tip pill (or any other) → `tip_amount` field populates correctly, `Total Due` increases by tip.
+4. Pick a Server. Click "Tip via Cash" route. Click Cash + add tender for Total Due. Complete Sale.
+5. Verify in DB: `SELECT * FROM tenant_<slug>.tip_captures ORDER BY id DESC LIMIT 1;` — **0 rows.**
+6. Verify the sale itself was written: `SELECT id, invoice_number, total_amount FROM tenant_<slug>.sales` — sale exists with the *non-tipped* total. The receipt UI shows tip line; DB does not.
+
+**Observed:**
+- Sale row inserted with `total_amount = subtotal` (no tip column on `sales` table — by design).
+- `tip_captures` row never written.
+- No user-facing error. POSCheckoutModal closes with success toast.
+- The error path in `backend/routes/sales.js:1838` is `.catch((err) => logger.error({ err, saleId }, "[tips] captureTipOnSale failed (non-blocking)"))` — fire-and-forget, swallowed.
+
+**Expected:** A `tip_captures` row with `(sale_id, draft_order_id, outlet_id, server_id, tip_amount, tip_method)` so the Tip Pool flow has something to distribute, and the server gets credit for the tip in `commission_earnings(earning_type='tip')`.
+
+**Suspected root cause file:line:**
+- DB CHECK constraint (verified live via `pg_get_constraintdef`): `CHECK ((tip_method = ANY (ARRAY['cash'::text, 'card'::text, 'split'::text])))` on `tenant_<slug>.tip_captures`.
+- Frontend POST body verified live: `{"tip_amount":360,"tip_method":"Cash","server_id":1,...}` — the value is **`"Cash"` with a capital C**.
+- The CHECK requires lowercase `"cash"`. INSERT fails with `23514` constraint violation; the catch in sales.js:1838 swallows it; sale completes; tip vanishes.
+- The bug is in the frontend tip-method capitalisation. `frontend/src/pages/redesign/pos/POSCheckoutModal.jsx` (or wherever the "Tip via Cash" button stores `tipMethod` state) stores the user-facing capitalised label and sends it raw.
+
+**Defense-in-depth: backend has a wrong-but-quiet behavior:**
+- `services/tips.js:captureTipOnSale` doesn't normalise `tip_method`. It also doesn't validate against the allowlist before inserting.
+- `routes/sales.js:1828` calls `captureTipOnSale` fire-and-forget — even when the insert fails, the user-visible flow says success. **The fire-and-forget catch should at minimum surface a Sentry event.** As a guarantee level, "tip captured" should be a transactional part of the sale, not a dangling side effect — otherwise data integrity isn't promised.
+
+**Suggested fix paths:**
+- **Option A (smallest, fixes today):** lowercase `tip_method` in `POSCheckoutModal.jsx` at the point it's set on the body or in state. One-line fix. Prevents this bug class for all current callers.
+- **Option B (correct, defensive):** in `services/tips.js:captureTipOnSale`, normalise `tip_method` to lowercase and reject anything outside the allowlist with a clear error. Combined with raising the catch in `routes/sales.js:1828` to also append a Sentry event so silent drops are observable. Fix at both ends.
+- **Option C (most correct):** make tip capture transactional with the sale — INSERT to `tip_captures` inside the same `db.transaction(...)` as the sale insert, wrapped so a constraint violation aborts the sale entirely (or at least surfaces an error to the cashier). Harder to roll out without breaking existing fire-and-forget assumptions.
+
+Recommend **A + B** together: A fixes the immediate symptom (one-line frontend), B prevents the next case-mismatch / typo bug class from going silently the same way (small backend hardening + alerting).
+
+**Console / network errors:** None observed at the user level. POST `/api/sales` returns **200**. The constraint violation lives only in the Pino/Sentry log on the backend — would need to grep server logs to confirm. Sample request body excerpt:
+
+```json
+{
+  "cartItems":[{"id":2,...}],
+  "payments":[{"method":"Cash","amount":2760}],
+  "outlet_id":1,"employee_id":1,
+  "tip_amount":360,
+  "tip_method":"Cash",   // ← bug: should be "cash"
+  "server_id":1,
+  "draft_order_id":null,
+  "table_session_id":4,
+  "seat_count":2
+}
+```
+
+**Plan implication for flow 3.2:** With W24 open, the Tip Pool / payouts steps (3.2 step 6-7) have nothing to distribute. The Tip Pools UI may still render and let me click through the flow, but it would distribute Rs 0 across all servers — not a meaningful test. Flow 3.2 cannot be closed without W24 fixed.
+
+**Workaround for the walkthrough:** could manually INSERT a `tip_captures` row via Supabase to seed the Tip Pool flow (`INSERT INTO tip_captures ... VALUES (3, NULL, 1, 1, 360, 'cash')`). Documents Tip Pools as "tested with seeded captures, not via the live checkout flow". Imperfect.
 
 ---
 
@@ -1354,6 +1487,53 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 2. Optional: a 5-min smoke pass on flow 3.1 again to confirm everything still works after a sleep — flow 3.1 verification is the foundation for flows 3.2-3.6 which all depend on table-session lifecycle.
 3. Future polish (not Phase 3 blocker): UX clarity on `Fire C{n}` vs `Send to Kitchen` since the buttons look interchangeable but do different things.
 4. Future refactor (deferred): the W16 rehydrate path's edge case where a cashier rehydrates THEN adds new items will re-fire the rehydrated items via the delete-and-rebuild PUT semantics. Either change `/api/draft-orders/:id` PUT to be additive when items have `kitchen_status='sent'`, or add a dedicated "append items" endpoint.
+
+### Session 2026-05-07 (evening) — Phase 3 flow 3.2 attempted; closed at stop-rule with 7 findings + 2 fixes
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.2 (Walk-in tab → modifiers → split bill by seat → tip pool); seat→split path verified, settle→tip path blocked.
+**Duration:** ~2.5 hours.
+
+**Result:** Steps 1-4 of flow 3.2 closed (seat → 2× Grilled Chicken → 2 seat groups → split-by-seat creates 2 child checks). Steps 5-7 (close children with tip → tip pool → distribute → payouts) blocked by W22+W23+W24. Pivot 2b ("settle the unsplit Rs 2,400 check via Pay-with-tip") attempted; settled successfully but the tip silently vanished — surfacing W24 as the keystone tip-flow blocker. Stop-rule fired at 3 🔴 blockers (W22+W23+W24); sitting closed.
+
+**Findings filed (7):**
+- **W18** 🟡 — no "Open Tab" / bar-tab CTA on Restaurant POS landing despite backend `POST /api/restaurant/tabs` + `createTabSchema` + `tab_id` branch existing; frontend never wires it.
+- **W19** 🔵 — Restaurant header strip labels `tableSessionId` as "Table N" instead of using `tables.label` (i.e. shows "Table 4" when the table is T1). Cosmetic; will read like "Table 5000" in production after enough seatings.
+- **W20** 🔴 ✅ FIXED `5978622` — `useCart.js:227` cart-add merge predicate matched on `product.id` alone, ignoring seat+course overlay. Same dish on two seats merged into one line. Fixed with predicate extension; retail flow unchanged because retail lines all carry `seat=null/course="main"`. 5 unit tests added in `cartMath.test.jsx` (44 cart-related tests still pass).
+- **W21** 🟡 ✅ FIXED `870fa0e` — `SplitCheckModal.submit()` called `ensureDraftOrder()` then POSTed to `/split` without first syncing the cart to the draft. Same architectural class as W14 that the W14 audit missed. Fixed by inlining a `syncCartToDraft` helper mirroring `RestaurantActionBar`'s.
+- **W22** 🔴 (open) — `/restaurant/checks` page's "Close check" icon button calls `PUT /api/restaurant/checks/:id` → backend has no PUT route at that path; default Express 404 (HTML body). Every click 404s.
+- **W23** 🔴 (open) — no UI path to pay split-children. After SplitCheckModal succeeds, the parent draft stays as POSContext's `draftOrderId`; the Checks list has Hold / Expedite / Split / Close-check actions but no "Settle this check"; floor view re-opens the parent. Children #7 + #8 are stranded.
+- **W24** 🔴 (open) — tips silently dropped at sale settlement. Frontend sends `tip_method:"Cash"` capitalised; DB CHECK constraint requires lowercase `'cash'/'card'/'split'`. INSERT into `tip_captures` fails with constraint violation; the fire-and-forget catch in `routes/sales.js:1828` swallows, sale completes successfully, tip vanishes silently. Verified live: sale `INV-2026-00003` written, `tip_captures` empty.
+
+**Live verifications (DB-confirmed):**
+- W20: T1 cart shows Seat 1 + Seat 2 groups, each with 1× Grilled Chicken @ Rs 1,200, total Rs 2,400.
+- W21: `POST /api/restaurant/checks/6/split` returns 200 + `{new_checks: [{id:7, total:1200, split_parent_id:6}, {id:8, total:1200, split_parent_id:6}]}`. Verified in DB.
+- W24: POST `/api/sales` body included `tip_amount:360, tip_method:"Cash", server_id:1`. Sale row `id=3 INV-2026-00003 total_amount=2400.00` written. `tip_captures` rows: 0.
+
+**Screenshots saved (2):**
+- `restaurant-walkthrough-phase3-3.2-cart-merged-into-seat1-2026-05-07.png` (W20 reproduction)
+- `restaurant-walkthrough-w20-fixed-2-seats-2-lines-2026-05-07.png` (W20 verified)
+- `restaurant-walkthrough-w21-fixed-split-by-seat-2026-05-07.png` (W21 verified — post-split floor view)
+
+**Surprises:**
+- W18 surfaced the *plan's* conflation of "walk-in tab" with "split-by-seat" — split-by-seat only makes sense on a multi-seat entity (table), not a seatless tab. Even with W18 fixed, the script's downstream steps would still need a table. The walkthrough proceeded with T1 as the walk-in vehicle.
+- W14's audit missed two siblings: W21 (Split path needs the same syncCartToDraft) and W24 (the tip-capture path's silent failure mode). Both are different routes that share a "fire-and-forget side effect that needed transactional guarantees" pattern. Worth a future audit pass: every `.catch((err) => logger.error(...))` in a write path is a candidate for "should this be transactional?"
+- W22+W23 together expose that the Checks list page (`/restaurant/checks`) was scaffolded as a list-view but never finished as an operator workspace. None of its row actions are usable post-split.
+- W24's silent-drop pattern (POST returns 200 even though a critical side effect failed) is the highest-priority class of bug because it doesn't cause user-visible breakage — it causes wrong data. A merchant could run for weeks without realizing their tip pool is empty.
+- The CHECK constraint on `tip_method` is lowercase strings, while `payments.method` accepts free-form strings (`"Cash"`/`"Card"` capitalised because that's the user-facing label). The frontend reused the payment_method casing for tip_method without realizing they're two different domains. Worth a tip-method enum constant in the frontend that mirrors the DB allowlist.
+
+**No commits this session beyond the 2 fixes that already shipped (`5978622` W20, `870fa0e` W21).** This findings doc is the next commit.
+
+**Status updated:** W18 🟡 OPEN, W19 🔵 OPEN, W20 ✅ FIXED, W21 ✅ FIXED, W22 🔴 OPEN, W23 🔴 OPEN, W24 🔴 OPEN. Status Summary: 3 open blockers (was 0), 1 open issue (was 1), 12 open polish (was 11 + W19). Total fixed: 19 (was 17). 2 commits shipped: 5978622, 870fa0e.
+
+**Recommendation for next sitting:**
+1. **Fix W24 first.** Smallest unblock for the most data-correctness-critical bug. One-line frontend fix (lowercase `tip_method` in POSCheckoutModal before sending) plus a backend hardening (normalise + Sentry alert in `services/tips.js:captureTipOnSale`). After W24 ships, every restaurant sale will correctly capture its tip.
+2. **Then W22 (small backend addition).** Add `PUT /api/restaurant/checks/:id` for status updates. ~10 min. Useful for non-payment closures (void whole check, abandoned check at end of shift) even if W23 isn't fully solved.
+3. **Then W23 (architectural).** Add a "Pay this check" button per-row on `/restaurant/checks` that opens POSContext with the row's `draftOrderId` pre-set. Or a per-child settlement queue UI after SplitCheckModal. Either way: reaches the existing POSCheckoutModal + Pay flow. Probably 30-60 min careful frontend work.
+4. **Then resume flow 3.2 from step 5** with all three fixes shipped. Should be smooth: split a check → settle each child with tip → open Tip Pool → distribute → DB shows captures + payouts.
+5. Defer W18 (Open-Tab CTA) and W19 (header label) to a polish pass — neither blocks Phase 3 progress.
+6. Floor state to clean for next sitting: T1 has `status=seated, session_id=4`. Drafts #5, #6, #7, #8 all `status=open` for that session (zombies + split children). Recommended: close session #4 via Supabase MCP (set `status='closed'`, set draft `status='completed'`) so the next sitting starts on a clean floor. The Sales History will retain INV-2026-00001/2/3 from this and prior sittings.
 
 ---
 

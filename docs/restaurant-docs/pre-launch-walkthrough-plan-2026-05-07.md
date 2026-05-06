@@ -579,7 +579,7 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 |---|---|---|---|
 | 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) — ✅ FIXED in 119a466 |
 | 2. Sidebar walkthrough | ✅ closed | 2026-05-08 | Morning: W1✅ (119a466+8f5c9ba), W2✅ (119a466), W4✅ (auto with W1). Afternoon resume: W8✅ (next push) Order Kiosks React #310, W9✅ (next push) backend snake_case typo, W10✅ (next push) sidebar/breadcrumb label drift |
-| 3. End-to-end flows | 🔄 in progress (1 of 12 closed) | 2026-05-07 | Flow 3.1 ✅ closed (T2 + T3 verified). 6 fixes shipped during walk: W12 (`6151331`), W13 (`58cb791`), W14 (`bd3003d`), W15 (`dc58973`), W16+W17 (`7a16c8e`). Resume next sitting from flow 3.2. |
+| 3. End-to-end flows | 🔄 in progress (1 of 12 closed; 3.2 partial) | 2026-05-07 | Flow 3.1 ✅ closed (T2+T3 verified, 6 fixes W12-W17). Flow 3.2 walked steps 1-4, blocked at step 5 by W22+W23+W24. Findings: W18 🟡, W19 🔵, W20 ✅ `5978622`, W21 ✅ `870fa0e`, W22 🔴, W23 🔴, W24 🔴. Resume after W24+W22+W23 ship. |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |
 | 6. Edge cases | | | |
@@ -592,6 +592,8 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 **Unpause (2026-05-07):** Both blockers fixed and live-verified — `119a466` (W1+W2+W3+W4) + `8f5c9ba` (W7 retry that unblocks W1's auto-seed code path). Next sitting can resume Phase 2 from `/restaurant/modifiers` with confidence the Restaurant section is fully walkable.
 
 **Phase 2 sweep close-out (2026-05-08):** All ~60 sidebar items walked. 1 🔴 (W8 Order Kiosks React #310 — same hook-order bug as W2 in a sibling file the W2 fix didn't audit), 1 🟡 (W9 backend snake_case typo on `req.context?.outlet_id` in 6 sites — masked because frontend usually passes `?outlet_id=` query, surfaced via POS Restaurant initial floor-plan fetch), 1 🔵 (W10 sidebar Customers vs page heading Guests label drift). Stop-rule didn't fire (1 blocker < 3). Phase 2 will be fully closed once W8 ships. Phase 3 can begin in parallel.
+
+**Phase 3 flow 3.2 pause (2026-05-07 evening):** Walked seat → 2-seat cart (W20 fixed) → split-by-seat (W21 fixed). Stop-rule fired at step 5 with 3 🔴 blockers: W22 (`/restaurant/checks` Close-check button calls non-existent PUT route → 404), W23 (no UI path to pay split-children — POS context stays on parent draft), W24 (tips silently dropped at sale settlement: frontend sends `tip_method:"Cash"` capitalised, DB CHECK requires lowercase). 7 findings filed total this sitting (W18-W24); 2 fixed live (W20 `5978622`, W21 `870fa0e`). Sitting closed. Next sitting should fix W24 first (smallest unblock for the most critical data-correctness bug), then W22, then W23, then resume flow 3.2 from step 5.
 
 ---
 
