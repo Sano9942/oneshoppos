@@ -579,7 +579,7 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 |---|---|---|---|
 | 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) — ✅ FIXED in 119a466 |
 | 2. Sidebar walkthrough | ✅ closed | 2026-05-08 | Morning: W1✅ (119a466+8f5c9ba), W2✅ (119a466), W4✅ (auto with W1). Afternoon resume: W8✅ (next push) Order Kiosks React #310, W9✅ (next push) backend snake_case typo, W10✅ (next push) sidebar/breadcrumb label drift |
-| 3. End-to-end flows | | | |
+| 3. End-to-end flows | 🔄 stopped at 3.1 step 1 | 2026-05-07 | W12 🔴 (Floor Plan "New Plan" CTA is no-op `onClick={() => {}}` — gates every flow that needs a table) |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |
 | 6. Edge cases | | | |

@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 6 | 0 |
+| 🔴 Blocker | 1 | 6 | 0 |
 | 🟡 Issue | 1 | 2 | 0 |
 | 🔵 Polish | 11 | 3 | 0 |
-| **Total** | **12** | **11** | **0** |
+| **Total** | **13** | **11** | **0** |
 
-Last update: 2026-05-08 (Phase 2 cleanup — W8 🔴 Order Kiosks React #310 fixed by hoisting useMemo above flag/perm gate; W9 🟡 6 backend snake_case typos `req.context?.outlet_id` → `req.context?.outletId` fixed across restaurant.js / restaurant-inbox.js / kds.js; W10 🔵 sidebar nav + breadcrumb labels now translate Customer/Customers/Product/Products via `usePreset().labels`. All 3 ship in next push.).
+Last update: 2026-05-07 (Phase 3 flow 3.1 hit hard wall on first action — W12 🔴 Floor Plan "New Plan" button is a no-op (`onClick={() => {}}` at RestaurantFloorRedesign.jsx:76). Backend `POST /api/restaurant/floor-plans` exists; frontend never wires it. Page also lacks any "Add Table" CTA — only renders existing tables read-only. Without a floor plan + tables, all 12 Phase 3 flows are blocked.
 
 ---
 
@@ -650,6 +650,62 @@ node -e "try { require('./backend/workers/course-release-worker-boss'); } catch 
 
 ---
 
+### W12 — Floor Plan "New Plan" button is a no-op; no plan/table create UI exists
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (gates Phase 3 flows 3.1, 3.2, 3.3, 3.6 — every flow that needs a table)
+**Surfaces affected:** `/restaurant/floor` (Floor Plan page) — and by extension every restaurant flow that requires a seated table session
+**Found via:** Phase 3 Playwright walkthrough 2026-05-07, flow 3.1 step 1
+
+**Steps to reproduce:**
+1. Log in as Test Owner on `sanoposlivetest1778021564659`
+2. Sidebar → Restaurant → Floor Plan (lands on `/restaurant/floor` cleanly — W1 fix holds)
+3. Click "New Plan" button (top-right of `PageShell`)
+4. Nothing happens. No modal, no inline form, no toast, no navigation, no console error.
+
+**Observed:** Click registers (button receives focus, `[active]` state in DOM), but produces zero visible effect.
+
+**Expected:** Either a modal or an inline form to capture floor plan name, then `POST /api/restaurant/floor-plans` with `{ name, outlet_id }` and refresh `loadPlans()`.
+
+**Console/network errors:** None. Console totally silent.
+
+**Screenshot:** `restaurant-walkthrough-phase3-3.1-new-plan-noop-2026-05-07.png`
+
+**Suspected root cause:**
+- `frontend/src/pages/redesign/RestaurantFloorRedesign.jsx:76` — `<Button size="sm" onClick={() => {}}>` literally has an empty no-op handler. There is no `useState` for any "show new plan modal" flag, and no `<Modal>` for plan creation in the file (read in full — only the seat-session modal at line 114 exists).
+- The same page (lines 91-112) also renders the table grid read-only — there is no "Add Table" CTA. So even if a plan were seeded by some other means (DB, API), the user couldn't add tables to it from the UI.
+
+**Backend confirms the endpoints exist** (so this really is a missing-frontend-wiring bug, not an endpoint-not-implemented issue):
+- `backend/routes/restaurant.js:42` — `POST /api/restaurant/floor-plans` (validated by `createFloorPlanSchema`)
+- `backend/routes/restaurant.js:78` — `POST /api/restaurant/tables` (validated by `createTableSchema`)
+- `backend/routes/restaurant.js:91` — `PUT /api/restaurant/tables/:id` (drag-to-reposition support)
+
+**DB state confirms zero seed data:**
+```sql
+SELECT COUNT(*) FROM tenant_sanoposlivetest1778021564659.restaurant_floor_plans;  -- 0
+SELECT COUNT(*) FROM tenant_sanoposlivetest1778021564659.restaurant_tables;       -- 0
+SELECT COUNT(*) FROM tenant_sanoposlivetest1778021564659.restaurant_table_sessions; -- 0
+```
+
+**Why nothing in the codebase wires this:**
+```
+$ grep -r "api\.post.*floor-plans" frontend/src   # → 0 matches
+```
+Zero frontend callers ever POST to `/api/restaurant/floor-plans`. The wiring was never built.
+
+**Suggested fix:**
+1. In `RestaurantFloorRedesign.jsx`, add `const [showNewPlanModal, setShowNewPlanModal] = useState(false)` and `const [planName, setPlanName] = useState("")`.
+2. Replace `onClick={() => {}}` at line 76 with `onClick={() => setShowNewPlanModal(true)}`.
+3. Add a `<Modal>` block similar to the existing seat-session modal (lines 114-126) that captures plan name, calls `await api.post("/api/restaurant/floor-plans", { name: planName, outlet_id: readContext().active_outlet_id })`, then `loadPlans()` and closes.
+4. Add an "Add Table" CTA inside the active-plan view that POSTs to `/api/restaurant/tables` with `{ floor_plan_id, label, capacity, shape, pos_x, pos_y }`. Without table-creation UI the floor plan is decorative.
+5. Verify backend `createFloorPlanSchema` field shape (likely `{ name, outlet_id }`; read `backend/schemas/restaurant.js` before sending).
+
+**Severity reasoning:** Without a floor plan and tables, the entire dine-in workflow (3.1, 3.2, 3.3, 3.6) cannot be exercised. Even 3.4 (online inbox → fire) is partially affected because acceptance flows that route to a table need a target table. This is not a polish issue — it's a brand-new restaurant tenant on day 1 cannot start using the product.
+
+**Discovery surprise:** Phase 2 walkthrough on 2026-05-07 (morning) verified `/restaurant/floor` "renders Floor Plan title + '+ New Plan' CTA" and called it ✅ FIXED for W1. That verification looked at *render*, not at *function*. The button rendered, so W1 was closed. But W1 was about the auth-bounce; the button-does-nothing bug is a separate latent regression that no one clicked into until Phase 3. **Lesson:** verifying a page "loads" is not the same as verifying its primary CTA works. Phase 2 sweep should have included a quick "click each primary CTA, expect *something* (modal/nav/toast)" check.
+
+---
+
 ## Healing log (out-of-band changes to live test tenant)
 
 > Record any DDL or DML run directly against `tenant_sanoposlivetest1778021564659` outside the migration runner. Future tenants get the same state via the migration / setup fixes, but the live test tenant predates them and needs manual catch-up.
@@ -886,6 +942,45 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 2. Fix W9 (snake_case → camelCase in 6 backend sites) — mechanical find/replace.
 3. After W8 fix, Phase 2 is fully closed and sitting can advance to Phase 3 (end-to-end restaurant flows).
 4. W10 is polish — defer to a "preset polish" PR alongside any other label-drift findings.
+
+### Session 2026-05-07 — Phase 3 attempted; stopped at flow 3.1 step 1 (W12 hard wall)
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.1 *attempted*; halted on first action.
+**Duration:** ~10 min before stop-rule triggered.
+
+**Result — 1 🔴 blocker on first click, no progress past step 1 of 12 flows:**
+
+| Flow | Step | Result |
+|---|---|---|
+| 3.1 | "+ New Plan" CTA on Floor Plan page | 🔴 W12 — button is `onClick={() => {}}`. No-op. Filed. |
+| 3.1 | All subsequent steps (add tables, seat, fire, settle) | ⏸️ NOT WALKED — blocked by W12 |
+| 3.2-3.12 | All flows | ⏸️ NOT WALKED — most depend on a seated table session |
+
+**Pre-flight verifications (clean ✅):**
+- Login session preserved from Phase 2 — landed on `/dashboard` directly, no re-login needed
+- Sidebar shows Restaurant section with no flicker (W3 fix holds)
+- W10 fix verified live: sidebar now reads "Guests / Guest Groups / Guest Invoices" (was "Customers")
+- Floor Plan page itself loads cleanly (W1 fix holds — no auth bounce)
+- Console silent throughout — zero errors, zero warnings
+
+**Findings filed this session:** W12 🔴 BLOCKER — Floor Plan "New Plan" CTA is a no-op (`onClick={() => {}}` at `RestaurantFloorRedesign.jsx:76`). Backend `POST /api/restaurant/floor-plans` exists; no frontend caller. No "Add Table" CTA either. Blocks every Phase 3 flow that needs a seated table.
+
+**Stop-rule reasoning:** the *flow 3.1 first action* is broken. There is no clean way to proceed without either fixing W12 or seeding floor_plans + restaurant_tables rows directly via Supabase MCP. Per protocol I stopped to discuss before SQL-seeding around the broken UI — that would be testing the rest of the system in a way no real merchant can reach. User needs to decide: (a) fix W12 first, then resume; (b) authorize me to seed via DB to unblock the rest of Phase 3 with a documented "test only" caveat.
+
+**Screenshots saved (1):**
+- `restaurant-walkthrough-phase3-3.1-new-plan-noop-2026-05-07.png` — empty page after clicking "New Plan"
+
+**Surprises:**
+- Phase 2's verification of W1 closed on "Floor Plan title + '+ New Plan' CTA renders". That verified render, not function. The button rendered correctly but did nothing — a separate latent bug that needed a click attempt to expose. **Lesson for future Phase 2 sweeps:** add a "click each primary CTA, expect any reaction" step. Render ≠ work.
+- Backend endpoints fully exist (POST floor-plans, POST tables, PUT tables for drag-position), Zod schemas exist, services exist. This is purely a frontend-wiring gap — likely the page was scaffolded as read-only and the create flow never landed. No commit history check done; would help to know whether this ever worked.
+- The same file shows a complete `openSession()` POST + seat modal at lines 57-64 / 114-126, so the page author *did* know how to wire a modal-driven POST. The "New Plan" flow was just left as a stub.
+
+**Recommendation for next sitting:**
+1. **Fix W12 first.** ~30 min frontend change: add modal state + `<Modal>` block + POST handler for plan creation, plus an "Add Table" CTA inside the active-plan view. Reference the existing seat-session modal for shape.
+2. After W12 ships and is live-verified (a real "New Plan → Main Floor → +Table T1/T2/T3/T4" round-trip writes to DB), resume Phase 3 from flow 3.1.
+3. Optional safety net: a 5-minute Phase 2 *delta* sweep that just clicks every primary CTA across the Restaurant section to catch any other no-op buttons before they bite Phase 3 step 1.
 
 ---
 
