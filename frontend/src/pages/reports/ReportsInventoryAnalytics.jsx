@@ -376,8 +376,7 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
     applyDrillFilter({
       search: "",
       ...patch,
-      });
-      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+    });
     setActiveTab?.("product-performance");
   };
   const comparisonExportRows = [

@@ -49,9 +49,6 @@ export default function KDSRedesign() {
   // 2-R.5: per-station settings modal (balance strategy + target prep + printer).
   const [settingsStation, setSettingsStation] = useState(null);
 
-  if (!flagsLoading && !flags.phase4_restaurant_kds) return <Navigate to="/dashboard" replace />;
-  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
-
   const loadStations = useCallback(async () => {
     try {
       const data = await api.get("/api/kds/stations");
@@ -184,6 +181,9 @@ export default function KDSRedesign() {
     if (r.category_name) return `Category: ${r.category_name}`;
     return "—";
   }
+
+  if (!flagsLoading && !flags.phase4_restaurant_kds) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   return (
     <PageShell title="Kitchen Display" subtitle="KDS ticket queue" right={

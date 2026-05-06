@@ -22,9 +22,6 @@ export default function RestaurantFloorRedesign() {
   const [showSeatModal, setShowSeatModal] = useState(null);
   const [seatForm, setSeatForm] = useState({ guest_count: 1, server_id: "" });
 
-  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
-  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
-
   const loadPlans = useCallback(async () => {
     setLoading(true);
     try {
@@ -53,6 +50,9 @@ export default function RestaurantFloorRedesign() {
     const interval = setInterval(loadFloorDetail, 10000);
     return () => clearInterval(interval);
   }, [activePlan, loadFloorDetail]);
+
+  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   const openSession = async (tableId) => {
     try {

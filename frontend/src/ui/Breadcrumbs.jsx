@@ -69,7 +69,6 @@ const LABELS = {
   availability: "86'd Items",
   modifiers: "Modifiers",
   kds: "KDS",
-  kiosk: "Kiosk",
   appointments: "Appointments",
   services: "Services",
   calendar: "Calendar",

@@ -17,14 +17,12 @@ const NAV_ITEMS = [
 export default function AdminLayout() {
   const navigate = useNavigate();
   const token = getAdminToken();
-
-  if (!token) return <Navigate to="/admin/login" replace />;
-
   const admin = getAdminSession()?.admin || null;
 
   const [openTicketCount, setOpenTicketCount] = useState(0);
 
   useEffect(() => {
+    if (!token) return;
     const fetchCount = () => {
       adminFetch("/api/admin/support-tickets?status=open")
         .then(r => r.ok ? r.json() : null)
@@ -34,7 +32,9 @@ export default function AdminLayout() {
     fetchCount();
     const timer = setInterval(fetchCount, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [token]);
+
+  if (!token) return <Navigate to="/admin/login" replace />;
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">

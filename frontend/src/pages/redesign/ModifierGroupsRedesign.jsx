@@ -20,8 +20,6 @@ export default function ModifierGroupsRedesign() {
   const [optionDialogGroup, setOptionDialogGroup] = useState(null);
   const [newOption, setNewOption] = useState({ name: "", price_delta: 0 });
 
-  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -32,6 +30,8 @@ export default function ModifierGroupsRedesign() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
 
   const saveGroup = async () => {
     try {

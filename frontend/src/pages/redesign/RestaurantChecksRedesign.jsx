@@ -23,9 +23,6 @@ export default function RestaurantChecksRedesign() {
   const [splitMode, setSplitMode] = useState("equal"); // equal | by_seat | by_item
   const [splitCount, setSplitCount] = useState(2);
 
-  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
-  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -36,6 +33,9 @@ export default function RestaurantChecksRedesign() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   const fireCourse = async (checkId, course) => {
     try {
