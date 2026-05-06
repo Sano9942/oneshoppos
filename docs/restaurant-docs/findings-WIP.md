@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 1 | 12 | 0 |
+| 🔴 Blocker | 0 | 13 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **14** | **21** | **0** |
+| **Total** | **13** | **22** | **0** |
 
-Last update: 2026-05-07 (sitting closed by user. Fix-it loop shipped 3 fixes: **W24** ✅ `29e540c` (tip_method normalisation + Sentry, live-verified). **W22** ✅ `4c65ec3` (PUT /checks/:id route, live-verified). **W23** wired `1301f2b` + cart-rehydrate patch `a7cb54c` — Pay button + resumeCheck path verified up to "POS opens in check view"; the rehydrate patch shipped after the empty-cart was observed but not yet re-verified live. Floor healed: drafts #10/#11/#12 cancelled, session #7 closed. Next sitting: verify `a7cb54c` rehydrates cart on Pay-this-check → settle 2 split children → open /tips → close + distribute pool. That closes flow 3.2 fully.)
+Last update: 2026-05-08 morning (W23 `a7cb54c` rehydrate live-verified end-to-end. Pay-this-check on a split child opens POS in check view AND the cart rehydrates with the correct draft items. Both split children of T1 (drafts #14 + #15) settled with 15% Cash tips → INV-2026-00005 + INV-2026-00006. Three tip_captures rows now in DB (id=2/3/4) all with `tip_method='cash'`. Total fixed: 22. 0 open blockers. Next: tip pool flow → distribute → flow 3.2 fully closes.)
 
 ---
 
@@ -1154,9 +1154,9 @@ This appears to be either (a) a backend route that was never written, or (b) a f
 
 ---
 
-### W23 — No UI path to pay/settle a split-child check (post-split, the children are orphans in the POS)
+### W23 — No UI path to pay/settle a split-child check (post-split, the children are orphans in the POS) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commits `1301f2b` (Pay-this-check action + resumeCheck plumbing) + `a7cb54c` (cart rehydrate from draft on resumeCheck) — live-verified 2026-05-08 morning. Pay button on `/restaurant/checks` rows navigates to `/pos/restaurant`, opens the POS in check view with the row's `draftOrderId`, and rehydrates the cart from `GET /api/draft-orders/:id`. Both T1 split children (drafts #14 + #15) settled end-to-end with tips → `INV-2026-00005` + `INV-2026-00006`, three `tip_captures` rows in DB.
 **Severity:** 🔴 BLOCKER (split-bill-by-seat is functionally incomplete — the children get created but cannot be paid through the cashier UI)
 **Surfaces affected:** Restaurant POS settlement flow after a SplitCheckModal completion. Affects flow 3.2 step 5 ("close both checks separately, capture tip on each") and every restaurant flow that splits a bill before paying. Currently the only thing the cashier can *do* with split children is see them on the `/restaurant/checks` list (W22 makes even closing them broken).
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5. Trying to identify where to go next after a successful split.
@@ -1572,6 +1572,54 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 3. Open /tips → today's pool → close → distribute (need a distribution rule first; `equal_share` is the simplest). Verify `tip_pool_payouts` rows.
 4. That closes flow 3.2 fully (steps 1–7 all green). Update plan progress tracker (Phase 3 = 2 of 12) + write the closing session log for 3.2.
 5. After 3.2 fully closes, the next walkthrough sitting can pick up from flow 3.3 (Reservation → seat → order → settle).
+
+### Session 2026-05-08 morning — Flow 3.2 closed end-to-end (W23 verified + tip pool round-trip)
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.2 wrap-up. Verified `a7cb54c` rehydrate live, settled both T1 split children with tip, ran tip pool open → close → distribute end-to-end.
+**Duration:** ~30 min.
+
+**Result:** ✅ flow 3.2 fully closed. W23 status flips OPEN → ✅ FIXED. 0 open blockers. Plan progress tracker bumped to "2 of 12 closed".
+
+**Pre-flight (clean ✅):**
+- Attendance session #2 still open (Test Owner clocked in from prior sitting).
+- Cash shift #2 still open.
+- 0 open table sessions on the floor.
+- Vercel deployment `a7cb54c` (dpl_27NSKqdWjpRdB5NEkaP9EAfr4byN) confirmed READY in production. POSRestaurantRoute chunk hash flipped to `Dtf-q0MN` (was `QzpqBT_Z` post-1301f2b).
+
+**Live verifications:**
+- **Step 1 (recreate scenario):** Seat T1 → Seat 1 / C3 / Grilled Chicken Rs 1,200 → switch to Seat 2 / C3 / Grilled Chicken Rs 1,200 → cart shows 2 seat groups, total Rs 2,400 (W20 holds). Send to Kitchen → kebab → Split → By Seat → confirm. DB: `draft_orders` for table_session_id=8 → parent #13 (Rs 0, parent=null) + 2 children #14 + #15 (Rs 1,200 each, parent=13). ✅
+- **Step 2 (W23 rehydrate verify):** /restaurant/checks shows 3 rows. Click Pay icon on row #15. Navigated to /pos/restaurant in check view. **Cart rehydrated: Total Rs 1,200, Seat 2 / Course 3 / Entrée, 1× Grilled Chicken Rs 1,200.** ✅ — `a7cb54c` works as designed. Screenshot: `restaurant-walkthrough-w23-fixed-pay-split-child-rehydrated-2026-05-07.png`.
+- **Step 3 (settle child #15):** Pay → 15% tip Rs 180 → Server Test Owner → Tip via Cash → Cash → Exact → Add → Complete Sale. DB: `INV-2026-00005`, total_amount=1200, tip_amount=180.00, tip_method='cash', server_id=1. ✅
+- **Step 4 (settle child #14):** Back to /restaurant/checks → 2 rows (parent #13 + child #14). Click Pay on #14. Cart rehydrated again: Seat 1 / C3 / Grilled Chicken Rs 1,200. Pay flow same as step 3. DB: `INV-2026-00006`, total=1200, tip 180 cash, server 1. ✅
+- **DB roll-up:** sales rows: id=4/5/6 all Rs 1,200 (3 today including today's earlier W24 verify of INV-00004). tip_captures: id=2/3/4 all `tip_method='cash' tip_amount=180.00 server_id=1`.
+- **Step 6 (tip pool flow):**
+  - No distribution rule existed; created via /tips Distribution Rules tab → New Rule → name "Equal Share Default", strategy `equal_share`, is_default=true, outlet_id=1. DB: `tip_pool_distribution_rules.id=1` confirmed.
+  - Pools tab → Open Pool → outlet 1 / business_date 2026-05-06 (UTC, matches the captures' UTC date). DB: `tip_pools.id=1 status='open' total_tips=0 business_date='2026-05-06'`. ✅
+  - Click Close → confirm dialog accepted. DB: `tip_pools.id=1 status='closed' total_tips=540.00`. tip_captures.pool_id stamped to 1 on all 3 rows. ✅
+  - Click Distribute → modal opens with "Total tips: Rs 540.00" + "Equal Share Default — Equal share" pre-selected → click Distribute. DB: `tip_pool_payouts.id=1 pool_id=1 employee_id=1 payout_amount=540.00`. `commission_earnings.id=1 employee_id=1 commission_amount=540.00 earning_type='tip'`. ✅
+  - Payouts tab UI shows: Test Owner / 3.64 hours / 1.00 weight / Rs 540.00 / unpaid / Pool #1. Screenshot: `restaurant-walkthrough-flow32-tip-pool-distributed-2026-05-07.png`.
+
+**Findings updates:**
+- W23 → ✅ FIXED — commits `1301f2b` + `a7cb54c` (now both live-verified).
+- Status Summary: 0 open blockers (was 1), 1 issue (W18), 12 polish (W19 + 11 prior). Total fixed: 22.
+
+**Floor healed for next sitting:** T1 dirty session #8 → cleared via Clear Table button (W17 fix end-to-end re-verified). Parent draft #13 (Rs 0, no children left to split) → cancelled via Supabase MCP (UI doesn't expose a direct cancel for empty parent post-distribution). All 4 tables back to "Tap to seat". DB sales total: 6 (`INV-2026-00001..00006`). 3 tip_captures all stamped pool_id=1, paid status pending. 1 tip_pool, 1 payout, 1 commission_earnings row. Test Owner still clocked in for next sitting if same-day.
+
+**Plan tracker bumped:** Phase 3 row → "2 of 12 closed", flow 3.2 entry rewritten as ✅ closed.
+
+**Surprises:**
+- Pool date display in the UI grid renders `2026-05-05T19:00:00.000Z` (the start-of-business-date timestamp in UTC, formatted with the Z suffix and non-localised). Cosmetic only — DB business_date is correct. Polish-class quality issue, not blocking. Not promoted to a finding because the same display lands in the Distribute modal heading too — clearly a deliberate ISO format choice across the page; if we file something here it's "consistent display polish, not data integrity".
+- The `commission_earnings` row gets `earning_type='tip'` and `sale_id=null`, even though the underlying tip_captures rows reference specific sales. This is the documented design: payout is *aggregated by employee per pool*, not per-sale. Confirmed against the row written. Worth noting if future tip-disposition reports need per-sale traceback.
+- W23 verification was clean and exactly as designed by `a7cb54c`. The "navigate to /pos/restaurant + openCheck + cart rehydrate from GET /api/draft-orders/:id" path works on first click for both children, with no visible glitch even though the second child's row temporarily showed an empty parent above it on the Checks page during the gap between settles.
+
+**No commits this session beyond the docs update.** All 5 fixes for flow 3.2 (W20/W21/W22/W23/W24) had already shipped pre-sitting; today's work was end-to-end verification + tip pool round-trip + closing the flow in docs.
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.3** (Reservation → seat → order → settle) per the plan. Floor is clean, tenant healthy, no carry-over fixes pending.
+2. Consider a brief "polish pass" follow-up later for W18 (Open-Tab CTA) and W19 (header label) since they're now the only outstanding restaurant-walkable findings — but neither blocks Phase 3 progression.
+3. The new outstanding follow-up worth tracking: payout date display in /tips renders ISO-shifted UTC (`2026-05-05T19:00:00.000Z` for a 2026-05-06 business date in PKT). Cosmetic — file as W25 if it bites a future merchant, otherwise leave for a polish pass.
 
 ---
 
