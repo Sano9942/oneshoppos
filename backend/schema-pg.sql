@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS outlets (
   monthly_sales_target NUMERIC(12,2) DEFAULT 0
 );
 
+-- 2-R.6 — per-outlet timezone for day-parting (falls back to company_profile.timezone when NULL)
+ALTER TABLE outlets ADD COLUMN IF NOT EXISTS timezone TEXT;
+
 CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -1597,6 +1600,11 @@ CREATE TABLE IF NOT EXISTS printer_config (
   is_active BOOLEAN DEFAULT TRUE
 );
 
+-- 2-R.7 — printer purpose for fire-chit vs guest-bill vs receipt routing (migration v59)
+ALTER TABLE printer_config ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'receipt';
+ALTER TABLE printer_config DROP CONSTRAINT IF EXISTS printer_config_purpose_check;
+ALTER TABLE printer_config ADD CONSTRAINT printer_config_purpose_check CHECK (purpose IN ('receipt','fire_chit','guest_bill','expo'));
+
 CREATE TABLE IF NOT EXISTS email_config (
   id SERIAL PRIMARY KEY,
   smtp_host TEXT DEFAULT 'smtp.gmail.com',
@@ -2898,12 +2906,16 @@ CREATE TABLE IF NOT EXISTS restaurant_table_sessions (
   outlet_id INTEGER NOT NULL REFERENCES outlets(id),
   server_id INTEGER REFERENCES employees(id),
   guest_count INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'seated' CHECK (status IN ('seated','ordering','served','check_requested','closed')),
+  status TEXT NOT NULL DEFAULT 'seated' CHECK (status IN ('seated','ordering','served','check_requested','closed','dirty')),
   seated_at TIMESTAMPTZ DEFAULT NOW(),
   closed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- 2-R.D (v61) — widen status CHECK to include 'dirty' for the housekeeping signal between paid + bussed.
+-- Drop-and-recreate pattern matches the v61 migration (constraint is named restaurant_table_sessions_status_check by Postgres).
+ALTER TABLE restaurant_table_sessions DROP CONSTRAINT IF EXISTS restaurant_table_sessions_status_check;
+ALTER TABLE restaurant_table_sessions ADD CONSTRAINT restaurant_table_sessions_status_check CHECK (status IN ('seated','ordering','served','check_requested','closed','dirty'));
 CREATE INDEX IF NOT EXISTS idx_restaurant_sessions_table ON restaurant_table_sessions(table_id) WHERE status != 'closed';
 CREATE INDEX IF NOT EXISTS idx_restaurant_sessions_outlet ON restaurant_table_sessions(outlet_id, status);
 
@@ -3065,6 +3077,15 @@ CREATE TABLE IF NOT EXISTS kds_stations (
 );
 CREATE INDEX IF NOT EXISTS idx_kds_stations_outlet ON kds_stations(outlet_id);
 
+-- 2-R.7 (v59) — kds_stations printer_id + load-balancing fields
+ALTER TABLE kds_stations
+  ADD COLUMN IF NOT EXISTS printer_id INTEGER REFERENCES printer_config(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS balance_strategy TEXT NOT NULL DEFAULT 'priority',
+  ADD COLUMN IF NOT EXISTS target_prep_seconds INTEGER,
+  ADD COLUMN IF NOT EXISTS last_assigned_at TIMESTAMPTZ;
+ALTER TABLE kds_stations DROP CONSTRAINT IF EXISTS kds_stations_balance_strategy_check;
+ALTER TABLE kds_stations ADD CONSTRAINT kds_stations_balance_strategy_check CHECK (balance_strategy IN ('priority','round_robin','least_loaded'));
+
 CREATE TABLE IF NOT EXISTS kds_station_routes (
   id SERIAL PRIMARY KEY,
   station_id INTEGER NOT NULL REFERENCES kds_stations(id) ON DELETE CASCADE,
@@ -3111,6 +3132,20 @@ CREATE TABLE IF NOT EXISTS kds_tickets (
 );
 CREATE INDEX IF NOT EXISTS idx_kds_tickets_station_status ON kds_tickets(station_id, status);
 CREATE INDEX IF NOT EXISTS idx_kds_tickets_order ON kds_tickets(draft_order_id);
+
+-- 2-R.5 (v60) — kds_tickets timing columns. prep_seconds populated by service layer at bump
+-- (bumped_at - fired_at). Plain INTEGER (not generated) so recall flow can preserve history.
+ALTER TABLE kds_tickets
+  ADD COLUMN IF NOT EXISTS fired_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS recalled_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS prep_seconds INTEGER;
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_station_bumped
+  ON kds_tickets(station_id, bumped_at)
+  WHERE bumped_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_fired_at
+  ON kds_tickets(fired_at)
+  WHERE fired_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS kds_ticket_events (
   id SERIAL PRIMARY KEY,
@@ -3193,6 +3228,167 @@ ALTER TABLE draft_order_items
   ADD COLUMN IF NOT EXISTS seat_number INTEGER,
   ADD COLUMN IF NOT EXISTS course_name TEXT DEFAULT 'main',
   ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'pending';
+
+-- ── Phase 2-R Wave B (v59) — Void/Comp adjustments + reason codes ──────
+-- Per-line audit ledger for void / comp / discount with manager-PIN approval.
+CREATE TABLE IF NOT EXISTS sale_item_adjustments (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('void','comp','discount')),
+  reason_code TEXT NOT NULL,
+  reason_note TEXT,
+  amount NUMERIC(12,2) NOT NULL,
+  manager_employee_id INTEGER REFERENCES employees(id),
+  manager_pin_verified_at TIMESTAMPTZ,
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sale_item_adjustments_sale ON sale_item_adjustments(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_item_adjustments_type ON sale_item_adjustments(adjustment_type, created_at);
+
+-- Tenant-customizable reason codes (10 default rows seeded below).
+CREATE TABLE IF NOT EXISTS void_reason_codes (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  label TEXT NOT NULL,
+  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('void','comp','both')),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO void_reason_codes (code, label, adjustment_type, sort_order) VALUES
+  ('spilled', 'Spilled / dropped', 'void', 10),
+  ('wrong_order', 'Wrong order', 'both', 20),
+  ('customer_change', 'Customer changed mind', 'void', 30),
+  ('kitchen_error', 'Kitchen error', 'both', 40),
+  ('vip_comp', 'VIP / manager comp', 'comp', 50),
+  ('manager_comp', 'Manager discretion', 'comp', 60),
+  ('training', 'Training / test order', 'both', 70),
+  ('allergy', 'Allergy / dietary issue', 'both', 80),
+  ('quality', 'Quality complaint', 'comp', 90),
+  ('other', 'Other', 'both', 100)
+  ON CONFLICT (code) DO NOTHING;
+
+-- ── Phase 2-R Wave B (v59) — Menu schedules / day-parting ───────────────
+CREATE TABLE IF NOT EXISTS menu_schedules (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+  day_of_week INTEGER CHECK (day_of_week >= 0 AND day_of_week <= 6),
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  timezone TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS menu_schedule_products (
+  schedule_id INTEGER NOT NULL REFERENCES menu_schedules(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  PRIMARY KEY (schedule_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_menu_schedule_products_product ON menu_schedule_products(product_id);
+
+-- ── Phase 2-R Wave C (v60) — KDS station load snapshots ────────────────
+-- 15-min rollups for KDS Analytics trend lines.
+CREATE TABLE IF NOT EXISTS kds_station_load_snapshots (
+  id SERIAL PRIMARY KEY,
+  station_id INTEGER NOT NULL REFERENCES kds_stations(id) ON DELETE CASCADE,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  open_tickets INTEGER NOT NULL,
+  avg_prep_seconds INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_kds_load_snapshots_station_time
+  ON kds_station_load_snapshots(station_id, recorded_at DESC);
+
+-- ── Phase 2-R Wave D (v61) — Pay-at-table + reservations + waitlist ────
+-- Pay-at-table session — mirrors storefront_payment_sessions pattern.
+-- draft_order_id / table_session_id nullable so cancelled sessions can outlive
+-- their source rows; sale_id links back once the sandbox webhook flips status to 'paid'.
+CREATE TABLE IF NOT EXISTS restaurant_payment_sessions (
+  id SERIAL PRIMARY KEY,
+  draft_order_id INTEGER REFERENCES draft_orders(id) ON DELETE SET NULL,
+  table_session_id INTEGER REFERENCES restaurant_table_sessions(id) ON DELETE SET NULL,
+  token TEXT UNIQUE NOT NULL,
+  gateway TEXT NOT NULL DEFAULT 'sandbox',
+  gateway_ref TEXT,
+  amount NUMERIC(12,2) NOT NULL,
+  tip_amount NUMERIC(12,2) DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','processing','paid','failed','expired')),
+  webhook_payload JSONB,
+  paid_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rps_status_expires
+  ON restaurant_payment_sessions(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_rps_table_session
+  ON restaurant_payment_sessions(table_session_id)
+  WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS reservations (
+  id SERIAL PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  party_size INTEGER NOT NULL CHECK (party_size > 0),
+  reservation_start TIMESTAMPTZ NOT NULL,
+  reservation_end TIMESTAMPTZ,
+  outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+  table_id INTEGER REFERENCES restaurant_tables(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','confirmed','seated','completed','no_show','cancelled','waitlisted')),
+  notes TEXT,
+  source TEXT DEFAULT 'staff',
+  sms_confirmed_at TIMESTAMPTZ,
+  sms_reminder_sent_at TIMESTAMPTZ,
+  token TEXT UNIQUE,
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reservations_start ON reservations(reservation_start);
+CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status, reservation_start);
+CREATE INDEX IF NOT EXISTS idx_reservations_table
+  ON reservations(table_id, reservation_start)
+  WHERE table_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS waitlist_entries (
+  id SERIAL PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  phone TEXT,
+  party_size INTEGER NOT NULL CHECK (party_size > 0),
+  outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+  quoted_wait_minutes INTEGER,
+  status TEXT NOT NULL DEFAULT 'waiting'
+    CHECK (status IN ('waiting','notified','seated','removed')),
+  position INTEGER,
+  notified_at TIMESTAMPTZ,
+  seated_at TIMESTAMPTZ,
+  removed_at TIMESTAMPTZ,
+  notes TEXT,
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_waitlist_status_position
+  ON waitlist_entries(status, position)
+  WHERE status IN ('waiting','notified');
+
+-- ── Public-schema infra cache (v50) ─────────────────────────────────────
+-- Cross-schema introspection cache keyed by snapshot. Public schema only —
+-- created here under explicit `public.` qualifier so provisioner running
+-- inside a tenant search_path still creates it in public. Used by /api/admin/infra.
+CREATE TABLE IF NOT EXISTS public.infra_cache (
+  cache_key TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  duration_ms INTEGER
+);
 
 -- ═══════════════════════════════════════════════════════════════
 -- Phase 4B — Appointment Booking
