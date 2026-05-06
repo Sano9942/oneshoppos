@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 2 | 11 | 0 |
+| 🔴 Blocker | 1 | 12 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **15** | **20** | **0** |
+| **Total** | **14** | **21** | **0** |
 
-Last update: 2026-05-07 (Phase 3 flow 3.2 fix-it loop — W24 ✅ FIXED `29e540c` (frontend lowercase + backend validation + Sentry alert). Live-verified: sale `INV-2026-00004` Rs 1,200 with 15% tip wrote `tip_captures.id=2 tip_amount=180.00 tip_method='cash' server_id=1`. **W22** 🔴 next (smallest remaining: add `PUT /api/restaurant/checks/:id`). **W23** 🔴 after (architectural: add Pay-from-Checks-list action). After all three ship + verify, resume flow 3.2 step 5 (split + pay each child + tip pool).)
+Last update: 2026-05-07 (Phase 3 flow 3.2 fix-it loop progressing. **W24** ✅ `29e540c` tip_method normalisation + Sentry. **W22** ✅ `4c65ec3` PUT /checks/:id route — verified by closing draft #9, status flipped to 'cancelled'. **W23** 🔴 next (architectural: Pay-from-Checks-list action; opens POSContext for the row's draftOrderId). After W23 ships + verifies, resume flow 3.2 step 5 (split + pay each child + tip pool).)
 
 ---
 
@@ -1115,9 +1115,9 @@ This is the same architectural class as W14 (`fix(restaurant): sync cart items t
 
 ---
 
-### W22 — `/restaurant/checks` "Close check" button calls a non-existent PUT route
+### W22 — `/restaurant/checks` "Close check" button calls a non-existent PUT route ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `4c65ec3` (2026-05-07), Vercel `dpl_Db5sa15pyCMZ9yeFmk9NJCHSkbPZ` + Railway redeploy of same commit. Three layers: (1) backend `routes/restaurant.js` adds `PUT /api/restaurant/checks/:id` mapping to `UPDATE draft_orders SET status = $1`, gated by the standard restaurant gate, logged to `action_history`. (2) backend `schemas/restaurant.js` adds `updateCheckSchema` validating `{status: 'cancelled'|'completed'}` only — internal lifecycle states (`open|claimed|merged`) are not exposed to operators. (3) frontend `RestaurantChecksRedesign.jsx:closeCheck` now sends `'cancelled'` (was `'closed'` which doesn't exist in the DB CHECK; would still have failed even with the route added). Live-verified: drove a fresh draft #9 (T2 session #6, Send-to-Kitchen Rs 1,200) to `/restaurant/checks`, clicked Close → `PUT /api/restaurant/checks/9 → 200 OK` → DB shows `id=9 status='cancelled' total=1200.00 table_session_id=6`. Empty state on page after reload confirms list filtering by `status='open'` works correctly. Screenshot: `restaurant-walkthrough-w22-fixed-close-check-2026-05-07.png`.
 **Severity:** 🔴 BLOCKER (the only "close check" UI surface on the Checks list page is dead — every click 404s)
 **Surfaces affected:** `/restaurant/checks` list page → "Close check" icon button on every row. Affects the post-split flow (need to close split children individually) and any other operational close-from-list scenario.
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 5. Immediately after W21 verified split: clicked "Close check" on row #7.

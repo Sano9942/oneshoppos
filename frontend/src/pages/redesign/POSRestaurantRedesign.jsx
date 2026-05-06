@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { POSProvider, usePOS } from "./pos/POSContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
@@ -32,13 +32,38 @@ import PayAtTableQRModal from "./pos/restaurant/PayAtTableQRModal";
 // mounts every existing POS modal so the restaurant flow inherits the
 // retail POS opening gate / lock / checkout / receipt / session-expired UX.
 function RestaurantContent() {
-  const { isLocked, notice, error, closeCheck, money } = usePOS();
+  const { isLocked, notice, error, closeCheck, openCheck, money } = usePOS();
   const [view, setView] = useState("floor");
   const [splitOpen, setSplitOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [voidCompState, setVoidCompState] = useState({ open: false, tab: "void" });
   const [payAtTable, setPayAtTable] = useState({ open: false, draftOrderId: null });
+
+  // W23 — when navigated here from /restaurant/checks "Pay this check"
+  // action, location.state carries { resumeCheck: { draftOrderId, ... } }.
+  // Resume by calling openCheck() with the row's payload and flipping the
+  // view to "check". One-shot: clear location.state after consuming so a
+  // back-navigation (or accidental remount) doesn't re-open the same draft.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const consumedRef = useRef(false);
+  useEffect(() => {
+    if (consumedRef.current) return;
+    const resume = location.state?.resumeCheck;
+    if (!resume?.draftOrderId) return;
+    consumedRef.current = true;
+    openCheck({
+      context: resume.orderContext || "dine_in",
+      tableSessionId: resume.tableSessionId || null,
+      draftOrderId: resume.draftOrderId,
+      seatCount: resume.seatCount || 0,
+    });
+    setView("check");
+    // Clear consumed state so a refresh / back-navigation doesn't re-fire.
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isLocked) return <POSLockScreen />;
 

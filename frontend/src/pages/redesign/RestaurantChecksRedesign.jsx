@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
-import { Receipt, Split, Flame, Clock, Zap, X } from "lucide-react";
+import { Receipt, Split, Flame, Clock, Zap, X, CreditCard } from "lucide-react";
 import { api } from "../../api";
 
 const STATUS_TONES = { open: "warning", split: "warning", closed: "success", voided: "danger" };
@@ -16,6 +16,7 @@ export default function RestaurantChecksRedesign() {
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const toast = useToast();
   const { fmt } = useCurrency();
+  const navigate = useNavigate();
 
   const [checks, setChecks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +90,26 @@ export default function RestaurantChecksRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  // W23 — open this check in the POS check view to take payment + tip.
+  // After SplitCheckModal completes, the parent draft is empty (items
+  // moved to children); the children inherit table_session_id but POS
+  // resolves the floor view to a single draft per session. This action
+  // hands the cashier a per-row entry point so each child / open check
+  // can be settled independently. POSRestaurantRedesign reads the state
+  // and calls openCheck() on mount.
+  const payCheck = (check) => {
+    navigate("/pos/restaurant", {
+      state: {
+        resumeCheck: {
+          draftOrderId: check.id,
+          tableSessionId: check.table_session_id || null,
+          orderContext: check.order_context || "dine_in",
+          seatCount: check.seat_count || 0,
+        },
+      },
+    });
+  };
+
   // W22: send 'cancelled' to match the draft_orders.status CHECK constraint
   // (open|claimed|completed|cancelled|merged). The button is intended for
   // operational close-out (abandoned/zombie checks) — sale settlement uses
@@ -141,6 +162,10 @@ export default function RestaurantChecksRedesign() {
                         </button>
                         <button onClick={() => { setShowSplit(c); setSplitMode("equal"); setSplitCount(2); }} title="Split check" className="p-1 rounded hover:bg-(--ui-bg-hover)">
                           <Split className="w-4 h-4" />
+                        </button>
+                        {/* W23 — pay this check via POS check view */}
+                        <button onClick={() => payCheck(c)} title="Pay this check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-emerald-600">
+                          <CreditCard className="w-4 h-4" />
                         </button>
                         <button onClick={() => closeCheck(c.id)} title="Close check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500">
                           <X className="w-4 h-4" />
