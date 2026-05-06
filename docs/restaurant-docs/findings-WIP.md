@@ -23,10 +23,10 @@
 |---|---|---|---|
 | 🔴 Blocker | 0 | 2 | 0 |
 | 🟡 Issue | 1 | 1 | 0 |
-| 🔵 Polish | 9 | 0 | 0 |
-| **Total** | **10** | **3** | **0** |
+| 🔵 Polish | 10 | 0 | 0 |
+| **Total** | **11** | **3** | **0** |
 
-Last update: 2026-05-07 (B1, B2, I1 fixed; B1.5 added for deferred non-restaurant schema drift).
+Last update: 2026-05-07 (B1, B2, I1 fixed; B1.5 added for deferred non-restaurant schema drift; P10 added for role-name mismatch surfaced during B2 fix).
 
 ---
 
@@ -220,6 +220,28 @@ When `phase4_restaurant_day_parting` is ON but no schedules exist, `filterAvaila
 **Status:** OPEN | **Source:** discovery §8.2.L
 
 Test tenant has `tax_mode='none'` but country pack PK auto-enabled `fbr_integration`. Walkthrough should verify FBR sidebar items don't aggressively prompt the merchant to set up FBR (since they declined GST). `frontend/src/ui/FBRPromptBanner.jsx` is opt-in (props-driven), but sidebar still shows FBR items.
+
+---
+
+### P10 — Role 1 name mismatch: provisioner says 'Admin', setup.js says 'Administrator'
+
+**Status:** OPEN | **Source:** surfaced during B2 fix-it session 2026-05-07
+
+`backend/tenant-provisioner-pg.js` creates role id=1 with name `'Admin'` (and seeds it with `all_access` via its own `ALL_PERMISSIONS` array). `backend/routes/setup.js` then attempts `INSERT (1, 'Administrator', ...) ON CONFLICT (id) DO NOTHING` — the conflict no-ops, leaving the row at `'Admin'`.
+
+**Live verification (`SELECT name FROM roles WHERE id = 1`):** `'Admin'` ✅ (provisioner won)
+
+**Effect:** functionally fine — provisioner already seeded `all_access`, and middleware uses `role_id` for permission resolution. But:
+- `DEFAULT_ROLE_PERMISSIONS.Administrator` (newly imported in B2 fix `0212ccc`) doesn't match the live role name during seed. Setup wizard's seed loop iterates `Object.keys(DEFAULT_ROLE_PERMISSIONS)` = `['Administrator', 'Manager', 'Cashier']` and joins on role.name; for role 1, that join misses (no `Administrator` row). Manager + Cashier match correctly because both files agree on those names.
+- UI surfaces that display `role.name` will show "Admin" rather than "Administrator" — fine, consistent, but worth a note.
+
+**Fix path (low priority):** pick one canonical name. Either:
+- Update `tenant-provisioner-pg.js:104-105` to use `'Administrator'` (matches setup.js + DEFAULT_ROLE_PERMISSIONS), OR
+- Update `setup.js` + `middleware/permissions.js` to use `'Admin'` (matches provisioner + the legacy livetest1 retail tenant)
+
+Provisioner runs first and wins via ON CONFLICT, so the fix should land in provisioner and align everything to `'Administrator'`. Cross-check: existing tenants (livetest1, sanoposlivetest1778021564659) already have `'Admin'` as the role name — would need a UPDATE statement during the heal.
+
+**Severity:** 🔵 Polish. Functionally correct today, cosmetic only, but creates dead-code paths in the seed loop that obscure intent.
 
 ---
 
