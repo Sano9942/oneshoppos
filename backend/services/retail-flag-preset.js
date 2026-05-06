@@ -8,13 +8,15 @@
  * RETAIL_SEED_FLAGS: 19 flags enabled when `industry_type === 'general_retail'`.
  *   Split into three buckets: core polish, opt-in extras, and integrations.
  *
- * RESTAURANT_SEED_FLAGS: 10 flags enabled when `industry_type === 'restaurant'`
+ * RESTAURANT_SEED_FLAGS: 11 flags enabled when `industry_type === 'restaurant'`
  *   or `'cafe'`. Subset of retail tuned for F&B — keeps loyalty / gift cards /
  *   manager override / risk controls / SMS / digest / delivery integrations,
- *   drops retail-specific flags (variant picker, holds, draft orders,
- *   inventory intelligence, item suggestions, label designer, omni input,
- *   per-line restock, receipt barcode lookup) since restaurants get the same
- *   UX through floor plan / tabs / KDS / menu engineering instead.
+ *   drops retail-specific flags (variant picker, holds, inventory intelligence,
+ *   item suggestions, label designer, omni input, per-line restock, receipt
+ *   barcode lookup) since restaurants get the same UX through floor plan /
+ *   tabs / KDS / menu engineering instead. `phase2_draft_orders` IS included
+ *   because POSContext.ensureDraftOrder backs every restaurant check with a
+ *   draft_orders row — without the flag, fire-course / send-to-kitchen 403.
  *
  * MULTI_OUTLET_SEED_FLAGS: 5 flags enabled the first time a tenant transitions
  *   from 1 → 2 outlets. `kiosk_context_locked` is intentionally NOT in this
@@ -77,6 +79,13 @@ const RESTAURANT_SEED_FLAGS = [
   // configures couriers, so safe to enable by default.
   "phase5_cod_reconciliation",
   "phase5_shipping_automation",
+
+  // POS plumbing (1) — gates POST /api/draft-orders. The restaurant POS
+  // (POSContext.ensureDraftOrder) lazily creates a draft for every check on
+  // first kitchen action, so this flag is mandatory for fire-course /
+  // send-to-kitchen / pay-at-table flows. Without it the entire restaurant
+  // POS path 403s on the first interaction.
+  "phase2_draft_orders",
 ];
 
 const MULTI_OUTLET_SEED_FLAGS = [

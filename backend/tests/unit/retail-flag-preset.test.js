@@ -13,8 +13,8 @@ describe("retail-flag-preset", () => {
     expect(RETAIL_SEED_FLAGS).toHaveLength(19);
   });
 
-  it("exports exactly 10 restaurant seed flags", () => {
-    expect(RESTAURANT_SEED_FLAGS).toHaveLength(10);
+  it("exports exactly 11 restaurant seed flags", () => {
+    expect(RESTAURANT_SEED_FLAGS).toHaveLength(11);
   });
 
   it("exports exactly 5 multi-outlet seed flags", () => {
@@ -36,7 +36,7 @@ describe("retail-flag-preset", () => {
     }
   });
 
-  it("RESTAURANT_SEED_FLAGS includes loyalty, gift cards, manager override, and delivery integrations", () => {
+  it("RESTAURANT_SEED_FLAGS includes loyalty, gift cards, manager override, delivery integrations, and draft orders", () => {
     for (const key of [
       "phase2g_loyalty",
       "phase2g_gift_cards",
@@ -48,6 +48,9 @@ describe("retail-flag-preset", () => {
       "phase5_cod_reconciliation",
       "phase5_shipping_automation",
       "retail_weekly_digest",
+      // phase2_draft_orders is required because POSContext.ensureDraftOrder
+      // backs every restaurant check with a draft_orders row.
+      "phase2_draft_orders",
     ]) {
       expect(RESTAURANT_SEED_FLAGS).toContain(key);
     }
@@ -62,7 +65,6 @@ describe("retail-flag-preset", () => {
       "phase2g_holds",
       "phase2g_inventory_intelligence",
       "phase2g_label_designer",
-      "phase2_draft_orders",
       "phase2_item_suggestions",
     ]) {
       expect(RESTAURANT_SEED_FLAGS).not.toContain(key);

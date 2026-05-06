@@ -63,17 +63,53 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
   });
 
   // Create draft order
+  // Two shapes accepted:
+  //   Retail park-sale: { outlet_id, customer_id?, notes?, items: [...] } — items required
+  //   Restaurant check: { order_context, table_session_id?, tab_id?, seat_count?, dining_option? }
+  //     — outlet_id derived from table session or req.context; items optional (added via PUT
+  //     as the cart fills). The frontend POSContext.ensureDraftOrder lazily creates the
+  //     restaurant draft on first kitchen action.
   app.post("/api/draft-orders", feat, async (req, res) => {
-    const { outlet_id, customer_id, notes, items } = req.body;
+    const {
+      outlet_id, customer_id, notes, items,
+      order_context, table_session_id, tab_id, seat_count, dining_option,
+    } = req.body;
     const createdBy = Number(req.headers["x-employee-id"] || 0);
     if (!createdBy) return res.status(401).json({ error: "Unauthorized" });
-    if (!outlet_id) return res.status(400).json({ error: "outlet_id is required" });
-    if (!items || items.length === 0) return res.status(400).json({ error: "items are required" });
+
+    const isRestaurantShape = !!(order_context || table_session_id || tab_id);
+
+    let resolvedOutletId = outlet_id;
+    let resolvedTableId = null;
+
+    if (isRestaurantShape) {
+      // Derive outlet_id from the table session row (preferred — guarantees the
+      // draft and the session belong to the same outlet) or fall back to the
+      // request context. Also pull table_id off the session so the floor view
+      // can join draft_orders → table.
+      if (table_session_id) {
+        const { rows: [session] } = await db.query(
+          "SELECT outlet_id, table_id FROM restaurant_table_sessions WHERE id = $1",
+          [table_session_id]
+        );
+        if (!session) return res.status(404).json({ error: "Table session not found" });
+        resolvedOutletId = resolvedOutletId || session.outlet_id;
+        resolvedTableId = session.table_id;
+      }
+      if (!resolvedOutletId) resolvedOutletId = req.context?.outletId || null;
+      if (!resolvedOutletId) return res.status(400).json({ error: "outlet_id is required" });
+    } else {
+      // Retail park-sale path — unchanged contract.
+      if (!resolvedOutletId) return res.status(400).json({ error: "outlet_id is required" });
+      if (!items || items.length === 0) return res.status(400).json({ error: "items are required" });
+    }
+
+    const lineItems = Array.isArray(items) ? items : [];
 
     try {
       const result = await db.transaction(async (client) => {
         let subtotal = 0, taxTotal = 0, discountTotal = 0;
-        for (const item of items) {
+        for (const item of lineItems) {
           const lineSubtotal = Number(item.price) * Number(item.quantity);
           const lineTax = lineSubtotal * (Number(item.effective_tax_rate || 0) / 100);
           subtotal += lineSubtotal;
@@ -83,13 +119,22 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
         const total = subtotal + taxTotal - discountTotal;
 
         const { rows: [order] } = await client.query(
-          `INSERT INTO draft_orders (outlet_id, customer_id, created_by, notes, subtotal, tax_total, discount_total, total)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-          [outlet_id, customer_id || null, createdBy, notes || null,
-           subtotal.toFixed(2), taxTotal.toFixed(2), discountTotal.toFixed(2), total.toFixed(2)]
+          `INSERT INTO draft_orders (
+             outlet_id, customer_id, created_by, notes,
+             subtotal, tax_total, discount_total, total,
+             order_context, table_id, table_session_id, tab_id, seat_count, dining_option
+           )
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           RETURNING *`,
+          [
+            resolvedOutletId, customer_id || null, createdBy, notes || null,
+            subtotal.toFixed(2), taxTotal.toFixed(2), discountTotal.toFixed(2), total.toFixed(2),
+            order_context || null, resolvedTableId, table_session_id || null,
+            tab_id || null, seat_count ?? null, dining_option || null,
+          ]
         );
 
-        for (const item of items) {
+        for (const item of lineItems) {
           await client.query(
             `INSERT INTO draft_order_items (draft_order_id, product_id, variant_id, product_name, quantity, price, discount, effective_tax_rate, notes, seat_number, course_name, kitchen_status)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
