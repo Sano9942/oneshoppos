@@ -18,21 +18,13 @@ const { getCountryPack, getCountryCodeFromName } = require("../config/country-pa
 const { seedPresetData } = require("../seeds/preset-seed-data");
 const { seedRetailFlags, seedRestaurantFlags } = require("../services/retail-flag-preset");
 const { signAccessToken, signRefreshToken } = require("../jwt-auth");
-
-const ROLE_PERMISSIONS = {
-  Administrator: ['all_access'],
-  Manager: [
-    'manage_inventory',
-    'manage_orders',
-    'view_reports',
-    'manage_employees',
-    'pos_discount',
-    'void_sales',
-    'pos_park',
-    'pos_void',
-  ],
-  Cashier: ['view_reports', 'pos_discount', 'pos_park'],
-};
+// Single source of truth for role -> permissions mapping. Previously hardcoded
+// here with a stale 8-perm Manager list, which left non-admin restaurant
+// employees locked out of every Phase 4 vertical route (manage_restaurant,
+// manage_kds, manage_tips, override_void_comp, override_price, manage_gift_cards,
+// manage_bookings, manage_projects, manage_contracts, manage_tickets,
+// manage_rentals, manage_rooms, manage_treatment_plans).
+const { DEFAULT_ROLE_PERMISSIONS } = require("../middleware/permissions");
 
 module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManager } = {}) {
   const router = express.Router();
@@ -324,7 +316,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         }
 
         // 4. Seed role permissions
-        for (const [roleName, perms] of Object.entries(ROLE_PERMISSIONS)) {
+        for (const [roleName, perms] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
           const { rows: [role] } = await client.query(
             'SELECT id FROM roles WHERE name = $1',
             [roleName]
@@ -454,7 +446,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
               name: admin_name,
               role_id: 1,
             },
-            permissions: ROLE_PERMISSIONS.Administrator,
+            permissions: DEFAULT_ROLE_PERMISSIONS.Administrator,
             tenant: { slug: tenant.slug, name: tenant.name },
           };
         }
