@@ -30,6 +30,10 @@ export function writeSession(session) {
 export function clearSession() {
   localStorage.removeItem(AUTH_KEY);
   localStorage.removeItem("currentEmployee");
+  // W3 — clear the feature-flags warm cache too so the next tenant logged
+  // into this browser does not see the previous tenant's flag set on first
+  // paint. Cheap; the next mount of useFeatureFlags refetches anyway.
+  localStorage.removeItem("sanopos_feature_flags_cache_v1");
 }
 
 // --- Context helpers (used by ContextSelect + RequireContext) ---

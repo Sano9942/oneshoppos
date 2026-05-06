@@ -61,16 +61,19 @@ export default function MenuSchedulesRedesign() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  if (flagsLoading) return null;
-  if (!flags.phase4_restaurant_day_parting) return <Navigate to="/" replace />;
-  if (!hasPerm("manage_restaurant")) return <Navigate to="/" replace />;
-
+  // W2 — useMemo MUST be called before any conditional early returns. Calling
+  // it after the flagsLoading/perm gates produces a different hook count
+  // across renders (none on first render, one on second) → React #310.
   const filtered = useMemo(
     () => selectedOutletId
       ? schedules.filter((s) => !s.outlet_id || String(s.outlet_id) === String(selectedOutletId))
       : schedules,
     [schedules, selectedOutletId]
   );
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_restaurant_day_parting) return <Navigate to="/" replace />;
+  if (!hasPerm("manage_restaurant")) return <Navigate to="/" replace />;
 
   const cellClick = (dow, hour) => {
     setEditing({

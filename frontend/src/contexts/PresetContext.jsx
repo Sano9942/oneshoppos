@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthProvider";
+import { readContext, writeContext } from "../auth/authStore";
 
 const DEFAULT_LABELS = {
   product: "Product",
@@ -88,6 +89,18 @@ export function PresetProvider({ children }) {
       .then((data) => {
         if (cancelled) return;
         if (data?.preset) setPreset({ ...DEFAULT_PRESET, ...data.preset });
+        // W1 — auto-seed single-branch context for tenants that never visit
+        // /context-select (Free / single-outlet / context_selection_required=off).
+        // Without this, restaurant pages that gate on
+        // readContext()?.active_outlet_id (Floor / Checks / KDS) silently
+        // bounce because the session never gets a context object written.
+        if (!readContext() && data?.primary_outlet_id) {
+          writeContext({
+            scope_mode: "single_branch",
+            active_outlet_id: data.primary_outlet_id,
+            active_company_id: data?.companies?.[0]?.id ?? null,
+          });
+        }
         setPresetLoaded(true);
       })
       .catch(() => {

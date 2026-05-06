@@ -23,8 +23,40 @@ const DEFAULT_FLAGS = {
   kiosk_context_locked: false,
 };
 
+// W3 — warm-cache key for last-known flags. On every successful fetch we
+// write the resolved flag map to localStorage; on next mount we use it as
+// the initial state (fast paint), then revalidate. Eliminates the ~1.5s
+// flicker where restaurant/clinic/etc. nav items disappear on first paint
+// because fail-closed defaults hide everything until the network resolves.
+const FLAGS_CACHE_KEY = "sanopos_feature_flags_cache_v1";
+
+function readCachedFlags() {
+  try {
+    const raw = localStorage.getItem(FLAGS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedFlags(next) {
+  try {
+    localStorage.setItem(FLAGS_CACHE_KEY, JSON.stringify(next));
+  } catch {
+    // localStorage may be unavailable (private mode, quota) — fail silent
+  }
+}
+
 export default function useFeatureFlags(authHeaders) {
-  const [flags, setFlags] = useState(DEFAULT_FLAGS);
+  // Initial state prefers cached flags so the sidebar/UI paints with the
+  // last-known truth instead of all-false. `loading` still starts true so
+  // anything that explicitly waits for first fetch keeps working.
+  const [flags, setFlags] = useState(() => {
+    const cached = readCachedFlags();
+    return cached ? { ...DEFAULT_FLAGS, ...cached } : DEFAULT_FLAGS;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,10 +77,13 @@ export default function useFeatureFlags(authHeaders) {
           next[f.key] = Number(f.enabled || 0) === 1;
         });
         setFlags(next);
+        writeCachedFlags(next);
       })
       .catch(() => {
         if (!mounted) return;
-        setFlags(DEFAULT_FLAGS);
+        // Keep whatever was already in state (cached or default) on fetch
+        // failure rather than resetting to DEFAULT_FLAGS — a transient
+        // network blip should not yank the sidebar out from under the user.
       })
       .finally(() => {
         if (mounted) setLoading(false);
