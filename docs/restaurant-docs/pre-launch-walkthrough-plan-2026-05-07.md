@@ -578,7 +578,7 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 | Phase | Status | Date | Findings filed |
 |---|---|---|---|
 | 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) — ✅ FIXED in 119a466 |
-| 2. Sidebar walkthrough | ⏸️ paused — Restaurant section partial (5 of 12 items walked); resume with Modifiers / Online Inbox / Tip Pools / Order Kiosks + Reports + cross-cutting | 2026-05-07 | W1 (Floor/Checks/KDS bounce, blocker) ✅ FIXED in 119a466 + 8f5c9ba, W2 (Menu Schedules React #310, blocker) ✅ FIXED in 119a466, W4 (sidebar links bounce — W1 cascade, polish) ✅ FIXED auto with W1 |
+| 2. Sidebar walkthrough | ⏸️ ~closed — full sweep done, all sections walked. 1 🔴 blocker (W8) + 1 🟡 issue (W9) open. Will fully close after W8/W9 ship. | 2026-05-08 | Morning: W1✅ (in 119a466+8f5c9ba), W2✅ (in 119a466), W4✅ (auto with W1). Afternoon resume: W8 🔴 Order Kiosks React #310, W9 🟡 backend snake_case typo, W10 🔵 sidebar Customers/Guests label drift |
 | 3. End-to-end flows | | | |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |
@@ -590,6 +590,8 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 **Pause reason (2026-05-07):** Phase 2 hit 2 independent 🔴 blockers in the first 5 Restaurant routes. Per the sitting's stop-rule (3+ blockers in Phase 2), pause until W1 + W2 ship and resume from `/restaurant/modifiers`. See `findings-WIP.md` Walkthrough Session Log entry 2026-05-07 for full detail.
 
 **Unpause (2026-05-07):** Both blockers fixed and live-verified — `119a466` (W1+W2+W3+W4) + `8f5c9ba` (W7 retry that unblocks W1's auto-seed code path). Next sitting can resume Phase 2 from `/restaurant/modifiers` with confidence the Restaurant section is fully walkable.
+
+**Phase 2 sweep close-out (2026-05-08):** All ~60 sidebar items walked. 1 🔴 (W8 Order Kiosks React #310 — same hook-order bug as W2 in a sibling file the W2 fix didn't audit), 1 🟡 (W9 backend snake_case typo on `req.context?.outlet_id` in 6 sites — masked because frontend usually passes `?outlet_id=` query, surfaced via POS Restaurant initial floor-plan fetch), 1 🔵 (W10 sidebar Customers vs page heading Guests label drift). Stop-rule didn't fire (1 blocker < 3). Phase 2 will be fully closed once W8 ships. Phase 3 can begin in parallel.
 
 ---
 

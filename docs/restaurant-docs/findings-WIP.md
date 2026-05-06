@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 4 | 0 |
-| 🟡 Issue | 1 | 1 | 0 |
-| 🔵 Polish | 11 | 2 | 0 |
-| **Total** | **12** | **7** | **0** |
+| 🔴 Blocker | 1 | 4 | 0 |
+| 🟡 Issue | 2 | 1 | 0 |
+| 🔵 Polish | 12 | 2 | 0 |
+| **Total** | **15** | **7** | **0** |
 
-Last update: 2026-05-07 (fix-it session shipped — W1/W2/W3/W4 fixed in commit 119a466, W7 retry shipped in 8f5c9ba, all four verified live on https://sanopos.com against `sanoposlivetest1778021564659`).
+Last update: 2026-05-08 (Phase 2 sweep resumed and closed — W8 🔴 Order Kiosks React #310 filed, W9 🟡 snake_case bug in restaurant routes filed, W10 🔵 Customers/Guests label drift filed. All other Phase 2 items walked clean.).
 
 ---
 
@@ -486,6 +486,116 @@ Failed to load resource: the server responded with a status of 401 ()
 
 ---
 
+### W8 — Order Kiosks page crashes with React error #310 (rendered more hooks than previous render)
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER
+**Surfaces affected:** `/order-kiosks` (entire admin-side counter/table kiosk launcher)
+**Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Restaurant section sweep (resumption)
+
+**Steps to reproduce:**
+1. Sign in as Test Owner on `sanoposlivetest1778021564659`
+2. Navigate to `/order-kiosks` (sidebar: Restaurant → Order Kiosks)
+3. Page-level ErrorBoundary catches a thrown React error and shows "Something went wrong / This section encountered an error. You can try again or reload the page."
+
+**Observed:** Identical "Something went wrong" card to W2. Reloading retriggers.
+
+**Expected:** Counter/Table kiosk launcher renders — outlet picker + counter label input + "Launch counter kiosk" / "Launch table kiosk" buttons + active-kiosk table.
+
+**Console error (raw):**
+```
+Error: Minified React error #310; visit https://react.dev/errors/310
+  at xS [as useMemo]
+  at re (https://sanopos.com/assets/OrderKiosksRoute-CG1cL1G-.js:1:2600)
+```
+
+**Source / root cause** (verified against code, not docs):
+- `frontend/src/pages/redesign/OrderKiosksRedesign.jsx:40-82` — useState/useCallback/useEffect hooks declared unconditionally
+- `frontend/src/pages/redesign/OrderKiosksRedesign.jsx:84-86` — three early returns AFTER the hook block:
+  ```js
+  if (flagsLoading) return null;
+  if (!flags.phase4_restaurant_qr) return <Navigate to="/" replace />;
+  if (!hasPerm("manage_restaurant")) return <Navigate to="/" replace />;
+  ```
+- `frontend/src/pages/redesign/OrderKiosksRedesign.jsx:164-169` — `useMemo(() => [...data.counters, ...data.tables])` called AFTER the early-return block
+- First render: `flagsLoading=true` → bails at line 84 → useMemo never called.
+- Second render after flags load: passes line 84 → useMemo called → hook count differs → React #310.
+
+**Same bug class as W2 (Menu Schedules)**, but the W2 fix in commit `119a466` only audited `redesign/restaurant/*Redesign.jsx`. `OrderKiosksRedesign.jsx` lives in `redesign/` directly (not `redesign/restaurant/`), so it wasn't checked.
+
+**Screenshots:**
+- `restaurant-walkthrough-phase2-order-kiosks-react310-2026-05-06.png`
+
+**Suggested fix:** Move the `useMemo` (line 164) before the early-return block (line 84). Easy, ~1 minute. Then grep ALL `redesign/**/*Redesign.jsx` for the same `useFeatureFlags` + early-return + later-hook pattern as a permanent audit (cheaper to write a lint rule than to keep finding these one-by-one).
+
+**Possible permanent fix:** custom ESLint rule that flags any hook call below an early-return inside a flag-gated component, OR move the `flagsLoading` short-circuit to a parent wrapper component so child renders never see different hook counts.
+
+---
+
+### W9 — Six restaurant routes typo `req.context?.outlet_id` (snake_case) but middleware writes `req.context.outletId` (camelCase)
+
+**Status:** OPEN
+**Severity:** 🟡 ISSUE (functional latently — masked because frontend almost always passes `outlet_id` query)
+**Surfaces affected:** any code path that hits restaurant/KDS/inbox routes WITHOUT `?outlet_id=` query — currently the POS Restaurant initial floor-plan fetch
+**Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Commerce/Catalog/Inventory sweep, observed 400 in console while opening `/pos/restaurant`
+
+**Steps to reproduce:**
+1. Sign in
+2. Navigate to `/pos` (auto-redirects to `/pos/restaurant` for restaurant tenant)
+3. Console shows: `Failed to load resource: the server responded with a status of 400 () @ https://api.sanopos.com/api/restaurant/floor-plans:0`
+4. Network: `GET /api/restaurant/floor-plans` (no query) → `{ "error": "outlet_id required" }` 400
+
+**Observed:** 400 swallowed silently; POS still loads with takeaway/delivery/drive-thru buttons. Error visible in console + Sentry.
+
+**Expected:** Backend should fall back to `req.context.outletId` (set by `resolveContext` middleware from `x-outlet-id` header — verified populated correctly client-side post-W1 fix).
+
+**Source / root cause** (verified against backend + frontend):
+- `backend/middleware/tenant-auth.js:96` writes `req.context.outletId = decoded.oid` (camelCase)
+- `backend/middleware/tenant-auth.js:296` writes `req.context.outletId = Number(outletId)` (camelCase)
+- 6 restaurant-domain routes read the wrong property:
+  - `backend/routes/restaurant.js:23` `req.context?.outlet_id` (snake_case, never matches)
+  - `backend/routes/restaurant.js:114` (same)
+  - `backend/routes/restaurant.js:162` (same)
+  - `backend/routes/restaurant-inbox.js:24` (same)
+  - `backend/routes/kds.js:15` (same)
+  - `backend/routes/kds.js:79` (same)
+- Remaining backend code uses `req.context.outletId` (camelCase) consistently — the 6 restaurant sites are the typo.
+- Frontend `RestaurantFloorGrid.jsx:42` calls without `?outlet_id=` query → backend's "fall back to context" path fires → property doesn't exist → 400.
+
+**Why this didn't surface earlier:** most restaurant routes are called WITH `?outlet_id=` query from the frontend (admin pages explicitly pass it). The POS restaurant variant initial-load is the rare site that omits the query and relies on context fallback.
+
+**Console error (raw):**
+```
+Failed to load resource: the server responded with a status of 400 ()
+@ https://api.sanopos.com/api/restaurant/floor-plans:0
+```
+
+**Suggested fix:** find/replace `req.context?.outlet_id` → `req.context?.outletId` across the 6 sites. Mechanical fix, no risk. Optional bonus: lint rule banning `req.context.outlet_id` in favor of `req.context.outletId`.
+
+---
+
+### W10 — Restaurant preset label drift: page heading says "Guests" but sidebar nav, breadcrumb, and Customer Groups link all say "Customers"
+
+**Status:** OPEN
+**Severity:** 🔵 POLISH
+**Surfaces affected:** sidebar nav (`Customers`, `Customer Groups`, `Customer Invoices`), breadcrumb on /customers, breadcrumb on /customer-groups, label inconsistency between page heading vs nav
+**Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Customers item
+
+**Steps to reproduce:**
+1. Sign in to restaurant tenant
+2. Click Customers in sidebar — sidebar says "Customers" but page heading says "Guests"
+3. Same for Customer Groups (sidebar shows "Customer Groups", page heading uses preset labels but nav doesn't)
+
+**Observed:** Restaurant preset properly applies the `customer → Guest` label to page headings via `usePreset()`, but the sidebar nav config (`frontend/src/ui/nav-config.js`) hardcodes the English labels. Same for the breadcrumb's `LABELS` map (`frontend/src/ui/Breadcrumbs.jsx`).
+
+**Expected (per `industry-config.js` `restaurant.labels.customer = "Guest"`):** sidebar should also localize via the preset; "Guests" / "Guest Groups" / "Guest Invoices" — at least for restaurant industry.
+
+**Risk:** zero functional. Cognitive friction — restaurateurs see "Guests" on the page, "Customers" in nav, and have to bridge the gap themselves.
+
+**Suggested fix:** make `nav-config.js` consume `usePreset().labels.customer` for the customer-related nav entries. Or accept the inconsistency and document it. Or remove the preset label override entirely and pick one canonical term.
+
+---
+
 ## Healing log (out-of-band changes to live test tenant)
 
 > Record any DDL or DML run directly against `tenant_sanoposlivetest1778021564659` outside the migration runner. Future tenants get the same state via the migration / setup fixes, but the live test tenant predates them and needs manual catch-up.
@@ -677,6 +787,51 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 **Status updated:** W1, W2, W3, W4, W7 → ✅ FIXED. Status Summary: 0 open blockers, 1 open issue (W6 latent perm-array gap), 11 open polish (P1-P10 + W5).
 
 **Recommendation for next sitting:** Phase 2 can resume from `/restaurant/modifiers` with confidence the Restaurant section is fully walkable.
+
+### Session 2026-05-08 — Phase 2 sweep resumed and closed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659` (restaurant, PK, Free, tax_mode=none)
+**Phases walked:** Phase 2 — Restaurant section remaining 4 items + Reports deep links + cross-cutting + Commerce/Catalog/Inventory + Procurement + Insights + Operations + Setup + Compliance + Admin/Account.
+**Duration:** ~25 min (much faster than morning sitting because most pages load clean)
+
+**Phase 2 result — 1 🔴 blocker, 1 🟡 issue, 1 🔵 polish, ~50 items walked clean:**
+
+| Section | Items walked | Notes |
+|---|---|---|
+| Restaurant (remaining 4) | Modifiers ✅, Online Inbox ✅, Tip Pools ✅ (3 tabs), Order Kiosks 🔴 W8 | W8 = same React #310 hook-order bug as W2; sibling file in `redesign/` (not `redesign/restaurant/`) was missed by W2 fix audit |
+| Reports deep links | Menu Engineering ✅, KDS Analytics ✅ | KDS Analytics empty-state hint "the 15-min worker populates this chart" — Phase 5 worker check |
+| Cross-cutting | Loyalty Tiers ✅ (4 seed tiers), Gift Cards ✅, Marketing Campaigns ✅, Messaging Inbox ✅, Fulfillment ✅, Courier Settings ✅ (13 couriers), COD Settlements ✅, Retail Risk ✅, Integrations Hub ✅ (incl SMS Providers section with 3 cards) |  |
+| Commerce | POS ✅ (with W9 background 400), Orders ✅, Parked Sales ✅, Customers ✅ (W10 label drift), Customer Groups ✅, Returns ✅, Sales History ✅, Cash Mgmt ✅, Products ✅ (5 sample menu items), Categories ✅ (4 seed cats), Brands ✅, Taxes ✅, Attribute Sets ✅, Promotions ✅, Price Lists ✅, Smart Collections ✅, Scheduled Changes ✅, Stock Counts ✅, Stock Adjustments ✅, Transfers ✅, Returned Stock ✅, Reorder Alerts ✅ | W9 surfaced via POS restaurant variant calling `/api/restaurant/floor-plans` without `?outlet_id=` query → 400 "outlet_id required" |
+| Procurement | Suppliers ✅, Purchase Orders ✅, Expenses ✅, Approvals ✅, Supplier Payables ✅ |  |
+| Insights | Reports ✅, Report Builder ✅, Accounting ✅, Chart of Accounts ✅, Journal Entries ✅, Credit/Debit Notes ✅, Post-dated Cheques ✅ | Reports has 1 Recharts container width warning, not error — common with lazy-tabs |
+| Operations | Kiosk ✅ (`/kiosk?tenant=...&outlet=1`), CRM ✅, Quotations ✅, Attendance ✅, HR ✅, Scheduling ✅, Notifications ✅ |  |
+| Setup | Employees ✅, Outlets ✅, Company Settings ✅, POS Layouts ✅, Outlet Tax Profiles ✅, Barcode Templates ✅, Receipt Templates ✅, Printer Settings ✅, Import ✅, Backup & Restore ✅ |  |
+| Compliance | FBR Settings ✅, FBR Dashboard ✅, Tax Lookup ✅ |  |
+| Admin/Account | Action History ✅, Billing ✅, My Tickets ✅, Profile ✅, Administrator (= Roles & Permissions) ✅ | Note: "Administrator" sidebar entry → `/administrator` page is actually a roles+perms manager. Confusing label but functional. |
+
+**Findings filed this session:**
+- **W8 🔴 BLOCKER** — Order Kiosks React #310 (`/order-kiosks`). Same pattern as W2 but in a different file the W2 fix didn't cover.
+- **W9 🟡 ISSUE** — Six restaurant routes typo `req.context?.outlet_id` (snake_case) but middleware writes `req.context.outletId` (camelCase). Causes 400 on `/api/restaurant/floor-plans` from POS Restaurant initial load. Masked elsewhere because most callers pass `?outlet_id=` query.
+- **W10 🔵 POLISH** — Sidebar nav still says "Customers"/"Customer Groups" while page headings say "Guests" (restaurant preset's `labels.customer` doesn't reach `nav-config.js`/`Breadcrumbs.jsx`).
+
+**Screenshots saved (1):**
+- `restaurant-walkthrough-phase2-order-kiosks-react310-2026-05-06.png` — W8 reproduction
+
+**Surprises:**
+- Almost all ~60 routes loaded clean. Phase 2 fundamentally healthy after morning's W1+W2 fixes — the sweep mostly confirmed empty states render, headings appear, no 4xx/5xx, no console errors. Major qualitative shift from morning where 5 of 12 restaurant routes had problems.
+- W8 surfaced a sibling-file gap: the W2 fix audit grepped `redesign/restaurant/*` but Order Kiosks lives in `redesign/` directly. A more permanent fix would be a lint rule banning hooks below early-returns in flag-gated components, since this pattern keeps recurring.
+- W9 was discovered accidentally via the restaurant POS landing page. The bug has lived in 3 files / 6 sites for who-knows-how-long without anyone noticing because the frontend almost always passes `?outlet_id=` query. Backend fallback path was never exercised. Worth a `/api/admin/tenants/.../debug` smoke that hits each restaurant endpoint without query.
+- Smart Collections and Report Builder are listed in plan as "should be hidden / flag OFF for restaurant" but actually render full pages. Either the plan / `RESTAURANT_SEED_FLAGS` is stale or these flags default to ON now. Worth a flag inventory cross-check.
+- "Administrator" sidebar entry (`/administrator`) is actually the Roles & Permissions admin page — confusingly named. Same label collision as the Owner role — both human role and a section page share the noun. Cosmetic but worth a rename.
+
+**Status updated:** W8, W9, W10 → OPEN. Status Summary: 1 open blocker (W8), 2 open issues (W6, W9), 12 open polish (P1-P10 + W5 + W10).
+
+**Recommendation for next sitting:**
+1. Fix W8 (Order Kiosks) — same one-line move as W2. Audit ALL `redesign/**/*Redesign.jsx` for the same pattern while at it.
+2. Fix W9 (snake_case → camelCase in 6 backend sites) — mechanical find/replace.
+3. After W8 fix, Phase 2 is fully closed and sitting can advance to Phase 3 (end-to-end restaurant flows).
+4. W10 is polish — defer to a "preset polish" PR alongside any other label-drift findings.
 
 ---
 
