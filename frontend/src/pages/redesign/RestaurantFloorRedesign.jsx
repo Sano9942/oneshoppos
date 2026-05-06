@@ -4,7 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalBody, ModalFooter, Input, Select, EmptyState } from "../../ui/primitives";
 import { LayoutGrid, Plus, Users, Clock, X } from "lucide-react";
 import { api } from "../../api";
 
@@ -21,6 +21,12 @@ export default function RestaurantFloorRedesign() {
   const [loading, setLoading] = useState(true);
   const [showSeatModal, setShowSeatModal] = useState(null);
   const [seatForm, setSeatForm] = useState({ guest_count: 1, server_id: "" });
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planForm, setPlanForm] = useState({ name: "" });
+  const [planSubmitting, setPlanSubmitting] = useState(false);
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [tableForm, setTableForm] = useState({ label: "", capacity: 4, shape: "square" });
+  const [tableSubmitting, setTableSubmitting] = useState(false);
 
   const loadPlans = useCallback(async () => {
     setLoading(true);
@@ -71,9 +77,50 @@ export default function RestaurantFloorRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  const createPlan = async () => {
+    const name = planForm.name.trim();
+    if (!name) { toast.error("Plan name is required"); return; }
+    const outletId = readContext()?.active_outlet_id;
+    if (!outletId) { toast.error("No active outlet"); return; }
+    setPlanSubmitting(true);
+    try {
+      const plan = await api.post("/api/restaurant/floor-plans", { name, outlet_id: Number(outletId) });
+      toast.success("Floor plan created");
+      setShowPlanModal(false);
+      setPlanForm({ name: "" });
+      await loadPlans();
+      if (plan?.id) setActivePlan(plan.id);
+    } catch (err) { toast.error(err.message); }
+    finally { setPlanSubmitting(false); }
+  };
+
+  const createTable = async () => {
+    const label = tableForm.label.trim();
+    if (!label) { toast.error("Table label is required"); return; }
+    if (!activePlan) { toast.error("Pick a floor plan first"); return; }
+    setTableSubmitting(true);
+    try {
+      const offset = tables.length;
+      await api.post("/api/restaurant/tables", {
+        floor_plan_id: activePlan,
+        label,
+        capacity: Number(tableForm.capacity) || 4,
+        shape: tableForm.shape,
+        pos_x: (offset % 6) * 100,
+        pos_y: Math.floor(offset / 6) * 100,
+      });
+      toast.success("Table added");
+      setShowTableModal(false);
+      setTableForm({ label: "", capacity: 4, shape: "square" });
+      await loadFloorDetail();
+      await loadPlans();
+    } catch (err) { toast.error(err.message); }
+    finally { setTableSubmitting(false); }
+  };
+
   return (
     <PageShell title="Floor Plan" subtitle="Restaurant table management" right={
-      <Button size="sm" onClick={() => {}}>
+      <Button size="sm" onClick={() => { setPlanForm({ name: "" }); setShowPlanModal(true); }}>
         <Plus className="w-4 h-4 mr-1" /> New Plan
       </Button>
     }>
@@ -86,6 +133,28 @@ export default function RestaurantFloorRedesign() {
             </button>
           ))}
         </div>
+      )}
+
+      {!loading && plans.length === 0 && (
+        <EmptyState
+          title="No floor plans yet"
+          body="Create a floor plan to start seating guests. Each plan can hold its own set of tables."
+        />
+      )}
+
+      {activePlan && (
+        <div className="flex justify-end mb-3">
+          <Button size="sm" tone="default" onClick={() => { setTableForm({ label: "", capacity: 4, shape: "square" }); setShowTableModal(true); }}>
+            <Plus className="w-4 h-4 mr-1" /> Add Table
+          </Button>
+        </div>
+      )}
+
+      {activePlan && tables.length === 0 && (
+        <EmptyState
+          title="No tables in this plan"
+          body="Click Add Table to place your first table."
+        />
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -110,6 +179,58 @@ export default function RestaurantFloorRedesign() {
           </SectionCard>
         ))}
       </div>
+
+      <Modal open={showPlanModal} onClose={() => setShowPlanModal(false)} title="New Floor Plan" size="sm">
+        <ModalBody>
+          <label className="block text-sm font-medium mb-1">Plan name</label>
+          <Input
+            autoFocus
+            value={planForm.name}
+            onChange={e => setPlanForm({ name: e.target.value })}
+            placeholder="e.g. Main Floor, Patio, Bar"
+          />
+        </ModalBody>
+        <ModalFooter>
+          <Button tone="plain" onClick={() => setShowPlanModal(false)} disabled={planSubmitting}>Cancel</Button>
+          <Button tone="primary" onClick={createPlan} disabled={planSubmitting || !planForm.name.trim()}>
+            {planSubmitting ? "Creating…" : "Create plan"}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal open={showTableModal} onClose={() => setShowTableModal(false)} title="Add Table" size="sm">
+        <ModalBody>
+          <label className="block text-sm font-medium mb-1">Label</label>
+          <Input
+            autoFocus
+            value={tableForm.label}
+            onChange={e => setTableForm(f => ({ ...f, label: e.target.value }))}
+            placeholder="e.g. T1, A2, Bar-3"
+          />
+          <label className="block text-sm font-medium mb-1 mt-3">Capacity</label>
+          <Input
+            type="number"
+            min="1"
+            value={tableForm.capacity}
+            onChange={e => setTableForm(f => ({ ...f, capacity: e.target.value }))}
+          />
+          <label className="block text-sm font-medium mb-1 mt-3">Shape</label>
+          <Select
+            value={tableForm.shape}
+            onChange={e => setTableForm(f => ({ ...f, shape: e.target.value }))}
+          >
+            <option value="square">Square</option>
+            <option value="round">Round</option>
+            <option value="rectangle">Rectangle</option>
+          </Select>
+        </ModalBody>
+        <ModalFooter>
+          <Button tone="plain" onClick={() => setShowTableModal(false)} disabled={tableSubmitting}>Cancel</Button>
+          <Button tone="primary" onClick={createTable} disabled={tableSubmitting || !tableForm.label.trim()}>
+            {tableSubmitting ? "Adding…" : "Add table"}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {showSeatModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowSeatModal(null)}>
