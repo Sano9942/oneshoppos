@@ -26,7 +26,7 @@
 | 🔵 Polish | 12 | 3 | 0 |
 | **Total** | **14** | **21** | **0** |
 
-Last update: 2026-05-07 (Phase 3 flow 3.2 fix-it loop progressing. **W24** ✅ `29e540c` tip_method normalisation + Sentry. **W22** ✅ `4c65ec3` PUT /checks/:id route — verified by closing draft #9, status flipped to 'cancelled'. **W23** 🔴 next (architectural: Pay-from-Checks-list action; opens POSContext for the row's draftOrderId). After W23 ships + verifies, resume flow 3.2 step 5 (split + pay each child + tip pool).)
+Last update: 2026-05-07 (sitting closed by user. Fix-it loop shipped 3 fixes: **W24** ✅ `29e540c` (tip_method normalisation + Sentry, live-verified). **W22** ✅ `4c65ec3` (PUT /checks/:id route, live-verified). **W23** wired `1301f2b` + cart-rehydrate patch `a7cb54c` — Pay button + resumeCheck path verified up to "POS opens in check view"; the rehydrate patch shipped after the empty-cart was observed but not yet re-verified live. Floor healed: drafts #10/#11/#12 cancelled, session #7 closed. Next sitting: verify `a7cb54c` rehydrates cart on Pay-this-check → settle 2 split children → open /tips → close + distribute pool. That closes flow 3.2 fully.)
 
 ---
 
@@ -1534,6 +1534,44 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 4. **Then resume flow 3.2 from step 5** with all three fixes shipped. Should be smooth: split a check → settle each child with tip → open Tip Pool → distribute → DB shows captures + payouts.
 5. Defer W18 (Open-Tab CTA) and W19 (header label) to a polish pass — neither blocks Phase 3 progress.
 6. Floor state to clean for next sitting: T1 has `status=seated, session_id=4`. Drafts #5, #6, #7, #8 all `status=open` for that session (zombies + split children). Recommended: close session #4 via Supabase MCP (set `status='closed'`, set draft `status='completed'`) so the next sitting starts on a clean floor. The Sales History will retain INV-2026-00001/2/3 from this and prior sittings.
+
+### Session 2026-05-07 (late evening) — Fix-it loop W22+W23+W24 shipped + W22/W24 verified live; W23 partial verify
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Continuation of the 3.2 flow paused earlier in the day. Fix-it loop in the recommended order: W24 → W22 → W23 → resume 3.2 step 5+. Closed at user request before tip-pool verification.
+**Duration:** ~2 hours.
+
+**Result:** 3 fixes shipped + pushed (`29e540c` W24, `4c65ec3` W22, `1301f2b` + `a7cb54c` W23). W22 and W24 fully live-verified end-to-end. W23 wired + chunk hashes flipped + first cart rehydrate patch shipped (`a7cb54c`); cart-rehydrate-from-draft live-verify deferred to next sitting along with the actual pay-each-child + tip-pool flow.
+
+**Commits shipped this session (4):**
+- `29e540c` — fix(restaurant): normalise tip_method to lowercase + raise silent drops to Sentry (W24). 3 layers: frontend lowercase at the wire, backend `services/tips.js` normalise+validate against `ALLOWED_TIP_METHODS`, route catch upgrades to Sentry alert. 6-case unit test in `services-tips-w24.test.js`.
+- `4c65ec3` — fix(restaurant): add `PUT /api/restaurant/checks/:id` route for non-payment closure (W22). New route + Zod `updateCheckSchema` + frontend `closeCheck` sends `'cancelled'` to match the DB CHECK.
+- `1301f2b` — fix(restaurant): add 'Pay this check' action on /restaurant/checks rows (W23). Pay icon button per row + one-shot `useEffect` in POSRestaurantRedesign that reads `location.state.resumeCheck`, calls `openCheck`, flips view to "check".
+- `a7cb54c` — fix(restaurant): rehydrate cart on W23 resumeCheck (split-child Pay flow). Initial commit cleared the cart on `openCheck` so cashier saw Total Rs 0; this patch fetches `GET /api/draft-orders/:id` and seeds cart with items keyed to the specific draft (different from W16 which resolves via `tableSessionId`).
+
+**Live verifications:**
+- **W24 ✅** — settled fresh sale `INV-2026-00004` Rs 1,200 with 15% tip. DB row `tip_captures.id=2 tip_amount=180.00 tip_method='cash' (LOWERCASE) server_id=1 outlet_id=1 sale_id=4`. Pre-fix `INV-2026-00003` still has `tip_id=null` (confirms only post-fix sales succeed). Screenshot: `restaurant-walkthrough-w24-fixed-tip-captured-2026-05-07.png`.
+- **W22 ✅** — drove fresh draft `#9` (T2 session #6, Send-to-Kitchen Rs 1,200) to `/restaurant/checks`, clicked Close → `PUT /api/restaurant/checks/9 → 200 OK` → DB shows `id=9 status='cancelled'`. Page reload confirmed empty-state filter works. Screenshot: `restaurant-walkthrough-w22-fixed-close-check-2026-05-07.png`.
+- **W23 partial** — Pay button rendered (3 buttons across the row set: parent #10 + children #11, #12). Click navigated to `/pos/restaurant`, opened the check view (verified — body had no "Tap to seat" text), but cart showed Rs 0 with zero items. Patched in `a7cb54c` to also fetch the draft items; verification of the patch deferred — sitting closed before re-running the flow.
+
+**Status updated:** W22 ✅ FIXED `4c65ec3`, W24 ✅ FIXED `29e540c`. W23 marked OPEN-but-shipping-twice in this finding's status; needs one more sitting to verify the rehydrate patch (`a7cb54c`) lands cart items + the actual tip-capture per child + the tip-pool flow.
+
+**Status Summary delta:** Was 3 open blockers + 1 issue + 12 polish at start of fix-it loop. Now: 1 open blocker (W23 — pending verify of rehydrate patch) + 1 issue (W18) + 12 polish. **Total fixed: 21** (was 19 at start of loop).
+
+**Surprises:**
+- W22 + W24 went exactly as designed — clean, no rework. The unit test added in W24's commit will catch any future capitalisation regression.
+- W23 caught a hidden second-order bug: `openCheck()` clears the cart unconditionally, so any caller that sets `draftOrderId` from outside the floor-grid path inherits an empty cart. The W16 rehydrate path lives in `RestaurantFloorGrid.jsx` and resolves via `tableSessionId`, but split children share `table_session_id` with the parent — fetching by session would land on the wrong draft. Patched in `a7cb54c` by fetching the specific `draftOrderId`.
+- The CLAUDE.md and previous fix-it pattern (W14, W17) followed by W21 + W23 reveal a recurring "client-state vs server-state divergence" theme in this codebase — every fix-it pass adds a new spot where the cart needs to either push (sync) or pull (rehydrate) from the canonical draft row. Worth a future refactor pass: move all draft↔cart syncing into a single hook so new modals don't need to remember to call it.
+
+**Floor healed for next sitting:** drafts #10, #11, #12 → `cancelled`. Session #7 → `closed`. T2's earlier session #6 also closed (was leftover from W22 verify). Floor: all 4 tables `Tap to seat`. DB: 4 sales total (`INV-2026-00001..4`), 1 tip_capture (id=2 from `INV-00004` — the W24 verify).
+
+**Recommendation for next sitting:**
+1. Verify `a7cb54c` cart rehydrate landed: seat T1, 2x chicken to two seats, send to kitchen, split by seat, navigate to /restaurant/checks, click Pay on first child. Cart should now show 1× Grilled Chicken Rs 1,200.
+2. Settle both children with 15% tip via Cash → 2 new sales + 2 new tip_captures.
+3. Open /tips → today's pool → close → distribute (need a distribution rule first; `equal_share` is the simplest). Verify `tip_pool_payouts` rows.
+4. That closes flow 3.2 fully (steps 1–7 all green). Update plan progress tracker (Phase 3 = 2 of 12) + write the closing session log for 3.2.
+5. After 3.2 fully closes, the next walkthrough sitting can pick up from flow 3.3 (Reservation → seat → order → settle).
 
 ---
 
