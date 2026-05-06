@@ -625,9 +625,13 @@ node -e "try { require('./backend/workers/course-release-worker-boss'); } catch 
 1. `backend/workers/course-release-worker-boss.js:9` — replaced `` `*/1 * * * *` `` with `"* * * * *"` in the comment so the comment doesn't self-terminate.
 2. `backend/boot/workers.js` — wrapped each `register*Worker(...)` call in a `tryRegister(label, fn)` helper that catches per-worker, logs the `label` + full `err.stack`, and continues. Outer `.catch()` also upgraded to log `err.stack`. (Commit `5879ee8` shipped this resilience first; the actual code fix in this entry.)
 
-**Verification:**
-- Local: all three workers `require()` cleanly after the fix.
-- Production: pending Railway redeploy. Once deployed, expect the 3 schedule rows (`course-release-sweep`, `kds-load-snapshot`, `reservation-reminder-check`) to appear in `pgboss.schedule` and the workers to log "registered" lines.
+**Verification (live, 2026-05-06T18:28:51 UTC, container `932cca09f57f`):**
+- Boot logs:
+  - `Course-release worker (pg-boss) registered — every minute`
+  - `KDS load-snapshot worker (pg-boss) registered — every 15 min`
+  - `Reservation reminder worker (pg-boss) registered — every 15 min`
+- Supabase `pgboss.schedule` now has 3 new rows: `course-release-sweep` (cron `* * * * *`), `kds-load-snapshot` (`*/15 * * * *`), `reservation-reminder-check` (`*/15 * * * *`). All `timezone=UTC`, `updated_on=2026-05-06 18:28:51`.
+- Bonus confirmation from the intermediate `5879ee8` deploy (container `7477a197ece1`): per-worker isolation worked exactly as intended — only `[boss] register course-release failed: SyntaxError: Unexpected token '*'` was logged at the right file:line, and kds-snapshot + reservation-reminder both registered cleanly afterwards. That's how the actual root cause was pinpointed in one boot cycle.
 
 **Lessons / preventable recurrences:**
 - Any JSDoc comment that wants to embed a cron expression containing `*/` should escape it (e.g. wrap in single-quoted double-asterisk) or use `*\/N` or just write it as `"* * * * *"`. Even safer: ESLint rule `no-irregular-whitespace` or a custom rule banning `*/` outside of comment delimiters.
