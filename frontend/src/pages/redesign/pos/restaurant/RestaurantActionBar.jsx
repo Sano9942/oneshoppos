@@ -79,8 +79,16 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
       const draftId = await ensureDraftOrder();
       if (!draftId) throw new Error("Could not create draft order");
       await syncCartToDraft(draftId);
-      await api.post(`/api/restaurant/checks/${draftId}/send-to-kitchen`, {});
-      showNotice?.("Sent to kitchen.");
+      const result = await api.post(`/api/restaurant/checks/${draftId}/send-to-kitchen`, {});
+      // W15 defense: backend silently returns zero tickets when no KDS
+      // stations are configured for the outlet. Surface that as a clear
+      // warning so the cashier doesn't think the kitchen got the order.
+      const ticketCount = Array.isArray(result?.tickets) ? result.tickets.length : 0;
+      if (ticketCount === 0) {
+        setError?.("No kitchen stations configured. Set one up in KDS settings before sending orders.");
+      } else {
+        showNotice?.(`Sent ${ticketCount} ticket${ticketCount === 1 ? "" : "s"} to kitchen.`);
+      }
     } catch (e) {
       setError?.(e.message || "Failed to send to kitchen");
     } finally {

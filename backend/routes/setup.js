@@ -290,6 +290,19 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
+        // 2a. Seed a default KDS station for restaurant/cafe tenants. Without
+        // this, sendToKitchen() resolves targetStation=null for every item
+        // and silently produces zero tickets — the kitchen never sees the
+        // order even though the cashier's UI shows "Sent to kitchen". W15.
+        // Idempotent: only inserts when no station already exists for outlet 1.
+        if (industry_type === "restaurant" || industry_type === "cafe") {
+          await client.query(
+            `INSERT INTO kds_stations (outlet_id, name, station_role, balance_strategy, is_active)
+             SELECT 1, 'Main Kitchen', 'prep', 'priority', true
+             WHERE NOT EXISTS (SELECT 1 FROM kds_stations WHERE outlet_id = 1)`
+          );
+        }
+
         // 2b. Seed sample data (categories + products) — failure is non-fatal.
         // Wrapped in a SAVEPOINT so a seed failure can't poison the parent
         // transaction (Postgres aborts the whole tx on any unhandled error).
