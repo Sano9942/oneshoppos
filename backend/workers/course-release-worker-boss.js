@@ -6,7 +6,7 @@
  * restaurant_course_fires.status from 'held' → 'fired' and calls
  * sendToKitchen so the matching course items land on the KDS.
  *
- * pg-boss schedules cron-style. This worker uses `*/1 * * * *` (once per
+ * pg-boss schedules cron-style. This worker uses "* * * * *" (once per
  * minute — pg-boss does not support sub-minute cron). The plan calls for
  * 30s but pg-boss cron granularity is 1 minute — a 1-minute delay on a
  * course that should have fired at 8 PM is acceptable for kitchen pacing,

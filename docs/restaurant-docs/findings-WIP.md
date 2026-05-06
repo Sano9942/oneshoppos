@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 1 | 4 | 0 |
+| 🔴 Blocker | 1 | 5 | 0 |
 | 🟡 Issue | 2 | 1 | 0 |
 | 🔵 Polish | 12 | 2 | 0 |
-| **Total** | **15** | **7** | **0** |
+| **Total** | **15** | **8** | **0** |
 
-Last update: 2026-05-08 (Phase 2 sweep resumed and closed — W8 🔴 Order Kiosks React #310 filed, W9 🟡 snake_case bug in restaurant routes filed, W10 🔵 Customers/Guests label drift filed. All other Phase 2 items walked clean.).
+Last update: 2026-05-08 (W11 🔴 Phase-3 blocker found and fixed — `*/1` inside a JSDoc block comment closed the comment early, making `course-release-worker-boss.js` un-requireable; that single SyntaxError silently took out KDS-snapshot + reservation-reminder workers via the chain's shared catch handler. Boot resilience also hardened: each register call now isolated with stack logging.).
 
 ---
 
@@ -593,6 +593,45 @@ Failed to load resource: the server responded with a status of 400 ()
 **Risk:** zero functional. Cognitive friction — restaurateurs see "Guests" on the page, "Customers" in nav, and have to bridge the gap themselves.
 
 **Suggested fix:** make `nav-config.js` consume `usePreset().labels.customer` for the customer-related nav entries. Or accept the inconsistency and document it. Or remove the preset label override entirely and pick one canonical term.
+
+---
+
+### W11 — `*/1` inside JSDoc block comment closes the comment early; took out 3 restaurant workers ✅ FIXED
+
+**Status:** ✅ FIXED — commit (next push) (2026-05-08)
+**Severity:** 🔴 BLOCKER for Phase 3 (Phase 1+2 unaffected — original 14 workers ran fine)
+**Surfaces affected:** `course-release-sweep`, `kds-load-snapshot`, `reservation-reminder-check` workers — all three never registered after Railway env vars were enabled
+**Found via:** Phase 3 prep — sister Claude session enabled `COURSE_RELEASE_WORKER_ENABLED=1`, `KDS_SNAPSHOT_WORKER_ENABLED=1`, `RESERVATION_REMINDER_WORKER_ENABLED=1` on Railway and redeployed. Boot logs showed 14 workers register, then `[boss] Failed to start pg-boss: Unexpected token '*'` and the remaining workers never started.
+
+**Actual root cause** (verified by `require()` in isolation, not docs):
+- `backend/workers/course-release-worker-boss.js:9` JSDoc comment contains the literal text `` `*/1 * * * *` ``
+- `*/` inside a JS block comment ends the comment. The `1 * * * *` after it was parsed as JavaScript code
+- Result: `node -e "require('./workers/course-release-worker-boss')"` throws `SyntaxError: Unexpected token '*'` at the file's line 9, before any pg-boss code runs
+- The two workers AFTER course-release in `boot/workers.js` (kds-snapshot, reservation-reminder) never even got their `require()` triggered — the chain's shared `.catch()` swallowed the SyntaxError and only logged `err.message`, masking the real source
+
+**Repro (read-only):**
+```sh
+node -e "try { require('./backend/workers/course-release-worker-boss'); } catch (e) { console.log(e.message); console.log(e.stack.split(String.fromCharCode(10)).slice(0,3).join(String.fromCharCode(10))); }"
+# → Unexpected token '*'
+# → backend/workers/course-release-worker-boss.js:9
+# →  * pg-boss schedules cron-style. This worker uses `*/1 * * * *`
+```
+
+**Why the diagnosis took two passes:**
+- The error message `Unexpected token '*'` plus the cron string in the worker (`* * * * *`) made the cron parser look like the prime suspect. But local cron-parser tests showed `* * * * *` parses fine, and direct SQL on Supabase also accepted the schedule. Misdirection from a coincidence.
+- The `boot/workers.js:390` `.catch()` only logged `err.message` (no `err.stack`), and ALL register-worker calls were in a single chain — so one failure killed every subsequent worker silently. There was no signal that the failure was at `require()` time, not in pg-boss.
+
+**Fixes shipped:**
+1. `backend/workers/course-release-worker-boss.js:9` — replaced `` `*/1 * * * *` `` with `"* * * * *"` in the comment so the comment doesn't self-terminate.
+2. `backend/boot/workers.js` — wrapped each `register*Worker(...)` call in a `tryRegister(label, fn)` helper that catches per-worker, logs the `label` + full `err.stack`, and continues. Outer `.catch()` also upgraded to log `err.stack`. (Commit `5879ee8` shipped this resilience first; the actual code fix in this entry.)
+
+**Verification:**
+- Local: all three workers `require()` cleanly after the fix.
+- Production: pending Railway redeploy. Once deployed, expect the 3 schedule rows (`course-release-sweep`, `kds-load-snapshot`, `reservation-reminder-check`) to appear in `pgboss.schedule` and the workers to log "registered" lines.
+
+**Lessons / preventable recurrences:**
+- Any JSDoc comment that wants to embed a cron expression containing `*/` should escape it (e.g. wrap in single-quoted double-asterisk) or use `*\/N` or just write it as `"* * * * *"`. Even safer: ESLint rule `no-irregular-whitespace` or a custom rule banning `*/` outside of comment delimiters.
+- The chain-of-awaits-with-one-shared-catch pattern is a known footgun. The post-fix `tryRegister` isolation makes future single-worker failures self-identifying.
 
 ---
 
