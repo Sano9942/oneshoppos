@@ -579,7 +579,7 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 |---|---|---|---|
 | 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) — ✅ FIXED in 119a466 |
 | 2. Sidebar walkthrough | ✅ closed | 2026-05-08 | Morning: W1✅ (119a466+8f5c9ba), W2✅ (119a466), W4✅ (auto with W1). Afternoon resume: W8✅ (next push) Order Kiosks React #310, W9✅ (next push) backend snake_case typo, W10✅ (next push) sidebar/breadcrumb label drift |
-| 3. End-to-end flows | 🔄 in progress (2 of 12 closed) | 2026-05-08 | Flow 3.1 ✅ closed. Flow 3.2 ✅ closed end-to-end (split + tip pool round-trip). Flow 3.3 attempted, blocked at step 4 by **W25** 🔴 — Reservations Seat button only flips status, no table picker, no `restaurant_table_sessions` row, no `reservations.table_id` stamp. Reservation #1 cancelled to heal. Resume after W25 ships. Flow 3.11 also depends on W25's data linkage. |
+| 3. End-to-end flows | 🔄 in progress (3 of 12 closed) | 2026-05-08 | Flow 3.1 ✅ closed. Flow 3.2 ✅ closed (split + tip pool round-trip). Flow 3.3 ✅ closed (W25 `51e4b14` — table-picker modal + `/seat` endpoint shipped + verified). Reservation Test 2 → pick T2 → session #9 opened + reservation.table_id=2 → settle → INV-2026-00007 Rs 950. Flow 3.11 (cancel/no-show on a seated reservation) now also walkable on the same data linkage. |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |
 | 6. Edge cases | | | |

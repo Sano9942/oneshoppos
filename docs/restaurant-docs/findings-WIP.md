@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 1 | 13 | 0 |
+| 🔴 Blocker | 0 | 14 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **14** | **22** | **0** |
+| **Total** | **13** | **23** | **0** |
 
-Last update: 2026-05-08 morning (flow 3.3 attempted, blocked at step 4 by **W25** 🔴 — the Reservations page Seat button only flips `reservations.status` from 'pending' to 'seated' via a generic PUT. There is no table-picker modal, no `reservations.table_id` update, no `restaurant_table_sessions` row creation. A "seated" reservation is functionally a status badge — the cashier still has to manually go to /pos/restaurant and tap a table like a walk-in. Reservation #1 healed via Cancel. Sitting paused. Flow 3.2 stays closed (tip pool round-trip from earlier sitting holds). Next sitting: ship W25 fix, then walk 3.3 fresh.)
+Last update: 2026-05-08 morning (flow 3.3 closed end-to-end. **W25** ✅ FIXED commit `51e4b14` — table-picker modal on Seat click + `POST /api/restaurant/reservations/:id/seat` endpoint (transactional: opens session via `floor.openTableSession` + stamps `reservations.table_id` + `status='seated'`). Live-verified: Reservation #2 "Reservation Test 2" → click Seat → modal showed T1-T4 all green/Available → click T2 → DB confirms reservation table_id=2 status=seated AND new session #9 status=seated table_id=2. Walked through to settle: Caesar Salad C1 + Iced Tea C5 → Send to Kitchen → Pay → INV-2026-00007 Rs 950. T2 dirty → cleared. Floor: 0 open sessions. Total fixed: 23. 0 open blockers.)
 
 ---
 
@@ -1248,9 +1248,9 @@ Recommend **A + B** together: A fixes the immediate symptom (one-line frontend),
 
 ---
 
-### W25 — Reservation "Seat" button only flips status; no table picker, no session opens, no table_id stamped
+### W25 — Reservation "Seat" button only flips status; no table picker, no session opens, no table_id stamped ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `51e4b14` (2026-05-08 morning). Frontend table-picker modal + new `POST /api/restaurant/reservations/:id/seat` endpoint (transactional). Live-verified end-to-end: reservation seat → table picker → pick T2 → DB shows reservation.table_id=2 status='seated' + new restaurant_table_sessions row #9 status='seated' table_id=2 → walked through to settle on T2 → INV-2026-00007 Rs 950.
 **Severity:** 🔴 BLOCKER (flow 3.3 reservation→seat handoff is non-functional; reservation rows are visual-only sticky notes that don't participate in the floor / order / settle flow)
 **Surfaces affected:** `/restaurant/reservations` page Seat action; downstream blocks flow 3.3 (Reservation → seat → order → settle) and flow 3.11 (Reservation cancel/no-show — same data model, same gap).
 **Found via:** Playwright walkthrough 2026-05-08 morning, Phase 3 flow 3.3 step 4 ("Click Seat on the reservation → pick T2 → confirm"). Plan expected a table picker modal and a `restaurant_table_sessions` row to open. Neither happened.
@@ -1720,6 +1720,51 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 2. Live-verify: book reservation → click Seat → pick T2 → confirm → DB shows new session linked + reservation row stamped → /pos/restaurant shows T2 seated → continue to add items → fire → settle (re-uses already-verified flow 3.1 from there).
 3. After W25 ships, walk 3.3 fresh end-to-end. Should be ~15 min if backend/frontend both clean.
 4. After 3.3 closes, 3.11 (cancel/no-show) becomes walkable — same page, same data model, just different status transitions.
+
+### Session 2026-05-08 morning (continuation 2) — W25 shipped + flow 3.3 closed end-to-end
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Fix-it loop for W25 + Phase 3 flow 3.3 (Reservation → seat → order → settle).
+**Duration:** ~45 min including code, deploy, and live verification.
+
+**Result:** ✅ W25 shipped, ✅ flow 3.3 fully closed. 0 open blockers. Phase 3 = 3 of 12.
+
+**Commit shipped:** `51e4b14 fix(restaurant): wire reservation Seat -> table picker -> open session (W25)`. Three layers:
+1. `backend/schemas/reservations.js` — new `reservationSeatSchema` (`.strict()`, `{ table_id, server_id?, guest_count? }`).
+2. `backend/routes/restaurant/reservations.js` — new `POST /api/restaurant/reservations/:id/seat`. Transactional: asserts status ∈ {pending, confirmed, waitlisted}, calls `floor.openTableSession` (re-uses canonical helper, throws 409 if table occupied), `UPDATE reservations SET status='seated', table_id=$1`, logs action_history, returns `{ session, reservation }`.
+3. `frontend/.../ReservationsRedesign.jsx` — Seat button now opens a modal that fetches floor plans (auto-selects first), fetches its tables (with `session_id`/`server_name` from `getFloorPlanWithTables`), renders a green/red/amber tile grid (available/occupied/undersized), POSTs `/seat` on click. Multi-plan support via tab strip.
+
+**Live verifications:**
+- Backend route registered: `curl -X POST .../reservations/999999/seat -d '{"table_id":1}'` returned **403** (auth gate fired) — not 404 (route missing). Confirms Railway redeploy was clean.
+- Vercel deploy `dpl_D7kPMrBihRJ9vDGNSCzgTUGqyepG` reached READY in 22s. Chunk hash for ReservationsRoute didn't visually flip (`D5NLUvDY` before & after) — Vercel's content-hash dedup; verified the new code shipped by grepping the chunk: `curl -fsS .../assets/ReservationsRoute-D5NLUvDY.js | grep -oE 'reservations/\\$\\{[^}]*\\}/seat'` returned a hit. New code is live; same hash is just deduplication.
+- **Modal works:** Created Reservation #2 ("Reservation Test 2", party 2). Clicked Seat → modal opened with title "Seat Reservation Test 2 / Party of 2 / 12:32 AM / pick a table" + 4 green "Available" tiles for T1-T4. Screenshot: `restaurant-walkthrough-w25-fixed-seat-picker-modal-2026-05-07.png`.
+- **DB linkage works:** Clicked T2. Toast "Seated Reservation Test 2". DB confirms:
+  ```
+  reservations  id=2 status='seated' table_id=2
+  restaurant_table_sessions id=9 status='seated' table_id=2 closed_at=null
+  ```
+  Both happened in a single transaction.
+- **Floor view recognizes the session:** `/pos/restaurant` showed T2 "seated, 2 guests" (W19 cosmetic remains — header inside the check view says "Table 9" instead of T2's label, but the floor tile uses the correct label).
+- **Full settle flow works:** Tapped T2 → check view → Seat 1/C1/Caesar Salad Rs 650 → Seat 1/C5/Iced Tea Rs 300 → cart Rs 950 → Send to Kitchen → Pay → Cash Exact → Add → Complete Sale. DB: `INV-2026-00007 total_amount=950`. Floor: T2 → "Needs Bussing" → Clear Table → "Tap to seat".
+
+**Findings updates:**
+- W25 → ✅ FIXED (commit `51e4b14`).
+- Status Summary: 0 open blockers (was 1), 1 issue (W18), 12 polish. Total fixed: 23.
+- Plan tracker: Phase 3 row → "3 of 12 closed".
+
+**Floor healed for next sitting:** All 4 tables "Tap to seat". Sessions: id=8 (T1) closed, id=9 (T2) closed via Clear Table. Reservations: id=1 cancelled, id=2 seated→completed-implicitly (no automatic transition on settle, but the table cycle worked). DB sales: 7 rows (`INV-2026-00001..00007`). 3 tip_captures all stamped pool_id=1 from the prior sitting. Test Owner clocked in (session #2), shift #2 open.
+
+**Surprises:**
+- Vercel content-hash dedup struck a third time today. Same chunk URL served before and after the new commit. Verified new code shipped via curl-and-grep against the URL itself. Don't trust chunk-hash equality alone; confirm via a unique string in the diff.
+- The reservation row doesn't auto-flip to 'completed' when its session settles. After INV-00007 wrote and the table cleared, reservation #2 still says `status='seated'` in DB. That's a polish-class follow-up if a merchant cares about reservation cleanup at end-of-shift; not a launch blocker.
+- The implementation took ~30 min coding + ~15 min deploy/verify. Comparable to W12/W23 estimates. Pattern is reliable: when a backend service helper already exists (`floor.openTableSession`), the bridge is small.
+- The W25 fix also retroactively unblocks 3.11 (reservation cancel/no-show on a seated reservation) and flow 3.5/3.6 if they ever needed reservation-linked floor sessions — same data model.
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.4** (Online Inbox → accept → fire → handoff) per the plan. Need to mint an Order Kiosk first; floor is clean.
+2. Optional: file a polish-class follow-up for "reservation status doesn't auto-flip to completed when its session closes" — not a launch blocker.
+3. The recurring Vercel content-hash dedup pattern is worth a brief note in the operations playbook: "if the chunk URL didn't change after a deploy, verify the new code shipped via curl-grep on a unique identifier from the diff before assuming the deploy is broken".
 
 ---
 
