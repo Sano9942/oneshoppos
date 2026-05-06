@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { POSProvider, usePOS } from "./pos/POSContext";
+import { api } from "../../api";
 import { usePreset } from "../../contexts/PresetContext";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 import POSLockScreen from "./pos/POSLockScreen";
@@ -32,7 +33,7 @@ import PayAtTableQRModal from "./pos/restaurant/PayAtTableQRModal";
 // mounts every existing POS modal so the restaurant flow inherits the
 // retail POS opening gate / lock / checkout / receipt / session-expired UX.
 function RestaurantContent() {
-  const { isLocked, notice, error, closeCheck, openCheck, money } = usePOS();
+  const { isLocked, notice, error, closeCheck, openCheck, setCart, money } = usePOS();
   const [view, setView] = useState("floor");
   const [splitOpen, setSplitOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -42,9 +43,13 @@ function RestaurantContent() {
 
   // W23 — when navigated here from /restaurant/checks "Pay this check"
   // action, location.state carries { resumeCheck: { draftOrderId, ... } }.
-  // Resume by calling openCheck() with the row's payload and flipping the
-  // view to "check". One-shot: clear location.state after consuming so a
-  // back-navigation (or accidental remount) doesn't re-open the same draft.
+  // Resume by calling openCheck() with the row's payload, fetching the
+  // specific draft's items so the cart shows what the cashier is paying for,
+  // and flipping the view to "check". One-shot: clear location.state after
+  // consuming so a back-navigation (or accidental remount) doesn't re-fire.
+  // Cart rehydrate mirrors the W16 pattern in RestaurantFloorGrid but
+  // targets a specific draftOrderId instead of resolving via tableSessionId
+  // (split children share session_id with their parent — we need *this* one).
   const location = useLocation();
   const navigate = useNavigate();
   const consumedRef = useRef(false);
@@ -60,7 +65,28 @@ function RestaurantContent() {
       seatCount: resume.seatCount || 0,
     });
     setView("check");
-    // Clear consumed state so a refresh / back-navigation doesn't re-fire.
+    // Best-effort cart rehydrate from the draft's items. If this fails the
+    // cashier sees an empty cart but Pay still works against the draft id.
+    (async () => {
+      try {
+        const detail = await api.get(`/api/draft-orders/${resume.draftOrderId}`);
+        const items = detail?.items || [];
+        if (items.length) {
+          setCart(items.map((it) => ({
+            id: it.product_id,
+            variant_id: it.variant_id || null,
+            name: it.product_name,
+            price: Number(it.price),
+            originalPrice: Number(it.price),
+            quantity: Number(it.quantity),
+            seat_number: it.seat_number ?? null,
+            course_name: it.course_name || "main",
+            kitchen_status: it.kitchen_status || "pending",
+            availableStock: 99999,
+          })));
+        }
+      } catch { /* silent — empty cart is the safe default */ }
+    })();
     navigate(location.pathname, { replace: true, state: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
