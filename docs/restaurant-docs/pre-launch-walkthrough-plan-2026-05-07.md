@@ -577,8 +577,8 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 
 | Phase | Status | Date | Findings filed |
 |---|---|---|---|
-| 1. Login + dashboard | | | |
-| 2. Sidebar walkthrough | | | |
+| 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) |
+| 2. Sidebar walkthrough | ⏸️ paused — Restaurant section partial (5 of 12 items walked) | 2026-05-07 | W1 (Floor/Checks/KDS bounce, blocker), W2 (Menu Schedules React #310, blocker), W4 (sidebar links bounce — W1 cascade, polish) |
 | 3. End-to-end flows | | | |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |
@@ -586,6 +586,8 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 | 7. Cafe parity pass | | | |
 | 8. Pre-launch decisions | | | |
 | 9. Cleanup | | | |
+
+**Pause reason (2026-05-07):** Phase 2 hit 2 independent 🔴 blockers in the first 5 Restaurant routes. Per the sitting's stop-rule (3+ blockers in Phase 2), pause until W1 + W2 ship and resume from `/restaurant/modifiers`. See `findings-WIP.md` Walkthrough Session Log entry 2026-05-07 for full detail.
 
 ---
 

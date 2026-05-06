@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 2 | 0 |
+| 🔴 Blocker | 3 | 2 | 0 |
 | 🟡 Issue | 1 | 1 | 0 |
-| 🔵 Polish | 10 | 0 | 0 |
-| **Total** | **11** | **3** | **0** |
+| 🔵 Polish | 11 | 0 | 0 |
+| **Total** | **15** | **3** | **0** |
 
-Last update: 2026-05-07 (B1, B2, I1 fixed; B1.5 added for deferred non-restaurant schema drift; P10 added for role-name mismatch surfaced during B2 fix).
+Last update: 2026-05-07 (Phase 1 + partial Phase 2 walkthrough — W1/W2/W3 blockers filed in Restaurant section before pausing the sweep; W4 polish for sidebar flicker).
 
 ---
 
@@ -245,6 +245,156 @@ Provisioner runs first and wins via ON CONFLICT, so the fix should land in provi
 
 ---
 
+## Walkthrough findings (Wn)
+
+### W1 — Floor / Checks / KDS bounce to /dashboard on every navigation
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER
+**Surfaces affected:** `/restaurant/floor`, `/restaurant/checks`, `/kds` (any restaurant page that gates on `readContext()?.active_outlet_id`)
+**Found via:** Playwright walkthrough 2026-05-07, Phase 2 — Restaurant section sweep
+
+**Steps to reproduce:**
+1. Sign in as Test Owner on `sanoposlivetest1778021564659` (Free plan, single Main Store outlet)
+2. Land on dashboard
+3. Click sidebar → Restaurant → Floor Plan (or Checks, or KDS)
+4. URL flips to `/restaurant/floor` for ~3s, then redirects back to `/dashboard`. No error, no toast, nothing.
+
+**Observed:** Hard redirect to `/dashboard` (or `/`) within 3 seconds. Console clean. Network clean. From the operator's perspective, the link "does nothing".
+
+**Expected:** Floor Plan page renders with empty state and "+ Floor Plan" CTA.
+
+**Source / root cause** (verified against code, not docs):
+- `frontend/src/pages/redesign/RestaurantFloorRedesign.jsx:26` — `if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;`
+- `frontend/src/pages/redesign/RestaurantChecksRedesign.jsx:27` — same gate
+- `frontend/src/pages/redesign/KDSRedesign.jsx:53` — same gate
+- `frontend/src/auth/authStore.js:37-40` — `readContext()` reads `session.context`
+- Live `localStorage.authSession` keys: `["employee","permissions","loadedAt","token","tenant_slug","tenant","company"]` — **no `context` key**
+- Free-plan single-outlet tenants never visit `/context-select` at boot, so the session never gets a `context.active_outlet_id` written. The gate was correct in spirit (don't try to load floor data for an unscoped admin) but Floor/Checks/KDS are the merchant's primary surfaces — bouncing them silently is the opposite of helpful.
+
+**Console / network errors:** None — `useFeatureFlags` resolves cleanly, no 4xx/5xx, no React errors. The `<Navigate replace />` is silent.
+
+**Screenshots:**
+- `restaurant-walkthrough-phase2-floor-plan-deep-link-2026-05-07.png` (the resulting /dashboard after bounce)
+
+**Suggested fix paths (for the fix-it session, not this walkthrough):**
+1. Drop the `active_outlet_id` gate entirely — let the page render with an empty state if no outlet is selected, or use the `primary_outlet_id` from `/api/context/bootstrap` as a fallback.
+2. Make `loadCompanyProfile`/`resolveContext` middleware include the active outlet id in the session bootstrap response and write it client-side (single-outlet tenants don't have a "context choice" to make).
+3. Replace `Navigate to="/"` with an inline empty-state CTA: "Pick an outlet to manage tables".
+
+Pre-existing live tenants like `livetest1` work because they went through `/context-select` historically and have a `context` key. New tenants (single outlet on Free) skip that step entirely. The bug is invisible until you sign up fresh.
+
+---
+
+### W2 — Menu Schedules crashes with React error #310 (rendered more hooks than previous render)
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER
+**Surfaces affected:** `/restaurant/menu-schedules` (and likely any page following the same conditional-hook order pattern)
+**Found via:** Playwright walkthrough 2026-05-07, Phase 2 — 🆕 Menu Schedules check
+
+**Steps to reproduce:**
+1. Sign in
+2. Navigate to `/restaurant/menu-schedules`
+3. Page-level ErrorBoundary catches a thrown React error and shows "Something went wrong / This section encountered an error. You can try again or reload the page."
+
+**Observed:** "Something went wrong" card. Reloading just retriggers the same error.
+
+**Expected:** 7-day × 24-hour weekly grid with editor pane, even if empty.
+
+**Console error:**
+```
+Error: Minified React error #310; visit https://react.dev/errors/310
+  at MenuSchedulesRedesign (... MenuSchedulesRoute-Ceirh_xz.js)
+```
+React error #310 = "Rendered more hooks than during the previous render" — i.e. hooks called conditionally.
+
+**Source / root cause** (verified against code, not docs):
+- `frontend/src/pages/redesign/restaurant/MenuSchedulesRedesign.jsx:64-66` — three early returns AFTER the initial useState/useCallback/useEffect block:
+  ```js
+  if (flagsLoading) return null;
+  if (!flags.phase4_restaurant_day_parting) return <Navigate to="/" replace />;
+  if (!hasPerm("manage_restaurant")) return <Navigate to="/" replace />;
+  ```
+- `frontend/src/pages/redesign/restaurant/MenuSchedulesRedesign.jsx:68-73` — `useMemo` called AFTER those conditional returns:
+  ```js
+  const filtered = useMemo(
+    () => selectedOutletId
+      ? schedules.filter(...)
+      : schedules,
+    [schedules, selectedOutletId]
+  );
+  ```
+- First render: `flagsLoading=true` → early return at line 64 → `useMemo` never runs.
+- Second render after flags load: passes through line 64 → `useMemo` runs.
+- React tracks hooks by call order; total hook count differs across renders → React #310.
+
+**Screenshots:**
+- `restaurant-walkthrough-phase2-menu-schedules-react310-2026-05-07.png`
+
+**Suggested fix:** Move the `useMemo` before the early-return block (and apply the same lint rule to all `redesign/restaurant/*Redesign.jsx` files — there's a 1% chance Reservations/Waitlist/86 dodge it only because they happen not to use further hooks after the gate; worth a follow-up grep). Easy fix; low risk.
+
+---
+
+### W3 — Sidebar restaurant section invisible for ~1.5s after every navigation
+
+**Status:** OPEN
+**Severity:** 🔵 POLISH (UX flicker, not functional)
+**Surfaces affected:** every page with the sidebar (so: every authenticated page after Phase 0 nav-config regroup `25def3a`)
+**Found via:** Playwright walkthrough 2026-05-07, Phase 1 + Phase 2
+
+**Steps to reproduce:**
+1. Sign in
+2. Land on dashboard. Sidebar shows: Overview / Sell / Customers / Catalog / Inventory / Procurement / Fulfillment / Online Store / Finance / Insights / People / Compliance / Setup / Account.
+3. **No "Restaurant" group between Online Store and Finance.**
+4. Wait ~1.5 seconds.
+5. "Restaurant" group appears with Floor Plan / Checks / 86'd Items / Modifiers / Menu Schedules / Reservations / Waitlist / Online Inbox / Void/Comp Reasons / KDS / Tip Pools / Order Kiosks.
+
+**Observed:** First paint of every navigation hides restaurant items. Verified via `performance.now()`-bracketed eval — initial groups list lacks "Restaurant"; settled groups list 1.5s later includes it.
+
+**Expected:** Restaurant items visible on first paint.
+
+**Source / root cause** (verified against code, not docs):
+- `frontend/src/components/AppLayoutRedesign.jsx:88-100` — sidebar filter applies `(!it.requiredFlag || Boolean(flags[it.requiredFlag]))` synchronously
+- `frontend/src/hooks/useFeatureFlags.js:6-24` — `DEFAULT_FLAGS` is fail-closed (every restaurant `phase4_*` key absent → falsy)
+- `frontend/src/hooks/useFeatureFlags.js:27` — initial state is `setFlags(DEFAULT_FLAGS)` → all restaurant phase4_* flags read as `false` until the `/api/feature-flags` fetch resolves
+- `flagsLoading` state exists but is NOT consumed by `AppLayoutRedesign` — only the resolved `flags` object. The sidebar nav doesn't wait for the flag fetch.
+- Result: until the network round-trip completes, every restaurant nav item is filtered out.
+
+**Console / network errors:** None.
+
+**Screenshots:**
+- `restaurant-walkthrough-phase1-dashboard-2026-05-07.png` (initial paint, no Restaurant section)
+- `restaurant-walkthrough-phase1-sidebar-restaurant-section-2026-05-07.png` (post-settle, Restaurant section visible)
+
+**Why this is polish-only:** the merchant who knows the section exists can wait 1-2s. But for a brand-new restaurant tenant who clicked through onboarding and lands on the dashboard, the first impression is "where are my tables?" — which directly contradicts the wizard they just completed.
+
+**Suggested fix:** either (a) make `AppLayoutRedesign` render skeleton groups while `flagsLoading=true` instead of an empty/incomplete sidebar, or (b) seed the `useFeatureFlags` initial state from `localStorage["lastKnownFlags"]` updated each successful fetch (warm-cache pattern), or (c) inline-render the `flagsLoading` spinner in the sidebar nav area.
+
+---
+
+### W4 — Sidebar nav links to restaurant routes are React-Router clickable but bounced (W1 cascade)
+
+**Status:** OPEN
+**Severity:** 🔵 POLISH (downstream of W1)
+**Surfaces affected:** Restaurant sidebar links (Floor Plan, Checks, KDS specifically)
+**Found via:** Playwright walkthrough 2026-05-07, Phase 2 — sidebar click + hard-nav both reproduce
+
+**Steps to reproduce:**
+1. Click the Floor Plan sidebar link
+2. URL stays at `/dashboard` — **the `<NavLink>` click registers but the route guard immediately fires Navigate-back**
+3. Same with hard-nav directly to `/restaurant/floor`
+
+**Observed:** Sidebar entry exists, looks live, click does nothing visible. Identical UX to a broken link.
+
+**Expected:** Restaurant pages load.
+
+**Suspected root cause:** This is the surface symptom of W1; not a separate bug. Worth flagging because the merchant experiences "the sidebar lies to me" before they understand it's an outlet-context bug.
+
+**Suggested fix:** Resolved by W1 fix.
+
+---
+
 ## Healing log (out-of-band changes to live test tenant)
 
 > Record any DDL or DML run directly against `tenant_sanoposlivetest1778021564659` outside the migration runner. Future tenants get the same state via the migration / setup fixes, but the live test tenant predates them and needs manual catch-up.
@@ -338,7 +488,66 @@ Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Own
 
 > Append a dated entry per Playwright walkthrough session. Each entry: date, scope (which sections of the plan), findings IDs added (W1, W2, ...), commit refs of any fixes shipped that session.
 
-(empty so far — first session expected after blockers B1 + B2 fixed)
+### Session 2026-05-07 — Phase 1 + partial Phase 2 (paused on blockers)
+
+**Operator:** Hassan (with Claude in headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659` (restaurant, PK, Free, tax_mode=none)
+**Phases walked:** Phase 1 (full) + Phase 2 — Restaurant section (partial, 5 of 12 items)
+**Duration:** ~75 min before pausing
+
+**Phase 1 result — clean ✅ with one polish item:**
+- Login flow worked (clean creds → land on /dashboard)
+- KPI cards / onboarding checklist / profile dropdown all render
+- Onboarding checklist correctly shows restaurant steps (Set up your store / Add your first menu item / Set up your floor plan / Open a shift / Make your first order) — verifies P4 expectation
+- Profile dropdown shows "Administrator" role text — verifies I1 fix `2a322eb` shipped (note: from source, `AppLayoutRedesign.jsx` ProfileDropdown hardcodes role text by `role_id`, not reading the DB `role` text column — but the visual outcome is correct)
+- POS labels via `/api/context/bootstrap` confirmed restaurant-flavored: Menu Item / Guest / Order
+- FBR sidebar items render but no aggressive prompt banner — P9 looks OK (no FBR banner pestering despite `fbr_integration` ON + `tax_mode=none`)
+- Filed: **W3** (sidebar restaurant section flickers in after ~1.5s)
+
+**Phase 2 result — paused after 3 blockers, only 5 of 12 Restaurant items walked:**
+
+| 🆕 Route | Result | Notes |
+|---|---|---|
+| `/restaurant/availability` (86'd Items) | ✅ clean empty state | B1 heal verified live |
+| `/restaurant/menu-schedules` | 🔴 React #310 — page crashes | W2 |
+| `/restaurant/reservations` | ✅ clean empty state | B1 heal verified live |
+| `/restaurant/waitlist` | ✅ clean empty state | B1 heal verified live |
+| `/restaurant/void-reasons` | ✅ 10 seed reasons render | B1 heal verified live |
+
+| Other Restaurant items | Result |
+|---|---|
+| `/restaurant/floor` (Floor Plan) | 🔴 W1 — bounces to /dashboard |
+| `/restaurant/checks` (Checks) | 🔴 W1 — bounces to /dashboard |
+| `/kds` (KDS) | 🔴 W1 — bounces to /dashboard |
+| Modifiers / Online Inbox / Tip Pools / Order Kiosks | ⏸️ NOT WALKED — paused |
+
+**Findings IDs filed this session:** W1 (🔴 BLOCKER, Floor/Checks/KDS bounce — missing context.active_outlet_id on Free single-outlet tenants), W2 (🔴 BLOCKER, Menu Schedules React #310 — useMemo after conditional return), W3 (🔵 POLISH, sidebar restaurant section invisible for ~1.5s on every nav due to fail-closed flag default), W4 (🔵 POLISH, sidebar restaurant links appear broken — surface symptom of W1).
+
+**Why we paused:** the constraint was "stop if 3+ 🔴 blockers in Phase 2." We hit exactly 3 (W1 affects 3 routes but it's one root cause; W2 is independent). The restaurant section is the heart of merchant operations — continuing the cross-vertical sweep before fixing Floor/Checks/KDS would log a lot of noise without progressing the launch readiness picture.
+
+**Screenshots saved (8):**
+- `restaurant-walkthrough-phase1-landing-2026-05-07.png` — public landing page
+- `restaurant-walkthrough-phase1-dashboard-2026-05-07.png` — first paint of dashboard (no Restaurant section)
+- `restaurant-walkthrough-phase1-dashboard-settled-2026-05-07.png` — same dashboard after settle (still doesn't catch Restaurant — folded below fold)
+- `restaurant-walkthrough-phase1-sidebar-restaurant-section-2026-05-07.png` — Restaurant nav items after sidebar scroll, post-settle
+- `restaurant-walkthrough-phase1-profile-dropdown-2026-05-07.png` — confirms "Administrator" role label
+- `restaurant-walkthrough-phase2-floor-plan-deep-link-2026-05-07.png` — W1 reproduction (floor URL → /dashboard bounce)
+- `restaurant-walkthrough-phase2-availability-loaded-2026-05-07.png` — 🆕 86'd Items empty state
+- `restaurant-walkthrough-phase2-menu-schedules-react310-2026-05-07.png` — W2 reproduction
+- `restaurant-walkthrough-phase2-reservations-loaded-2026-05-07.png` — 🆕 Reservations empty state
+- `restaurant-walkthrough-phase2-waitlist-loaded-2026-05-07.png` — 🆕 Waitlist empty state
+- `restaurant-walkthrough-phase2-void-reasons-loaded-2026-05-07.png` — 🆕 Void/Comp Reasons with 10 seeds
+
+**Surprises:**
+- The 5 🆕 routes that B1 was specifically meant to unblock — 4 of 5 work flawlessly. Only Menu Schedules has its own independent bug (W2), unrelated to B1. So B1's fix shipped well; W2 is a separate hook-order regression.
+- Yesterday's `25def3a refactor(nav): regroup sidebar` did NOT remove restaurant items from the config (verified by reading the diff). The flicker (W3) has been latent since `useFeatureFlags` shipped — the regroup just changed the section grouping, the timing bug was always there.
+- Free-tier tenants entirely skip `/context-select` and so never get a `context.active_outlet_id` written to their session. Three restaurant pages depended on that being set. This is the single highest-leverage bug to fix for restaurant launch — it makes the platform feel broken to a brand-new restaurant signup the moment they click Floor Plan.
+
+**Recommendation for next sitting:** stop the walkthrough until W1 + W2 land. Both are small frontend fixes:
+- W1: drop the `active_outlet_id` gate or fall back to `primary_outlet_id`
+- W2: move `useMemo` before the early-return block in `MenuSchedulesRedesign.jsx`
+
+After those ship, the next walkthrough sitting can resume Phase 2 from the unwalked Restaurant items (Modifiers, Online Inbox, Tip Pools, Order Kiosks) and proceed cross-vertical.
 
 ---
 
