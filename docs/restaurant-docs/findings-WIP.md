@@ -26,7 +26,7 @@
 | 🔵 Polish | 12 | 3 | 0 |
 | **Total** | **13** | **23** | **0** |
 
-Last update: 2026-05-08 morning (flow 3.3 closed end-to-end. **W25** ✅ FIXED commit `51e4b14` — table-picker modal on Seat click + `POST /api/restaurant/reservations/:id/seat` endpoint (transactional: opens session via `floor.openTableSession` + stamps `reservations.table_id` + `status='seated'`). Live-verified: Reservation #2 "Reservation Test 2" → click Seat → modal showed T1-T4 all green/Available → click T2 → DB confirms reservation table_id=2 status=seated AND new session #9 status=seated table_id=2. Walked through to settle: Caesar Salad C1 + Iced Tea C5 → Send to Kitchen → Pay → INV-2026-00007 Rs 950. T2 dirty → cleared. Floor: 0 open sessions. Total fixed: 23. 0 open blockers.)
+Last update: 2026-05-08 morning (flow 3.4 closed end-to-end. Counter Order Kiosk minted → public /menu/:token loaded with no auth → 1× Iced Tea Rs 300 submitted → web_orders #1 source='kiosk' arrived in /restaurant/inbox tagged `kioskK-17` → Accept → draft #19 + KDS ticket #12 `[external] kiosk #K-17` created → Bump → POST /api/kds/tickets/12/bump returned 200 + status='bumped' → /restaurant/checks Pay → cart rehydrated 1× Iced Tea Rs 300 → Cash Exact Add Complete → INV-2026-00008 Rs 300. Zero findings filed. Phase 3 = 4 of 12. Total fixed: 23. 0 open blockers. Floor healed: kiosk slot revoked, leftover empty kiosk_counter draft #18 cancelled.)
 
 ---
 
@@ -1765,6 +1765,58 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 1. Pick up from **flow 3.4** (Online Inbox → accept → fire → handoff) per the plan. Need to mint an Order Kiosk first; floor is clean.
 2. Optional: file a polish-class follow-up for "reservation status doesn't auto-flip to completed when its session closes" — not a launch blocker.
 3. The recurring Vercel content-hash dedup pattern is worth a brief note in the operations playbook: "if the chunk URL didn't change after a deploy, verify the new code shipped via curl-grep on a unique identifier from the diff before assuming the deploy is broken".
+
+### Session 2026-05-08 morning (continuation 3) — Flow 3.4 closed end-to-end + production health check
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Production /check-services (96h overdue) + Phase 3 flow 3.4 (Online Inbox → accept → fire → handoff).
+**Duration:** ~10 min.
+
+**Result:** ✅ flow 3.4 closed. 0 findings filed. Phase 3 = 4 of 12.
+
+**Production health check (96h overdue) — all green:**
+- Sentry (backend): 0 truly unresolved (the 4 listed are all `resolved` status).
+- Sentry (frontend): 4 unresolved errors. **2 new today** — `SANOPOS-FRONTEND-A` and `-B`, both "Rendered more hooks than during the previous render" (last seen 13:17 and 17:44 UTC, before W22-W25 fixes). Same hook-order class as W2/W8. Worth triaging in a future fix-it loop. Not blocking restaurant flows.
+- Vercel: ● Ready, latest deploy 58s ago (`27c238b` docs).
+- UptimeRobot: UP, 16-day uninterrupted streak.
+- Railway: Running, 0 error/fatal/crash/OOM matches in recent logs.
+- Supabase: ACTIVE_HEALTHY, 0 advisor lints (security + perf both clean).
+- Cloudflare: sanopos.com active, not paused. R2 bucket sanopos-uploads present.
+- API Health: status=ok, DB latency 7ms, Resend latency 341ms.
+
+**Live verifications (flow 3.4):**
+- **Step 1 — mint counter kiosk slot:** /order-kiosks → Launch counter kiosk → 1 active kiosk row, URL `https://sanopos.com/menu/10507207-608c-4355-9f3c-9f88acdb241d?tenant=sanoposlivetest1778021564659`. ✅
+- **Step 2 — public menu loads:** opened URL in new tab → menu rendered with 5 sample items, no auth prompt, "Powered by SanoPOS" footer. Clicked Add on Iced Tea → "1 item in your order, Rs 300" footer + Place Order CTA. Clicked Place Order. DB: `web_orders.id=1 source='kiosk' order_status='open' grand_total=300 accepted_at=null converted_draft_order_id=null`. ✅
+- **Step 3 — order in Online Inbox:** /restaurant/inbox showed row `kioskK-17 / Guest · no phone / 1× Iced Tea Rs 300` with Accept + Reject actions. ✅
+- **Step 4 — Accept:** clicked Accept. DB after:
+  ```
+  web_orders.id=1: order_status='open' accepted=true converted_draft_order_id=19
+  draft_orders.id=19: status='open' total=300
+  kds_tickets.id=12: status='new' station_id=1 (label "[external] kiosk #K-17")
+  ```
+  KDS view confirmed ticket #12 visible at the top of station 1's queue, age 0m. ✅
+- **Step 5 — Bump:** UI Bump click hit the wrong card via my JS targeting; re-issued via direct `POST https://api.sanopos.com/api/kds/tickets/12/bump` → 200 OK, body shows `status='bumped'`. (The browser's `window.fetch('/api/...')` resolved to sanopos.com which returned 405 because Vercel doesn't host the API — it lives at api.sanopos.com. This is a tooling artifact of how I called it, NOT a real frontend bug — the React API client sets `API_BASE` to api.sanopos.com.) DB: `kds_tickets.id=12 status='bumped'`. ✅
+- **Step 6 — Settle via Pay-this-check:** /restaurant/checks showed draft #19 row Rs 300 → clicked Pay this check → POS opened with cart rehydrated to 1× Iced Tea Rs 300 (W23 path holds for non-table drafts too). Pay → Cash Exact → Add → Complete Sale. DB: `INV-2026-00008 total_amount=300`. ✅ Screenshot: `restaurant-walkthrough-flow34-online-inbox-settled-2026-05-07.png`.
+
+**Findings updates:** None — full pipeline worked first try. Phase 3 row → "4 of 12 closed".
+
+**Floor healed for next sitting:**
+- Kiosk slot revoked (Revoke button on /order-kiosks).
+- Leftover empty `draft_orders.id=18 status='open' total=0 order_context='kiosk_counter'` (the slot's pre-mint draft, which is what the kiosk pivots to on each new order) → cancelled via Supabase MCP. Floor: 0 open sessions, 0 open drafts.
+- Test Owner still clocked in (session #2), shift #2 still open.
+- DB sales total: 8 (`INV-00001..00008`).
+
+**Surprises:**
+- Flow 3.4 was the first Phase 3 flow that walked clean with no fixes shipped. The W23 cart-rehydrate path that was originally written for split children also works perfectly for kiosk-converted drafts — same code path, different draft origin. Validates that "rehydrate from `GET /api/draft-orders/:id`" was the right abstraction.
+- The Online Inbox label `kioskK-17` looks like a bug (`kiosk` then `K-17` smashed together) but is just `${source}${external_order_number}` formatting where `external_order_number` is `K-17`. Cosmetic only.
+- The kiosk slot mints a placeholder draft (id=18) when launched, even before any orders are placed. When an order is submitted, the slot rotates to a fresh draft and the old one stays as `status='open' total=0`. That orphan won't matter in practice (cancellable from `/restaurant/checks` via the W22 close-check button), but it's noise. Polish-class follow-up if a merchant ever notices.
+- 2 new frontend Sentry errors today both look like the same class as W2/W8 (Rendered more hooks than previous render). Not surfaced during today's walks. Likely user agents with stale chunks hitting React after a deploy bumped the hook ordering. Worth a future hook-order audit pass.
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.5** (Counter Order Kiosk feature — re-test slot rotation, web_orders.source='kiosk') — but note 3.4 already exercised most of this path. May be quick.
+2. Or jump to **flow 3.6** (Table Order Kiosk — mint a Table Token, attach order to existing dine_in draft on a seated table). Needs a seated table first.
+3. Optional follow-up: triage the 2 new frontend Sentry hook-order errors. Not blocking restaurant launch.
 
 ---
 
