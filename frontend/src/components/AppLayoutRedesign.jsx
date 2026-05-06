@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Sun, User, UserCircle, X } from "lucide-react";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { readTenantSlug } from "../auth/authStore";
@@ -78,25 +78,50 @@ export default function AppLayoutRedesign() {
   const navigate = useNavigate();
   const { employee, hasPerm, logout, authHeaders } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
-  const { hasMode } = usePreset();
+  const { hasMode, labels } = usePreset();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Preset bootstrap moved to PresetProvider so routes outside AppLayout
   // (e.g. /pos opens in a new tab) also get presetLoaded=true.
 
+  // Restaurant preset (and others) override "Customer" → "Guest" /
+  // "Product" → "Menu Item" on page headings via usePreset().label(...).
+  // Sidebar nav strings live in nav-config.js with hardcoded English —
+  // translate them here so the sidebar matches the page headings.
+  const translateNavLabel = useCallback(
+    (label) => {
+      if (!label || !labels) return label;
+      const customer = labels.customer || "Customer";
+      const customers = labels.customers || "Customers";
+      const product = labels.product || "Product";
+      const products = labels.products || "Products";
+      // Order matters — replace plurals before singulars to avoid
+      // "Customer" inside "Customers" being substituted first.
+      return label
+        .replace(/Customers/g, customers)
+        .replace(/Customer/g, customer)
+        .replace(/Products/g, products)
+        .replace(/Product/g, product);
+    },
+    [labels],
+  );
+
   const nav = useMemo(
     () =>
       SHOPIFY_NAV_GROUPS.map((group) => ({
         ...group,
-        items: group.items.filter(
-          (it) =>
-            (!it.requiredPerm || hasPerm(it.requiredPerm)) &&
-            (!it.requiredFlag || Boolean(flags[it.requiredFlag])) &&
-            (!it.requiredMode || hasMode(it.requiredMode)),
-        ),
+        label: translateNavLabel(group.label),
+        items: group.items
+          .filter(
+            (it) =>
+              (!it.requiredPerm || hasPerm(it.requiredPerm)) &&
+              (!it.requiredFlag || Boolean(flags[it.requiredFlag])) &&
+              (!it.requiredMode || hasMode(it.requiredMode)),
+          )
+          .map((it) => ({ ...it, name: translateNavLabel(it.name) })),
       })).filter((g) => g.items.length),
-    [flags, hasPerm, hasMode],
+    [flags, hasPerm, hasMode, translateNavLabel],
   );
 
   return (

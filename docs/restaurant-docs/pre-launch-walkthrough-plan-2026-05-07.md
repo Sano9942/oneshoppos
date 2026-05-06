@@ -578,7 +578,7 @@ Update this table as phases close. Pattern: `✅ closed YYYY-MM-DD` or `🔄 in 
 | Phase | Status | Date | Findings filed |
 |---|---|---|---|
 | 1. Login + dashboard | ✅ closed | 2026-05-07 | W3 (sidebar flicker, polish) — ✅ FIXED in 119a466 |
-| 2. Sidebar walkthrough | ⏸️ ~closed — full sweep done, all sections walked. 1 🔴 blocker (W8) + 1 🟡 issue (W9) open. Will fully close after W8/W9 ship. | 2026-05-08 | Morning: W1✅ (in 119a466+8f5c9ba), W2✅ (in 119a466), W4✅ (auto with W1). Afternoon resume: W8 🔴 Order Kiosks React #310, W9 🟡 backend snake_case typo, W10 🔵 sidebar Customers/Guests label drift |
+| 2. Sidebar walkthrough | ✅ closed | 2026-05-08 | Morning: W1✅ (119a466+8f5c9ba), W2✅ (119a466), W4✅ (auto with W1). Afternoon resume: W8✅ (next push) Order Kiosks React #310, W9✅ (next push) backend snake_case typo, W10✅ (next push) sidebar/breadcrumb label drift |
 | 3. End-to-end flows | | | |
 | 4. Public surfaces | | | |
 | 5. Worker-driven flows | | | |

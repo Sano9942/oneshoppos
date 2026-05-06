@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 1 | 5 | 0 |
-| 🟡 Issue | 2 | 1 | 0 |
-| 🔵 Polish | 12 | 2 | 0 |
-| **Total** | **15** | **8** | **0** |
+| 🔴 Blocker | 0 | 6 | 0 |
+| 🟡 Issue | 1 | 2 | 0 |
+| 🔵 Polish | 11 | 3 | 0 |
+| **Total** | **12** | **11** | **0** |
 
-Last update: 2026-05-08 (W11 🔴 Phase-3 blocker found and fixed — `*/1` inside a JSDoc block comment closed the comment early, making `course-release-worker-boss.js` un-requireable; that single SyntaxError silently took out KDS-snapshot + reservation-reminder workers via the chain's shared catch handler. Boot resilience also hardened: each register call now isolated with stack logging.).
+Last update: 2026-05-08 (Phase 2 cleanup — W8 🔴 Order Kiosks React #310 fixed by hoisting useMemo above flag/perm gate; W9 🟡 6 backend snake_case typos `req.context?.outlet_id` → `req.context?.outletId` fixed across restaurant.js / restaurant-inbox.js / kds.js; W10 🔵 sidebar nav + breadcrumb labels now translate Customer/Customers/Product/Products via `usePreset().labels`. All 3 ship in next push.).
 
 ---
 
@@ -486,9 +486,9 @@ Failed to load resource: the server responded with a status of 401 ()
 
 ---
 
-### W8 — Order Kiosks page crashes with React error #310 (rendered more hooks than previous render)
+### W8 — Order Kiosks page crashes with React error #310 (rendered more hooks than previous render) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit (next push) (2026-05-08). Hoisted the `useMemo` above the `flagsLoading`/`!flags.phase4_restaurant_qr`/`!hasPerm` early-return block in `OrderKiosksRedesign.jsx`. Verified locally that JSX file parses cleanly. Will live-verify after deploy.
 **Severity:** 🔴 BLOCKER
 **Surfaces affected:** `/order-kiosks` (entire admin-side counter/table kiosk launcher)
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Restaurant section sweep (resumption)
@@ -532,9 +532,9 @@ Error: Minified React error #310; visit https://react.dev/errors/310
 
 ---
 
-### W9 — Six restaurant routes typo `req.context?.outlet_id` (snake_case) but middleware writes `req.context.outletId` (camelCase)
+### W9 — Six restaurant routes typo `req.context?.outlet_id` (snake_case) but middleware writes `req.context.outletId` (camelCase) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit (next push) (2026-05-08). All 6 sites updated: `restaurant.js:23, 114, 162`, `restaurant-inbox.js:24`, `kds.js:15, 79`. Replaced `req.context?.outlet_id` with `req.context?.outletId`. `node -c` syntax-checked all three files. Verified by `grep -nE "req\.context\?\.outlet_id|req\.context\.outlet_id" backend` returns no matches.
 **Severity:** 🟡 ISSUE (functional latently — masked because frontend almost always passes `outlet_id` query)
 **Surfaces affected:** any code path that hits restaurant/KDS/inbox routes WITHOUT `?outlet_id=` query — currently the POS Restaurant initial floor-plan fetch
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Commerce/Catalog/Inventory sweep, observed 400 in console while opening `/pos/restaurant`
@@ -574,9 +574,9 @@ Failed to load resource: the server responded with a status of 400 ()
 
 ---
 
-### W10 — Restaurant preset label drift: page heading says "Guests" but sidebar nav, breadcrumb, and Customer Groups link all say "Customers"
+### W10 — Restaurant preset label drift: page heading says "Guests" but sidebar nav, breadcrumb, and Customer Groups link all say "Customers" ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit (next push) (2026-05-08). Added a `translateNavLabel` helper in `AppLayoutRedesign.jsx` that consults `usePreset().labels.customer / customers / product / products` and rewrites group names + nav item names accordingly. Same helper inlined into `Breadcrumbs.jsx`. Replace order is plurals-then-singulars to avoid "Customer" inside "Customers" being substituted first. JSX parse-checked; existing layout unit tests still pass. Will live-verify by reloading the dashboard on the restaurant tenant after deploy — sidebar should show "Guests" and "Guest Groups".
 **Severity:** 🔵 POLISH
 **Surfaces affected:** sidebar nav (`Customers`, `Customer Groups`, `Customer Invoices`), breadcrumb on /customers, breadcrumb on /customer-groups, label inconsistency between page heading vs nav
 **Found via:** Playwright walkthrough 2026-05-08, Phase 2 — Customers item

@@ -21,7 +21,7 @@ module.exports = function registerRestaurantInboxRoutes(app, deps) {
 
   app.get("/api/restaurant/inbox", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       const rows = await inbox.listInbox(
         deps.db,
         outletId ? Number(outletId) : null,

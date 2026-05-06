@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { ChevronRight, Home } from "lucide-react";
+import { usePreset } from "../contexts/PresetContext";
 
 const LABELS = {
   dashboard: "Dashboard",
@@ -97,11 +98,27 @@ const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display", "/retail/home
 
 export default function Breadcrumbs() {
   const { pathname } = useLocation();
+  const { labels } = usePreset();
 
   if (SKIP.some((p) => pathname === p || pathname === "/")) return null;
 
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return null;
+
+  // Mirror AppLayout's nav-label translation so breadcrumbs match the page
+  // headings under the restaurant preset (Customer → Guest, Product → Menu Item).
+  const translate = (label) => {
+    if (!label || !labels) return label;
+    const customer = labels.customer || "Customer";
+    const customers = labels.customers || "Customers";
+    const product = labels.product || "Product";
+    const products = labels.products || "Products";
+    return label
+      .replace(/Customers/g, customers)
+      .replace(/Customer/g, customer)
+      .replace(/Products/g, products)
+      .replace(/Product/g, product);
+  };
 
   return (
     <nav className="mb-3 flex items-center gap-1 text-xs text-(--ui-text-muted)">
@@ -110,7 +127,8 @@ export default function Breadcrumbs() {
       </Link>
       {segments.map((seg, i) => {
         const path = "/" + segments.slice(0, i + 1).join("/");
-        const label = LABELS[seg] || seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const rawLabel = LABELS[seg] || seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const label = translate(rawLabel);
         const isLast = i === segments.length - 1;
         return (
           <span key={path} className="flex items-center gap-1">

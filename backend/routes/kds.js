@@ -12,7 +12,7 @@ module.exports = function registerKdsRoutes(app, deps) {
 
   app.get("/api/kds/stations", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const stations = await kds.getStations(deps.db, Number(outletId));
       res.json({ stations });
@@ -76,7 +76,7 @@ module.exports = function registerKdsRoutes(app, deps) {
   // so the UI can render without extra round-trips).
   app.get("/api/kds/routes", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const { rows } = await deps.db.query(
         `SELECT sr.*, ks.name AS station_name, ks.station_role,

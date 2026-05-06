@@ -20,7 +20,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
 
   app.get("/api/restaurant/floor-plans", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const plans = await floor.getFloorPlans(deps.db, Number(outletId));
       res.json({ floor_plans: plans });
@@ -111,7 +111,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
 
   app.get("/api/restaurant/table-sessions", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       const status = req.query.status;
       const params = [];
       let where = "1=1";
@@ -159,7 +159,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
 
   app.get("/api/restaurant/checks", ...gate, async (req, res) => {
     try {
-      const outletId = req.query.outlet_id || req.context?.outlet_id;
+      const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const rows = await checks.getOpenChecks(deps.db, Number(outletId), req.query);
       res.json({ checks: rows });

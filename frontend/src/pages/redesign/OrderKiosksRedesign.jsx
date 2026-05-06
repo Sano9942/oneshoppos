@@ -81,6 +81,17 @@ export default function OrderKiosksRedesign() {
     if (outletId) loadTokens(outletId);
   }, [outletId, loadTokens]);
 
+  // Hoist hooks above the flag/perm gate. The previous arrangement called
+  // useMemo after these early returns, which made the hook count differ
+  // between the first render (flagsLoading=true → bail) and subsequent
+  // renders (flagsLoading=false → useMemo runs), throwing React #310.
+  const rows = useMemo(() => {
+    return [
+      ...data.counters.map((c) => ({ ...c, kind: "counter" })),
+      ...data.tables.map((t) => ({ ...t, kind: "table" })),
+    ];
+  }, [data]);
+
   if (flagsLoading) return null;
   if (!flags.phase4_restaurant_qr) return <Navigate to="/" replace />;
   if (!hasPerm("manage_restaurant")) return <Navigate to="/" replace />;
@@ -160,13 +171,6 @@ export default function OrderKiosksRedesign() {
       error("Could not copy — your browser blocked clipboard access");
     }
   };
-
-  const rows = useMemo(() => {
-    return [
-      ...data.counters.map((c) => ({ ...c, kind: "counter" })),
-      ...data.tables.map((t) => ({ ...t, kind: "table" })),
-    ];
-  }, [data]);
 
   return (
     <PageShell
