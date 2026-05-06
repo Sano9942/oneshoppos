@@ -244,23 +244,38 @@ function startAll(deps) {
   // pg-boss workers — email, FBR, and cleanup (requires DATABASE_URL / Postgres)
   if (process.env.DATABASE_URL) {
     const { getBoss } = require("../services/boss");
+    // Isolate each worker registration so one failure doesn't kill the rest.
+    // Logs full stack so we can trace which worker actually threw.
+    const tryRegister = async (label, fn) => {
+      try {
+        await fn();
+      } catch (err) {
+        console.error(`[boss] register ${label} failed:`, err && err.stack ? err.stack : err && err.message ? err.message : err);
+      }
+    };
     getBoss()
       .then(async (boss) => {
         const pool = db.pool || db;
 
         if (String(process.env.EMAIL_WORKER_ENABLED || "0") === "1") {
-          const { registerEmailWorker } = require("../workers/email-worker-boss");
-          await registerEmailWorker(boss, pool);
+          await tryRegister("email", async () => {
+            const { registerEmailWorker } = require("../workers/email-worker-boss");
+            await registerEmailWorker(boss, pool);
+          });
         }
 
         if (String(process.env.FBR_WORKER_ENABLED || "0") === "1") {
-          const { registerFbrWorker } = require("../workers/fbr-worker-boss");
-          await registerFbrWorker(boss, pool);
+          await tryRegister("fbr", async () => {
+            const { registerFbrWorker } = require("../workers/fbr-worker-boss");
+            await registerFbrWorker(boss, pool);
+          });
         }
 
         if (String(process.env.CLEANUP_WORKER_ENABLED || "0") === "1") {
-          const { registerCleanupWorker } = require("../workers/cleanup-worker-boss");
-          await registerCleanupWorker(boss);
+          await tryRegister("cleanup", async () => {
+            const { registerCleanupWorker } = require("../workers/cleanup-worker-boss");
+            await registerCleanupWorker(boss);
+          });
         }
 
         // Orphan-schema scan defaults ON whenever pg-boss is wired — moves
@@ -268,81 +283,111 @@ function startAll(deps) {
         // (Phase 1.1 Tier 1, prod snapshot 2026-04-17). Set
         // ORPHAN_SCHEMA_SCAN_WORKER_ENABLED=0 to opt out.
         if (String(process.env.ORPHAN_SCHEMA_SCAN_WORKER_ENABLED || "1") !== "0") {
-          const { registerOrphanSchemaScanWorker } = require("../workers/orphan-schema-scan-worker-boss");
-          await registerOrphanSchemaScanWorker(boss, db);
+          await tryRegister("orphan-schema-scan", async () => {
+            const { registerOrphanSchemaScanWorker } = require("../workers/orphan-schema-scan-worker-boss");
+            await registerOrphanSchemaScanWorker(boss, db);
+          });
         }
 
         if (String(process.env.MARKETPLACE_SYNC_WORKER_ENABLED || "0") === "1") {
-          const { registerMarketplaceSyncWorker } = require("../workers/marketplace-sync-worker-boss");
-          await registerMarketplaceSyncWorker(boss, pool);
+          await tryRegister("marketplace-sync", async () => {
+            const { registerMarketplaceSyncWorker } = require("../workers/marketplace-sync-worker-boss");
+            await registerMarketplaceSyncWorker(boss, pool);
+          });
         }
 
         if (String(process.env.RESERVATION_WORKER_ENABLED || "0") === "1") {
-          const { registerReservationWorker } = require("../workers/reservation-worker-boss");
-          await registerReservationWorker(boss, pool);
+          await tryRegister("reservation", async () => {
+            const { registerReservationWorker } = require("../workers/reservation-worker-boss");
+            await registerReservationWorker(boss, pool);
+          });
         }
 
         if (String(process.env.SUBSCRIPTION_GRACE_WORKER_ENABLED || "0") === "1") {
-          const { registerSubscriptionGraceWorker } = require("../workers/subscription-grace-worker-boss");
-          await registerSubscriptionGraceWorker(boss, pool);
+          await tryRegister("subscription-grace", async () => {
+            const { registerSubscriptionGraceWorker } = require("../workers/subscription-grace-worker-boss");
+            await registerSubscriptionGraceWorker(boss, pool);
+          });
         }
 
         if (String(process.env.RENTAL_OVERDUE_WORKER_ENABLED || "0") === "1") {
-          const { registerRentalOverdueWorker } = require("../workers/rental-overdue-worker-boss");
-          await registerRentalOverdueWorker(boss, pool);
+          await tryRegister("rental-overdue", async () => {
+            const { registerRentalOverdueWorker } = require("../workers/rental-overdue-worker-boss");
+            await registerRentalOverdueWorker(boss, pool);
+          });
         }
 
         if (String(process.env.HOLD_EXPIRY_WORKER_ENABLED || "0") === "1") {
-          const { registerHoldExpiryWorker } = require("../workers/hold-expiry-worker-boss");
-          await registerHoldExpiryWorker(boss, pool);
+          await tryRegister("hold-expiry", async () => {
+            const { registerHoldExpiryWorker } = require("../workers/hold-expiry-worker-boss");
+            await registerHoldExpiryWorker(boss, pool);
+          });
         }
 
         if (String(process.env.ROOM_OVERDUE_WORKER_ENABLED || "0") === "1") {
-          const { registerRoomOverdueCheckoutWorker } = require("../workers/room-overdue-checkout-worker-boss");
-          await registerRoomOverdueCheckoutWorker(boss, pool);
+          await tryRegister("room-overdue", async () => {
+            const { registerRoomOverdueCheckoutWorker } = require("../workers/room-overdue-checkout-worker-boss");
+            await registerRoomOverdueCheckoutWorker(boss, pool);
+          });
         }
 
         if (String(process.env.TREATMENT_PLAN_WORKER_ENABLED || "0") === "1") {
-          const { registerTreatmentPlanWorker } = require("../workers/treatment-plan-worker-boss");
-          await registerTreatmentPlanWorker(boss, pool);
+          await tryRegister("treatment-plan", async () => {
+            const { registerTreatmentPlanWorker } = require("../workers/treatment-plan-worker-boss");
+            await registerTreatmentPlanWorker(boss, pool);
+          });
         }
 
         if (String(process.env.ABC_WORKER_ENABLED || "0") === "1") {
-          const { registerAbcWorker } = require("../workers/abc-worker-boss");
-          await registerAbcWorker(boss, pool);
+          await tryRegister("abc", async () => {
+            const { registerAbcWorker } = require("../workers/abc-worker-boss");
+            await registerAbcWorker(boss, pool);
+          });
         }
 
         if (String(process.env.ANOMALY_WORKER_ENABLED || "0") === "1") {
-          const { registerAnomalyWorker } = require("../workers/anomaly-worker-boss");
-          await registerAnomalyWorker(boss, pool);
+          await tryRegister("anomaly", async () => {
+            const { registerAnomalyWorker } = require("../workers/anomaly-worker-boss");
+            await registerAnomalyWorker(boss, pool);
+          });
         }
 
         if (String(process.env.RETAIL_DIGEST_WORKER_ENABLED || "0") === "1") {
-          const { registerRetailDigestWorker } = require("../workers/retail-digest-worker-boss");
-          await registerRetailDigestWorker(boss, pool);
+          await tryRegister("retail-digest", async () => {
+            const { registerRetailDigestWorker } = require("../workers/retail-digest-worker-boss");
+            await registerRetailDigestWorker(boss, pool);
+          });
         }
 
         // Bucket F (Phase 2-G): hourly sweep that force-closes open cash shifts
         // older than each tenant's `company_profile.shift_auto_close_hours`
         // (default 36h). Tenant-gated by `shift_auto_close` feature flag.
         if (String(process.env.SHIFT_AUTO_CLOSE_WORKER_ENABLED || "0") === "1") {
-          const { registerShiftAutoCloseWorker } = require("../workers/shift-auto-close-worker-boss");
-          await registerShiftAutoCloseWorker(boss, pool);
+          await tryRegister("shift-auto-close", async () => {
+            const { registerShiftAutoCloseWorker } = require("../workers/shift-auto-close-worker-boss");
+            await registerShiftAutoCloseWorker(boss, pool);
+          });
         }
 
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
-          const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
-          await registerCourseReleaseWorker(boss, pool);
+          await tryRegister("course-release", async () => {
+            const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
+            await registerCourseReleaseWorker(boss, pool);
+          });
         }
 
         if (String(process.env.KDS_SNAPSHOT_WORKER_ENABLED || "0") === "1") {
-          const { registerKdsSnapshotWorker } = require("../workers/kds-load-snapshot-worker-boss");
-          await registerKdsSnapshotWorker(boss, pool);
+          await tryRegister("kds-snapshot", async () => {
+            const { registerKdsSnapshotWorker } = require("../workers/kds-load-snapshot-worker-boss");
+            await registerKdsSnapshotWorker(boss, pool);
+          });
         }
 
         if (String(process.env.RESERVATION_REMINDER_WORKER_ENABLED || "0") === "1") {
-          const { registerReservationReminderWorker } = require("../workers/reservation-reminder-worker-boss");
-          await registerReservationReminderWorker(boss, pool);
+          await tryRegister("reservation-reminder", async () => {
+            const { registerReservationReminderWorker } = require("../workers/reservation-reminder-worker-boss");
+            await registerReservationReminderWorker(boss, pool);
+          });
         }
 
         // Booking reminders — tenant-aware setInterval poll. Uses
@@ -387,7 +432,7 @@ function startAll(deps) {
           console.log("[BookingReminders] Worker enabled (5-minute poll)");
         }
       })
-      .catch((err) => console.error("[boss] Failed to start pg-boss:", err.message));
+      .catch((err) => console.error("[boss] Failed to start pg-boss:", err && err.stack ? err.stack : err && err.message ? err.message : err));
   }
 }
 
