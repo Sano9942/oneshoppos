@@ -114,9 +114,12 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
       );
     }
 
-    // Admin employee
+    // Admin employee. Set the legacy `role` text column explicitly to
+    // 'Administrator' — the column defaults to 'Cashier' (see schema-pg.sql)
+    // and any UI surface that still reads the text column instead of joining
+    // through role_id would otherwise show the owner as a cashier.
     const empRes = await client.query(
-      "INSERT INTO employees (name, pin_hash, role_id) VALUES ('Admin', $1, $2) RETURNING id",
+      "INSERT INTO employees (name, role, pin_hash, role_id) VALUES ('Admin', 'Administrator', $1, $2) RETURNING id",
       [pinHash, roleId]
     );
     const employeeId = empRes.rows[0].id;

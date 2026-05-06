@@ -338,8 +338,12 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         let empId;
         const pinHash = await bcrypt.hash(String(admin_pin), 10);
         if (existingEmp) {
+          // Set role text alongside name + pin so legacy UI surfaces don't
+          // display the owner as 'Cashier' (the default value of the legacy
+          // role column on employees, retained for back-compat with code that
+          // hasn't migrated to role_id).
           await client.query(
-            "UPDATE employees SET name = $1, pin_hash = $2 WHERE id = $3",
+            "UPDATE employees SET name = $1, pin_hash = $2, role = 'Administrator' WHERE id = $3",
             [admin_name, pinHash, existingEmp.id]
           );
           empId = existingEmp.id;
