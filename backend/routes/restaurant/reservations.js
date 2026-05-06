@@ -13,8 +13,10 @@ module.exports = function registerReservationsRoutes(app, deps) {
     reservationCreateSchema,
     reservationUpdateSchema,
     reservationSmsSchema,
+    reservationSeatSchema,
   } = require("../../schemas/reservations");
   const smsService = require("../../services/sms");
+  const floor = require("../../services/restaurant-floor");
   const logger = require("../../services/logger").child({ component: "reservations" });
 
   const gate = [
@@ -127,6 +129,82 @@ module.exports = function registerReservationsRoutes(app, deps) {
         if (!row) return res.status(404).json({ error: "Reservation not found" });
         res.json(row);
       } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    }
+  );
+
+  // W25 — seat a reservation: pick a table, open a table_session, stamp
+  // reservations.table_id + status='seated'. Until this route shipped, the
+  // Seat button on /restaurant/reservations only flipped status — leaving
+  // table_id null and no floor-side session to order/fire/settle against.
+  app.post(
+    "/api/restaurant/reservations/:id/seat",
+    ...gate,
+    validate(reservationSeatSchema),
+    async (req, res) => {
+      try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
+        const { table_id, server_id, guest_count } = req.body;
+
+        const result = await deps.db.transaction(async (client) => {
+          const { rows: [reservation] } = await client.query(
+            "SELECT * FROM reservations WHERE id = $1",
+            [id]
+          );
+          if (!reservation) {
+            const err = new Error("Reservation not found");
+            err.statusCode = 404;
+            throw err;
+          }
+          if (!["pending", "confirmed", "waitlisted"].includes(reservation.status)) {
+            const err = new Error(
+              `Reservation is ${reservation.status} — only pending/confirmed/waitlisted reservations can be seated`
+            );
+            err.statusCode = 409;
+            throw err;
+          }
+
+          // Re-uses the same service helper that the floor "tap empty table to seat"
+          // flow uses. Throws 409 if the table already has an active session, or
+          // 404 if the table_id is invalid. outlet_id is derived from the table's
+          // floor plan inside openTableSession — reservations.outlet_id may be null.
+          const session = await floor.openTableSession(client, {
+            table_id,
+            server_id: server_id ?? null,
+            guest_count: guest_count ?? reservation.party_size ?? 1,
+          });
+
+          const { rows: [updatedReservation] } = await client.query(
+            `UPDATE reservations
+             SET status = 'seated', table_id = $1, updated_at = NOW()
+             WHERE id = $2
+             RETURNING *`,
+            [table_id, id]
+          );
+
+          return { session, reservation: updatedReservation };
+        });
+
+        try {
+          await deps.db.query(
+            "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+            [
+              req.employee.id,
+              "reservation_seated",
+              JSON.stringify({
+                reservation_id: id,
+                table_id,
+                session_id: result.session.id,
+              }),
+            ]
+          );
+        } catch {}
+
+        res.json(result);
+      } catch (err) {
+        logger.error({ err, reservation_id: req.params.id }, "reservation seat failed");
         res.status(err.statusCode || 500).json({ error: err.message });
       }
     }

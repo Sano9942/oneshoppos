@@ -39,6 +39,12 @@ const reservationSmsSchema = z.object({
   template: z.enum(["confirmation", "reminder", "cancellation"]),
 }).passthrough();
 
+const reservationSeatSchema = z.object({
+  table_id: z.coerce.number().int().positive(),
+  server_id: z.coerce.number().int().positive().optional().nullable(),
+  guest_count: z.coerce.number().int().positive().max(50).optional(),
+}).strict();
+
 // Public booking — tight; the browser can't be trusted with status/source.
 const publicReservationCreateSchema = z.object({
   customer_name: z.string().min(1).max(200),
@@ -53,5 +59,6 @@ module.exports = {
   reservationCreateSchema,
   reservationUpdateSchema,
   reservationSmsSchema,
+  reservationSeatSchema,
   publicReservationCreateSchema,
 };
