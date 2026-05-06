@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 9 | 0 |
-| 🟡 Issue | 0 | 5 | 0 |
-| 🔵 Polish | 11 | 3 | 0 |
-| **Total** | **11** | **17** | **0** |
+| 🔴 Blocker | 1 | 9 | 0 |
+| 🟡 Issue | 1 | 5 | 0 |
+| 🔵 Polish | 12 | 3 | 0 |
+| **Total** | **14** | **17** | **0** |
 
-Last update: 2026-05-07 (Flow 3.1 walked end-to-end on T2 — sale Rs 950 / INV-2026-00001 / 2 KDS tickets bumped / Sales History + Reports show the sale. Three additional fixes shipped during the walkthrough: W15 ✅ `dc58973` default KDS station seed + zero-tickets warning; W16 ✅ `7a16c8e` rehydrate cart on table re-entry; W17 ✅ `7a16c8e` settle marks table dirty + draft completed + Clear Table CTA. Live tenant healed for the next walk by closing dangling T1+T2 sessions via Supabase MCP. Resuming Phase 3 with flow 3.2 after live-verify on T3.)
+Last update: 2026-05-07 (Phase 3 flow 3.2 opened — pre-flight clean. Three findings filed: **W18** (🟡 no "Open Tab" / bar-tab CTA on Restaurant POS landing — backend `POST /api/restaurant/tabs` exists, frontend never calls it), **W19** (🔵 header labels `tableSessionId` as "Table N" instead of `tables.label`), and **W20** (🔴 BLOCKER — cart merges adds by `product_id` alone in `useCart.js:227`, ignoring `seat_number` / `course_name` overlay; second chicken added with Seat 2 selected merged into the Seat 1 group instead of creating a Seat 2 line; breaks split-by-seat). Sitting paused at flow 3.2 step 3 awaiting fix-or-workaround decision.)
 
 ---
 
@@ -946,6 +946,139 @@ UPDATE tenant_sanoposlivetest1778021564659.employees SET role = 'Administrator' 
 Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Owner", role:"Administrator", role_id:1}` ✅
 
 **Note on role-name inconsistency** (surfaced during B2 verification, non-blocking): provisioner inserts role id=1 with `name='Admin'`; setup.js's `roleDefs` then INSERTs (1,'Administrator') with `ON CONFLICT (id) DO NOTHING` so the 'Admin' name persists. `DEFAULT_ROLE_PERMISSIONS.Administrator` therefore doesn't match by name during seed — but provisioner already seeds Admin role with `all_access` via its own `ALL_PERMISSIONS` array (10 perms incl. all_access), so functionally OK. Filed mentally as a follow-up; does not block walkthrough.
+
+---
+
+### W18 — No "Open Tab" / bar-tab CTA on Restaurant POS landing despite backend support
+
+**Status:** OPEN
+**Severity:** 🟡 ISSUE (functional gap — backend feature unreachable from UI)
+**Surfaces affected:** Restaurant POS landing (`/pos/restaurant`); flow 3.2 (Walk-in tab) per `pre-launch-walkthrough-plan-2026-05-07.md` line 230
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 1
+
+**Steps to reproduce:**
+1. Login → `/pos/restaurant`
+2. Inspect the action-bar buttons rendered above the floor.
+
+**Observed:** Three walk-in CTAs render — `New Takeaway`, `New Delivery`, `New Drive-Thru`. Plus 4 table tiles (T1–T4). No "Open Tab" / "Bar Tab" / "Walk-in Tab" button. Per Restaurant POS landing button DOM scrape, the only buttons are the three takeout types and the four table tiles.
+
+**Expected:** Per the script and per backend support, an "Open Tab" CTA that lets a cashier name a tab (e.g. "John W") and ring up items against it without seating a table — the canonical bar-tab pattern.
+
+**Backend evidence the feature exists:**
+- `backend/schemas/restaurant.js:79` exports `createTabSchema` (also documented in `backend/schemas/CLAUDE.md` "Restaurant schemas" section)
+- `backend/routes/restaurant.js:366` mounts `POST /api/restaurant/tabs` with `validate(createTabSchema)`
+- `backend/routes/restaurant.js:375` mounts `POST /api/restaurant/tabs/:id/close`
+- `backend/schemas/restaurant.js:43` `createCheckSchema` has a `tab_id` branch alongside `table_session_id`
+- `backend/schemas/restaurant.js:44` `order_context` enum includes `"bar"` and `"drive_thru"` values
+
+**Frontend evidence the feature is unreachable:**
+- `frontend/src/pages/redesign/pos/restaurant/RestaurantHeader.jsx:33-35` only maps `dine_in / takeout / delivery` — no `bar` or `drive_thru` mapping; the Drive-Thru CTA likely sets one of the existing 3 contexts
+- Repo-wide grep `/api/restaurant/tabs` returns zero matches under `frontend/src` — no caller exists
+- Repo-wide grep `tab_id` in frontend returns zero matches — `createCheckSchema`'s tab branch is never wired
+- `RestaurantFloorGrid.jsx:177` `openTableCheck` is a *table-session* function, not a tab opener
+
+**Console / network errors:** None — no broken state. Pure missing UI surface.
+
+**Screenshot filename:** None taken (W18 is "absence of a button" — script reflects observed state).
+
+**Suspected root cause:** Restaurant POS landing scaffolded with 3 fixed walk-in buttons + table tiles; bar-tab path was implemented backend-only and never wired into the action bar. Likely the "Walk-in Tab" pattern was punted to a later phase. No commit history check done.
+
+**Impact / severity reasoning:** Bar-tab is a real restaurant pattern (cocktail bar, taproom, café counter where a guest leaves a card open and adds items over an hour). Today merchants must use "New Takeaway" (loses the bar-tab semantics: no name, no separate ledger, gets settled immediately) or seat them at a virtual table. **Not 🔴 launch-blocker** because there is a workaround (use Takeaway or a table) and the script explicitly allows the table fallback. **🟡 because** the backend feature exists, suggesting a UI gap that's mostly mechanical to close — a "+ Open Tab" button + a small modal capturing tab name → POST `/api/restaurant/tabs` → set `orderContext='bar'` + `tabId` → header maps `bar → "Tab: <name>"`.
+
+**Suggested fix:** Add a fourth walk-in button "+ Open Tab" alongside Takeaway/Delivery/Drive-Thru in `RestaurantFloorGrid.jsx`'s top action row. Modal captures tab name. POST → `/api/restaurant/tabs` → use returned `tab.id` as `tab_id` for the next `createCheckSchema` POST. Extend `RestaurantHeader.jsx:33-35` to render `bar → "Tab: <tab_name>"`. Persist `tabId` in `POSContext` next to `tableSessionId`.
+
+**Plan reconciliation:** Walkthrough flow 3.2 says "POS → Open Tab → tab name 'John W' → ... → Split bill by seat". Split-by-seat only makes sense on a seated entity. In practice the script conflates "walk-in tab" with the seat-split flow; in the real product, a bar-tab would have one seat (the named patron) and split-by-seat on a 1-seat tab is degenerate. So even with W18 fixed, the seat-split exercise would be done against a *table* with a tab attached, not a seatless bar-tab. **Walkthrough proceeds using T1 as the walk-in vehicle for "John W"** — exercises the same downstream spine (modifiers → multi-seat assign → split-by-seat → tip pool) without being blocked on W18.
+
+---
+
+### W19 — Restaurant header labels session_id as "Table N" instead of using table label
+
+**Status:** OPEN
+**Severity:** 🔵 POLISH (cosmetic; functional flow is unaffected)
+**Surfaces affected:** `RestaurantHeader.jsx` — Restaurant POS check view header strip (and its collapsed variant). Visible from the moment a cashier seats a table until they leave the check.
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 1 (post-seat). Seated T1 (`table_id=1`, `label='T1'`) → header rendered `"Table 4"`. Verified via Supabase MCP that the seated session_id is 4 and the matching table is T1.
+
+**Steps to reproduce:**
+1. `/pos/restaurant` → tap any table tile (e.g. T1) → confirm Seat modal at 2 guests.
+2. Land on the check view.
+3. Inspect the dark header strip — top-left badge.
+
+**Observed:** "Table 4" (= the `restaurant_table_sessions.id` from the just-created session row).
+
+**Expected:** "Table T1" (or "T1") — the human-readable `restaurant_tables.label` of the seated table. A cashier doesn't think in session ids.
+
+**Why this matters in production:** Today the test tenant happens to have session_ids 1–4 and tables T1–T4, so the misalignment looks innocuous. In production, `restaurant_table_sessions.id` is a SERIAL that monotonically grows forever — by the 5,000th seating on T1, the header will read `"Table 5000"` while the actual table is T1.
+
+**Suspected root cause file:line:** `frontend/src/pages/redesign/pos/restaurant/RestaurantHeader.jsx:33` —
+```jsx
+const contextLabel =
+  orderContext === "dine_in"   ? `Table ${tableSessionId ?? "—"}` :
+  ...
+```
+The component comment on line 6 even says *"Shows table label + guest count + server name + elapsed time."* — the intent was always to show the label; the implementation just wired the wrong field. `usePOS()` provides `tableSessionId`, `seatCount`, `employee` from line 11 but does not currently expose `tableLabel`.
+
+**Suggested fix (minimal):**
+1. In `RestaurantFloorGrid.jsx:177-185`, the `openTableCheck` payload already has access to `table.label` (the floor-grid pre-loaded the table list). Add `tableLabel: table.label` to the `openCheck()` call alongside `tableSessionId`.
+2. Add `tableLabel` to `POSContext` state (next to `tableSessionId`).
+3. In `RestaurantHeader.jsx:11`, destructure `tableLabel`, then change line 33 to `\`Table ${tableLabel ?? tableSessionId ?? "—"}\``.
+4. Same change in the collapsed-strip render (line ~52) and in the cart-collision confirm message (`RestaurantFloorGrid.jsx:341-342` — same `Table ${tableSessionId}` typo).
+
+**Console / network errors:** None.
+
+**Screenshot:** Skipped — header text rendered exactly as DOM-snapshotted (`Table 4`, `Guests: 2`, `Elapsed: 00:12`, `Server: Test Owner`).
+
+---
+
+### W20 — Restaurant cart merges adds by product_id alone, ignoring seat_number / course_name
+
+**Status:** OPEN
+**Severity:** 🔴 BLOCKER (breaks split-bill-by-seat flow at the data layer; you cannot get two same-product items onto two different seats from the UI)
+**Surfaces affected:** Restaurant POS check view; flow 3.2 step 2-3 (assign first chicken to seat 1, second to seat 2). Also affects every restaurant flow where a cashier rings up the same item for multiple seats — which is most multi-guest tables ordering the same dish.
+**Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2.
+
+**Steps to reproduce:**
+1. Seat any table (e.g. T1, 2 guests).
+2. SeatCoursePicker shows `Seat 1` selected. Choose any course (e.g. C3 Entrée).
+3. Search "grilled" → click Grilled Chicken (Sample). Cart now shows: `Seat 1 · Course 3 · Entrée — Grilled Chicken × 1 — Rs 1,200.00`. ✅ correct.
+4. Switch SeatCoursePicker to `Seat 2` (no other change).
+5. Search "grilled" → click Grilled Chicken (Sample) again.
+
+**Observed:** Cart shows a single group `Seat 1 · Course 3 · Entrée — Grilled Chicken × 2 — Rs 2,400.00` (one cart line, qty bumped to 2). Seat 2 group is never created.
+
+**Expected:** Cart shows two separate groups — `Seat 1 · Course 3 — × 1` and `Seat 2 · Course 3 — × 1` (each as its own line, since they belong to different guests). This is the canonical two-guests-same-dish pattern that flow 3.2 + split-by-seat depend on.
+
+**Suspected root cause file:line:** `frontend/src/pages/redesign/pos/hooks/useCart.js:227` —
+```js
+const found = forceNewLine ? null : prev.find((x) => x.id === product.id);
+if (found) {
+  // increments existing line's quantity
+  ...
+}
+// else: NEW line gets the seat overlay stamped on line 244
+```
+The merge predicate matches on `product.id` alone. The seat overlay (`overlay.seat_number`, `overlay.course_name`, set by `buildSeatCourseOverlay()` in `POSContext.jsx:425-431`) is only applied on the **first** add of a product. Subsequent adds of the same product collapse onto whatever seat/course the first add used, regardless of the SeatCoursePicker's current state.
+
+**Why this is a 🔴 BLOCKER:**
+- Split-bill-by-seat requires items per seat. If the cart can't represent "Grilled Chicken × 1 on Seat 1, Grilled Chicken × 1 on Seat 2", there is nothing for `splitCheckSchema` `split_type: "by_seat"` to split by — both chickens appear on the same seat group's bill.
+- The data layer is correct (`draft_order_items` and `sale_items` both have `seat_number` and `course_name` columns; `cartGrouping.js` correctly groups by seat+course). The bug is purely in the cart-add merge predicate.
+- Workaround for the walkthrough: bulk-scan mode `"new_line"` (`localStorage["pos_bulk_scan_mode_${deviceId}"] = "new_line"`, see `useCart.js:218-225`) bypasses the merge entirely — every add creates a fresh line. Not a real merchant workaround (forces every add to be a new line, breaking quantity-bumping for legitimate "same item, same seat" adds).
+
+**Suggested fix (one-line for retail-safety):** change line 227's predicate to:
+```js
+const found = forceNewLine ? null
+  : prev.find((x) => x.id === product.id
+      && (x.seat_number ?? null) === (seatStamp ?? null)
+      && (x.course_name ?? "main") === (courseStamp ?? "main"));
+```
+This preserves retail's "increment qty" behavior (where every line has `seat_number=null, course_name="main"` so all match) while letting restaurant lines split by the (seat, course) pair. Add a unit test in `frontend/tests/unit/pos-context-open-check.test.jsx` (or `cartMath`-adjacent) that asserts: `addToCart(p, {seat:1,course:"course_1"}); addToCart(p, {seat:2,course:"course_1"})` → 2 lines, not 1.
+
+**Console / network errors:** None — the bug is purely in client-side cart state. No network call yet (no `ensureDraftOrder` until Send to Kitchen / Pay-at-Table per W14 plumbing).
+
+**Screenshot:** `restaurant-walkthrough-phase3-3.2-cart-merged-into-seat1-2026-05-07.png` (will capture before un-blocking).
+
+**Plan implication for flow 3.2:** Cannot exercise split-by-seat as scripted with this bug. Two options to keep the sitting moving:
+1. Fix W20 first (~10 min change + test), live-verify, then resume 3.2 step 3 cleanly.
+2. Use the `"new_line"` bulk-scan workaround for the walkthrough only — file W20 as found, and note the workaround in the session log so future reads know split-by-seat was exercised under non-default cart settings.
 
 ---
 

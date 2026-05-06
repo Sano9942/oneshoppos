@@ -19,13 +19,22 @@ function resolveBulkScanForceNewLine() {
   return mode === "new_line";
 }
 
-function simulateAddToCart(prev, product) {
+function simulateAddToCart(prev, product, overlay = {}) {
   const forceNewLine = resolveBulkScanForceNewLine();
-  const found = forceNewLine ? null : prev.find((x) => x.id === product.id);
+  // W20: restaurant carts split lines by seat+course in addition to product_id.
+  // Retail flow passes no overlay → seat=null / course="main" on every line, so
+  // the predicate degenerates to plain id-equality.
+  const seatStamp = overlay.seat_number ?? null;
+  const courseStamp = overlay.course_name ?? "main";
+  const matchesLine = (x) =>
+    x.id === product.id
+    && (x.seat_number ?? null) === (seatStamp ?? null)
+    && (x.course_name ?? "main") === (courseStamp ?? "main");
+  const found = forceNewLine ? null : prev.find(matchesLine);
   if (found) {
-    return prev.map((x) => (x.id === product.id ? { ...x, quantity: x.quantity + 1 } : x));
+    return prev.map((x) => (matchesLine(x) ? { ...x, quantity: x.quantity + 1 } : x));
   }
-  return [{ ...product, quantity: 1 }, ...prev];
+  return [{ ...product, quantity: 1, seat_number: seatStamp, course_name: courseStamp }, ...prev];
 }
 
 const WIDGET = { id: 42, name: "Widget", price: 100 };
@@ -73,5 +82,63 @@ describe("bulk-scan toggle — addToCart branching", () => {
     cart = simulateAddToCart(cart, WIDGET);
     expect(cart).toHaveLength(1);
     expect(cart[0].quantity).toBe(2);
+  });
+});
+
+// W20 — restaurant cart-line splitting by (seat_number, course_name).
+//
+// Before the fix, useCart.addToCart matched on product.id alone, so adding the
+// same dish to a different seat just bumped the existing line's quantity.
+// Split-bill-by-seat had nothing to split. The fix extends the merge predicate
+// to also compare seat_number + course_name; retail (no overlay) is unchanged
+// because retail lines all have seat=null / course="main".
+
+describe("W20 — restaurant cart split by seat + course", () => {
+  it("retail flow (no overlay) still increments existing line", () => {
+    let cart = [];
+    cart = simulateAddToCart(cart, WIDGET);
+    cart = simulateAddToCart(cart, WIDGET);
+    expect(cart).toHaveLength(1);
+    expect(cart[0].quantity).toBe(2);
+    expect(cart[0].seat_number).toBe(null);
+    expect(cart[0].course_name).toBe("main");
+  });
+
+  it("same product on two seats produces two separate lines", () => {
+    let cart = [];
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_3" });
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 2, course_name: "course_3" });
+    expect(cart).toHaveLength(2);
+    expect(cart[0].quantity).toBe(1);
+    expect(cart[1].quantity).toBe(1);
+    const seats = cart.map((x) => x.seat_number).sort();
+    expect(seats).toEqual([1, 2]);
+  });
+
+  it("same product, same seat, two courses produces two separate lines", () => {
+    let cart = [];
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_1" });
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_3" });
+    expect(cart).toHaveLength(2);
+    const courses = cart.map((x) => x.course_name).sort();
+    expect(courses).toEqual(["course_1", "course_3"]);
+  });
+
+  it("same product, same seat, same course increments existing line", () => {
+    let cart = [];
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_3" });
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_3" });
+    expect(cart).toHaveLength(1);
+    expect(cart[0].quantity).toBe(2);
+    expect(cart[0].seat_number).toBe(1);
+    expect(cart[0].course_name).toBe("course_3");
+  });
+
+  it("two different products on the same seat+course are separate lines (id is still part of the key)", () => {
+    const FRIES = { id: 7, name: "Fries", price: 200 };
+    let cart = [];
+    cart = simulateAddToCart(cart, WIDGET, { seat_number: 1, course_name: "course_3" });
+    cart = simulateAddToCart(cart, FRIES,  { seat_number: 1, course_name: "course_3" });
+    expect(cart).toHaveLength(2);
   });
 });

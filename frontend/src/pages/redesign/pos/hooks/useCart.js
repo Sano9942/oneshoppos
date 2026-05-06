@@ -223,14 +223,21 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
       bulkScanMode = localStorage.getItem(`pos_bulk_scan_mode_${deviceId}`) || "increment";
     } catch { /* localStorage unavailable — keep default */ }
     const forceNewLine = bulkScanMode === "new_line";
+    // W20: restaurant carts must split lines by seat+course, not just product_id,
+    // so the same dish on different seats produces separate lines. Retail flow is
+    // unchanged because retail lines all carry seat_number=null / course_name="main".
+    const matchesLine = (x) =>
+      x.id === product.id
+      && (x.seat_number ?? null) === (seatStamp ?? null)
+      && (x.course_name ?? "main") === (courseStamp ?? "main");
     setCart((prev) => {
-      const found = forceNewLine ? null : prev.find((x) => x.id === product.id);
+      const found = forceNewLine ? null : prev.find(matchesLine);
       if (found) {
         if (!isBundle && stock > 0 && found.quantity >= stock)
           showNotice?.(`Note: Selling past available stock (${stock} in stock).`);
         const nextQty = found.quantity + 1;
         return prev.map((x) => {
-          if (x.id !== product.id) return x;
+          if (!matchesLine(x)) return x;
           const plMatch = resolvePriceListPrice(x.id, x.variant_id, nextQty);
           const resolvedPrice = plMatch ? Number(plMatch.price) : x.originalPrice;
           return { ...x, quantity: nextQty, price: resolvedPrice };
