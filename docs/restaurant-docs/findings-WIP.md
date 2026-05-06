@@ -21,64 +21,78 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 2 | 0 | 0 |
-| 🟡 Issue | 1 | 0 | 0 |
+| 🔴 Blocker | 0 | 2 | 0 |
+| 🟡 Issue | 1 | 1 | 0 |
 | 🔵 Polish | 9 | 0 | 0 |
-| **Total** | **12** | **0** | **0** |
+| **Total** | **10** | **3** | **0** |
 
-Last update: 2026-05-07 (initial population from discovery report).
+Last update: 2026-05-07 (B1, B2, I1 fixed; B1.5 added for deferred non-restaurant schema drift).
 
 ---
 
 ## 🔴 BLOCKERS
 
-### B1 — Schema drift: 6 tables missing on fresh tenants
+### B1 — Schema drift: tables + columns + constraints missing on fresh tenants ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `449b6a6` (2026-05-07)
 **Severity:** 🔴 Launch-blocker
-**Surfaces affected:** Void/Comp (manager PIN), Day-parting (menu schedules), Reservations admin, Reservations public form, Waitlist, Pay-at-Table
+**Surfaces affected:** Void/Comp (manager PIN), Day-parting (menu schedules), Reservations admin, Reservations public form, Waitlist, Pay-at-Table, KDS routing, KDS analytics, table-session housekeeping ('dirty' status), admin infra panel
 
-**Root cause:**
-- `backend/tenant-provisioner-pg.js:78-93` runs `schema-pg.sql` to create tables, then INSERTs `schema_version` rows for ALL `MIGRATIONS` (1..N) marking them applied.
-- Migration runner (`backend/migrate-pg.js`) checks `schema_version` and skips applied versions.
-- `schema-pg.sql` is missing 6 tables that v59 (Phase 2-R Wave B) and v61 add:
-  - `void_reason_codes`
-  - `sale_item_adjustments`
-  - `menu_schedules`
-  - `menu_schedule_products`
-  - `reservations`
-  - `waitlist_entries`
-  - `restaurant_payment_sessions`
-- Result: every fresh tenant marks v59/v61 as applied but never gets the tables.
+**Scope expanded during fix-it session 2026-05-07** after source verification revealed broader drift than the discovery report's 7 tables. Final scope landed:
 
-**Live verification (via Supabase MCP, project `tpjewvfoqtskscmwjtjj`):**
-- `sanoposlivetest1778021564659.schema_version MAX(version) = 85` ✅
-- `to_regclass('tenant_sanoposlivetest1778021564659.void_reason_codes') = NULL` ❌
-- `to_regclass('tenant_sanoposlivetest1778021564659.menu_schedules') = NULL` ❌
-- `to_regclass('tenant_sanoposlivetest1778021564659.reservations') = NULL` ❌
-- `to_regclass('tenant_sanoposlivetest1778021564659.waitlist_entries') = NULL` ❌
+**Tables added to `backend/schema-pg.sql` (8):**
+- `sale_item_adjustments` (v59)
+- `void_reason_codes` + 10 default reason rows (v59)
+- `menu_schedules` + `menu_schedule_products` (v59)
+- `kds_station_load_snapshots` (v60) — initially missed by discovery
+- `restaurant_payment_sessions` (v61)
+- `reservations` (v61)
+- `waitlist_entries` (v61)
+- `public.infra_cache` (v50, public-schema-qualified) — initially missed by discovery
 
-**Affected routes (will all 500 on a fresh restaurant tenant):**
-- `backend/routes/restaurant/void-comp.js` — reads `void_reason_codes`, writes `sale_item_adjustments`
-- `backend/routes/restaurant/menu-schedules.js` — reads/writes `menu_schedules`, `menu_schedule_products`
-- `backend/routes/restaurant/reservations.js` — reads/writes `reservations`
-- `backend/routes/public-reservations.js`
-- `backend/routes/restaurant/waitlist.js` — reads/writes `waitlist_entries`
-- `backend/routes/restaurant/pay-at-table.js` — writes `restaurant_payment_sessions`, references `sale_item_adjustments`
+**Column additions also synced:**
+- `outlets.timezone` (v59)
+- `kds_stations.printer_id`, `balance_strategy`, `target_prep_seconds`, `last_assigned_at` + balance_strategy CHECK (v59)
+- `printer_config.purpose` + purpose CHECK (v59)
+- `kds_tickets.fired_at`, `bumped_at`, `recalled_at`, `prep_seconds` + 2 indexes (v60)
+- `restaurant_table_sessions.status` CHECK widened to include 'dirty' (v61)
 
-**Fix path:**
-1. Add the missing CREATE TABLE statements to `backend/schema-pg.sql` so fresh provisioners create them.
-2. For existing tenants like `sanoposlivetest1778021564659`: run the CREATE TABLE statements manually against their schema, OR delete v59/v61 rows from `schema_version` and re-run migrations.
-3. Verify via `to_regclass(...)` query for each table.
-4. Re-test the affected routes return 200 (or expected 4xx, not 500).
+**Root cause:** `backend/tenant-provisioner-pg.js:88-94` INSERTs `schema_version` rows for ALL migrations (1..N), so the migration runner skips re-applying them. When `schema-pg.sql` was missing those migrations' end-state, fresh tenants got the schema_version row saying "applied" while the tables/columns/constraints didn't exist.
 
-**Source:** `discovery-2026-05-07.md` §8.1.A
+**Live test tenant** (`sanoposlivetest1778021564659`) was healed out-of-band — see Healing log below for full DDL trail and per-step verification.
+
+**Out-of-scope (filed as B1.5 below for follow-up):** `treatment_plan_templates`, outlets geofence cols, leave_requests partial-day cols, company_profile v77 onboarding cols.
+
+**Source:** `discovery-2026-05-07.md` §8.1.A; expanded scope verified against migrate-pg.js v50, v59, v60, v61
 
 ---
 
-### B2 — Manager role missing 13 perms
+### B1.5 — Non-restaurant schema drift (deferred from B1)
 
-**Status:** OPEN
+**Status:** OPEN — scoped out of Phase 0 session 2026-05-07
+**Severity:** 🟡 functional outside the restaurant vertical
+**Scope note:** Deferred from Phase 0 session 2026-05-07. Fix in next focused schema-sync session covering full v1..v85 audit. Discovery (2026-05-07) did not catch these because it only audited restaurant surface area; B1's source-verification pass surfaced them.
+
+Each item is `to_regclass`/`information_schema.columns` NULL on a fresh tenant for the same root cause as B1 — provisioner pre-stamps `schema_version` so the migration is skipped, but `schema-pg.sql` doesn't have the equivalent DDL.
+
+| Item | Source | Severity guess | Used by |
+|---|---|---|---|
+| `treatment_plan_templates` table | v46 — `migrate-pg.js:3872` (CREATE TABLE) + `:3890` (idx_treatment_plan_templates_archived) | functional (clinic preset only) | `routes/treatment-plan-templates.js`, treatment-plan worker reminders |
+| `outlets.latitude`, `outlets.longitude`, `outlets.geofence_radius_meters` (NUMERIC(10,7), NUMERIC(10,7), INTEGER) | v19 — `migrate-pg.js:1227` | functional | `routes/attendance.js` (4 refs — PIN-checkin geofence enforcement) |
+| `leave_requests.partial_day` (BOOLEAN), `start_time` (TIME), `end_time` (TIME), `schedule_impact_status` (TEXT) | v19 — `migrate-pg.js:1230` | functional | `routes/tier4/hr.js` (3 refs — partial-day leave + scheduling overlap detection) |
+| `company_profile.multi_outlet_flags_seeded` (BOOLEAN DEFAULT false) | v77 — `migrate-pg.js:5623` | functional | `routes/outlets.js` (5 refs — gates the 5-flag seed when 2nd outlet is created; without it `seedMultiOutletFlags` re-fires on every outlet POST) |
+| `company_profile.test_receipt_printed_at` (TIMESTAMPTZ) | v77 — `migrate-pg.js:5624` | functional | `routes/printer.js` (3 refs — onboarding "test print" marker) |
+| `company_profile.fbr_banner_dismissed` (BOOLEAN DEFAULT false) | v77 — `migrate-pg.js:5625` | cosmetic | `routes/tier4/company-profile.js` (1 ref — dismissable FBR banner) |
+
+**Fix path:** dedicated schema-sync session — read each migration version v1..v85 in `migrate-pg.js`, audit cumulative end-state vs `schema-pg.sql`, ALTER TABLE / CREATE TABLE for each gap, heal existing tenants. The B1 session healed only the restaurant-relevant subset.
+
+**Source:** verified against migrate-pg.js source during B1 source-verification pass; agent's full-scope drift inventory referenced internally in this session.
+
+---
+
+### B2 — Manager role missing 13 perms ✅ FIXED
+
+**Status:** ✅ FIXED — commit `0212ccc` (2026-05-07)
 **Severity:** 🔴 Launch-blocker (functional lockout for non-admins)
 **Surfaces affected:** Every restaurant route gated by `manage_restaurant`, `manage_kds`, `manage_tips`, `override_void_comp`, `override_price`, `manage_gift_cards`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`
 
@@ -110,9 +124,9 @@ Last update: 2026-05-07 (initial population from discovery report).
 
 ## 🟡 ISSUES
 
-### I1 — Owner employee `role` text column says "Cashier"
+### I1 — Owner employee `role` text column says "Cashier" ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED — commit `2a322eb` (2026-05-07)
 **Severity:** 🟡 Cosmetic-to-medium (depends on UI surfaces reading the text column)
 
 **Root cause:**
@@ -213,7 +227,88 @@ Test tenant has `tax_mode='none'` but country pack PK auto-enabled `fbr_integrat
 
 > Record any DDL or DML run directly against `tenant_sanoposlivetest1778021564659` outside the migration runner. Future tenants get the same state via the migration / setup fixes, but the live test tenant predates them and needs manual catch-up.
 
-(empty so far — entries appended as fixes ship)
+### 2026-05-07 — B1 + B2 + I1 fixes shipped, live tenant healed
+
+Run via Supabase MCP against project `tpjewvfoqtskscmwjtjj`. Each step verified with a follow-up SELECT before proceeding.
+
+**B1 heal — column additions (v59 + v60 + v61 CHECK):**
+
+```sql
+-- v59: outlets.timezone
+ALTER TABLE tenant_sanoposlivetest1778021564659.outlets ADD COLUMN IF NOT EXISTS timezone TEXT;
+
+-- v59: kds_stations columns + balance_strategy CHECK
+ALTER TABLE tenant_sanoposlivetest1778021564659.kds_stations
+  ADD COLUMN IF NOT EXISTS printer_id INTEGER REFERENCES tenant_sanoposlivetest1778021564659.printer_config(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS balance_strategy TEXT NOT NULL DEFAULT 'priority',
+  ADD COLUMN IF NOT EXISTS target_prep_seconds INTEGER,
+  ADD COLUMN IF NOT EXISTS last_assigned_at TIMESTAMPTZ;
+ALTER TABLE tenant_sanoposlivetest1778021564659.kds_stations DROP CONSTRAINT IF EXISTS kds_stations_balance_strategy_check;
+ALTER TABLE tenant_sanoposlivetest1778021564659.kds_stations ADD CONSTRAINT kds_stations_balance_strategy_check CHECK (balance_strategy IN ('priority','round_robin','least_loaded'));
+
+-- v59: printer_config.purpose + CHECK
+ALTER TABLE tenant_sanoposlivetest1778021564659.printer_config ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'receipt';
+ALTER TABLE tenant_sanoposlivetest1778021564659.printer_config DROP CONSTRAINT IF EXISTS printer_config_purpose_check;
+ALTER TABLE tenant_sanoposlivetest1778021564659.printer_config ADD CONSTRAINT printer_config_purpose_check CHECK (purpose IN ('receipt','fire_chit','guest_bill','expo'));
+
+-- v60: kds_tickets timing columns + 2 indexes
+ALTER TABLE tenant_sanoposlivetest1778021564659.kds_tickets
+  ADD COLUMN IF NOT EXISTS fired_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS recalled_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS prep_seconds INTEGER;
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_station_bumped ON tenant_sanoposlivetest1778021564659.kds_tickets(station_id, bumped_at) WHERE bumped_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_fired_at ON tenant_sanoposlivetest1778021564659.kds_tickets(fired_at) WHERE fired_at IS NOT NULL;
+
+-- v61: restaurant_table_sessions status CHECK widened to include 'dirty'
+ALTER TABLE tenant_sanoposlivetest1778021564659.restaurant_table_sessions DROP CONSTRAINT IF EXISTS restaurant_table_sessions_status_check;
+ALTER TABLE tenant_sanoposlivetest1778021564659.restaurant_table_sessions ADD CONSTRAINT restaurant_table_sessions_status_check CHECK (status IN ('seated','ordering','served','check_requested','closed','dirty'));
+```
+
+Verify (information_schema.columns + pg_get_constraintdef): all 10 columns present, dirty CHECK live ✅
+
+**B1 heal — 8 new tables (full DDL bodies in commit `449b6a6`'s schema-pg.sql additions; same DDL run with explicit `tenant_sanoposlivetest1778021564659.` schema qualifier):**
+
+- `sale_item_adjustments` + 2 indexes (v59)
+- `void_reason_codes` + 10 default reason rows via INSERT ... ON CONFLICT (code) DO NOTHING (v59)
+- `menu_schedules` + `menu_schedule_products` + idx_menu_schedule_products_product (v59)
+- `kds_station_load_snapshots` + idx_kds_load_snapshots_station_time (v60)
+- `restaurant_payment_sessions` + idx_rps_status_expires + idx_rps_table_session (v61)
+- `reservations` + 3 indexes (idx_reservations_start, _status, _table) (v61)
+- `waitlist_entries` + idx_waitlist_status_position (v61)
+
+`public.infra_cache` was confirmed already present in `public` schema (`to_regclass('public.infra_cache')` returns `infra_cache`) — likely landed via a previous migrate-pg.js run against public schema, no separate heal needed.
+
+Verify (`to_regclass` for each): all 8 tables present, void_reason_codes seed count = 10 ✅
+
+**B2 heal — Manager perm backfill:**
+
+```sql
+INSERT INTO tenant_sanoposlivetest1778021564659.role_permissions (role_id, permission)
+SELECT 2, perm FROM unnest(ARRAY[
+  'manage_inventory', 'manage_orders', 'view_reports', 'manage_employees',
+  'pos_discount', 'void_sales', 'pos_park', 'pos_void',
+  'manage_restaurant', 'manage_kds', 'manage_bookings', 'manage_projects',
+  'manage_contracts', 'manage_tickets', 'manage_rentals', 'manage_rooms',
+  'manage_treatment_plans', 'manage_tips', 'override_void_comp',
+  'manage_gift_cards', 'override_price'
+]) AS perm
+ON CONFLICT (role_id, permission) DO NOTHING;
+```
+
+Inserted all 21 canonical Manager perms; the 8 already-present rows were skipped via ON CONFLICT.
+
+Verify (`SELECT COUNT(...) FROM role_permissions WHERE role_id = 2`): Manager 8 → 21 perms ✅
+
+**I1 heal — owner role text:**
+
+```sql
+UPDATE tenant_sanoposlivetest1778021564659.employees SET role = 'Administrator' WHERE id = 1 AND role_id = 1;
+```
+
+Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Owner", role:"Administrator", role_id:1}` ✅
+
+**Note on role-name inconsistency** (surfaced during B2 verification, non-blocking): provisioner inserts role id=1 with `name='Admin'`; setup.js's `roleDefs` then INSERTs (1,'Administrator') with `ON CONFLICT (id) DO NOTHING` so the 'Admin' name persists. `DEFAULT_ROLE_PERMISSIONS.Administrator` therefore doesn't match by name during seed — but provisioner already seeds Admin role with `all_access` via its own `ALL_PERMISSIONS` array (10 perms incl. all_access), so functionally OK. Filed mentally as a follow-up; does not block walkthrough.
 
 ---
 
