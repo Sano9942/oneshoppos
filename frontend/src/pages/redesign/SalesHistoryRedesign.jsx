@@ -12,13 +12,16 @@ import {
 } from "../../ui/primitives";
 import { api } from "../../api";
 import InvoiceView from "../InvoiceView";
-import { Ban, Download, FileText, Mail, MessageCircle, Printer, RefreshCw, Search, Share2 } from "lucide-react";
+import { Ban, Download, FileText, Gift, Mail, MessageCircle, Printer, RefreshCw, Search, Share2 } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { buildReceiptHtml } from "../../utils/receipt";
 import { buildPublicReceiptUrl, buildWhatsAppShareUrl } from "../../utils/publicReceipt";
 import POSEmailReceiptModal from "./pos/POSEmailReceiptModal";
+import VoidCompModal from "./pos/restaurant/VoidCompModal";
 
 const formatDate = fmtUtcDateTime;
 
@@ -64,6 +67,10 @@ export default function SalesHistoryRedesign() {
   const { fmt: money, symbol: currencySymbol } = useCurrency();
   const navigate = useNavigate();
   const toast = useToast();
+  const { authHeaders, hasPerm } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
+  const canCompVoid =
+    flags.phase4_restaurant_void_comp && (hasPerm("manage_restaurant") || hasPerm("all_access"));
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,6 +89,17 @@ export default function SalesHistoryRedesign() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [invoiceSaleId, setInvoiceSaleId] = useState(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  // W29 — per-line comp/void on a settled sale. Modal opens with the
+  // tapped sale_item_id, posts to /api/restaurant/sale-items/:id/adjust.
+  // Adjustments list rendered as inline badges on each item line.
+  const [adjustments, setAdjustments] = useState([]);
+  const [voidCompState, setVoidCompState] = useState({
+    open: false,
+    tab: "comp",
+    saleItemId: null,
+    itemName: null,
+    remainingAmount: 0,
+  });
 
   const loadSales = useCallback(
     async (nextPage = page) => {
@@ -109,13 +127,29 @@ export default function SalesHistoryRedesign() {
     [page, search, dateFrom, dateTo],
   );
 
+  const loadAdjustments = useCallback(async (saleId) => {
+    if (!saleId || !canCompVoid) {
+      setAdjustments([]);
+      return;
+    }
+    try {
+      const data = await api.get(`/api/restaurant/adjustments?sale_id=${saleId}`);
+      setAdjustments(Array.isArray(data) ? data : []);
+    } catch {
+      // Non-restaurant tenant or flag off — leave empty, no error toast
+      setAdjustments([]);
+    }
+  }, [canCompVoid]);
+
   const loadDetail = async (sale) => {
     setSelected(sale);
     setDetail(null);
+    setAdjustments([]);
     setDetailLoading(true);
     try {
       const data = await api.get(`/api/sales/${sale.id}`);
       setDetail(data);
+      loadAdjustments(sale.id);
     } catch (e) {
       setError(e.message || "Failed to load sale details");
     } finally {
@@ -418,21 +452,87 @@ export default function SalesHistoryRedesign() {
 
                     <div>
                       <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
-                      <div className="max-h-44 space-y-2 overflow-auto">
+                      <div className="max-h-56 space-y-2 overflow-auto">
                         {itemsWithRemaining.map((item) => {
                           const refunded = Number(item.refunded_qty || 0);
+                          const lineTotal = Number(item.price_at_sale || 0) * Number(item.quantity || 0);
+                          const lineAdjustments = adjustments.filter((a) => a.sale_item_id === item.id);
+                          const compTotal = lineAdjustments
+                            .filter((a) => a.adjustment_type === "comp")
+                            .reduce((s, a) => s + Number(a.amount || 0), 0);
+                          const voidTotal = lineAdjustments
+                            .filter((a) => a.adjustment_type === "void")
+                            .reduce((s, a) => s + Number(a.amount || 0), 0);
+                          const adjustedTotal = compTotal + voidTotal;
+                          const remainingAdjustable = Math.max(0, lineTotal - adjustedTotal);
+                          const fullyAdjusted = adjustedTotal >= lineTotal && lineTotal > 0;
                           return (
                             <div key={item.id} className="rounded border border-(--ui-border) p-2 text-xs">
-                              <p className="font-medium text-(--ui-text)">{item.product_name}</p>
-                              <p className="text-(--ui-text-muted)">
-                                {item.quantity} x {money(item.price_at_sale)}
-                                {refunded > 0 ? (
-                                  <span className="ml-1 text-rose-600">
-                                    ({refunded} refunded
-                                    {item.remainingQty > 0 ? `, ${item.remainingQty} remaining` : ""})
-                                  </span>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-(--ui-text)">{item.product_name}</p>
+                                  <p className="text-(--ui-text-muted)">
+                                    {item.quantity} x {money(item.price_at_sale)}
+                                    {refunded > 0 ? (
+                                      <span className="ml-1 text-rose-600">
+                                        ({refunded} refunded
+                                        {item.remainingQty > 0 ? `, ${item.remainingQty} remaining` : ""})
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                  {lineAdjustments.length > 0 ? (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {lineAdjustments.map((a) => (
+                                        <span
+                                          key={a.id}
+                                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                            a.adjustment_type === "comp"
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : "bg-rose-50 text-rose-700"
+                                          }`}
+                                          title={`${a.reason_label || a.reason_code}${a.reason_note ? ` — ${a.reason_note}` : ""}`}
+                                        >
+                                          {a.adjustment_type === "comp" ? "Comped" : "Voided"} {money(a.amount)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                {canCompVoid && !Number(detail.sale.voided || 0) ? (
+                                  <div className="flex shrink-0 gap-1">
+                                    <button
+                                      type="button"
+                                      disabled={fullyAdjusted}
+                                      title={fullyAdjusted ? "Line fully adjusted" : "Comp this line (manager PIN required)"}
+                                      onClick={() => setVoidCompState({
+                                        open: true,
+                                        tab: "comp",
+                                        saleItemId: item.id,
+                                        itemName: item.product_name,
+                                        remainingAmount: remainingAdjustable,
+                                      })}
+                                      className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      <Gift size={11} /> Comp
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={fullyAdjusted}
+                                      title={fullyAdjusted ? "Line fully adjusted" : "Void this line (manager PIN required)"}
+                                      onClick={() => setVoidCompState({
+                                        open: true,
+                                        tab: "void",
+                                        saleItemId: item.id,
+                                        itemName: item.product_name,
+                                        remainingAmount: remainingAdjustable,
+                                      })}
+                                      className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      <Ban size={11} /> Void
+                                    </button>
+                                  </div>
                                 ) : null}
-                              </p>
+                              </div>
                             </div>
                           );
                         })}
@@ -494,6 +594,21 @@ export default function SalesHistoryRedesign() {
           onClose={() => setShowEmailModal(false)}
         />
       )}
+
+      <VoidCompModal
+        open={voidCompState.open}
+        initialTab={voidCompState.tab}
+        saleItemId={voidCompState.saleItemId}
+        itemName={voidCompState.itemName}
+        remainingAmount={voidCompState.remainingAmount}
+        onClose={() => setVoidCompState((s) => ({ ...s, open: false }))}
+        onSuccess={(adj) => {
+          setVoidCompState((s) => ({ ...s, open: false }));
+          if (adj?.adjustment_type === "comp") toast.success("Item comped");
+          else if (adj?.adjustment_type === "void") toast.success("Item voided");
+          if (selected?.id) loadAdjustments(selected.id);
+        }}
+      />
     </PageShell>
   );
 }
