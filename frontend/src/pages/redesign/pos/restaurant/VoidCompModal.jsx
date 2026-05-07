@@ -43,6 +43,12 @@ export default function VoidCompModal({
       setBusy(false);
       setAmount(remainingAmount || 0);
       setTab(initialTab);
+    } else {
+      // Caller may open the modal with a fresh remainingAmount (e.g. tapping
+      // a different sale_item from a list). Re-seed amount so the merchant
+      // doesn't have to re-type the line total each time.
+      setAmount(remainingAmount || 0);
+      setTab(initialTab);
     }
   }, [open, remainingAmount, initialTab]);
 
