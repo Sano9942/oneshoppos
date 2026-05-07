@@ -23,10 +23,10 @@
 |---|---|---|---|
 | 🔴 Blocker | 0 | 14 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
-| 🔵 Polish | 12 | 3 | 0 |
-| **Total** | **13** | **23** | **0** |
+| 🔵 Polish | 13 | 3 | 0 |
+| **Total** | **14** | **23** | **0** |
 
-Last update: 2026-05-08 morning (flow 3.4 closed end-to-end. Counter Order Kiosk minted → public /menu/:token loaded with no auth → 1× Iced Tea Rs 300 submitted → web_orders #1 source='kiosk' arrived in /restaurant/inbox tagged `kioskK-17` → Accept → draft #19 + KDS ticket #12 `[external] kiosk #K-17` created → Bump → POST /api/kds/tickets/12/bump returned 200 + status='bumped' → /restaurant/checks Pay → cart rehydrated 1× Iced Tea Rs 300 → Cash Exact Add Complete → INV-2026-00008 Rs 300. Zero findings filed. Phase 3 = 4 of 12. Total fixed: 23. 0 open blockers. Floor healed: kiosk slot revoked, leftover empty kiosk_counter draft #18 cancelled.)
+Last update: 2026-05-08 morning (flows 3.5 + 3.6 + 3.7 closed end-to-end. Counter slot mint → public submit → slot rotated current_draft_order_id null→21, web_orders#2 source='kiosk' K-20 (rejected to keep floor clean). Table token mint for T3 → public submit attached to dine_in draft #22 (NOT inbox; total Rs 1000, 2 items @ kitchen_status='pending'). Send-to-Kitchen → KDS ticket #13 station_1 status='new'. Pay-this-check → cart rehydrate works for table-mode kiosk drafts too (W23 path is universal). Cash Exact Add Complete Sale → INV-2026-00009 Rs 1000. Fresh T4 token minted → /menu/:token rendered "Table: T4" + 5 sample items, prices match products table exactly. 1 polish finding W26 filed (table-token + seated-session model has 3 disconnects: settled table-token URL becomes "Menu Unavailable", kiosk-minted dine_in draft doesn't auto-flip session to 'dirty' on settle, and the same /menu/:token URL stops working post-settle which contradicts plan 3.7 wording). Phase 3 = 7 of 12. Total fixed: 23. 0 open blockers. Floor healed: T4 token revoked + draft #23 cancelled, session #10 force-closed via DB (W17 dirty-flip didn't fire because draft #22 had table_session_id=null).)
 
 ---
 
@@ -1817,6 +1817,106 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 1. Pick up from **flow 3.5** (Counter Order Kiosk feature — re-test slot rotation, web_orders.source='kiosk') — but note 3.4 already exercised most of this path. May be quick.
 2. Or jump to **flow 3.6** (Table Order Kiosk — mint a Table Token, attach order to existing dine_in draft on a seated table). Needs a seated table first.
 3. Optional follow-up: triage the 2 new frontend Sentry hook-order errors. Not blocking restaurant launch.
+
+### W26 — Table-token kiosk model and seat-via-POS session model are not linked (3 disconnects)
+
+**Status:** OPEN — 🔵 Polish
+**Severity:** 🔵 Polish (functional today, but creates two parallel "checks" per table when both paths are used; merchant-visible if a server seats a table via POS while a customer simultaneously scans the table QR)
+**Surfaces affected:** /order-kiosks (table-mode mint), /pos/restaurant (seat → check view), /restaurant/checks, public /menu/:token
+**Found via:** Phase 3 flow 3.6 + 3.7 walkthrough on 2026-05-08
+
+**Three related disconnects, observed in the same sitting:**
+
+1. **Seat-via-POS and table-token-via-kiosk create two separate dine_in drafts for the same table.**
+   - Walked: seated T3 via /pos/restaurant (created `restaurant_table_sessions.id=10` with `status='seated'`, no draft yet — POS lazily creates the draft on first cart action and links it to the session via `table_session_id`).
+   - Then: minted table token for T3 via /order-kiosks (POST /api/restaurant/kiosk-tokens with table_id=3) which INSERTs `draft_orders.id=22` with `table_id=3, source_token_id='8741f38b…', table_session_id=null, source_channel='kiosk'`.
+   - Result: T3 now has a seated session #10 (no draft) AND a kiosk-minted dine_in draft #22 (no session link). They never converge.
+   - Root cause: `backend/routes/restaurant-kiosk.js:73-82` INSERTs the draft without resolving the existing open table session — it doesn't query `restaurant_table_sessions` at all.
+
+2. **Settling a kiosk-minted dine_in draft does NOT auto-flip the seated session to 'dirty' (W17 doesn't fire).**
+   - Walked: settled draft #22 via Pay-this-check → INV-2026-00009. DB after: draft #22 → completed; session #10 still `status='seated', closed_at=null`.
+   - Root cause: the W17 dirty-flip logic in `routes/sales.js` post-sale runs UPDATE on `restaurant_table_sessions WHERE id = $1` keyed on `table_session_id` from the *draft* — but draft #22's `table_session_id` was null because the kiosk mint code (point 1 above) never linked it. So the UPDATE matches zero rows.
+   - Effect: floor view continues to show T3 as SEATED even after the only check at that table settles. Operator must manually re-enter the check view (which now has empty cart) and walk away — no Clear Table CTA appears because session is `seated`, not `dirty`. Healed via direct `UPDATE restaurant_table_sessions SET status='closed', closed_at=NOW() WHERE id=10`.
+
+3. **The same /menu/:token URL becomes "Menu Unavailable" once the linked draft is settled, contradicting plan 3.7 wording.**
+   - Plan 3.7 step 1: "Open the same `/menu/:token?tenant=<slug>` URL from 3.6 → confirm menu items render." But by the time 3.7 runs, the draft from 3.6 has been settled → token returns null in `resolveKioskToken` → public page renders "Menu Unavailable / No active session found for this QR code".
+   - Root cause: `backend/routes/public-restaurant.js:73-78` `resolveKioskToken` filters table-token lookup with `WHERE d.source_token_id = $1 AND d.status = 'open' AND d.order_context IN ('dine_in','bar')`. Once the draft is settled or cancelled, the token is dead.
+   - This is "by design" per the kiosk-design.md the route comments reference — table tokens ARE the draft, and a settled draft is gone. But the plan wording implies the URL is a stable bookmark like a counter slot. Either the plan needs a wording fix ("mint a fresh table token for read-only browse, then revoke") OR the design needs to change so a settled table token rolls forward to a fresh draft (matching counter-slot behavior).
+   - Walkaround used in 3.7 verify: minted a fresh token for T4, opened /menu/:token, verified menu rendered + prices match products table exactly (Caesar Salad Rs 650 / Garlic Bread Rs 350 / Iced Tea Rs 300 / Chocolate Cake Rs 500 / Grilled Chicken Rs 1200), revoked without ordering. This is the clean equivalent of the plan's intent.
+
+**Effect (combined):** with the current code, a merchant who uses both seat-via-POS and table QR codes simultaneously will end up with parallel checks per table. If the customer's QR-scan check settles first, the seated session lingers. Hide-the-bug workaround for v1: only use ONE channel per table — either staff seats and rings up via POS, OR customers self-order via QR; don't mix. This is a real shipping limitation worth a launch-day operator note.
+
+**Suggested fix paths (any one of these resolves the recurring class):**
+1. Make `POST /api/restaurant/kiosk-tokens` resolve any existing open `restaurant_table_sessions` for the table and link the new draft to it via `table_session_id`. Then W17 dirty-flip works without further changes. Also opens the door for staff to see the kiosk draft in /pos/restaurant when they tap the seated table.
+2. Make /pos/restaurant's "Tap to seat" check for any open kiosk-minted draft on the table (`SELECT … WHERE table_id=$1 AND status='open' AND order_context IN ('dine_in','bar')`) and adopt it instead of creating a separate session. Operator opens the table and sees the customer's items already in the cart.
+3. Document the limitation in the operator playbook: "Don't use seat-via-POS and table QR codes for the same table at the same time."
+
+For 3.7 specifically: revise the plan wording to mint a fresh token for browse-verification, then revoke. Don't reuse the settled token from 3.6.
+
+**Source verification done before filing:** read `backend/routes/restaurant-kiosk.js:28-115` (POST mint logic), `backend/routes/public-restaurant.js:23-90` (resolveKioskToken), confirmed `restaurant_kiosk_slots` table has no `table_id` column and table tokens are stored as `draft_orders.source_token_id`. DB confirmation: queried session #10 + draft #22 throughout the walk to verify the disconnect at each step.
+
+**Screenshots:**
+- `restaurant-walkthrough-flow35-counter-kiosk-rotation-2026-05-07.png` (3.5 verified)
+- `restaurant-walkthrough-flow36-table-kiosk-settled-2026-05-07.png` (3.6 settled INV-2026-00009)
+- `restaurant-walkthrough-flow37-qr-menu-readonly-2026-05-07.png` (3.7 fresh-token verify on T4)
+
+---
+
+### Session 2026-05-08 morning (continuation 4) — Flows 3.5 + 3.6 + 3.7 closed; W26 (polish) filed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flows 3.5 (counter kiosk re-verify), 3.6 (table kiosk attaches to dine_in draft + settle), 3.7 (QR menu read-only browse).
+**Duration:** ~25 min.
+
+**Result:** ✅ all three flows closed. 1 polish finding (W26) filed. 0 open blockers. Phase 3 = 7 of 12.
+
+**Pre-flight (clean ✅):** Attendance session #2 still open from prior sittings, cash shift #2 still open, 0 open table sessions, 0 open drafts.
+
+**Flow 3.5 verification:**
+- Mint counter slot via /order-kiosks → kiosk_slots.id=3 token=`0600df73…` `current_draft_order_id=null`. ✅
+- Open public URL → menu renders → add Garlic Bread → submit. Confirmation "K-20". DB: `web_orders.id=2 source='kiosk' external_order_number='K-20' grand_total=350 order_status='open' converted_draft_order_id=null`. Slot's `current_draft_order_id` rotated to draft #21 (a fresh empty `kiosk_counter` placeholder). ✅
+- Re-visited the same URL → fresh menu, no leftover cart from K-20. Slot rotation works. ✅
+- Rejected K-20 from /restaurant/inbox to keep floor clean (web_orders.id=2 → 'cancelled').
+- Floor healed: slot revoked + draft #21 cancelled.
+
+**Flow 3.6 verification:**
+- Seated T3 (party 2) via /pos/restaurant → `restaurant_table_sessions.id=10 table_id=3 status='seated'` (no draft yet — POS lazily creates draft on first cart action).
+- Minted T3 table token via /order-kiosks → POST /api/restaurant/kiosk-tokens body `{outlet_id:1, table_id:3}` → INSERTs `draft_orders.id=22 table_id=3 source_token_id='8741f38b…' source_channel='kiosk' order_context='dine_in' table_session_id=NULL`. Note: this is a SEPARATE draft from the seated session — see W26.
+- Open public table URL → header reads "Table: T3". Add Caesar Salad + Garlic Bread → submit. Confirmation "Sent to your server — please wait" (different from counter mode). DB: draft #22 total updated to Rs 1000, items 27/28 pending. NO new web_orders row (table mode bypasses inbox). ✅
+- /restaurant/checks shows row #22 / T3 / Test Owner / 2 items / Rs 1,000 / open. Click Pay-this-check → POS opens, cart rehydrates (W23 path works for kiosk-minted drafts too). Header shows "Table —" because draft has `table_session_id=null` (W26 disconnect).
+- Send-to-Kitchen → kds_tickets.id=13 station=1 status='new' table_label='T3' course_name='main'. ✅ (cart sync delete-and-rebuild rotated item ids 27/28 → 29/30)
+- Pay → Cash Exact Rs 1000 → Add → Complete Sale. **Sale wrote `INV-2026-00009 total_amount=1000.00`. Draft #22 → 'completed'.** ✅
+- Detour: Test Owner had been clocked-in yesterday but `getEmployeeStatusForToday` returns 'not_clocked_in' on a fresh day (session count for today = 0). Clicked Pay → "Clock in at the kiosk before using POS" toast fired. Healed via direct `POST /api/attendance/pin-checkin` PIN 1234 → session #3 created, then proceeded with Pay flow above. Not a bug — expected daily-reset behavior; documented for next sitting's pre-flight.
+
+**Flow 3.7 verification (read-only browse):**
+- Re-opened the SAME /menu/:token URL from 3.6 → "Menu Unavailable / No active session found for this QR code". 🔵 — filed as W26. Plan wording assumes the URL is reusable like a counter slot; it's not.
+- Walkaround: minted a fresh table token for T4 → `e933e943…`. Opened public URL → menu renders cleanly with header "Table: T4" + 5 items.
+- **Pricing match (DB vs UI):** DB `Caesar Salad=650, Garlic Bread=350, Iced Tea=300, Chocolate Cake=500, Grilled Chicken=1200` — public menu shows exact same values. ✅
+
+**Floor healed for next sitting:**
+- T4 token revoked via /order-kiosks → draft #23 → 'cancelled'.
+- Session #10 (T3) was stuck in `status='seated'` because the W17 dirty-flip never fired — draft #22's `table_session_id` was null when minted (W26 disconnect #2). Force-closed via Supabase MCP: `UPDATE restaurant_table_sessions SET status='closed', closed_at=NOW() WHERE id=10`.
+- DB end-state: 0 open table sessions, 0 open drafts. T1–T4 all "Tap to seat".
+- Sales total: 9 (`INV-2026-00001..00009`). Test Owner has TWO open attendance sessions now (#2 from yesterday, #3 from today's heal) — but only #3 is the one /api/attendance/my-status checks for "today's count > 0" gate. Both will be closed when shift closes.
+
+**Findings updates:**
+- W26 → 🔵 OPEN — three related disconnects between table-token kiosk model and seat-via-POS session model. Polish-class — functional today but mixing both paths per table creates parallel checks. Source-verified against `routes/restaurant-kiosk.js`, `routes/public-restaurant.js`, observed live.
+- Status Summary: 0 open blockers, 1 issue (W18), **13 polish** (was 12 — +W26). Total fixed: 23 (unchanged). Plan tracker: Phase 3 row → "7 of 12 closed".
+
+**Surprises:**
+- The "Clock in at the kiosk before using POS" gate on a clocked-in user threw me until I read the route source. The status check is per-day, not per-shift — clocked-in yesterday doesn't count today. Pre-flight for next sitting: always assume a fresh clock-in is needed if the date has rolled over since last attendance session, regardless of `session_end IS NULL`.
+- W26 disconnects #1 and #2 are the same root cause shape as W12/W22/W23/W25: backend has a thing (the table_session_id column on draft_orders), schema supports it, but the code path that should populate it doesn't. Pattern recognition: every restaurant data model with two redundant linkage columns (`table_id` AND `table_session_id`) has a 50% chance one of them is being ignored by some code path.
+- Flow 3.6 also caught the W23 cart-rehydrate path working for kiosk-minted drafts that have no `table_session_id` (it resolves by `draftOrderId` directly). Confirms the W23 abstraction was right — it's "rehydrate from `GET /api/draft-orders/:id`" without caring about how the draft was created. Same pattern that worked for split children + counter-kiosk drafts.
+- Flow 3.7 plan wording bug (reuse the same URL post-settle) was caught by attempting to literally follow the plan. Worth doing this every flow — plan walkthroughs find plan bugs as well as code bugs.
+
+**No code commits this session — only docs (this finding + session log + plan tracker).**
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.8** (Day-parting: lunch/dinner schedules). Floor is clean, tenant healthy, no carry-over fixes pending. Pre-flight: re-clock in via `/kiosk` PIN 1234 if the date has rolled.
+2. Optional fix-it loop for W26 if a merchant launches with both QR + POS-seat in the same restaurant. Pick fix path #1 (resolve open session in `routes/restaurant-kiosk.js` and link the draft) — single backend change, ~15 min.
+3. Future polish (still): W18 (Open-Tab CTA) + W19 (header label "Table N" instead of `tables.label`) + W26 (this) — ship together when convenient.
+4. Triage the 2 new frontend Sentry hook-order errors flagged in the 3.4 close-out (SANOPOS-FRONTEND-A and -B) — not blocking restaurant launch but worth a hook-order audit pass.
 
 ---
 
