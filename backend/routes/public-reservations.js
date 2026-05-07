@@ -12,9 +12,15 @@ module.exports = function registerPublicReservationsRoutes(app, deps) {
 
   // Tenant slug resolver wrapper — allow it as either a route param or query
   // so the frontend can use whichever is cleanest.
+  //
+  // Express 5 changed `req.query` to a getter that re-parses `req.url` on every
+  // access — mutations to `req.query.X = Y` write to a temporary object that's
+  // discarded on the next access. We pass the slug via the `x-tenant-slug`
+  // request header instead (mutable in Express 5), which `resolvePublicTenantDb`
+  // already reads as a fallback.
   async function resolveForSlug(req, deps) {
     const tenantSlug = req.params.tenantSlug || req.query.tenant;
-    req.query.tenant = tenantSlug;
+    if (tenantSlug) req.headers["x-tenant-slug"] = String(tenantSlug);
     return resolvePublicTenantDb(req, deps);
   }
 
