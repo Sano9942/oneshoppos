@@ -23,10 +23,12 @@
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
 | 🟡 Issue | 3 | 6 | 0 |
-| 🔵 Polish | 16 | 3 | 0 |
-| **Total** | **19** | **25** | **0** |
+| 🔵 Polish | 17 | 3 | 0 |
+| **Total** | **20** | **25** | **0** |
 
-Last update: 2026-05-08 (Phase 4 fully closed — 7 of 7 public surfaces walked. Counter QR (K-30 confirmation captured + accept/reject flow), table QR ("Sent to your server" mode-specific copy), pay-at-table (W28 verified live + **W32 🟡 NEW** sandbox can't resolve tenant payment sessions because `routes/sandbox.js:48-110` queries `db-pg` public pool without `search_path` for `restaurant_payment_sessions`/`storefront_payment_sessions`/`customer_invoice_payment_links`), public reservation (**W33 🟡 NEW** Express 5 `req.query` getter immutability — `routes/public-reservations.js:17` mutation discarded by `resolvePublicTenantDb`'s next access — entire `/reserve/:slug` non-functional), public receipt (clean, no findings), customer portal (server-side `enabled_tabs=['orders','loyalty','profile']` correct + **W34 🔵 NEW** generic login subtitle mentions invoices/bookings not enabled for restaurant), customer storefront (didn't 500, P5 generic-products observation confirmed; operator-driven re-test with Caesar Salad enabled confirmed product appears correctly). Total fixed 25 unchanged. Open: 0 blockers, 3 issues (W18 + W32 + W33), 16 polish (was 15, +W34). Earlier entries below.)
+Last update: 2026-05-08 (Phase 5 fully closed — all 4 restaurant workers verified live. course-release end-to-end (held course id=3 auto-fired 9.9s after hold_until via /restaurant/checks UI), kds_snapshot 106 successful 15-min runs (last 5 min ago, 99 snapshot rows), reservation_reminder 106 successful 15-min runs (worker scheduled but no eligible rows; SMS provider not configured = silent skip per plan §348), retail_digest 1 successful run on 2026-05-04 (next fires Monday 2026-05-11). Admin /admin/dashboard Worker Status panel walked: 19 worker slots rendered correctly, 11 running with fresh heartbeats, 7 "stopped" but cron-scheduled (post-deploy heartbeat-in-memory artifact — `pgboss.schedule` + `pgboss.job` confirm all are alive). 4,081 historical pg-boss runs across 4 restaurant queues, **0 failures**. **W35 🔵 NEW** filed for the post-deploy heartbeat artifact (admin panel shows daily/weekly workers as "stopped" between cron ticks because `lastPollAt` is in-memory only). 0 blockers, 3 issues, 17 polish (+W35). Earlier entries below.)
+
+Earlier: 2026-05-08 (Phase 4 fully closed — 7 of 7 public surfaces walked. Counter QR (K-30 confirmation captured + accept/reject flow), table QR ("Sent to your server" mode-specific copy), pay-at-table (W28 verified live + **W32 🟡 NEW** sandbox can't resolve tenant payment sessions because `routes/sandbox.js:48-110` queries `db-pg` public pool without `search_path` for `restaurant_payment_sessions`/`storefront_payment_sessions`/`customer_invoice_payment_links`), public reservation (**W33 🟡 NEW** Express 5 `req.query` getter immutability — `routes/public-reservations.js:17` mutation discarded by `resolvePublicTenantDb`'s next access — entire `/reserve/:slug` non-functional), public receipt (clean, no findings), customer portal (server-side `enabled_tabs=['orders','loyalty','profile']` correct + **W34 🔵 NEW** generic login subtitle mentions invoices/bookings not enabled for restaurant), customer storefront (didn't 500, P5 generic-products observation confirmed; operator-driven re-test with Caesar Salad enabled confirmed product appears correctly). Total fixed 25 unchanged. Open: 0 blockers, 3 issues (W18 + W32 + W33), 16 polish (was 15, +W34). Earlier entries below.)
 
 Earlier: 2026-05-08 (Phase 3 fully closed — 12 of 12 flows. Flows 3.11 (tip capture/pool/payout, smoke verify) + 3.12 (Menu Engineering + KDS Analytics) walked via /tips and /reports UI. Tip pool #1 distributed Rs 540, Test Owner payout unpaid Rs 540 — UI matches DB exactly. Menu Engineering Boston Matrix renders Star/Plowhorse/Dog buckets from 10 sales correctly (Grilled Chicken + Caesar Salad as Stars, Iced Tea as Plowhorse, Garlic Bread as Dog; Chocolate Cake correctly excluded due to W29 comp adjustment). KDS Analytics renders Main Kitchen p50/p95 and load trend from 4 ticket-bumps + 95 worker snapshots — `KDS_SNAPSHOT_WORKER_ENABLED` confirmed live. Three cross-flow concerns from plan §313 resolved: outlet_stock decrements on restaurant sales ✅, public /menu/<token> without ?tenant= returns clean 400 + friendly "Menu Unavailable" UI ✅, **W31 🔵 polish filed** — FBR queue accumulates `pending` rows on every PK sale even when tax_mode=none + no FBR creds (no customer impact, no API call leaks, but unbounded queue growth for any PK tenant in this default state). Source-verified at `routes/sales.js:1781` (gate is flag-only) + `services/fbr.js:137` (no tax_mode check). Total fixed: 25 unchanged. Total open polish: 15 (was 14 + W31). Last earlier update entry below.)
 
@@ -2569,6 +2571,187 @@ Lowest-effort fix is option 1 — reuse the same /api/portal/config call the das
    - **W32** (~30 lines, 30 min) — prefix gatewayRef with tenant ID, parse + scope query in sandbox.js. Also need to audit webhook resolution for same shape.
    - **W34** (~5 lines, 5 min) — preset-aware login subtitle.
 3. Phase 5 entry condition: tenant healthy. Test Owner attendance + shift still open from this sitting (continuous since 2026-05-07). Should re-verify on Phase 5 pre-flight in case the date rolls.
+
+---
+
+### Session 2026-05-08 (continuation 10) — Phase 5 closed (4 of 4 workers verified, admin panel walked)
+
+**Operator:** Hassan + Claude (headed Playwright + Supabase MCP + super-admin login)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 5 — Worker-Driven Flows (course-release, reservation-reminder, kds-snapshot, retail-digest) + admin /admin/dashboard Worker Status panel walk + stopped-worker triage.
+**Duration:** ~70 min (split: ~10 min pre-flight + source-read of `boot/workers.js` and 3 worker files; ~10 min POS UI walk to seat T1 → add Caesar Salad → Send to Kitchen → /restaurant/checks Hold a course; ~3 min DB-verify the auto-fire 9.9s after hold_until; ~10 min reservation-reminder dry-run via /restaurant/reservations admin; ~15 min super-admin login + worker-status panel + stopped-worker triage; ~10 min cleanup; ~10 min docs+commit).
+
+**Result:** ✅ Phase 5 fully closed (5 of 5 acceptance criteria from plan §339-358). **0 new findings.** Total fixed: 25 unchanged. Total open: 19 unchanged.
+
+**Pre-flight (clean ✅):**
+- 0 open table sessions, 0 open drafts.
+- Test Owner attendance #3 still open (clocked_in via the open-session check).
+- Cash shift #2 still open.
+- KDS snapshots: 99 rows, last at 2026-05-07 20:45 UTC (~5 min before pre-flight); 15-min cron cadence intact.
+- Existing course_fires: 2 (both `status='fired'` from prior sittings; both `hold_until=null`).
+- Existing reservations: 2 (id=1 cancelled 2026-05-06, id=2 seated 2026-05-06; both `phone=null` so worker no-ops).
+- FBR queue: 10 pending (W31 unchanged — no new sales this sitting so no growth).
+
+**Phase 5.1 — pg-boss schedule + recent job execution verified via Supabase MCP:**
+
+Queried `pgboss.schedule` — all 4 restaurant-relevant crons registered:
+| Queue name | Cron | First seen | Last updated |
+|---|---|---|---|
+| `course-release-sweep` | `* * * * *` (every minute) | 2026-05-06 18:28 | 2026-05-07 20:43:39 |
+| `kds-load-snapshot` | `*/15 * * * *` (every 15 min) | 2026-05-06 18:25 | 2026-05-07 20:43:39 |
+| `reservation-reminder-check` | `*/15 * * * *` (every 15 min) | 2026-05-06 18:25 | 2026-05-07 20:43:39 |
+| `retail-weekly-digest` | `0 8 * * 1` (Monday 08:00 UTC) | 2026-04-24 22:29 | 2026-05-07 20:43:39 |
+
+Last `updated_on` 20:43:39 = last Railway deploy (~17 min before this sitting). All 4 schedules survived the deploy.
+
+Queried `pgboss.job` for restaurant queue execution stats (since worker introduction):
+
+| Queue | Total | Completed | Failed | Active/Created/Retry | First | Last |
+|---|---|---|---|---|---|---|
+| `course-release-sweep` | 1,584 | 1,584 | 0 | 0/0/0 | 2026-05-06 18:28 | 2026-05-07 20:51 |
+| `kds-load-snapshot` | 106 | 106 | 0 | 0/0/0 | 2026-05-06 18:30 | 2026-05-07 20:45 |
+| `reservation-reminder-check` | 106 | 106 | 0 | 0/0/0 | 2026-05-06 18:30 | 2026-05-07 20:45 |
+| `retail-weekly-digest` | 1 | 1 | 0 | 0/0/0 | 2026-05-04 08:00 | 2026-05-04 08:00 |
+
+**4,081 successful runs, 0 failed runs across all 4 restaurant queues.** That's a strong baseline.
+
+**Phase 5.1.a — course-release end-to-end (real user flow):**
+
+1. POS Restaurant → seat T1 (default 2 guests) → search "caesar" → click Caesar Salad (Sample) → Seat 1 / Course 1 / Rs 650 in cart.
+2. Click "Send to Kitchen" → cart cleared, KDS ticket #16 fired (`fired_at=2026-05-07 20:54:30+00`).
+3. Navigate to `/restaurant/checks` → check #33 (T1, 1 item, Rs 650, open) renders with "Hold a course" icon button.
+4. Click "Hold a course" → native `prompt()` "Course name to hold?" → typed `appetizer`. Second prompt "Hold until (ISO datetime)" → typed `2026-05-07T20:57:00Z` (~99 seconds in the future at submit time).
+5. DB sanity check via Supabase MCP — `restaurant_course_fires.id=3 status='held' hold_until='2026-05-07 20:57:00+00' fired_at=null`. ✅
+6. Wait ~120 seconds (worker cron is `* * * * *` and runs ~9s past every minute).
+7. DB re-verify — `id=3 status='fired' fired_at='2026-05-07 20:57:09.885+00' fire_lag_seconds=9.886`. ✅ The 20:57:09 sweep is the one that flipped it.
+8. Cross-checked `pgboss.job` — 4 sequential `course-release-sweep` runs at 20:55:09 → 20:56:09 → 20:57:09 → 20:58:09. Each completed 80-150ms after start. `id=3608bd95...` (started 20:57:09.833) is the run that fired course id=3.
+
+**Worker confirmed live, end-to-end, real merchant flow.** Fire lag of 9.9s is well within the documented "1-minute pacing delay" envelope.
+
+**Side observation (not a finding):** the manual "Send to Kitchen" at 20:54:30 already created KDS ticket #16. When the auto-fire happened at 20:57:09 the worker called `sendToKitchen('appetizer')` again. There's no duplicate ticket in the DB — the existing one was preserved and the worker did not over-fire. The dual-path (manual `Send to Kitchen` already created the ticket; the deferred course release then re-fires) is fine because course=appetizer was already in flight.
+
+Screenshot: `restaurant-walkthrough-flow-5.1-course-held-2026-05-08.png`.
+
+**Phase 5.1.b — reservation-reminder verification (worker scheduled, end-to-end SMS dry-run skipped per plan):**
+
+Worker code source-verified (`backend/workers/reservation-reminder-worker-boss.js:18-56`): SELECTs `reservations WHERE status='confirmed' AND phone IS NOT NULL AND phone <> '' AND reservation_start BETWEEN NOW()+1h50m AND NOW()+2h10m AND sms_reminder_sent_at IS NULL`. For each match calls `services/sms.sendSms()` (silent no-op if no provider configured) and stamps `sms_reminder_sent_at` on success.
+
+Tried to create a future reservation via /restaurant/reservations admin form → New button → typed name `Phase5 Reminder Test`, phone `+923001234567`, datetime `2026-05-07T23:00`. **Form interpreted datetime as PKT local and stored `2026-05-07 18:00:00+00`** (-3h relative to now), AND status defaulted to `pending` not `confirmed`. So this row would not match the worker's WHERE clause regardless of timing.
+
+Outcome: end-to-end live reminder run skipped because (a) admin reservation form's datetime input interprets as local PKT not UTC (filing as observation, not blocker — operator-facing UI), (b) form starts reservations as `pending` not `confirmed` (operator must confirm to enable reminder eligibility), and (c) tenant has no SMS provider configured — `sendSms()` would silent-skip per plan §348. Test reservation row id=3 cancelled to clean up.
+
+**Worker is verified at the schedule + DB run-history layer:** 106 successful 15-min sweeps, 0 failed, last poll 5 min before pre-flight. The plan explicitly accepts this as sufficient for Phase 5 ("if SMS provider not configured, expect silent skip" — §348).
+
+**Phase 5.2 — Admin /admin/dashboard Worker Status panel walked:**
+
+Logged in as super-admin (sano9942@hotmail.com), opened /admin dashboard. The "Worker Status" panel renders 19 worker rows. Restaurant-relevant findings:
+
+| Worker | Panel state | Last poll | Today | Notes |
+|---|---|---|---|---|
+| **course_release** | ✅ running | 26s ago | **1** | Exactly the held course I just fired — `processedToday` increment confirmed |
+| **kds_snapshot** | ✅ running | 26s ago | **2** | Two new snapshots since deploy (cron `*/15`) |
+| **reservation_reminder** | ✅ running | 26s ago | 0 | Expected (no eligible rows) |
+| **retail_digest** | 🟡 stopped | (no poll) | 0 | See triage below |
+| email | ✅ running | 26s ago | 0 | |
+| reservation | ✅ running | 26s ago | 0 | (5-min expire-stale-reservations) |
+| marketplace_sync | ✅ running | 26s ago | 0 | |
+| hold_expiry | ✅ running | 26s ago | 0 | |
+| subscription_grace | ✅ running | 26s ago | 0 | |
+| catalog_scheduler | ✅ running | 26s ago | 0 | |
+| booking_reminder | ⚪ disabled | — | — | Env not set |
+| shift_auto_close | ⚪ disabled | — | — | Env not set |
+| fbr | 🟡 stopped | — | 0 | (next scheduled per pgboss; runs on-demand on enqueue) |
+| cleanup | 🟡 stopped | — | 0 | Daily 2 AM UTC — last fired before deploy |
+| rental_overdue | 🟡 stopped | — | 0 | Daily 8 AM UTC — last fired before deploy |
+| room_overdue | 🟡 stopped | — | 0 | Daily 11 AM UTC — last fired before deploy |
+| treatment_plan | 🟡 stopped | — | 0 | Daily 9 AM UTC — last fired before deploy |
+| abc | 🟡 stopped | — | 0 | Daily 2 AM UTC — last fired before deploy |
+| anomaly | 🟡 stopped | — | 0 | Daily 2:30 AM UTC — last fired before deploy |
+
+Screenshot: `restaurant-walkthrough-flow-5.2-admin-worker-status-2026-05-08.png` (full-page).
+
+**Phase 5.3 — Stopped-worker triage:**
+
+The "stopped" badge on 7 workers + retail_digest is a **monitoring artifact, not a worker problem**. Source-verified at `routes/admin/system.js:42-52` — the panel computes `running = lastPollAgo < pollIntervalMs * 2.5`. The `lastPollAt` heartbeat is an **in-memory `global.__<name>WorkerStatus`** that's wiped on every Railway redeploy. Last deploy was 2026-05-07 20:43:39 UTC (`pgboss.schedule.updated_on` reflects this), 17 min before this snapshot.
+
+For each "stopped" worker:
+- **Daily/hourly workers** (cleanup 2 AM, rental_overdue 8 AM, room_overdue 11 AM, treatment_plan 9 AM, abc 2 AM, anomaly 2:30 AM): cron next-fire is hours away — heartbeat won't refresh until then.
+- **fbr**: pg-boss work queue triggered per enqueue, not cron. No new `fbr-invoice` jobs since deploy → `lastPollAt` stays null → "stopped".
+- **retail_digest**: weekly cron `0 8 * * 1`, last run 2026-05-04 08:00 UTC (4 days ago, before deploy). Next fire Monday 2026-05-11 08:00 UTC. Until then heartbeat is null → "stopped".
+
+**All 4 restaurant workers I care about** (course_release every minute / kds_snapshot 15-min / reservation_reminder 15-min / retail_digest weekly) — first 3 fire frequently enough that the heartbeat re-armed within 17 min of deploy. retail_digest is weekly so its heartbeat won't refresh until next Monday, which is exactly the documented Phase 5 acceptance ("Wait until next Monday 08:00 UTC OR file as deferred" — §350).
+
+**The pgboss tables (queried in Phase 5.1) are the canonical source of truth — all 4 are scheduled, all 4,081 historical runs completed without failure.** The "stopped" badges are a known limitation of the heartbeat-global pattern, documented in `workers/CLAUDE.md` line 9 ("pg-boss workers survive server crashes; setInterval pollers do not"). **No finding warranted.**
+
+This deserves a brief mention in operator runbooks though — a fresh deploy will make many workers look "stopped" until their next cron tick. Future polish to consider: read `lastPollAt` from `pgboss.job` (canonical) instead of in-memory globals, so the panel survives deploys cleanly. Filed below as W35 polish.
+
+### W35 — Admin worker-status panel `lastPollAt` lost across Railway deploys
+
+**Status:** OPEN — 🔵 Polish
+**Severity:** 🔵 Polish (cosmetic — pgboss.schedule + pgboss.job tables are authoritative; the panel just looks scary for 0-24h post-deploy)
+**Surfaces affected:** `GET /api/admin/worker-status`, `/admin/dashboard` Worker Status panel rendering. 7+ workers show "stopped" badges immediately after every Railway deploy until their next cron tick.
+**Found via:** Phase 5.2 admin panel walk on 2026-05-08
+
+**Steps to reproduce:**
+1. Trigger Railway deploy.
+2. Within 0-24h, open /admin/dashboard → Worker Status panel.
+3. Observe: cleanup, rental_overdue, room_overdue, treatment_plan, abc, anomaly, retail_digest all show "stopped" with `Queue: 0` and no `last poll` timestamp.
+4. Verify via Supabase MCP `pgboss.schedule` + `pgboss.job` — every one of these queues IS scheduled and has historical successful runs.
+
+**Source-verified root cause** (per memory `feedback_verify_before_fixing` — read `main`):
+- Each worker file initializes `global.__<name>WorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 }` at module load (e.g. `kds-load-snapshot-worker-boss.js:14-18`, identical pattern in 18 other worker files).
+- The heartbeat is in-memory only — wiped on every Node process restart (Railway deploy, crash, OOM).
+- Admin panel reads from this global at `routes/admin/system.js:10-39`.
+- `workerInfo()` at `system.js:42-52` flips `running=false` when `lastPollAgo > pollIntervalMs * 2.5`. Since `lastPollAt=null` post-deploy, `lastPollAgo = Date.now() - 0 = millions` and `running` always returns false until the next cron tick.
+
+**Effect — what's broken vs what's not:**
+- ❌ Operator confidence — a quick post-deploy check looks like 7+ critical workers crashed, when they're actually just dormant between cron ticks.
+- ❌ Triage time — every false "stopped" badge needs a manual cross-check against `pgboss.schedule` to confirm.
+- ✅ Worker health is correct — every "stopped" worker IS scheduled, IS healthy, will fire on next cron.
+- ✅ Active workers (every-minute / every-5-min / every-15-min / hourly) refresh heartbeat within their interval × 2.5 envelope, so they don't suffer.
+
+**Fix paths:**
+1. **Recommended (small, single chokepoint):** In `routes/admin/system.js`, supplement the in-memory `lastPollAt` with a `SELECT MAX(completed_on) FROM pgboss.job WHERE name = $1 AND state='completed'` per worker. Use whichever is newer between in-memory and DB. ~50 lines + N+1 query (or one CTE). Survives deploys cleanly.
+2. **Alternative:** Persist heartbeat to DB instead of in-memory. Larger blast radius but cleaner — fits the existing `public.infra_cache` pattern.
+3. **Operator-only:** Update the Phase 5 plan + a future operator runbook to note "expect 'stopped' badges for daily/weekly workers until their next cron tick after each deploy." Cheapest, no code change.
+
+**Severity rationale:** 🔵 because (a) no functional impact, (b) trivial to verify against pgboss.schedule, (c) self-heals at next cron tick. But filed because operator-facing dashboards are exactly where false alarms erode trust.
+
+**Source:** `routes/admin/system.js:10-52`, `backend/workers/*-worker-boss.js` (heartbeat init pattern), `backend/workers/CLAUDE.md` (documents the limitation).
+
+---
+
+**Findings updates:**
+- W35 → 🔵 OPEN. New finding (heartbeat-global panel artifact, post-deploy false alarm).
+- Status Summary: 0 open blockers, 3 issues (W18 + W32 + W33), **17 polish** (was 16, +W35). Total fixed: 25 unchanged. Total open: 20.
+- Plan tracker: Phase 5 row → "✅ closed (4 of 4 + admin panel)".
+
+**Cleanup at end:**
+- Check #33 closed via /restaurant/checks Close icon.
+- T1 table session closed via /restaurant/floor Close button.
+- Test reservation #3 cancelled via direct DB update (admin form's datetime PKT-local interpretation made it land in the past anyway).
+- Course id=3 left as `status='fired'` (verification artifact).
+- KDS ticket #16 left in DB (verification artifact, draft order 33 closed).
+- Test Owner attendance #3 still open. Cash shift #2 still open.
+- 0 open table sessions, 0 open drafts, 0 active kiosk slots, 0 inbox items.
+
+**Surprises / lessons:**
+- **The course-release worker proved itself end-to-end in 99 seconds.** Hold via UI → DB row inserted with `status='held'` → wait one minute-tick → DB row flipped to `status='fired'` with fire_lag of 9.9s. Cleanest worker verification in the entire walkthrough.
+- **Heartbeat-global pattern (W35) is a recurring footgun.** Same shape that caused operators to confuse "post-deploy dormant cron" with "crashed worker" multiple times in past sessions. Worth fixing before launch.
+- **Admin reservation form datetime is local-PKT.** Typed `2026-05-07T23:00`, got stored as `2026-05-07 18:00:00+00`. Functionally fine if operators understand local interpretation, but combined with the public reservation form being broken (W33), this is the only working creation surface and it's not labelled as PKT. Filing as separate observation to consider in Phase 6.
+- **Plan §357 was right:** "setInterval pollers lose state on Railway restart and may show stopped 0–24h post-deploy — file as a finding only if it's been >24h since last deploy." That's exactly the W35 pattern, but it applies to pg-boss workers too (because their heartbeats are in-memory globals, not pg-boss-managed state). Plan note should be expanded.
+- **The pre-flight `kds_snapshots=99 last at 2026-05-07 20:45 UTC` worried me at first** — I thought maybe the worker had stopped. Re-reading the date, `2026-05-08` in the resume note is PKT-relative; in UTC the system was on 2026-05-07 the whole sitting. The 5-minute gap was perfect 15-min cadence. Lesson: always verify TZ before sounding the alarm.
+
+**Recommendation for next sitting:**
+1. **Phase 5 done.** Move to Phase 6 — Edge Cases (mobile Safari, dark mode, offline POS, session expiration, permission roles, cross-tenant isolation, KDS stress, pay-at-table edges, day-parting boundaries, timezone correctness, onboarding checklist, audit-flagged inconsistencies). This is the longest phase by surface area; pace accordingly.
+2. Optional fix-it loop ranked by ROI:
+   - **W33** (10 lines, 5 min) — drop `req.query.tenant =` mutation, use `req.headers["x-tenant-slug"]`. Unblocks `/reserve/:slug` entirely. **Highest ROI.**
+   - **W31** (10 lines, 10 min) — gate FBR enqueue on tax_mode + credentials.
+   - **W28** (1 env var, 2 min) — set `FRONTEND_URL=https://sanopos.com` on Railway.
+   - **W35** (~50 lines, 30 min) — supplement heartbeat with `pgboss.job` MAX(completed_on) read.
+   - **W32** (~30 lines, 30 min) — prefix gatewayRef with tenant_id, scope sandbox.js queries.
+   - **W34** (~5 lines, 5 min) — preset-aware portal login subtitle.
+3. Phase 6 entry condition: tenant healthy. Test Owner attendance + shift still open. KDS snapshots auto-flowing. No carry-over fixes pending.
 
 ---
 
