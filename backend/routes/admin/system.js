@@ -5,6 +5,45 @@ module.exports = function registerSystemRoutes(app, deps) {
   const { db, requireAllowedIp, requireSuperAdmin, logAdminAction } = deps;
 
   // ── Worker Status ──────────────────────────────────────────────────────
+  //
+  // W35 — heartbeat globals are in-memory only and wipe on every Railway
+  // redeploy. Daily/weekly workers (rental_overdue 8am, room_overdue 11am,
+  // treatment_plan 9am, abc 2am, anomaly 2:30am, cleanup 2am, retail_digest
+  // Monday 8am) appear "stopped" until their next cron tick — sometimes for
+  // hours after a deploy. Operators saw scary post-deploy dashboards even
+  // though pg-boss + the cron schedule were healthy.
+  //
+  // Mitigation: also query pgboss.job MAX(completed_on) per known queue and
+  // use whichever timestamp is newer (in-memory or DB). The DB reading is
+  // canonical for pg-boss workers and survives deploys cleanly. Falls back
+  // to the in-memory global on DB error so we never regress to "stopped"
+  // when the DB lookup happens to fail.
+  //
+  // Maps each worker key to its pg-boss queue name (when applicable). Workers
+  // without a pg-boss queue (booking_reminder uses setInterval, catalog_scheduler
+  // ditto) are mapped to null and rely on the in-memory heartbeat alone.
+  const PG_BOSS_QUEUES = {
+    email: "email",
+    fbr: "fbr-invoice",
+    cleanup: "cleanup-dead-tenants",
+    reservation: "expire-reservations",
+    marketplace_sync: "marketplace-order-poll",
+    booking_reminder: null, // setInterval
+    rental_overdue: "rental-overdue-check",
+    room_overdue: "room-overdue-check",
+    treatment_plan: "treatment-plan-daily-check",
+    course_release: "course-release-sweep",
+    kds_snapshot: "kds-load-snapshot",
+    reservation_reminder: "reservation-reminder-check",
+    abc: "abc-daily",
+    hold_expiry: "hold-expiry-sweep",
+    anomaly: "anomaly-daily",
+    retail_digest: "retail-weekly-digest",
+    shift_auto_close: "shift-auto-close",
+    subscription_grace: "subscription-grace-check",
+    catalog_scheduler: null, // setInterval
+  };
+
   app.get("/api/admin/worker-status", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const emailStatus = global.__emailWorkerStatus || null;
@@ -38,39 +77,67 @@ module.exports = function registerSystemRoutes(app, deps) {
       // Scheduled catalog changes — 60s setInterval poll.
       const catalogSchedulerStatus = global.__catalogSchedulerStatus || null;
 
-      function workerInfo(status, pollIntervalMs) {
-        if (!status) return { enabled: false, running: false };
-        const lastPollAgo = Date.now() - (status.lastPollAt || 0);
+      // W35: query pgboss.job once for all known queues. Returns a map of
+      // queue_name → max(completed_on) timestamp in ms. Failures fall back
+      // to an empty map so we never make the panel worse than before.
+      const queueNames = Object.values(PG_BOSS_QUEUES).filter(Boolean);
+      const dbLastRunByQueue = {};
+      try {
+        const { rows } = await db.query(
+          `SELECT name, MAX(completed_on) AS last_completed
+           FROM pgboss.job
+           WHERE name = ANY($1) AND state = 'completed'
+           GROUP BY name`,
+          [queueNames]
+        );
+        for (const r of rows) {
+          dbLastRunByQueue[r.name] = r.last_completed
+            ? new Date(r.last_completed).getTime()
+            : null;
+        }
+      } catch (err) {
+        // Pre-pgboss tenants or DB hiccup — fall back to in-memory only.
+      }
+
+      function workerInfo(workerKey, status, pollIntervalMs) {
+        const inMemoryAt = status?.lastPollAt || 0;
+        const queueName = PG_BOSS_QUEUES[workerKey];
+        const dbAt = queueName ? dbLastRunByQueue[queueName] || 0 : 0;
+        // Use whichever is newer.
+        const lastPollAt = Math.max(inMemoryAt, dbAt) || 0;
+
+        if (!status && !lastPollAt) return { enabled: false, running: false };
+        const lastPollAgo = lastPollAt ? Date.now() - lastPollAt : Number.MAX_SAFE_INTEGER;
         return {
           enabled: true,
           running: lastPollAgo < pollIntervalMs * 2.5,
-          last_poll_at: status.lastPollAt ? new Date(status.lastPollAt).toISOString() : null,
-          last_poll_ago_seconds: Math.round(lastPollAgo / 1000),
-          processed_today: status.processedToday || 0,
-          queue_depth: status.queueDepth || 0,
+          last_poll_at: lastPollAt ? new Date(lastPollAt).toISOString() : null,
+          last_poll_ago_seconds: lastPollAt ? Math.round(lastPollAgo / 1000) : null,
+          processed_today: status?.processedToday || 0,
+          queue_depth: status?.queueDepth || 0,
         };
       }
 
       return res.json({
-        email: workerInfo(emailStatus, 60_000),
-        fbr: workerInfo(fbrStatus, 30_000),
-        cleanup: workerInfo(cleanupStatus, 24 * 60 * 60 * 1000),
-        reservation: workerInfo(reservationStatus, 60_000),
-        marketplace_sync: workerInfo(marketplaceSyncStatus, 5 * 60_000),
-        booking_reminder: workerInfo(bookingReminderStatus, 5 * 60_000),
-        rental_overdue: workerInfo(rentalOverdueStatus, 24 * 60 * 60 * 1000),
-        room_overdue: workerInfo(roomOverdueStatus, 24 * 60 * 60 * 1000),
-        treatment_plan: workerInfo(treatmentPlanStatus, 24 * 60 * 60 * 1000),
-        course_release: workerInfo(courseReleaseStatus, 60_000),
-        kds_snapshot: workerInfo(kdsSnapshotStatus, 15 * 60_000),
-        reservation_reminder: workerInfo(reservationReminderStatus, 15 * 60_000),
-        abc: workerInfo(abcStatus, 24 * 60 * 60 * 1000),
-        hold_expiry: workerInfo(holdExpiryStatus, 60 * 60 * 1000),
-        anomaly: workerInfo(anomalyStatus, 24 * 60 * 60 * 1000),
-        retail_digest: workerInfo(retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
-        shift_auto_close: workerInfo(shiftAutoCloseStatus, 60 * 60 * 1000),
-        subscription_grace: workerInfo(subscriptionGraceStatus, 60 * 60 * 1000),
-        catalog_scheduler: workerInfo(catalogSchedulerStatus, 60_000),
+        email: workerInfo("email", emailStatus, 60_000),
+        fbr: workerInfo("fbr", fbrStatus, 30_000),
+        cleanup: workerInfo("cleanup", cleanupStatus, 24 * 60 * 60 * 1000),
+        reservation: workerInfo("reservation", reservationStatus, 60_000),
+        marketplace_sync: workerInfo("marketplace_sync", marketplaceSyncStatus, 5 * 60_000),
+        booking_reminder: workerInfo("booking_reminder", bookingReminderStatus, 5 * 60_000),
+        rental_overdue: workerInfo("rental_overdue", rentalOverdueStatus, 24 * 60 * 60 * 1000),
+        room_overdue: workerInfo("room_overdue", roomOverdueStatus, 24 * 60 * 60 * 1000),
+        treatment_plan: workerInfo("treatment_plan", treatmentPlanStatus, 24 * 60 * 60 * 1000),
+        course_release: workerInfo("course_release", courseReleaseStatus, 60_000),
+        kds_snapshot: workerInfo("kds_snapshot", kdsSnapshotStatus, 15 * 60_000),
+        reservation_reminder: workerInfo("reservation_reminder", reservationReminderStatus, 15 * 60_000),
+        abc: workerInfo("abc", abcStatus, 24 * 60 * 60 * 1000),
+        hold_expiry: workerInfo("hold_expiry", holdExpiryStatus, 60 * 60 * 1000),
+        anomaly: workerInfo("anomaly", anomalyStatus, 24 * 60 * 60 * 1000),
+        retail_digest: workerInfo("retail_digest", retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
+        shift_auto_close: workerInfo("shift_auto_close", shiftAutoCloseStatus, 60 * 60 * 1000),
+        subscription_grace: workerInfo("subscription_grace", subscriptionGraceStatus, 60 * 60 * 1000),
+        catalog_scheduler: workerInfo("catalog_scheduler", catalogSchedulerStatus, 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
