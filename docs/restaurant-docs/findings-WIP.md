@@ -22,11 +22,13 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
-| 🟡 Issue | 3 | 6 | 0 |
-| 🔵 Polish | 17 | 3 | 0 |
-| **Total** | **20** | **25** | **0** |
+| 🟡 Issue | 1 | 8 | 0 |
+| 🔵 Polish | 13 | 7 | 0 |
+| **Total** | **14** | **31** | **0** |
 
-Last update: 2026-05-08 (Phase 5 fully closed — all 4 restaurant workers verified live. course-release end-to-end (held course id=3 auto-fired 9.9s after hold_until via /restaurant/checks UI), kds_snapshot 106 successful 15-min runs (last 5 min ago, 99 snapshot rows), reservation_reminder 106 successful 15-min runs (worker scheduled but no eligible rows; SMS provider not configured = silent skip per plan §348), retail_digest 1 successful run on 2026-05-04 (next fires Monday 2026-05-11). Admin /admin/dashboard Worker Status panel walked: 19 worker slots rendered correctly, 11 running with fresh heartbeats, 7 "stopped" but cron-scheduled (post-deploy heartbeat-in-memory artifact — `pgboss.schedule` + `pgboss.job` confirm all are alive). 4,081 historical pg-boss runs across 4 restaurant queues, **0 failures**. **W35 🔵 NEW** filed for the post-deploy heartbeat artifact (admin panel shows daily/weekly workers as "stopped" between cron ticks because `lastPollAt` is in-memory only). 0 blockers, 3 issues, 17 polish (+W35). Earlier entries below.)
+Last update: 2026-05-08 (post-Phase-5 fix-it loop closed — 6 fixes shipped + live-verified end-to-end. **W28** ✅ FIXED via Railway env var (`FRONTEND_URL=https://sanopos.com`) — pay_url now serves sanopos.com domain. **W33** ✅ FIXED `03577f8` — Express 5 `req.query` mutation replaced with header mutation; `/reserve/:slug` now shows 26 bookable slots end-to-end. **W31** ✅ FIXED `8091a07` — `enqueueFbrInvoice` gates on `tax_mode != 'none'` AND credentials present; verified on tenant default state by ringing up sale id=11 (fbr count stayed at 10, no new row). **W34** ✅ FIXED `a0aba0b` — portal login subtitle preset-aware via `/api/portal/config.enabled_tabs`; restaurant tenants see "Access your orders, loyalty, and account." **W35** ✅ FIXED `b2cef77` — admin worker-status panel supplements in-memory heartbeat with `pgboss.job MAX(completed_on)`; 6 daily/weekly workers that pre-fix showed "stopped" post-deploy now show "running" with actual last-completed timestamps. **W32** ✅ FIXED `dd231e4` — sandbox + webhook handlers cross-tenant scan to find tenant DB scope for the gateway_ref; sandbox page resolves "Restaurant Table Payment / Table check #34" instead of "Payment reference not found in any context"; clicking Pay Successfully fires the webhook → flips session to paid → creates sale → closes table session, all live-verified by ringing up sale id=12 Rs 747.50. Status Summary: 0 blockers (was 0), 1 issue (was 3 → -W32 -W33), 13 polish (was 17 → -W28 -W31 -W34 -W35), 31 fixed (was 25 → +6). Earlier entries below.)
+
+Earlier: 2026-05-08 (Phase 5 fully closed — all 4 restaurant workers verified live. course-release end-to-end (held course id=3 auto-fired 9.9s after hold_until via /restaurant/checks UI), kds_snapshot 106 successful 15-min runs (last 5 min ago, 99 snapshot rows), reservation_reminder 106 successful 15-min runs (worker scheduled but no eligible rows; SMS provider not configured = silent skip per plan §348), retail_digest 1 successful run on 2026-05-04 (next fires Monday 2026-05-11). Admin /admin/dashboard Worker Status panel walked: 19 worker slots rendered correctly, 11 running with fresh heartbeats, 7 "stopped" but cron-scheduled (post-deploy heartbeat-in-memory artifact — `pgboss.schedule` + `pgboss.job` confirm all are alive). 4,081 historical pg-boss runs across 4 restaurant queues, **0 failures**. **W35 🔵 NEW** filed for the post-deploy heartbeat artifact (admin panel shows daily/weekly workers as "stopped" between cron ticks because `lastPollAt` is in-memory only). 0 blockers, 3 issues, 17 polish (+W35). Earlier entries below.)
 
 Earlier: 2026-05-08 (Phase 4 fully closed — 7 of 7 public surfaces walked. Counter QR (K-30 confirmation captured + accept/reject flow), table QR ("Sent to your server" mode-specific copy), pay-at-table (W28 verified live + **W32 🟡 NEW** sandbox can't resolve tenant payment sessions because `routes/sandbox.js:48-110` queries `db-pg` public pool without `search_path` for `restaurant_payment_sessions`/`storefront_payment_sessions`/`customer_invoice_payment_links`), public reservation (**W33 🟡 NEW** Express 5 `req.query` getter immutability — `routes/public-reservations.js:17` mutation discarded by `resolvePublicTenantDb`'s next access — entire `/reserve/:slug` non-functional), public receipt (clean, no findings), customer portal (server-side `enabled_tabs=['orders','loyalty','profile']` correct + **W34 🔵 NEW** generic login subtitle mentions invoices/bookings not enabled for restaurant), customer storefront (didn't 500, P5 generic-products observation confirmed; operator-driven re-test with Caesar Salad enabled confirmed product appears correctly). Total fixed 25 unchanged. Open: 0 blockers, 3 issues (W18 + W32 + W33), 16 polish (was 15, +W34). Earlier entries below.)
 
@@ -2030,9 +2032,10 @@ Plus a comment on each callsite documenting why `req.tenantId` is unset on this 
 
 ---
 
-### W28 — Pay-at-table response returns localhost pay_url + qr_url instead of sanopos.com
+### W28 — Pay-at-table response returns localhost pay_url + qr_url instead of sanopos.com ✅ FIXED
 
-**Status:** OPEN — 🔵 Polish
+**Status:** ✅ FIXED — Railway env var set 2026-05-08 (no commit, config-only). Live-verified via re-mint on T2: `pay_url=https://sanopos.com/pay/55297617-8eea-4871-ad4f-0bea46cf33a6`. Screenshot: `restaurant-walkthrough-fix-w28-verified-2026-05-08.png`.
+**Severity:** 🔵 Polish
 **Severity:** 🔵 Polish (functional today — `checkout_url` at `api.sanopos.com` is correct; `pay_url` and `qr_url` are presented to staff in the QR modal but if staff hand the localhost URL to a guest's phone, it's broken)
 **Surfaces affected:** `POST /api/restaurant/checks/:id/payment-session` response payload — `pay_url` and `qr_url` fields
 **Found via:** Phase 3 flow 3.9 step 5 walkthrough on 2026-05-08
@@ -2221,9 +2224,10 @@ Plus a comment on each callsite documenting why `req.tenantId` is unset on this 
 
 ---
 
-### W31 — FBR invoice queue grows on every sale even when tax_mode=none + no FBR credentials
+### W31 — FBR invoice queue grows on every sale even when tax_mode=none + no FBR credentials ✅ FIXED
 
-**Status:** OPEN — 🔵 Polish
+**Status:** ✅ FIXED — commit `8091a07` (2026-05-08). Live-verified by ringing up sale id=11 (Rs 650 cash) on test tenant: sales count went 10→11, **fbr_invoices count stayed at 10**, no new row inserted. Pre-fix this would have added one stuck `pending` row with `last_error='Missing FBR credentials'`.
+**Severity:** 🔵 Polish
 **Severity:** 🔵 Polish (no customer impact, no data corruption, FBR API is never actually hit because credentials are missing — but the `fbr_invoices` queue accumulates one stuck `pending` row per sale forever for any PK tenant that hasn't disabled the `fbr_integration` flag or completed FBR config)
 **Surfaces affected:** `tenant_<slug>.fbr_invoices` table, `routes/sales.js:1779-1805` (sale settle), `routes/sales.js:440-450` (sale void → debit note), and likely the equivalent path in `routes/returns.js`
 **Found via:** Phase 3 cross-flow concern §313 (P9) verified during sitting 8 pre-flight 2026-05-08
@@ -2342,9 +2346,10 @@ Screenshot: `restaurant-walkthrough-w32-menu-engineering-deeplink-2026-05-08.png
 
 ---
 
-### W32 — Sandbox payment page can't resolve tenant-scoped payment sessions (queries public schema)
+### W32 — Sandbox payment page can't resolve tenant-scoped payment sessions (queries public schema) ✅ FIXED
 
-**Status:** OPEN — 🟡 Issue (sandbox mode only; affects pay-at-table, storefront checkout, and invoice-link sandbox flows)
+**Status:** ✅ FIXED — commit `dd231e4` (2026-05-08). **Scope expanded during fix:** the same shape bug existed in `routes/webhooks.js:processWebhookEvent` (also queried `db-pg` for tenant-scoped tables); both `routes/sandbox.js` AND `routes/webhooks.js` were fixed. Cross-tenant scan helper added in each file: iterate active tenants via `tenantDbManager`, find first hit for the gateway_ref, scope the DB to that tenant. Live-verified end-to-end: customer pay page → click Pay Rs 747.50 → sandbox page now correctly renders "Restaurant Table Payment / Table check #34" (was "Payment / Payment reference not found in any context"). Click Pay Successfully → page shows "Simulated payment.completed" → POS QR modal flips → table session closes ('dirty'/Needs Bussing) → sale id=12 created Rs 747.50 with sale_id linked back to `restaurant_payment_sessions`. **Pre-fix this never worked — the modal stayed at "Waiting for guest" forever.** Screenshots: `restaurant-walkthrough-fix-w32-sandbox-resolved-2026-05-08.png`. Audit follow-up: `routes/webhooks.js:551` (WhatsApp inbox writer) has the same shape — uses `db-pg` for tenant `messaging` table. Not in W32 scope but filed for future audit.
+**Severity:** 🟡 Issue (sandbox mode only; affects pay-at-table, storefront checkout, and invoice-link sandbox flows)
 **Severity:** 🟡 Issue (sandbox is documented as "soft-launch only" per plan §496, so this isn't a customer-facing prod bug. But: (a) the plan §496 lists Decision C as "keep sandbox for soft launch (5-10 friendly testers)" which puts this on the launch path; (b) the same shape (public-route querying public schema for tenant data) is what bit W27, so the pattern is recurring.)
 **Surfaces affected:** `GET /api/sandbox/pay/:gatewayRef` server-rendered page, downstream `processWebhookEvent` resolution. Any tenant-scoped payment context: `customer_invoice_payment_links`, `storefront_payment_sessions`, `restaurant_payment_sessions`. Platform billing (`payment_intents`) is unaffected because it lives in public schema.
 **Found via:** Phase 4 flow 4.3 walkthrough on 2026-05-08
@@ -2388,9 +2393,10 @@ Screenshot: `restaurant-walkthrough-w32-menu-engineering-deeplink-2026-05-08.png
 
 ---
 
-### W33 — Public reservation `/reserve/:slug` non-functional in production due to Express 5 `req.query` immutability
+### W33 — Public reservation `/reserve/:slug` non-functional in production due to Express 5 `req.query` immutability ✅ FIXED
 
-**Status:** OPEN — 🟡 Issue (could be 🔴 launch-blocker depending on whether reservations are launch-required for v1)
+**Status:** ✅ FIXED — commit `03577f8` (2026-05-08). Replaced `req.query.tenant = tenantSlug` mutation (broken in Express 5 because `req.query` is now a getter that re-parses on every access) with `req.headers["x-tenant-slug"] = String(tenantSlug)` (headers ARE mutable in Express 5). `resolvePublicTenantDb` already reads the header as a fallback. Live-verified: `/reserve/sanoposlivetest1778021564659` UI now shows 26 bookable time slots (09:00–21:30 in 30-min increments). API confirmed: `curl /api/public/restaurant/reservations/<slug>/availability?date=...&party_size=2` returns 30 slots, no 400 error. Screenshot: `restaurant-walkthrough-fix-w33-verified-2026-05-08.png`. Audited all `req.query.X = Y` mutations across `backend/routes` — this was the only one. Bug was isolated.
+**Severity:** 🟡 Issue (could be 🔴 launch-blocker depending on whether reservations are launch-required for v1)
 **Severity:** 🟡 (the entire `/reserve/:slug` public surface returns "No times to show" for any date — no customer can book a reservation through the QR code or shareable URL. Admin reservation management on `/restaurant/reservations` works fine — only the public booking form is broken.)
 **Surfaces affected:** `GET /api/public/restaurant/reservations/:tenantSlug/availability`, `POST /api/public/restaurant/reservations/:tenantSlug` (reservation creation likely has the same shape — needs separate verify, but if availability is broken the form can't reach the create call). Frontend page: `frontend/src/pages/public/ReservationBookingPage.jsx`.
 **Found via:** Phase 4 flow 4.4 walkthrough on 2026-05-08
@@ -2437,9 +2443,10 @@ async function resolveForSlug(req, deps) {
 
 ---
 
-### W34 — Customer portal login subtitle mentions tabs not enabled for restaurant tenants
+### W34 — Customer portal login subtitle mentions tabs not enabled for restaurant tenants ✅ FIXED
 
-**Status:** OPEN — 🔵 Polish
+**Status:** ✅ FIXED — commit `a0aba0b` (2026-05-08). Frontend `PortalLogin.jsx` now fetches `/api/portal/config` on mount via `portalApi.get`, reads `enabled_tabs` array, and composes a vertical-appropriate subtitle. Restaurant tenants now see **"Access your orders, loyalty, and account."** (was "Access your invoices, bookings, and account."). Fail-open to original copy on config fetch error. Live-verified at `/portal/sanoposlivetest1778021564659/login`. Screenshot: `restaurant-walkthrough-fix-w34-verified-2026-05-08.png`.
+**Severity:** 🔵 Polish
 **Severity:** 🔵 Polish (cosmetic — subtitle copy mentions "invoices" + "bookings" but neither is in the restaurant `enabled_tabs` list, which is correctly server-controlled to `['orders', 'loyalty', 'profile']`)
 **Surfaces affected:** `/portal/:tenantSlug/login` page subtitle.
 **Found via:** Phase 4 flow 4.6 walkthrough on 2026-05-08
@@ -2685,9 +2692,10 @@ For each "stopped" worker:
 
 This deserves a brief mention in operator runbooks though — a fresh deploy will make many workers look "stopped" until their next cron tick. Future polish to consider: read `lastPollAt` from `pgboss.job` (canonical) instead of in-memory globals, so the panel survives deploys cleanly. Filed below as W35 polish.
 
-### W35 — Admin worker-status panel `lastPollAt` lost across Railway deploys
+### W35 — Admin worker-status panel `lastPollAt` lost across Railway deploys ✅ FIXED
 
-**Status:** OPEN — 🔵 Polish
+**Status:** ✅ FIXED — commit `b2cef77` (2026-05-08). Admin worker-status endpoint now reads `MAX(completed_on) FROM pgboss.job WHERE name = ANY($queues) AND state='completed'` and uses whichever timestamp is newer between in-memory heartbeat and DB. PG_BOSS_QUEUES map at top of `routes/admin/system.js` documents which workers are pg-boss-backed. Workers without a pg-boss queue (booking_reminder, catalog_scheduler — both `setInterval`) are mapped to null and rely on in-memory only, same as before. Fail-open on DB error. Live-verified before/after on `/admin/dashboard` Worker Status panel: **6 daily/weekly workers (cleanup, rental_overdue, room_overdue, treatment_plan, abc, anomaly, retail_digest) flipped from pre-fix "stopped" to post-fix "running" with their actual last-completed timestamps** ranging from 11h-86h ago — no longer false-alarm-flagged immediately after every Railway deploy. Email + FBR also show last-run timestamps now (correctly displayed since they're event-driven, not cron). Screenshot: `restaurant-walkthrough-fix-w35-verified-2026-05-08.png`.
+**Severity:** 🔵 Polish
 **Severity:** 🔵 Polish (cosmetic — pgboss.schedule + pgboss.job tables are authoritative; the panel just looks scary for 0-24h post-deploy)
 **Surfaces affected:** `GET /api/admin/worker-status`, `/admin/dashboard` Worker Status panel rendering. 7+ workers show "stopped" badges immediately after every Railway deploy until their next cron tick.
 **Found via:** Phase 5.2 admin panel walk on 2026-05-08
@@ -2752,6 +2760,63 @@ This deserves a brief mention in operator runbooks though — a fresh deploy wil
    - **W32** (~30 lines, 30 min) — prefix gatewayRef with tenant_id, scope sandbox.js queries.
    - **W34** (~5 lines, 5 min) — preset-aware portal login subtitle.
 3. Phase 6 entry condition: tenant healthy. Test Owner attendance + shift still open. KDS snapshots auto-flowing. No carry-over fixes pending.
+
+---
+
+### Session 2026-05-08 (continuation 11) — Post-Phase-5 fix-it loop: 6 of 6 fixes shipped + verified
+
+**Operator:** Hassan + Claude (headed Playwright + Supabase MCP + Railway CLI + super-admin login)
+**Tenant:** `sanoposlivetest1778021564659`
+**Scope:** Operator approved fixing all 6 outstanding open findings (W28, W31, W32, W33, W34, W35) in one fix-it loop before moving to Phase 6. Source-verified each finding against current `main` first per `feedback_verify_before_fixing` and `feedback_frontend_claude_stale`.
+**Duration:** ~50 min (split: ~10 min source-verify of all 6 cited code paths + their callers; ~20 min coding 5 commits + Railway env var; ~5 min push + Railway redeploy + Vercel deploy wait; ~15 min live-verify each fix end-to-end).
+
+**Result:** ✅ all 6 fixes shipped + live-verified. **0 new findings.** Status Summary: 14 open (was 20), 31 fixed (was 25). Open polish dropped 17→13 (–W28 –W31 –W34 –W35). Open issues dropped 3→1 (–W32 –W33). W18 is the only open issue remaining.
+
+**Pre-flight:** clean. Test Owner attendance #3 + cash shift #2 still open from sittings 9-10. KDS snapshot worker still running on 15-min cadence (now 100 rows). Latest sale id=10 (Rs 950 from sitting 8 verification).
+
+**Commits shipped (5 backend code + 1 Railway env-var, no commit):**
+- W28: Railway env var only — `FRONTEND_URL=https://sanopos.com` set via `railway variables --set`. No commit. Verified at `pay-at-table.js:128`.
+- W33: `03577f8` — `routes/public-reservations.js:17` mutation → header. 7 lines diff.
+- W31: `8091a07` — `services/fbr.js:137` enqueue gate. 36 lines diff. Single chokepoint, all 3 callers (sales settle, sales void, returns) inherit the gate.
+- W34: `a0aba0b` — `frontend/src/pages/portal/PortalLogin.jsx` preset-aware subtitle. 52 lines diff.
+- W35: `b2cef77` — `routes/admin/system.js` heartbeat supplemented with `pgboss.job MAX(completed_on)`. 93 lines diff.
+- W32: `dd231e4` — `routes/sandbox.js` + `routes/webhooks.js` cross-tenant scan helpers. **Scope expanded during fix:** the original W32 finding only flagged `routes/sandbox.js`; source-verify revealed `routes/webhooks.js:processWebhookEvent` had the same shape bug (which is why pay-at-table never transitioned to "paid" pre-fix even though the user thought it should). Both fixed in one commit. 192 insertions, 92 deletions.
+
+**Live verification — each fix walked end-to-end on prod:**
+
+| Fix | Verification path | Pre-fix | Post-fix |
+|---|---|---|---|
+| **W28** | re-mint pay-at-table QR on T2 → read `pay_url` field in modal | `http://localhost:5173/pay/...` | `https://sanopos.com/pay/55297617-...` |
+| **W33** | `/reserve/sanoposlivetest1778021564659` UI + curl API | UI: "No times to show" / API: 400 "tenant query param required" | UI: 26 slots 09:00–21:30 / API: 30 slots returned |
+| **W31** | ring up sale id=11 (Rs 650 cash via POS Restaurant) | would have inserted 1 stuck `pending` row in `fbr_invoices` | sales count 10→11, **fbr count stayed at 10**, no row inserted ✅ |
+| **W34** | `/portal/sanoposlivetest1778021564659/login` subtitle | "Access your invoices, bookings, and account." | "Access your orders, loyalty, and account." |
+| **W32** | mint QR on T2 → open customer pay page → click Pay Rs 747.50 → click Pay Successfully on sandbox → watch tab 0 POS QR modal | sandbox: "Payment / Payment reference not found in any context"; modal stayed at "Waiting for guest" forever | sandbox: "Restaurant Table Payment / Table check #34"; click Pay Successfully → "Simulated payment.completed" → POS modal closed → T2 went to "Needs Bussing" → sale id=12 created Rs 747.50 ✅ |
+| **W35** | `/admin/dashboard` Worker Status panel — visual diff vs sitting 10 | 7 workers showed "stopped" with no `last_poll_at` | 6 daily/weekly workers (cleanup, rental_overdue, room_overdue, treatment_plan, abc, anomaly, retail_digest) flipped to "running" with actual last-completed timestamps from pgboss.job (11h–86h ago) ✅ |
+
+Screenshots: `restaurant-walkthrough-fix-w28-verified-2026-05-08.png`, `restaurant-walkthrough-fix-w32-sandbox-resolved-2026-05-08.png`, `restaurant-walkthrough-fix-w33-verified-2026-05-08.png`, `restaurant-walkthrough-fix-w34-verified-2026-05-08.png`, `restaurant-walkthrough-fix-w35-verified-2026-05-08.png`.
+
+**Cleanup at end:**
+- T1 cleared via "Clear Table" (post-W31 sale).
+- T2 cleared via "Clear Table" (post-W32 sale).
+- 0 open table sessions, 0 open drafts.
+- Test Owner attendance #3 still open. Cash shift #2 still open.
+- Sales count: 12 (added id=11 Rs 650 for W31 + id=12 Rs 747.50 for W32).
+- New `restaurant_payment_sessions.id=2 status=paid sale_id=12` (W32 verification artifact, kept for cross-flow trace).
+
+**Surprises / lessons:**
+- **W32 was bigger than W32 alone.** The original W32 finding scoped only `routes/sandbox.js`, but source-verify of `processWebhookEvent` revealed the webhook handler had the same shape bug (which was the actual root cause of "Waiting for guest" never transitioning). Per memory `feedback_parallel_paths` — when fixing a shared-concern bug, audit every other route/service that touches it. Caught both in one commit.
+- **W35 working perfectly.** The 6 daily/weekly workers that pre-fix looked "stopped" are now correctly showing as "running" with their last-completed timestamps. Operator confidence post-deploy goes from "7 critical workers crashed?!" to "everything's fine, last cron tick was N hours ago as expected."
+- **W31 verification was clean.** Sales count went up by 1, FBR count stayed flat. No false negatives, no surprise enqueues. Fail-open path preserved on lookup error (verified by reading the diff carefully — `try/catch` falls through to original behavior).
+- **W33 was a 7-line fix unblocking a 100% non-functional public surface.** Highest ROI of the loop. The Express 5 mutation pattern would have hit any `req.query.X = Y` we'd have added during a future refactor; worth a future eslint rule.
+- **W34 fail-open path intentional.** If `/api/portal/config` errors during login page load, the subtitle stays the original copy and the form still works. Login is the most critical path on the portal — never blocked on cosmetic config.
+- **W28 was a 2-minute env-var change.** Railway CLI made this trivial. Operator could have flipped it themselves in the dashboard at any point — but the fix is now committed via `railway variables --set` history and the Railway service redeploys cleanly. No code change needed.
+
+**Recommendation for next sitting:**
+1. **Phase 6 — Edge Cases.** Mobile Safari pass, dark mode, offline POS, session expiration, permission roles (B2 verification — Manager + Cashier), cross-tenant isolation, KDS stress test, pay-at-table edges (now testable thanks to W32+W28), day-parting boundaries, timezone correctness, onboarding checklist (P4), audit-flagged inconsistencies (P2 + P10). Longest phase; pace accordingly.
+2. **Audit follow-up:** `routes/webhooks.js:551` (WhatsApp inbox writer) has the same `db-pg` for tenant-table shape that W32 fixed. Out of scope this loop. Worth a small focused audit + fix if WhatsApp is on the launch path.
+3. **Audit follow-up:** consider a lint rule for `req.query.X = Y` mutations to catch any future Express 5 footguns.
+4. **W18 (`/restaurant/checks` Open-Tab CTA)** is the only remaining open issue. Polish-tier in practice — staff workaround exists. Ship in next fix-it loop or close as "won't fix" if not blocking.
+5. **2 frontend Sentry hook-order errors** (SANOPOS-FRONTEND-A and -B) still untriaged from sitting 4. Worth running them through the Sentry CLI in a future sitting.
 
 ---
 
