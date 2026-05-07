@@ -23,10 +23,12 @@
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
-| 🔵 Polish | 14 | 3 | 0 |
-| **Total** | **15** | **25** | **0** |
+| 🔵 Polish | 15 | 3 | 0 |
+| **Total** | **16** | **25** | **0** |
 
-Last update: 2026-05-08 (flow 3.10 closed after shipping W29 BLOCKER `ebc8d48`. Discovered via UI walk: comp/void backend (`POST /api/restaurant/sale-items/:id/adjust`) and modal both shipped since v59, but the only frontend caller `POSRestaurantRedesign.jsx:169` opened VoidCompModal with `saleItemId={null}` and the modal's submit gate `ready = saleItemId && reasonCode && pin && amount` made it permanently disabled. The "check-detail page wires saleItemId directly" comment was aspirational — that page never shipped. Source-verified across all of `frontend/src` (only one caller, no item-picker anywhere). Path A fix: per-line **Comp** + **Void** icon buttons on Sales History detail panel, gated by `phase4_restaurant_void_comp` flag + `manage_restaurant` perm; tapping opens VoidCompModal with `saleItemId`+`itemName`+`remainingAmount` prefilled; on success shows "Comped Rs N" / "Voided Rs N" badge inline. Live-verified via UI: wrong PIN 9999 → inline "Invalid PIN" error stays in modal ✅, correct PIN 1234 → modal closes + "Comped Rs 500.00" badge appears ✅, DB `sale_item_adjustments.id=2` written with manager_employee_id=1, manager_pin_verified_at, reason_code='training' ✅. Also shipped W30 modal-init followup `<NEXT_HASH>` (amount field now re-seeds from `remainingAmount` on open transition, not just on close). Phase 3 = 10 of 12. Total fixed: 25. 0 open blockers.)
+Last update: 2026-05-08 (Phase 3 fully closed — 12 of 12 flows. Flows 3.11 (tip capture/pool/payout, smoke verify) + 3.12 (Menu Engineering + KDS Analytics) walked via /tips and /reports UI. Tip pool #1 distributed Rs 540, Test Owner payout unpaid Rs 540 — UI matches DB exactly. Menu Engineering Boston Matrix renders Star/Plowhorse/Dog buckets from 10 sales correctly (Grilled Chicken + Caesar Salad as Stars, Iced Tea as Plowhorse, Garlic Bread as Dog; Chocolate Cake correctly excluded due to W29 comp adjustment). KDS Analytics renders Main Kitchen p50/p95 and load trend from 4 ticket-bumps + 95 worker snapshots — `KDS_SNAPSHOT_WORKER_ENABLED` confirmed live. Three cross-flow concerns from plan §313 resolved: outlet_stock decrements on restaurant sales ✅, public /menu/<token> without ?tenant= returns clean 400 + friendly "Menu Unavailable" UI ✅, **W31 🔵 polish filed** — FBR queue accumulates `pending` rows on every PK sale even when tax_mode=none + no FBR creds (no customer impact, no API call leaks, but unbounded queue growth for any PK tenant in this default state). Source-verified at `routes/sales.js:1781` (gate is flag-only) + `services/fbr.js:137` (no tax_mode check). Total fixed: 25 unchanged. Total open polish: 15 (was 14 + W31). Last earlier update entry below.)
+
+Earlier: 2026-05-08 (flow 3.10 closed after shipping W29 BLOCKER `ebc8d48`. Discovered via UI walk: comp/void backend (`POST /api/restaurant/sale-items/:id/adjust`) and modal both shipped since v59, but the only frontend caller `POSRestaurantRedesign.jsx:169` opened VoidCompModal with `saleItemId={null}` and the modal's submit gate `ready = saleItemId && reasonCode && pin && amount` made it permanently disabled. The "check-detail page wires saleItemId directly" comment was aspirational — that page never shipped. Source-verified across all of `frontend/src` (only one caller, no item-picker anywhere). Path A fix: per-line **Comp** + **Void** icon buttons on Sales History detail panel, gated by `phase4_restaurant_void_comp` flag + `manage_restaurant` perm; tapping opens VoidCompModal with `saleItemId`+`itemName`+`remainingAmount` prefilled; on success shows "Comped Rs N" / "Voided Rs N" badge inline. Live-verified via UI: wrong PIN 9999 → inline "Invalid PIN" error stays in modal ✅, correct PIN 1234 → modal closes + "Comped Rs 500.00" badge appears ✅, DB `sale_item_adjustments.id=2` written with manager_employee_id=1, manager_pin_verified_at, reason_code='training' ✅. Also shipped W30 modal-init followup `<NEXT_HASH>` (amount field now re-seeds from `remainingAmount` on open transition, not just on close). Phase 3 = 10 of 12. Total fixed: 25. 0 open blockers.)
 
 ---
 
@@ -2212,6 +2214,127 @@ Plus a comment on each callsite documenting why `req.tenantId` is unset on this 
 2. After 3.11 closes, **flow 3.12** (Menu Engineering — sales-data-driven categorization). Last flow in Phase 3. Depends on the kds-load-snapshot worker having run; if `KDS_SNAPSHOT_WORKER_ENABLED` is unset on Railway, file as deferred per the plan's Phase 5 worker checklist.
 3. Future polish on POS overflow Comp/Void: now that Sales History is the canonical surface, consider either removing the POS overflow entry, or replacing it with a recent-sales picker that opens VoidCompModal with `saleItemId` set. Not blocking — Sales History route works for every comp scenario.
 4. Triage the 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — still untriaged.
+
+---
+
+### W31 — FBR invoice queue grows on every sale even when tax_mode=none + no FBR credentials
+
+**Status:** OPEN — 🔵 Polish
+**Severity:** 🔵 Polish (no customer impact, no data corruption, FBR API is never actually hit because credentials are missing — but the `fbr_invoices` queue accumulates one stuck `pending` row per sale forever for any PK tenant that hasn't disabled the `fbr_integration` flag or completed FBR config)
+**Surfaces affected:** `tenant_<slug>.fbr_invoices` table, `routes/sales.js:1779-1805` (sale settle), `routes/sales.js:440-450` (sale void → debit note), and likely the equivalent path in `routes/returns.js`
+**Found via:** Phase 3 cross-flow concern §313 (P9) verified during sitting 8 pre-flight 2026-05-08
+
+**Steps to reproduce:**
+1. Sign up a fresh PK tenant via the wizard (any vertical, plan=Free).
+2. Country pack auto-seeds `feature_flags.fbr_integration=true`.
+3. Choose `tax_mode=none` (or never go to /settings/fbr to enter a token + NTN).
+4. Settle any sale.
+5. `SELECT * FROM tenant_<slug>.fbr_invoices` — one new `status='pending'` row with `last_error='Missing FBR credentials'` per sale.
+
+**Live observed (test tenant `sanoposlivetest1778021564659`):**
+- `company_profile.tax_mode='none'`, `fbr_api_token IS NULL`, `ntn IS NULL`, `feature_flags.fbr_integration=true`.
+- 10 sales settled across this walkthrough, 10 corresponding `fbr_invoices` rows, all `status='pending'` `retry_count=0` `last_error='Missing FBR credentials'`.
+- FBR worker is correctly halting at the credential check before any HTTP call — there's no leak to the FBR API. But the queue depth on `/admin/dashboard` Worker Status will reflect 1 row per sale per credential-less PK tenant, and `pg_stat_activity` cost grows linearly with sales.
+
+**Source-verified root cause** (per memory `feedback_verify_before_fixing` — read from `main`, not CLAUDE.md):
+- `backend/routes/sales.js:1781-1784`: enqueue gate is `SELECT enabled FROM feature_flags WHERE key='fbr_integration'` — flag-only check.
+- `backend/services/fbr.js:137-166` (`enqueueFbrInvoice`): unconditional INSERT into `fbr_invoices`, no gate on `tax_mode` or credential presence.
+- `tax_mode=none` is a `company_profile` column (v83). The enqueue path never reads it.
+- The PK country pack defaults `fbr_integration=true` regardless of the wizard's tax_mode answer, so any PK tenant that picks `tax_mode=none` lands in the bad combination by default.
+
+**Effect — what's broken vs what's not:**
+- ✅ No FBR API call (credential check gates it before HTTP).
+- ✅ No customer-visible failure (sale settles 200 OK, receipt prints, etc.).
+- ✅ No double-charge / IRN-mismatch / data corruption.
+- ❌ `fbr_invoices` table grows without bound for any tenant in this state.
+- ❌ Worker queue depth metrics (and `/admin/worker-status` panel) will report a misleading "FBR backlog" when the merchant simply doesn't use FBR.
+- ❌ Pre-launch, this combination is the merchant default for PK tenants — anyone who signs up and picks "I don't charge GST" gets a silent backlog.
+
+**Fix paths (no code changes shipped this sitting — filed as polish for fix-it loop):**
+
+1. **Smallest fix (recommended):** add a `tax_mode !== 'none'` AND/OR `fbr_api_token IS NOT NULL` guard in the enqueue gate at `routes/sales.js:1781`. Returns or void path at `:444` and `routes/returns.js` (verify) need the same treatment. ~6-10 lines total.
+2. **Cleaner fix:** move the gate into `enqueueFbrInvoice` itself — let the service refuse when credentials/tax_mode are absent. Removes the foot-gun for any future caller. ~10 lines.
+3. **Onboarding fix:** the PK country pack should NOT auto-seed `fbr_integration=true` when the wizard's tax_mode answer is `none` (or, conversely, the wizard's `tax_mode=none` selection should also flip the flag off). Larger blast radius but fixes the root cause for new tenants. Combine with #1 or #2 for safety on existing tenants.
+
+**Recommendation:** ship Fix #2 first (single chokepoint, low risk), then revisit the country-pack default in a separate audit. Don't ship Fix #3 alone — existing PK tenants in this state still need the queue to stop growing.
+
+**Severity rationale:** 🔵 not 🟡 because (a) no customer impact, (b) FBR API is never actually called, (c) the fix is small, (d) the merchant can heal by either entering FBR creds or flipping the flag off in the admin panel. But filed because the queue accumulating silently is exactly the W24/W27 class of "feature configured wrong, system says nothing" — worth fixing before launch.
+
+**Source:** `backend/routes/sales.js:1779-1805`, `backend/services/fbr.js:137-166`, live tenant DB state.
+
+**Audit reminder for fix-it session:** check `routes/returns.js` and the void path at `routes/sales.js:440-450` for the same pattern.
+
+---
+
+### Session 2026-05-08 (continuation 8) — Phase 3 closed (12 of 12); W31 polish filed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.11 (Tip capture → pool → distribute → payout, smoke verify) + flow 3.12 (Menu Engineering + KDS Analytics) + 3 cross-flow concerns from plan §313.
+**Duration:** ~50 min (split: ~10 min pre-flight + DB sanity + source-verify of report routes; ~10 min /tips UI walk; ~15 min /reports walk + Menu Engineering + KDS Analytics + sidebar group rendering false-alarm; ~10 min cross-flow concern verification; ~5 min docs+commit).
+
+**Result:** ✅ Phase 3 fully closed (12 of 12). **W31 🔵 polish filed** (FBR queue under tax_mode=none). 0 open blockers. 3 cross-flow concerns resolved.
+
+**Pre-flight (clean ✅):**
+- 0 open table sessions, 0 open drafts, 0 menu_schedules, 0 sold-out items.
+- Test Owner attendance #3 still open (clocked_in via the open-session check).
+- Cash shift #2 still open.
+- Sales: 10 (`INV-2026-00001..00010`).
+- Tip state matches resume note exactly: `tip_pools.id=1 status='distributed' total_tips=540 closed_at=2026-05-06`; `tip_captures` ids 2/3/4 all `pool_id=1 server_id=1 tip_method='cash' tip_amount=180`; `tip_pool_payouts.id=1 employee_id=1 payout_amount=540 paid_at=NULL commission_earning_id=1`; `commission_earnings.id=1 employee_id=1 sale_id=NULL earning_type='tip' commission_amount=540 status='pending'`.
+- KDS state: 14 tickets total, 4 with `bumped_at IS NOT NULL AND prep_seconds IS NOT NULL`, **95 worker snapshots** in `kds_station_load_snapshots` — `KDS_SNAPSHOT_WORKER_ENABLED` is live on Railway.
+- FBR queue: 10 pending rows, all `last_error='Missing FBR credentials'` (this turned into W31 below).
+
+**Flow 3.11 walk (smoke verify of 3.2 artifacts):**
+1. /tips → Pools tab → row #1 renders: Date `2026-05-05T19:00:00.000Z` (UTC for 2026-05-06, raw ISO not localized), Outlet `#1`, Status `distributed`, Tips `Rs 540.00`, Captures `3`, Payouts `1`, Closed by `Test Owner`, Closed at `5/7/2026, 4:01:37 AM`, Action `Void`. Matches DB exactly.
+2. /tips → Payouts tab → summary cards: Total payouts 1, Total amount Rs 540.00, Unpaid Rs 540.00. Single row: Test Owner / Hours 3.64 / Weight 1.00 / Payout Rs 540.00 / Paid `unpaid` / Pool `#1`. Export CSV button present. **No "Mark as paid" UI** (source-confirmed earlier — `/api/tips/payouts` only has GET, no PATCH/POST to flip paid_at).
+3. Plan optional step "mark payout paid via UI to verify state transition" → not applicable, no UI path. Documented but not filed (data correctness fine — `paid_at` is null forever for unpaid until a future Mark-Paid feature ships).
+
+Screenshot: `restaurant-walkthrough-flow-3.11-tips-payouts-2026-05-08.png`. Flow 3.11 ✅ closed.
+
+**Flow 3.12 walk (Menu Engineering + KDS Analytics):**
+1. /reports loaded — top-level groups: Sales / Customers / Inventory / Operations / Finance / HR / Governance. Initial scan didn't see "Restaurant" group; thought I'd found a preset bug. Re-checked source — restaurant preset's `visible_report_groups` in `backend/config/industry-config.js:53` does NOT explicitly list "Restaurant" or "Multi-Channel", but the rendered DOM showed them anyway. False alarm. (The earlier scan only captured visible viewport tabs — Restaurant group is at the bottom of the sidebar and was offscreen.)
+2. Direct deep-link `/reports?tab=menu-engineering` → Menu Engineering tab renders with real data:
+   - **Star (2)**: Grilled Chicken (Sample) 5 sold, Rs 6,000 profit, Rs 1,200 margin/unit; Caesar Salad (Sample) 4 sold, Rs 2,600 profit, Rs 650 margin/unit
+   - **Plowhorse (1)**: Iced Tea (Sample) 4 sold, Rs 1,200 profit, Rs 300 margin/unit
+   - **Dog (1)**: Garlic Bread (Sample) 1 sold, Rs 350 profit, Rs 350 margin/unit
+   - Boston Matrix scatter chart with median lines (pop=4, margin=500)
+   - **Chocolate Cake correctly absent** — confirmed via re-read of `routes/reports/menu-engineering.js:69-72`: the SQL subtracts comp'd lines via `sale_item_adjustments.adjustment_type='comp'` so a fully-comped item with no other sales drops out. The W29 comp record (sale_item_id=14, Rs 500) is exactly what excluded it. **Cross-validation of W29 fix: positive.**
+3. Click "KDS Analytics" tab in sidebar → renders:
+   - Main Kitchen station: count 4, p50 85s, p95 11102s, mean 3316s, target `—` (not yet configured)
+   - By Category: Beverages 3 tickets (p50 106s), Appetizers 1 ticket (p50 64s)
+   - Load Trend chart populated with snapshots over the day
+   - Note: URL stayed at `?tab=menu-engineering` after clicking KDS Analytics — the click swapped active state via React, but `setSearchParams` wasn't invoked. Cosmetic only; navigation works.
+
+Screenshot: `restaurant-walkthrough-w32-menu-engineering-deeplink-2026-05-08.png` (named with placeholder W32, but no finding filed — false alarm), `restaurant-walkthrough-flow-3.12-kds-analytics-2026-05-08.png`. Flow 3.12 ✅ closed.
+
+**Cross-flow §313 verification:**
+1. **Sale stock decrement on restaurant sales (P-flag concern):** Caesar 100→96 (4 sold), Chocolate Cake 100→95 (5 sold incl. the comp'd one), Iced Tea 100→96 (4 sold), Garlic Bread 100→99 (1 sold), Grilled Chicken 100→99 (1 sold). Total 15 units across 10 sales. **Restaurant sales DO decrement `outlet_stock`. Resolved positive.** (Concern from plan §313 was that they might not — they do.)
+2. **Tax mode=none + FBR flag ON (P9):** `company_profile.tax_mode='none'`, `fbr_api_token IS NULL`, `ntn IS NULL`, `feature_flags.fbr_integration=true` (auto-seeded by PK country pack). **Found 10 stuck `pending` rows in `fbr_invoices` queue, one per sale, all with `last_error='Missing FBR credentials'`.** Source-verified the gate at `routes/sales.js:1781-1784` is flag-only — does NOT check tax_mode. Worker correctly halts at credential check before any FBR API call (no leak), but queue grows unbounded. **W31 🔵 polish filed** with three fix-path options (gate the enqueue at the call site, or push gate into `enqueueFbrInvoice` itself, or fix the country-pack default).
+3. **Public menu without `?tenant=` (discovery §7 / P6):** Tested both API and UI paths.
+   - `curl https://api.sanopos.com/api/public/restaurant/menu/<token>` (no `?tenant=`) → 400 `{"error":"tenant query param or x-tenant-slug header is required"}` ✅
+   - https://sanopos.com/menu/<token> (no `?tenant=`) → "Menu Unavailable / tenant query param or x-tenant-slug header is required / Please ask your server for help, or scan the QR code again." ✅
+   - **No stack traces, no 500s, friendly UI fallback.** Resolved positive.
+
+**Findings updates:**
+- W31 → 🔵 OPEN. Status Summary: 0 open blockers, 1 issue (W18), **15 polish** (was 14, +W31). Total fixed: 25 unchanged. Total open: 16.
+- Plan tracker: Phase 3 row → "✅ closed (12 of 12)".
+
+**Surprises / lessons:**
+- The /tips UI matched DB state perfectly — confirms 3.2's tip flow is robust. The "no Mark-Paid UI" gap is by design (or a missing feature) — `tip_pool_payouts.paid_at` is currently a stamp that's only flipped via direct DB update or a future API; merchants would need ops to mark a payroll cycle complete. Worth filing as a future feature, not a bug.
+- The Date column in /tips shows raw `2026-05-05T19:00:00.000Z` (UTC instant) instead of localizing to `2026-05-06` (PKT business_date). Cosmetic only, not filed.
+- W31 was caught by the Phase 3 cross-flow concern checklist, not by any user-reported issue. Pattern: "feature configured wrong in default state, system says nothing, queue silently grows" — same shape as W24 (silent tip drop) and W27 (silent day-parting skip). All three would have shipped to merchants if the walkthrough hadn't deliberately tested the cross-flow combinations.
+- Initial misread of the Reports sidebar (thought Restaurant group was filtered out) — recurring pattern of trusting a partial DOM scan over a full visual check. Always scroll the sidebar before declaring a UI element absent.
+- The Menu Engineering tab correctly excluded Chocolate Cake from popularity stats because of the W29 comp record. That's a positive cross-validation: the void/comp adjustment table flowed through to a different report two days later, with no manual reconciliation needed. The data architecture is sound.
+- Plan §313 cross-flow concerns deserve a permanent home in every Phase walkthrough. Two of the three concerns this sitting were "feature works fine, no findings" but the third (W31) was a real bug. Skipping them would have shipped a slow leak.
+
+**No code commits this session beyond the docs (W31 finding + session log + plan tracker). W31 is filed for future fix-it loop, not blocking.**
+
+**Recommendation for next sitting:**
+1. **Phase 3 is done.** Move to Phase 4 — Public Surfaces (7 customer-facing surfaces: kiosk, QR menu in counter+table mode, pay-at-table, public reservation, public receipt, customer portal, customer storefront). Acceptance criteria are end-to-end walks with auth model + happy path + error states.
+2. Optional fix-it loop for W31 — single source-file change at `services/fbr.js:137-166` (push the gate into `enqueueFbrInvoice` itself, refuse when `tax_mode='none'` OR credentials missing). ~10 lines. Combine with country-pack default fix later.
+3. Optional polish for W18 (`/restaurant/checks` Open-Tab CTA) + W19 (header label) + W26 (table-token / seat-session disconnects) + W28 (pay-at-table URL FRONTEND_URL env) + W31 (FBR queue gate). Five polish items can ship as one commit when the operator next opens a fix-it window.
+4. Triage the 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — still untriaged.
+5. Phase 4 entry condition: tenant healthy, no carry-over fixes pending, attendance + shift still open from this sitting.
 
 ---
 
