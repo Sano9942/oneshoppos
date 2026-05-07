@@ -23,10 +23,10 @@
 |---|---|---|---|
 | 🔴 Blocker | 0 | 15 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
-| 🔵 Polish | 13 | 3 | 0 |
-| **Total** | **14** | **24** | **0** |
+| 🔵 Polish | 14 | 3 | 0 |
+| **Total** | **15** | **24** | **0** |
 
-Last update: 2026-05-08 (flow 3.8 closed end-to-end after fixing W27. Created Lunch schedule pinned with Iced Tea + Garlic Bread → public /menu/:token still showed all 5 items outside the window → root caused as `getFeatureFlagsMap(req.tenantId)` on a public route mounted before `loadTenantAndPerms` (req.tenantId is undefined) → silently fell through to public.feature_flags where day_parting=false → filter never ran. Shipped W27 fix `f1a3cd0` (capture tenant.id from resolvePublicTenantDb destructure, pass to getFeatureFlagsMap; both menu and add-item callsites in routes/public-restaurant.js). Re-verified all 3 paths post-deploy: outside-window menu API hides Iced Tea+Garlic Bread (3 of 5 returned), inside-window shows all 5, add off-schedule item returns 422 "Item not available at this time", P7 (un-pinned items always available) holds. Phase 3 = 8 of 12. Total fixed: 24. 0 open blockers. Floor healed: schedule deleted, kiosk slot revoked, all open drafts cancelled.)
+Last update: 2026-05-08 (flow 3.9 closed end-to-end. 86'd Iced Tea via API → /restaurant/availability page lists it with reason + since-time + Un-86 action. POS search shows row with inline "86'D" badge; click does NOT add to cart (cart total Rs 0 after click). Public /menu/:token returns 4 of 5 items (Iced Tea hidden). API hack `POST /checks/<token>/items {product_id:3}` returns 422 "Item is currently unavailable". Pay-at-table on a check that contains a now-86'd item returns 422 "Cannot take payment — some items are now 86'd: Iced Tea (Sample)". Un-86 → all surfaces restore + pay-session mints with 201. 1 polish finding W28 filed (pay_url + qr_url returned by `POST /restaurant/checks/:id/payment-session` use `http://localhost:5173/pay/...` instead of `https://sanopos.com/pay/...` — FRONTEND_URL env var missing/wrong on Railway. Cosmetic — actual checkout_url at api.sanopos.com is correct). Phase 3 = 9 of 12. Total fixed: 24. 0 open blockers. Floor healed: kiosk slot revoked, draft #25 cancelled, pending pay-sessions expired, T1 stranded session closed.)
 
 ---
 
@@ -2021,6 +2021,76 @@ Plus a comment on each callsite documenting why `req.tenantId` is unset on this 
 2. Optional follow-up: audit other public routes (storefront, public-bookings, public-reservations) for any callsite that uses `req.<auth-set-field>` after `resolvePublicTenantDb`. The pattern that bit W27 may exist elsewhere — different auth field, same shape.
 3. Future polish (still): W18 (Open-Tab CTA), W19 (header label), W26 (table-token / seat-session disconnects). Ship together when convenient.
 4. Triage the 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — not blocking restaurant launch but worth a hook-order audit pass.
+
+---
+
+### W28 — Pay-at-table response returns localhost pay_url + qr_url instead of sanopos.com
+
+**Status:** OPEN — 🔵 Polish
+**Severity:** 🔵 Polish (functional today — `checkout_url` at `api.sanopos.com` is correct; `pay_url` and `qr_url` are presented to staff in the QR modal but if staff hand the localhost URL to a guest's phone, it's broken)
+**Surfaces affected:** `POST /api/restaurant/checks/:id/payment-session` response payload — `pay_url` and `qr_url` fields
+**Found via:** Phase 3 flow 3.9 step 5 walkthrough on 2026-05-08
+
+**Steps to reproduce:**
+1. As Test Owner, build a kiosk-counter or dine-in draft with at least one item.
+2. `POST /api/restaurant/checks/<draft_id>/payment-session {tip_amount: 0}` with auth.
+3. Response includes `"pay_url":"http://localhost:5173/pay/<token>"` and `"qr_url":"http://localhost:5173/pay/<token>"`.
+
+**Live observed values (draft #25, two sessions):**
+- Session 1: `"pay_url":"http://localhost:5173/pay/5631035e-..."`, `"qr_url":"http://localhost:5173/pay/5631035e-..."`, `"checkout_url":"https://api.sanopos.com/api/sandbox/pay/sandbox_..."` (correct).
+- Session 2 after un-86: same shape, `pay_url`/`qr_url` localhost, `checkout_url` correct.
+
+**Root cause (likely, not source-verified yet):** `routes/restaurant/pay-at-table.js` builds the `pay_url`/`qr_url` from a `FRONTEND_URL` env var that's either unset on Railway or pointed at the dev default (`http://localhost:5173`). Other URL outputs that go through different builders (the SanoPay sandbox `checkout_url` here, or public receipt URLs) work fine, so the misconfiguration is local to whichever helper builds these two fields.
+
+**Fix path (low priority):**
+1. Set `FRONTEND_URL=https://sanopos.com` on Railway (preferred — single env-var change, no code touch).
+2. Or fall back the URL builder to `https://${tenant.slug}.sanopos.com` / the request's host header when env var is unset.
+
+**Source verification deferred** — defer to fix-it loop. Not blocking.
+
+**Severity rationale:** the `checkout_url` field is correct so a sandbox payment via the staff QR modal would still complete (modal shows the QR pointing at localhost, but the actual payment processor is at api.sanopos.com). However, if any operator surface presents `pay_url` to a customer (e.g. as an SMS / WhatsApp link in a future flow), it would 404 on the customer's phone. Worth fixing before any merchant uses pay-at-table in production.
+
+---
+
+### Session 2026-05-08 (continuation 6) — Flow 3.9 closed; W28 polish filed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.9 (86'd item across POS, kiosk, QR menu, API, pay-at-table, then un-86 restore).
+**Duration:** ~15 min.
+
+**Result:** ✅ flow 3.9 fully closed. 1 polish finding (W28) filed. 0 open blockers. Phase 3 = 9 of 12.
+
+**Pre-flight (clean ✅):** 0 open table sessions, 0 open drafts, 0 menu_schedules, 0 sold-out items. Test Owner attendance #3 still open from prior sitting (PKT 2026-05-07 23:26 → still session_end IS NULL → /api/attendance/my-status returns "clocked_in" via the open-session check, not the per-day count). Cash shift #2 still open.
+
+**Walk:**
+1. **86 Iced Tea**: `POST /api/restaurant/products/3/sold-out {reason: "Walkthrough test"}` → 201 with `is_sold_out=true, sold_out_since=NOW(), sold_out_reason="Walkthrough test"`. /restaurant/availability page lists it cleanly with Un-86 action. Note: the page is read-only — actual marking is via POS overflow menu OR the API. Plan wording suggests a toggle on /restaurant/availability but no such toggle exists; the route is admin-display only. Polish note for later: add a "Mark sold-out" CTA to /restaurant/availability for the cases where a manager isn't at POS. Not filed — too minor.
+2. **POS surface**: /pos/restaurant → seat T1 → search "ice" → row shows `Iced Tea (Sample) 86'd Rs 300.00 96` with inline pill. Click row → cart stays at Rs 0.00 (correctly blocked at the frontend layer). ✅
+3. **Kiosk public menu**: minted fresh counter slot via API (slot.id=5, token `8c12006f-...`). `curl /api/public/restaurant/menu/<token>` → 4 of 5 items returned (Iced Tea hidden). ✅
+4. **API hack**: `curl POST /api/public/restaurant/checks/<token>/items {product_id: 3}` → 422 `{"error":"Item is currently unavailable"}`. ✅
+5. **Pay-at-table refusal**: temporarily un-86 Iced Tea, added to draft #25 via the public route, re-86 it, then `POST /api/restaurant/checks/25/payment-session {tip_amount:0}` → 422 `{"error":"Cannot take payment — some items are now 86'd: Iced Tea (Sample)"}`. ✅
+6. **Restore**: un-86 via DELETE → public menu returns all 5 items, pay-session mints with 201.
+
+**Surprise / new finding:** session-create response returns `pay_url` + `qr_url` as `http://localhost:5173/pay/<token>` instead of `https://sanopos.com/pay/<token>`. `checkout_url` is correct (`https://api.sanopos.com/...`). Filed as **W28 🔵 polish** — likely missing/incorrect `FRONTEND_URL` on Railway. Functional today (operator workflow ends at the QR modal which has the correct sandbox URL), but if `pay_url` is ever sent to a guest phone via SMS/WhatsApp it would 404.
+
+**Findings updates:**
+- W28 → 🔵 OPEN. Status Summary: 0 open blockers, 1 issue (W18), **14 polish** (was 13 — +W28). Total fixed: 24 (unchanged).
+- Plan tracker: Phase 3 row → "9 of 12 closed".
+
+**Floor healed for next sitting:** Iced Tea un-86'd. Kiosk slot #5 revoked. draft #25 cancelled (kiosk_counter, no other items than Iced Tea after the test — items 33/34 still on it, but draft cancelled is the canonical heal). 2 pending pay-sessions for draft #25 expired. T1 stranded session (created when verifying POS surface step 2) closed via Supabase MCP. DB end-state: 0 open sessions, 0 open drafts, 0 sold-out, 0 pending pay-sessions.
+
+**Surprises:**
+- POS frontend correctly shows the 86'd badge + blocks the click — this is good defense-in-depth on top of the backend's 422 (one of the few flows where both client and server enforce the same rule). The "Iced Tea (Sample) 86'd Rs 300.00 96" search-row text squashes the badge into the name without separator (cosmetic readability — minor, not filed).
+- Pay-at-table refusal is a backend-only check at line 57-68 of `pay-at-table.js`. There's no frontend pre-check. That's actually the right design: 422 + a clear error toast on the QR modal opener is plenty. Don't duplicate the check on both sides.
+- Plan step 1 said "**86'd Items** → toggle Iced Tea to sold out → reason... until end of day". The /restaurant/availability page is read-only (display only). Actual mark-sold-out flow is via POS overflow menu (or the API). Plan wording could be clarified.
+- W28 surfaced because I literally ran the API call and read the JSON. Without that, the localhost URLs would have been hidden behind the staff QR modal which probably renders the URL embedded in a QR code (and the operator's eyes wouldn't notice the host).
+
+**No code commits this session beyond the docs (this finding + session log + plan tracker).**
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.10** (Comp/void with manager PIN — POS overflow → comp Chocolate Cake line → manager PIN modal → wrong PIN reject → correct PIN accept → settle → audit trail in `sale_item_adjustments`). Floor is clean, tenant healthy.
+2. Optional fix-it for W28: set `FRONTEND_URL=https://sanopos.com` on Railway. One env-var change, no code. ~2 min.
+3. The 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — still untriaged. Not blocking restaurant launch.
 
 ---
 
