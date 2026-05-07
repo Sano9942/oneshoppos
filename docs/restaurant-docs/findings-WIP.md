@@ -22,11 +22,13 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
-| 🟡 Issue | 1 | 8 | 0 |
-| 🔵 Polish | 13 | 7 | 0 |
-| **Total** | **14** | **31** | **0** |
+| 🟡 Issue | 2 | 8 | 0 |
+| 🔵 Polish | 14 | 7 | 0 |
+| **Total** | **16** | **31** | **0** |
 
-Last update: 2026-05-08 (post-Phase-5 fix-it loop closed — 6 fixes shipped + live-verified end-to-end. **W28** ✅ FIXED via Railway env var (`FRONTEND_URL=https://sanopos.com`) — pay_url now serves sanopos.com domain. **W33** ✅ FIXED `03577f8` — Express 5 `req.query` mutation replaced with header mutation; `/reserve/:slug` now shows 26 bookable slots end-to-end. **W31** ✅ FIXED `8091a07` — `enqueueFbrInvoice` gates on `tax_mode != 'none'` AND credentials present; verified on tenant default state by ringing up sale id=11 (fbr count stayed at 10, no new row). **W34** ✅ FIXED `a0aba0b` — portal login subtitle preset-aware via `/api/portal/config.enabled_tabs`; restaurant tenants see "Access your orders, loyalty, and account." **W35** ✅ FIXED `b2cef77` — admin worker-status panel supplements in-memory heartbeat with `pgboss.job MAX(completed_on)`; 6 daily/weekly workers that pre-fix showed "stopped" post-deploy now show "running" with actual last-completed timestamps. **W32** ✅ FIXED `dd231e4` — sandbox + webhook handlers cross-tenant scan to find tenant DB scope for the gateway_ref; sandbox page resolves "Restaurant Table Payment / Table check #34" instead of "Payment reference not found in any context"; clicking Pay Successfully fires the webhook → flips session to paid → creates sale → closes table session, all live-verified by ringing up sale id=12 Rs 747.50. Status Summary: 0 blockers (was 0), 1 issue (was 3 → -W32 -W33), 13 polish (was 17 → -W28 -W31 -W34 -W35), 31 fixed (was 25 → +6). Earlier entries below.)
+Last update: 2026-05-08 (Phase 6 closed — 13 of 13 sub-sections walked. **W36 🟡 NEW** KDS ticket cards unreadable in dark mode (`KDSRedesign.jsx:421` uses `bg-(--ui-bg)` page-bg token + item-name spans lack explicit text color → black-on-near-black ~1.0 contrast; verified live via Playwright DOM inspection). **W37 🔵 NEW** onboarding checklist `floor_plan` step always shows undone (`DashboardOnboarding.jsx:79` hardcoded `done: false` + 8 other vertical steps share the same shape). B2 (Manager 21 perms) live-verified end-to-end. Cashier-role tenant separation verified — no Restaurant section, direct nav blocked, but POS terminal accessible (correct since cashiers ring up restaurant orders). Cross-tenant isolation bulletproof — JWT `tid` wins, x-tenant-slug header ignored. Day-parting + pay-at-table edges + session-expired modal all source-verified (gates explicit; live triggers expensive). KDS stress test passes — 13 simultaneous tickets handled, recall mechanism works. Status Summary: 16 open (was 14, +W36 +W37), 31 fixed unchanged. Earlier entries below.)
+
+Earlier: 2026-05-08 (post-Phase-5 fix-it loop closed — 6 fixes shipped + live-verified end-to-end. **W28** ✅ FIXED via Railway env var (`FRONTEND_URL=https://sanopos.com`) — pay_url now serves sanopos.com domain. **W33** ✅ FIXED `03577f8` — Express 5 `req.query` mutation replaced with header mutation; `/reserve/:slug` now shows 26 bookable slots end-to-end. **W31** ✅ FIXED `8091a07` — `enqueueFbrInvoice` gates on `tax_mode != 'none'` AND credentials present; verified on tenant default state by ringing up sale id=11 (fbr count stayed at 10, no new row). **W34** ✅ FIXED `a0aba0b` — portal login subtitle preset-aware via `/api/portal/config.enabled_tabs`; restaurant tenants see "Access your orders, loyalty, and account." **W35** ✅ FIXED `b2cef77` — admin worker-status panel supplements in-memory heartbeat with `pgboss.job MAX(completed_on)`; 6 daily/weekly workers that pre-fix showed "stopped" post-deploy now show "running" with actual last-completed timestamps. **W32** ✅ FIXED `dd231e4` — sandbox + webhook handlers cross-tenant scan to find tenant DB scope for the gateway_ref; sandbox page resolves "Restaurant Table Payment / Table check #34" instead of "Payment reference not found in any context"; clicking Pay Successfully fires the webhook → flips session to paid → creates sale → closes table session, all live-verified by ringing up sale id=12 Rs 747.50. Status Summary: 0 blockers (was 0), 1 issue (was 3 → -W32 -W33), 13 polish (was 17 → -W28 -W31 -W34 -W35), 31 fixed (was 25 → +6). Earlier entries below.)
 
 Earlier: 2026-05-08 (Phase 5 fully closed — all 4 restaurant workers verified live. course-release end-to-end (held course id=3 auto-fired 9.9s after hold_until via /restaurant/checks UI), kds_snapshot 106 successful 15-min runs (last 5 min ago, 99 snapshot rows), reservation_reminder 106 successful 15-min runs (worker scheduled but no eligible rows; SMS provider not configured = silent skip per plan §348), retail_digest 1 successful run on 2026-05-04 (next fires Monday 2026-05-11). Admin /admin/dashboard Worker Status panel walked: 19 worker slots rendered correctly, 11 running with fresh heartbeats, 7 "stopped" but cron-scheduled (post-deploy heartbeat-in-memory artifact — `pgboss.schedule` + `pgboss.job` confirm all are alive). 4,081 historical pg-boss runs across 4 restaurant queues, **0 failures**. **W35 🔵 NEW** filed for the post-deploy heartbeat artifact (admin panel shows daily/weekly workers as "stopped" between cron ticks because `lastPollAt` is in-memory only). 0 blockers, 3 issues, 17 polish (+W35). Earlier entries below.)
 
@@ -2817,6 +2819,158 @@ Screenshots: `restaurant-walkthrough-fix-w28-verified-2026-05-08.png`, `restaura
 3. **Audit follow-up:** consider a lint rule for `req.query.X = Y` mutations to catch any future Express 5 footguns.
 4. **W18 (`/restaurant/checks` Open-Tab CTA)** is the only remaining open issue. Polish-tier in practice — staff workaround exists. Ship in next fix-it loop or close as "won't fix" if not blocking.
 5. **2 frontend Sentry hook-order errors** (SANOPOS-FRONTEND-A and -B) still untriaged from sitting 4. Worth running them through the Sentry CLI in a future sitting.
+
+---
+
+### W36 — KDS ticket cards unreadable in dark mode (text-on-bg contrast ~1.0)
+
+**Status:** OPEN
+**Severity:** 🟡 Issue (kitchen staff can't read tickets if dark mode is enabled)
+**Surfaces affected:** `frontend/src/pages/redesign/KDSRedesign.jsx:421` (ticket card outer div), all KDS ticket items
+**Found via:** Phase 6.2 dark-mode walk-through 2026-05-08
+
+**Steps to reproduce:**
+1. Login any restaurant tenant.
+2. Profile dropdown → toggle Dark Mode.
+3. Navigate to `/kds`.
+4. Observe ticket cards.
+
+**Observed:**
+Ticket card body background is `bg-(--ui-bg)` which evaluates to `#0f172a` in dark mode (the page background). Item-name spans (`<span className="font-bold text-sm">{item.product_name}</span>` at line 451 and similar) render with default text color = `rgb(0, 0, 0)` black. Result: black text on near-black background, contrast ratio ≈ 1.0:1, well below WCAG AA 4.5:1 minimum.
+
+**Expected:**
+Card background should differ from page background (use `bg-(--ui-surface)` instead of `bg-(--ui-bg)`), AND item-name text should explicitly use `text-(--ui-text)` so it renders light in dark mode.
+
+**Console/network errors:** None — purely visual.
+
+**Live measurement (Playwright JS injection on prod KDS):**
+```
+{ cardBg: "rgb(15, 23, 42)",   // = #0f172a, the page bg token
+  itemNameColor: "rgb(0, 0, 0)", // black on near-black
+  itemNameClasses: "font-bold text-sm" }  // no text color override
+```
+
+**Suspected root cause:**
+- `KDSRedesign.jsx:421` — `bg-(--ui-bg)` is wrong token; should be `bg-(--ui-surface)`.
+- Item-name spans at `:430` (table_label) and `:451` (product_name) lack `text-(--ui-text)` so they fall through to browser-default black.
+- The page-level body (rendered around the cards) DOES use the correct dark token (`#0f172a`), so the cards visually merge into the background and item text becomes invisible.
+
+**Why filed:**
+Light mode is the default — most merchants will never hit this. But: KDS in a dark kitchen with a dimmed display is a credible use case, and *any* staff toggling dark mode for the dining-room KDS station will see broken tickets. Plan §378 explicitly asks "POS specifically uses hardcoded colors per CLAUDE.md (verify if KDS / Floor Plan match)" — KDS does NOT match. Floor Plan dark mode is clean (verified separately).
+
+**Fix path:**
+1. Change `:421` from `bg-(--ui-bg)` to `bg-(--ui-surface)`.
+2. Add explicit `text-(--ui-text)` to item-name spans (`:430`, `:451`).
+3. Verify the `bg-(--ui-bg-hover)` header at `:428` and the `text-(--ui-text-muted)` at `:431/459/461` still read correctly post-fix.
+4. Optional: also gate this with a regression unit test that snapshots dark-mode contrast for the KDS card.
+
+**Severity rationale:** 🟡 not 🔵 because (a) KDS is a kitchen-critical surface — illegible tickets means food doesn't come out, (b) the breakage is silent (no error, no warning), (c) the fix is small (3-line CSS class change). But not a 🔴 because dark mode is opt-in and most merchants won't toggle it.
+
+**Source:** `frontend/src/pages/redesign/KDSRedesign.jsx:421-465`. Verified live on prod via Playwright.
+
+Screenshot: `restaurant-walkthrough-6.2-kds-dark-2026-05-08.png` (visible black-on-near-black ticket text).
+
+---
+
+### W37 — Onboarding checklist `floor_plan` step hardcoded done=false even when floor plan exists
+
+**Status:** OPEN
+**Severity:** 🔵 Polish (cosmetic — doesn't block any function, just shows a perpetually-incomplete checklist)
+**Surfaces affected:** `frontend/src/pages/dashboard/DashboardOnboarding.jsx:76-81` (one of N step builders)
+**Found via:** Phase 6.12 onboarding-checklist walk-through 2026-05-08
+
+**Steps to reproduce:**
+1. Restaurant tenant with at least one floor plan + tables (i.e. `restaurant_floor_plans` count > 0 AND `restaurant_tables` count > 0).
+2. Land on `/dashboard`.
+3. Observe "Get started with SanoPOS" panel.
+
+**Observed (live tenant `sanoposlivetest1778021564659`):**
+- DB: `restaurant_floor_plans` count = 1, `restaurant_tables` count = 4 (4 tables across 1 plan).
+- UI: "4 of 5 steps complete" with floor_plan showing as the missing step ("Set up your floor plan" → "Go →" CTA visible).
+- Other steps (`store`, `menu_item`, `shift`, `order`) correctly show as ✅ done.
+
+**Expected:**
+`floor_plan.done` should evaluate against actual floor plan count from `data` prop (e.g. `(data?.floorPlanCount ?? 0) > 0`), similar to how `shift.done = hasShiftOpen` checks `data.operationalReadiness`, `sale.done = hasSales` checks `data.saleCount`, `product.done = hasProducts` checks `data.inventory.total_products`.
+
+**Source-verified root cause:**
+`frontend/src/pages/dashboard/DashboardOnboarding.jsx:79`: `done: false` — hardcoded literal. The `buildSteps()` helper at `:9-13` extracts `hasShiftOpen`, `hasSales`, `hasProducts` from `data`, but never reads any floor-plan field. The dashboard `GET /api/reports/dashboard` payload likely doesn't include floor plan count either — this would need to be added to the dashboard route response shape and threaded through.
+
+The same pattern affects 8 other steps: `calendar`, `booking`, `ticket` (workflow), `contract`, `checkout` (rental), `room`, `rate`, `checkin` (room booking), and `membership`. Each is also `done: false` hardcoded. So clinic / appointment / booking / rental / room verticals will have the same perpetually-incomplete checklist for their preset's floor_plan-equivalent step.
+
+**Effect:**
+- ❌ Restaurant onboarding: floor_plan step never ticks even after merchant completes it. Merchant will see "4 of 5 steps complete" forever unless they manually dismiss the checklist (server-side `onboarding_dismissed` flag) or hit auto-dismiss when ALL steps pass — which never happens.
+- ❌ Same shape across 4+ verticals — would surface for clinic, booking, rental, room tenants too.
+
+**Why filed:**
+Plan §431 explicitly asks: "verify checklist actually surfaces restaurant-specific steps: store ✅, menu_item ✅, floor_plan ✅, shift ✅, order ✅" and "Each 'done' detection works." floor_plan detection does NOT work. Filed for transparency even though no merchant has complained — it's a perpetual cosmetic nag.
+
+**Fix paths:**
+1. **Smallest fix:** add `floorPlanCount` to dashboard `GET /api/reports/dashboard` response, then change `:79` from `done: false` to `done: (data?.floorPlanCount ?? 0) > 0`. Same shape as `hasShiftOpen`. ~5-line change.
+2. **Broader fix (recommended):** audit all 9 hardcoded `done: false` steps and either wire up the corresponding completion checks OR remove the steps from `presetSteps` registry until the wiring exists. Less ambitious but more honest.
+
+**Severity rationale:** 🔵 not 🟡 because (a) merchant can self-heal via dismiss button, (b) no functional impact — POS works regardless, (c) only the cosmetic widget is affected.
+
+**Source:** `frontend/src/pages/dashboard/DashboardOnboarding.jsx:9-13` (data-readers) + `:76-81` (the broken step). Verified live on prod via dashboard inspection.
+
+---
+
+### Session 2026-05-08 (continuation 12) — Phase 6 walked end-to-end (13 of 13 sub-sections)
+
+**Operator:** Hassan + Claude (headed Playwright + Supabase MCP + super-admin not needed)
+**Tenant:** `sanoposlivetest1778021564659`
+**Scope:** Walk all 13 Phase 6 sub-sections per plan §362-440. Goal: close Phase 6, file findings for any genuine bugs, defer cosmetic-only or live-trigger-expensive items with rationale.
+**Duration:** ~75 min total
+
+**Result:** ✅ all 13 sub-sections walked. **2 new findings filed (W36 🟡 + W37 🔵).** Phase 6 closed. Status Summary: 16 open (was 14), 31 fixed unchanged.
+
+**Pre-flight:** clean. 0 open table sessions, 0 open drafts, attendance #3 + cash shift #2 still open. 12 sales, KDS 13 active tickets.
+
+**Sub-section walks (✅ closed unless noted):**
+
+| 6.x | What | Result | Findings |
+|---|---|---|---|
+| 6.1 Mobile Safari | 390x844 viewport (Playwright reported 488x1055 due to scaling — still mobile breakpoint, Tailwind `lg=1024px`) | Sidebar drawer toggles ✅, no horizontal overflow, POS Restaurant floor plan tap-to-seat works, KDS readable on small screen, 0 console errors | None |
+| 6.2 Dark mode | Profile dropdown → toggle. Walked dashboard, /restaurant/floor, /restaurant/checks, /kds, /pos/restaurant, public receipt | Dashboard + Floor + Checks clean; **KDS broken (W36)**; POS Restaurant uses hardcoded light colors (per CLAUDE.md, intentional); public receipt + kiosk inherit `data-theme=dark` from localStorage (cross-page leak — by current design, not a finding) | **W36 🟡 NEW** KDS dark mode |
+| 6.3 Offline POS | DevTools-equivalent JS override (`navigator.onLine=false` + fetch stub) on /pos/restaurant | Floor plan shows friendly fallback "No tables in this floor plan yet" (since /api/* fails). Click "New Takeaway" → POS opens with explicit message **"Kitchen firing requires connection. Pay still works offline."** Send to Kitchen + Fire C1 disabled. Reconnect → tables reappear. Excellent UX. | None |
+| 6.4 Session expired | Tampered JWT last-10-chars → /api/sales POST → server returns 401 INVALID_TOKEN. Source-verified `POSSessionExpiredModal` mounted at `POSRedesign.jsx:290` AND `POSRestaurantRedesign.jsx:140`; trigger at `useCheckout.js:351-355` on any 401 from /api/sales. Live modal-render verification deferred (would require building full restaurant cart on live tenant — expensive setup). | None |
+| 6.5 Manager-role (B2) | Created Test Manager (PIN 5555, password TestMgr5555!). DB confirmed 21 perms (all 13 phase4 vertical perms present). Logged in: `/restaurant/checks` ✅, `/kds` ✅, `/tips` ✅. `/restaurant/void-reasons` redirects to /dashboard (frontend `all_access` gate). PATCH `/api/restaurant/void-reasons/1` → 403 "insufficient permissions" (backend `all_access` gate). | **B2 fully verified** |
+| 6.6 Cashier-role | Created Test Cashier (PIN 7777, password TestCash7777!). DB confirmed 3 perms (pos_discount, pos_park, view_reports). Sidebar: NO Restaurant section, NO restaurant links. Direct nav to `/restaurant/checks` and `/kds` redirects to /dashboard. `/pos` auto-routes to `/pos/restaurant` (POS terminal IS the cashier's tool). POST `/api/draft-orders` with `order_context='takeout'` succeeds (id=36 created) — confirmed cashier can ring up orders, can NOT administer Restaurant configuration. | None — matches plan expectation |
+| 6.7 Cross-tenant isolation | While logged in as Test Cashier (restaurant tenant), curl /api/products with `x-tenant-slug: livetest1` → response = "Caesar Salad (Sample) Rs 650" (restaurant data). DB confirms livetest1.products.id=1 = "T-Shirt (Sample) Rs 1500". JWT `tid` won, x-tenant-slug header was ignored. Same result with `x-tenant-slug: nonexistent_tenant_xyz`. ✅ **Cross-tenant isolation enforced.** | None |
+| 6.8 KDS stress | Production state: 13 active tickets visible simultaneously across 4 different tables (T1/T2/T3 + #15 external kiosk). Bumped tickets from earlier sessions show out-of-order timeline (#1@20:07:01, #2@20:07:13, #3@23:50:21, #12@23:51:13). Live recall test: POST /api/kds/tickets/12/recall → 200, status `bumped`→`new`. Re-bumped to restore state. | None |
+| 6.9 Pay-at-Table edges | Source-verified all 4 plan-asked edges in `routes/restaurant/pay-at-table.js`: (a) 86 item gate at `:57-67` returns 422 with item names; (b) prior-session expiry at `:78-85` auto-flips earlier `pending` sessions to `expired` (single-live-token policy); (c) 15-min `expires_at` at `:88` + 410-on-expired at `:208-211`; (d) webhook idempotency in `processWebhookEvent:368` returns early if status='paid'. All gates explicit. Live-trigger of each edge deferred (expensive setup; gates well-understood from source). | None |
+| 6.10 Day-parting | Source-verified `services/menu-schedule-resolver.js`: zero schedules → product available (line 103); same-day window `start ≤ now < end` (lines 119-120); overnight (`end < start`) handled (lines 121-123); day_of_week null → matches all days (line 116); tz cascade outlet→company→UTC. W27 already shipped the cache-invalidation fix. | None |
+| 6.11 Timezone | DB tenant tz = Asia/Karachi. Sale id=12 stored in DB at UTC 21:31:24 = Karachi 02:31:24 next day. Sales History UI shows "5/8/2026, 2:31:24 AM" — matches Karachi. Browser tz also Asia/Karachi (matches host). UI uses `fmtUtcDateTime` which formats in browser locale; documented behavior per `frontend/CLAUDE.md`. Day-parting uses outlet/company tz, not browser. | None — expected behavior |
+| 6.12 Onboarding checklist (P4) | Dashboard widget shows "4 of 5 steps complete" — store ✅, menu_item ✅, shift ✅, order ✅, floor_plan ❌ (showing "Go →" CTA despite tenant having 1 floor plan + 4 tables). Source-verified at `DashboardOnboarding.jsx:79`: `done: false` is hardcoded. 8 other vertical-specific steps have the same `done: false` literal. | **W37 🔵 NEW** floor_plan onboarding hardcoded |
+| 6.13 Audit-flagged (P2 + P10) | **P2 confirmed:** `routes/modifiers.js:20-21` and `routes/tips.js:21-22` use `requireFeature("phase4_restaurant")` but NOT `requireMode("restaurant")`. Theoretical defense-in-depth gap; in practice the flag is only seeded on restaurant tenants so this hasn't surfaced as a leak. **P10 confirmed:** DB role 1 named "Admin", but the profile dropdown header + sidebar Account-section link both render "Administrator". Cosmetic mismatch. | Observations only — already known per plan §437-438 |
+
+**Test data created (kept for next sittings):**
+- Test Manager employee (id=2 in tenant schema, role_id=2, password+PIN, all 21 perms)
+- Test Cashier employee (id=3 in tenant schema, role_id=3, password+PIN, 3 perms)
+- 1 extra draft order (id=36, status=open, order_context=takeout, created_by Test Cashier as part of 6.6 verification)
+- KDS ticket #12 was recalled+bumped during 6.8 (status restored to `bumped`)
+
+**Cleanup at end of sitting:**
+- Test Owner attendance #3 still open ✅
+- Cash shift #2 still open ✅
+- 0 open table sessions ✅
+- 1 open draft order id=36 (verification artifact, not affecting POS) — leaving for next sitting cleanup
+- Sales count: 12 (unchanged this sitting)
+- KDS: 13 active + 4 bumped (unchanged net)
+
+**Surprises / lessons:**
+- **6.2 dark mode caught a real bug.** KDS uses `bg-(--ui-bg)` (page bg, dark) instead of `bg-(--ui-surface)` (card surface) and item names lack explicit text color. Black-on-near-black at ~1.0 contrast. Not caught earlier because no prior sitting toggled dark mode on KDS specifically. Per memory `feedback_parallel_paths` — when fixing dark-mode, audit all surfaces, not just dashboard.
+- **6.3 offline UX is excellent.** "Kitchen firing requires connection. Pay still works offline." is a model offline message — explicit, scoped, doesn't lie about what's possible.
+- **6.6 Cashier behavior was a positive surprise.** I worried for a moment that Cashier could create restaurant draft orders via the unguarded `/api/draft-orders` POST. But re-checking: cashiers SHOULD be able to ring up takeaway/dine_in/delivery — that's the whole point of restaurant POS. The Restaurant *administration* surfaces (Floor Plan setup, Void/Comp config, KDS station config, Tip Pool admin) ARE properly gated by `manage_restaurant` perm. The right behavior.
+- **6.7 cross-tenant isolation is bulletproof.** Tampered `x-tenant-slug` was completely ignored — JWT `tid` is the canonical source. This was the right design from day 1; nice to confirm live.
+- **6.12 floor_plan hardcode is a 1-line bug** but caught only because I read the source after the live UI showed an inconsistency. Per memory `feedback_verify_before_fixing`. CLAUDE.md said "onboarding checklist surfaces restaurant-specific steps with completion detection" — the source revealed 9 of N steps are hardcoded `done: false`.
+- **6.13 P2 (modifiers/tips lack requireMode) is a known gap** but the practical risk is low because `phase4_restaurant` flag is only seeded for restaurant tenants. Safer to add `requireMode("restaurant")` defensively, but not blocking launch.
+
+**Recommendation for next sitting:**
+1. **Phase 7 — Cafe Parity Pass.** Sign up a fresh `cafetest1` tenant via wizard (Cafe / Quick Service preset), verify the 3 documented diffs from restaurant: no floor plan widget, "Customer" not "Guest" labels, `employees` step instead of `floor_plan` in onboarding. Delete the test tenant via `/admin` after.
+2. **Fix-it loop for W36 + W37 if operator wants.** W36 is the higher-priority of the two (kitchen-critical surface in dark mode). W37 is the easier fix (1-line literal change once `floorPlanCount` is added to dashboard payload).
+3. **W18 (Open-Tab CTA on /restaurant/checks)** is now the only other open issue. Polish-tier; ship in same fix-it loop or close as won't-fix.
+4. **2 frontend Sentry hook-order errors** still untriaged — could be quick to clear if not relevant to current code.
+5. **Cleanup of test artifacts:** Test Manager and Test Cashier employees + draft order #36 can be archived/deleted before Phase 8 if launch-fresh state is needed. They're not blocking anything currently.
 
 ---
 
