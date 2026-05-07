@@ -95,7 +95,7 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
     try {
       const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-      const { db } = resolved;
+      const { db, tenant } = resolved;
 
       const ctx = await resolveKioskToken(db, req.params.token);
       if (!ctx) {
@@ -117,9 +117,11 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
 
       // 2-R.6 day-parting filter. Flag-gated so non-restaurant tenants and
       // restaurant tenants without the flag see the full menu.
+      // Public route mounts before loadTenantAndPerms, so req.tenantId is
+      // unset — use the resolved tenant.id from resolvePublicTenantDb.
       let items = itemsRaw;
       try {
-        const flags = await getFeatureFlagsMap(req.tenantId);
+        const flags = await getFeatureFlagsMap(tenant?.id);
         if (flags.phase4_restaurant_day_parting) {
           items = await filterAvailableProducts(db, itemsRaw, ctx.outletId);
         }
@@ -148,7 +150,7 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
     try {
       const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-      const { db } = resolved;
+      const { db, tenant } = resolved;
 
       const { product_id, quantity, notes } = req.body || {};
       if (!product_id || !quantity || quantity < 1) {
@@ -170,8 +172,10 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
       }
 
       // 2-R.6 — refuse off-schedule adds when the flag is on.
+      // Public route mounts before loadTenantAndPerms, so req.tenantId is
+      // unset — use the resolved tenant.id from resolvePublicTenantDb.
       try {
-        const flags = await getFeatureFlagsMap(req.tenantId);
+        const flags = await getFeatureFlagsMap(tenant?.id);
         if (flags.phase4_restaurant_day_parting) {
           const available = await isProductAvailableNow(db, product.id, ctx.outletId);
           if (!available) {
