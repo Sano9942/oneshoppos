@@ -1,7 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { portalApi } from "../../api/portalApi";
 import { usePortalAuth } from "./PortalAuthProvider";
+
+// W34: tab-key → human label mapping for the login subtitle. Source of truth
+// for which tabs exist is `enabled_tabs` from `/api/portal/config`, which the
+// backend gates per industry preset (`PORTAL_ENABLED_TABS_BY_PRESET`).
+const TAB_LABELS = {
+  invoices: "invoices",
+  orders: "orders",
+  appointments: "appointments",
+  subscriptions: "subscriptions",
+  contracts: "contracts",
+  tickets: "tickets",
+  loyalty: "loyalty",
+  wallet: "wallet",
+  profile: "account",
+  stays: "stays",
+  treatments: "treatments",
+};
+const DEFAULT_SUBTITLE = "Access your invoices, bookings, and account.";
+
+function buildSubtitle(enabledTabs) {
+  if (!Array.isArray(enabledTabs) || enabledTabs.length === 0) {
+    return DEFAULT_SUBTITLE;
+  }
+  // Always anchor on "account" to match the original UX.
+  const labels = enabledTabs
+    .map((key) => TAB_LABELS[key])
+    .filter(Boolean);
+  if (!labels.includes("account")) labels.push("account");
+  if (labels.length === 1) return `Access your ${labels[0]}.`;
+  if (labels.length === 2) return `Access your ${labels[0]} and ${labels[1]}.`;
+  const last = labels.pop();
+  return `Access your ${labels.join(", ")}, and ${last}.`;
+}
 
 export default function PortalLogin() {
   const { tenantSlug } = useParams();
@@ -13,6 +46,23 @@ export default function PortalLogin() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
+  const [subtitle, setSubtitle] = useState(DEFAULT_SUBTITLE);
+
+  useEffect(() => {
+    let cancelled = false;
+    portalApi
+      .get(tenantSlug, "/api/portal/config")
+      .then((cfg) => {
+        if (cancelled) return;
+        setSubtitle(buildSubtitle(cfg?.enabled_tabs));
+      })
+      .catch(() => {
+        // Fail open — subtitle stays the default. Login form still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug]);
 
   async function submitPassword(e) {
     e.preventDefault();
@@ -50,7 +100,7 @@ export default function PortalLogin() {
   return (
     <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
       <h1 className="text-xl font-semibold mb-1">Sign in</h1>
-      <p className="text-sm text-slate-500 mb-6">Access your invoices, bookings, and account.</p>
+      <p className="text-sm text-slate-500 mb-6">{subtitle}</p>
 
       <form onSubmit={mode === "password" ? submitPassword : (e) => { e.preventDefault(); requestOtp(); }}>
         <label className="block text-sm font-medium mb-1">Email</label>
