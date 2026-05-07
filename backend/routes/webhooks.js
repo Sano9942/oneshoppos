@@ -17,6 +17,67 @@ const masterDb = require("../master-db-pg");
 const _logger = require("../services/logger").child({ component: "webhooks" });
 const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
 
+// W32: webhook arrives with no tenant context (mounted before tenant
+// middleware, payload doesn't carry slug). Tenant-scoped tables
+// (room_bookings, treatment_plans, customer_invoice_payment_links,
+// restaurant_payment_sessions, storefront_payment_sessions) live in each
+// tenant schema. The original handler queried `db-pg` (public pool)
+// without a search_path so every tenant-scoped lookup silently failed
+// with "relation does not exist". Pay-at-table sandbox transactions
+// never transitioned to "paid" because the webhook couldn't resolve
+// the session.
+//
+// Resolves tenant by scanning active tenants and returning the first
+// hit + its scoped DB. Returns null if not found in any tenant.
+async function resolveTenantDbForGatewayRef(gatewayRef) {
+  const tenantDbMgr = require("../tenant-db-manager-pg");
+  let tenants = [];
+  try {
+    const { rows } = await masterDb.query(
+      "SELECT id, slug FROM tenants WHERE status = 'active' ORDER BY id"
+    );
+    tenants = rows;
+  } catch (err) {
+    _logger.error({ err }, "webhook tenant list failed");
+    return null;
+  }
+
+  // Try each tenant-scoped table where a payment session might live.
+  // First match wins. Order matches the lookup order in processWebhookEvent
+  // below (room → treatment plan → invoice → restaurant → storefront).
+  const lookups = [
+    { table: "room_bookings", ref: "deposit_payment_intent_id" },
+    { table: "treatment_plans", ref: "deposit_payment_intent_id" },
+    { table: "customer_invoice_payment_links", ref: "gateway_ref" },
+    { table: "restaurant_payment_sessions", ref: "gateway_ref" },
+    { table: "storefront_payment_sessions", ref: "provider_ref" },
+  ];
+
+  for (const t of tenants) {
+    let db;
+    try {
+      db = await tenantDbMgr.getDb(t.id);
+    } catch (err) {
+      _logger.warn({ err, slug: t.slug }, "webhook getDb failed — skipping tenant");
+      continue;
+    }
+    for (const { table, ref } of lookups) {
+      try {
+        const { rows } = await db.query(
+          `SELECT 1 FROM ${table} WHERE ${ref} = $1 LIMIT 1`,
+          [gatewayRef]
+        );
+        if (rows.length) return { db, tenant: t };
+      } catch (err) {
+        if (!/does not exist/i.test(err.message)) {
+          _logger.warn({ err, slug: t.slug, table }, "webhook lookup error");
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Process a verified payment webhook event.
  * @param {Object} opts
@@ -149,7 +210,24 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
   // xpay, etc.) because verifyWebhook() is dispatched on adapter up front.
   // room_bookings.deposit_payment_intent_id is set by room-deposits.js when
   // a pre-auth is created, and the webhook looks it up here.
-  const db = require("../db-pg");
+  //
+  // W32: scope db to the tenant that owns this gateway_ref. Without this,
+  // every tenant-scoped lookup below queries the public pool with no
+  // search_path and silently fails with "relation does not exist", which
+  // is why pay-at-table never transitioned to "paid" in sandbox.
+  const resolved = await resolveTenantDbForGatewayRef(transaction_id);
+  if (!resolved) {
+    _logger.info(
+      { transaction_id, provider, event_type },
+      "Webhook gateway_ref not found in any tenant — checked rooms/treatment/invoice/restaurant/storefront contexts"
+    );
+    return { ok: false, statusCode: 404, error: "Payment context not found" };
+  }
+  const db = resolved.db;
+  _logger.info(
+    { transaction_id, tenant: resolved.tenant.slug },
+    "Webhook tenant resolved"
+  );
   try {
     const { rows: [booking] } = await db.query(
       "SELECT id, deposit_status FROM room_bookings WHERE deposit_payment_intent_id = $1",

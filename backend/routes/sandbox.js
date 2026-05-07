@@ -12,6 +12,74 @@ module.exports = function registerSandboxRoutes(app, deps) {
   const masterDb = require("../master-db-pg");
   const logger = require("../services/logger").child({ component: "sandbox" });
   const { processWebhookEvent } = require("./webhooks");
+  const tenantDbMgr = deps.tenantDbManager || require("../tenant-db-manager-pg");
+
+  // W32: tenant-scoped sandbox lookups. The 3 sandbox-eligible tables
+  // (customer_invoice_payment_links, storefront_payment_sessions,
+  // restaurant_payment_sessions) live in each tenant schema, not public.
+  // The original implementation queried `db-pg` (public pool) without a
+  // search_path and the catch blocks silently swallowed the "relation does
+  // not exist" error → context fell through to "unknown" → page rendered
+  // "Payment reference not found in any context".
+  //
+  // Sandbox is dev/soft-launch only and tenant counts stay small, so a
+  // cross-tenant scan is fine here. We iterate active tenants, get a
+  // scoped DB handle from `tenantDbManager`, and try each table. Returns
+  // both the row and the tenant slug so the webhook simulator can scope
+  // its own queries the same way.
+  async function findSandboxRefAcrossTenants(gatewayRef) {
+    let tenants = [];
+    try {
+      const { rows } = await masterDb.query(
+        "SELECT id, slug FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+      tenants = rows;
+    } catch (err) {
+      logger.error({ err }, "sandbox tenant list failed");
+      return null;
+    }
+
+    for (const t of tenants) {
+      let db;
+      try {
+        db = await tenantDbMgr.getDb(t.id);
+      } catch (err) {
+        logger.warn({ err, slug: t.slug }, "sandbox getDb failed — skipping tenant");
+        continue;
+      }
+
+      try {
+        const { rows: [link] } = await db.query(
+          "SELECT id, invoice_id, amount, status FROM customer_invoice_payment_links WHERE gateway_ref = $1",
+          [gatewayRef]
+        );
+        if (link) return { kind: "invoice", row: link, tenant: t, db };
+      } catch (err) {
+        if (!/does not exist/i.test(err.message)) logger.warn({ err, slug: t.slug }, "invoice lookup error");
+      }
+
+      try {
+        const { rows: [session] } = await db.query(
+          "SELECT id, web_order_id, amount, status FROM storefront_payment_sessions WHERE provider_ref = $1",
+          [gatewayRef]
+        );
+        if (session) return { kind: "storefront", row: session, tenant: t, db };
+      } catch (err) {
+        if (!/does not exist/i.test(err.message)) logger.warn({ err, slug: t.slug }, "storefront lookup error");
+      }
+
+      try {
+        const { rows: [rps] } = await db.query(
+          "SELECT id, amount, tip_amount, status, draft_order_id FROM restaurant_payment_sessions WHERE gateway_ref = $1",
+          [gatewayRef]
+        );
+        if (rps) return { kind: "restaurant", row: rps, tenant: t, db };
+      } catch (err) {
+        if (!/does not exist/i.test(err.message)) logger.warn({ err, slug: t.slug }, "restaurant lookup error");
+      }
+    }
+    return null;
+  }
 
   // ── GET /api/sandbox/pay/:gatewayRef — Sandbox payment page ────────
 
@@ -43,71 +111,43 @@ module.exports = function registerSandboxRoutes(app, deps) {
         };
       }
 
-      // Check invoice payment links (tenant schema)
+      // Tenant-scoped lookups. Sandbox queries 3 per-tenant tables; we scan
+      // active tenants because the gateway_ref shape doesn't carry tenant
+      // info. See `findSandboxRefAcrossTenants` above.
       if (!context) {
-        try {
-          const db = require("../db-pg");
-          const { rows: [link] } = await db.query(
-            "SELECT id, invoice_id, amount, status FROM customer_invoice_payment_links WHERE gateway_ref = $1",
-            [gatewayRef]
-          );
-          if (link) {
-            context = {
-              type: "invoice",
-              label: "Invoice Payment",
-              description: `Invoice payment link #${link.id}`,
-              amount: Number(link.amount),
-              currency: "PKR",
-              status: link.status,
-              reference: gatewayRef,
-            };
-          }
-        } catch (e) { /* tenant DB may not be available */ }
-      }
-
-      // Check storefront payment sessions (tenant schema)
-      if (!context) {
-        try {
-          const db = require("../db-pg");
-          const { rows: [session] } = await db.query(
-            "SELECT id, web_order_id, amount, status FROM storefront_payment_sessions WHERE provider_ref = $1",
-            [gatewayRef]
-          );
-          if (session) {
-            context = {
-              type: "storefront",
-              label: "Storefront Checkout",
-              description: `Order payment session #${session.id}`,
-              amount: Number(session.amount),
-              currency: "PKR",
-              status: session.status,
-              reference: gatewayRef,
-            };
-          }
-        } catch (e) { /* tenant DB may not be available */ }
-      }
-
-      // Check restaurant payment sessions (tenant schema, 2-R.3)
-      if (!context) {
-        try {
-          const db = require("../db-pg");
-          const { rows: [rps] } = await db.query(
-            "SELECT id, amount, tip_amount, status, draft_order_id FROM restaurant_payment_sessions WHERE gateway_ref = $1",
-            [gatewayRef]
-          );
-          if (rps) {
-            const total = Number(rps.amount) + Number(rps.tip_amount || 0);
-            context = {
-              type: "restaurant",
-              label: "Restaurant Table Payment",
-              description: `Table check #${rps.draft_order_id}`,
-              amount: total,
-              currency: "PKR",
-              status: rps.status,
-              reference: gatewayRef,
-            };
-          }
-        } catch (e) { /* tenant DB may not be available */ }
+        const hit = await findSandboxRefAcrossTenants(gatewayRef);
+        if (hit?.kind === "invoice") {
+          context = {
+            type: "invoice",
+            label: "Invoice Payment",
+            description: `Invoice payment link #${hit.row.id}`,
+            amount: Number(hit.row.amount),
+            currency: "PKR",
+            status: hit.row.status,
+            reference: gatewayRef,
+          };
+        } else if (hit?.kind === "storefront") {
+          context = {
+            type: "storefront",
+            label: "Storefront Checkout",
+            description: `Order payment session #${hit.row.id}`,
+            amount: Number(hit.row.amount),
+            currency: "PKR",
+            status: hit.row.status,
+            reference: gatewayRef,
+          };
+        } else if (hit?.kind === "restaurant") {
+          const total = Number(hit.row.amount) + Number(hit.row.tip_amount || 0);
+          context = {
+            type: "restaurant",
+            label: "Restaurant Table Payment",
+            description: `Table check #${hit.row.draft_order_id}`,
+            amount: total,
+            currency: "PKR",
+            status: hit.row.status,
+            reference: gatewayRef,
+          };
+        }
       }
 
       if (!context) {
@@ -147,7 +187,9 @@ module.exports = function registerSandboxRoutes(app, deps) {
     }
 
     try {
-      // Resolve the amount from the payment context
+      // Resolve the amount from the payment context. Platform billing
+      // (`payment_intents`) lives in public schema; the other 3 sources are
+      // per-tenant and need a cross-tenant scan (W32).
       let amount = 0;
 
       const { rows: [intent] } = await masterDb.query(
@@ -157,32 +199,12 @@ module.exports = function registerSandboxRoutes(app, deps) {
       if (intent) {
         amount = Number(intent.amount);
       } else {
-        try {
-          const db = require("../db-pg");
-          const { rows: [link] } = await db.query(
-            "SELECT amount FROM customer_invoice_payment_links WHERE gateway_ref = $1",
-            [gatewayRef]
-          );
-          if (link) {
-            amount = Number(link.amount);
-          } else {
-            const { rows: [session] } = await db.query(
-              "SELECT amount FROM storefront_payment_sessions WHERE provider_ref = $1",
-              [gatewayRef]
-            );
-            if (session) {
-              amount = Number(session.amount);
-            } else {
-              try {
-                const { rows: [rps] } = await db.query(
-                  "SELECT amount, tip_amount FROM restaurant_payment_sessions WHERE gateway_ref = $1",
-                  [gatewayRef]
-                );
-                if (rps) amount = Number(rps.amount) + Number(rps.tip_amount || 0);
-              } catch { /* pre-v61 tenant */ }
-            }
-          }
-        } catch (e) { /* tenant DB may not be available */ }
+        const hit = await findSandboxRefAcrossTenants(gatewayRef);
+        if (hit?.kind === "invoice" || hit?.kind === "storefront") {
+          amount = Number(hit.row.amount);
+        } else if (hit?.kind === "restaurant") {
+          amount = Number(hit.row.amount) + Number(hit.row.tip_amount || 0);
+        }
       }
 
       const statusMap = {
