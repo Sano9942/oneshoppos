@@ -22,11 +22,13 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
-| 🟡 Issue | 1 | 6 | 0 |
-| 🔵 Polish | 15 | 3 | 0 |
-| **Total** | **16** | **25** | **0** |
+| 🟡 Issue | 3 | 6 | 0 |
+| 🔵 Polish | 16 | 3 | 0 |
+| **Total** | **19** | **25** | **0** |
 
-Last update: 2026-05-08 (Phase 3 fully closed — 12 of 12 flows. Flows 3.11 (tip capture/pool/payout, smoke verify) + 3.12 (Menu Engineering + KDS Analytics) walked via /tips and /reports UI. Tip pool #1 distributed Rs 540, Test Owner payout unpaid Rs 540 — UI matches DB exactly. Menu Engineering Boston Matrix renders Star/Plowhorse/Dog buckets from 10 sales correctly (Grilled Chicken + Caesar Salad as Stars, Iced Tea as Plowhorse, Garlic Bread as Dog; Chocolate Cake correctly excluded due to W29 comp adjustment). KDS Analytics renders Main Kitchen p50/p95 and load trend from 4 ticket-bumps + 95 worker snapshots — `KDS_SNAPSHOT_WORKER_ENABLED` confirmed live. Three cross-flow concerns from plan §313 resolved: outlet_stock decrements on restaurant sales ✅, public /menu/<token> without ?tenant= returns clean 400 + friendly "Menu Unavailable" UI ✅, **W31 🔵 polish filed** — FBR queue accumulates `pending` rows on every PK sale even when tax_mode=none + no FBR creds (no customer impact, no API call leaks, but unbounded queue growth for any PK tenant in this default state). Source-verified at `routes/sales.js:1781` (gate is flag-only) + `services/fbr.js:137` (no tax_mode check). Total fixed: 25 unchanged. Total open polish: 15 (was 14 + W31). Last earlier update entry below.)
+Last update: 2026-05-08 (Phase 4 fully closed — 7 of 7 public surfaces walked. Counter QR (K-30 confirmation captured + accept/reject flow), table QR ("Sent to your server" mode-specific copy), pay-at-table (W28 verified live + **W32 🟡 NEW** sandbox can't resolve tenant payment sessions because `routes/sandbox.js:48-110` queries `db-pg` public pool without `search_path` for `restaurant_payment_sessions`/`storefront_payment_sessions`/`customer_invoice_payment_links`), public reservation (**W33 🟡 NEW** Express 5 `req.query` getter immutability — `routes/public-reservations.js:17` mutation discarded by `resolvePublicTenantDb`'s next access — entire `/reserve/:slug` non-functional), public receipt (clean, no findings), customer portal (server-side `enabled_tabs=['orders','loyalty','profile']` correct + **W34 🔵 NEW** generic login subtitle mentions invoices/bookings not enabled for restaurant), customer storefront (didn't 500, P5 generic-products observation confirmed; operator-driven re-test with Caesar Salad enabled confirmed product appears correctly). Total fixed 25 unchanged. Open: 0 blockers, 3 issues (W18 + W32 + W33), 16 polish (was 15, +W34). Earlier entries below.)
+
+Earlier: 2026-05-08 (Phase 3 fully closed — 12 of 12 flows. Flows 3.11 (tip capture/pool/payout, smoke verify) + 3.12 (Menu Engineering + KDS Analytics) walked via /tips and /reports UI. Tip pool #1 distributed Rs 540, Test Owner payout unpaid Rs 540 — UI matches DB exactly. Menu Engineering Boston Matrix renders Star/Plowhorse/Dog buckets from 10 sales correctly (Grilled Chicken + Caesar Salad as Stars, Iced Tea as Plowhorse, Garlic Bread as Dog; Chocolate Cake correctly excluded due to W29 comp adjustment). KDS Analytics renders Main Kitchen p50/p95 and load trend from 4 ticket-bumps + 95 worker snapshots — `KDS_SNAPSHOT_WORKER_ENABLED` confirmed live. Three cross-flow concerns from plan §313 resolved: outlet_stock decrements on restaurant sales ✅, public /menu/<token> without ?tenant= returns clean 400 + friendly "Menu Unavailable" UI ✅, **W31 🔵 polish filed** — FBR queue accumulates `pending` rows on every PK sale even when tax_mode=none + no FBR creds (no customer impact, no API call leaks, but unbounded queue growth for any PK tenant in this default state). Source-verified at `routes/sales.js:1781` (gate is flag-only) + `services/fbr.js:137` (no tax_mode check). Total fixed: 25 unchanged. Total open polish: 15 (was 14 + W31). Last earlier update entry below.)
 
 Earlier: 2026-05-08 (flow 3.10 closed after shipping W29 BLOCKER `ebc8d48`. Discovered via UI walk: comp/void backend (`POST /api/restaurant/sale-items/:id/adjust`) and modal both shipped since v59, but the only frontend caller `POSRestaurantRedesign.jsx:169` opened VoidCompModal with `saleItemId={null}` and the modal's submit gate `ready = saleItemId && reasonCode && pin && amount` made it permanently disabled. The "check-detail page wires saleItemId directly" comment was aspirational — that page never shipped. Source-verified across all of `frontend/src` (only one caller, no item-picker anywhere). Path A fix: per-line **Comp** + **Void** icon buttons on Sales History detail panel, gated by `phase4_restaurant_void_comp` flag + `manage_restaurant` perm; tapping opens VoidCompModal with `saleItemId`+`itemName`+`remainingAmount` prefilled; on success shows "Comped Rs N" / "Voided Rs N" badge inline. Live-verified via UI: wrong PIN 9999 → inline "Invalid PIN" error stays in modal ✅, correct PIN 1234 → modal closes + "Comped Rs 500.00" badge appears ✅, DB `sale_item_adjustments.id=2` written with manager_employee_id=1, manager_pin_verified_at, reason_code='training' ✅. Also shipped W30 modal-init followup `<NEXT_HASH>` (amount field now re-seeds from `remainingAmount` on open transition, not just on close). Phase 3 = 10 of 12. Total fixed: 25. 0 open blockers.)
 
@@ -2335,6 +2337,238 @@ Screenshot: `restaurant-walkthrough-w32-menu-engineering-deeplink-2026-05-08.png
 3. Optional polish for W18 (`/restaurant/checks` Open-Tab CTA) + W19 (header label) + W26 (table-token / seat-session disconnects) + W28 (pay-at-table URL FRONTEND_URL env) + W31 (FBR queue gate). Five polish items can ship as one commit when the operator next opens a fix-it window.
 4. Triage the 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — still untriaged.
 5. Phase 4 entry condition: tenant healthy, no carry-over fixes pending, attendance + shift still open from this sitting.
+
+---
+
+### W32 — Sandbox payment page can't resolve tenant-scoped payment sessions (queries public schema)
+
+**Status:** OPEN — 🟡 Issue (sandbox mode only; affects pay-at-table, storefront checkout, and invoice-link sandbox flows)
+**Severity:** 🟡 Issue (sandbox is documented as "soft-launch only" per plan §496, so this isn't a customer-facing prod bug. But: (a) the plan §496 lists Decision C as "keep sandbox for soft launch (5-10 friendly testers)" which puts this on the launch path; (b) the same shape (public-route querying public schema for tenant data) is what bit W27, so the pattern is recurring.)
+**Surfaces affected:** `GET /api/sandbox/pay/:gatewayRef` server-rendered page, downstream `processWebhookEvent` resolution. Any tenant-scoped payment context: `customer_invoice_payment_links`, `storefront_payment_sessions`, `restaurant_payment_sessions`. Platform billing (`payment_intents`) is unaffected because it lives in public schema.
+**Found via:** Phase 4 flow 4.3 walkthrough on 2026-05-08
+
+**Steps to reproduce:**
+1. As Test Owner, open a check on T1 with at least one item.
+2. POS Restaurant → "Request QR" → modal renders QR + `pay_url` (W28: localhost) + `checkout_url` (correct: `https://api.sanopos.com/api/sandbox/pay/sandbox_rest_<...>`).
+3. Open the customer `/pay/<token>?tenant=<slug>` page → render is fine, click "Pay Rs 747.50".
+4. Redirected to `https://api.sanopos.com/api/sandbox/pay/sandbox_rest_1778185448176_abfd4bfe`.
+5. Page renders: yellow "SANDBOX — NO REAL MONEY" banner + heading "Payment" + subtext **"Payment reference not found in any context"** + Ref display + Pay Successfully / Fail Payment / Cancel buttons.
+6. Click "Pay Successfully" → page text appends **"Unknown transaction"**. POS QR modal back at `/pos/restaurant` continues to read **"Waiting for guest · expires in 11:46"** indefinitely. Total never updates with tip.
+
+**Source-verified root cause** (per memory `feedback_verify_before_fixing` — read `main`, not CLAUDE.md):
+- `backend/routes/sandbox.js:18-128` — the `GET /api/sandbox/pay/:gatewayRef` handler is mounted before tenant middleware (per `routes/CLAUDE.md` "no auth, mounted before tenant middleware" list).
+- Lines 26-44 query `payment_intents` via `masterDb.query` — works (public schema).
+- Lines 47-65 (invoice payment links): `const db = require("../db-pg"); db.query("SELECT ... FROM customer_invoice_payment_links WHERE gateway_ref = $1", ...)` — `db-pg` is the raw public-schema pool. Without `SET search_path TO tenant_<slug>` or a tenant-resolved scoped client, this query targets `public.customer_invoice_payment_links` which doesn't exist. The catch swallows "relation does not exist".
+- Lines 68-87 (storefront): same pattern with `storefront_payment_sessions`.
+- Lines 90-110 (restaurant): same pattern with `restaurant_payment_sessions`.
+- All three try/catch blocks silently swallow the error → `context` stays null → line 113-122 falls through to "unknown" → page renders the misleading "Payment reference not found in any context" message.
+- The catch comment "tenant DB may not be available" is misleading: the tenant DB IS available, the route just isn't asking the tenant DB manager for it.
+
+**Effect — what's broken vs what's not:**
+- ❌ Sandbox payment page shows wrong context for any tenant-scoped sandbox transaction (3 of 4 sandbox flows broken).
+- ❌ Customer-facing experience: scary "Unknown transaction" text after clicking "Pay Successfully" for what they thought was a valid checkout.
+- ❌ POS-side state: the QR modal never transitions to "paid" because the webhook resolution similarly fails (the webhook handler at `processWebhookEvent` likely has the same shape — needs verification).
+- ✅ Platform billing sandbox (`payment_intents`) unaffected — public schema query works.
+- ✅ No customer-facing prod impact (sandbox-gated by `PAYMENT_GATEWAY=sandbox`). But: every restaurant pre-launch tester hitting this will believe pay-at-table is broken.
+
+**Fix path:** the sandbox needs to know which tenant the payment belongs to before querying tenant tables. Two clean options:
+1. Add a `tenant_slug` or `tenant_id` column to the gateway_ref-bearing tables (`storefront_payment_sessions`, `restaurant_payment_sessions`, `customer_invoice_payment_links`) — but they're tenant-scoped tables already, so the slug isn't trivially in the row. Need to track it elsewhere. Heavy.
+2. **Recommended:** prefix the `gatewayRef` itself with the tenant ID (e.g. `sandbox_rest_<tenantId>_<draftId>_<ts>`), parse it server-side in sandbox.js, look up tenant by ID via masterDb, then call `tenantDbManager.getDb(tenantId)` to scope the query. Single-file change, ~30 lines.
+3. **Or:** require the sandbox URL to include `?tenant=<slug>` (like every other public route), use `resolvePublicTenantDb`. Backend change at the URL builder + the handler. Same effect.
+
+**Severity rationale:** 🟡 not 🔴 because the `PAYMENT_GATEWAY=sandbox` mode is dev/soft-launch only and prod will switch to xPay (where the actual webhook handler may or may not have the same bug — needs separate audit). But pre-launch testing AND every Decision-C soft-launch tester will hit this, so it can't ship as-is for the soft-launch path.
+
+**Audit reminder for fix-it session:** check `processWebhookEvent` in `routes/webhooks.js` for the same pattern. If both the sandbox page AND the webhook resolution fail to scope tenant correctly, that's why the POS QR modal never transitions to paid even when the user clicks "Pay Successfully".
+
+**Source:** `backend/routes/sandbox.js:18-128`; live test on `sandbox_rest_1778185448176_abfd4bfe` Phase 4 flow 4.3.
+
+**Screenshots:** `restaurant-walkthrough-flow-4.3-pay-qr-modal-2026-05-08.png` (POS QR modal showing W28 localhost URL), `restaurant-walkthrough-flow-4.3-pay-customer-page-2026-05-08.png` (clean customer pay page), `restaurant-walkthrough-flow-4.3-sanopay-sandbox-2026-05-08.png` (sandbox showing "Payment reference not found in any context").
+
+---
+
+### W33 — Public reservation `/reserve/:slug` non-functional in production due to Express 5 `req.query` immutability
+
+**Status:** OPEN — 🟡 Issue (could be 🔴 launch-blocker depending on whether reservations are launch-required for v1)
+**Severity:** 🟡 (the entire `/reserve/:slug` public surface returns "No times to show" for any date — no customer can book a reservation through the QR code or shareable URL. Admin reservation management on `/restaurant/reservations` works fine — only the public booking form is broken.)
+**Surfaces affected:** `GET /api/public/restaurant/reservations/:tenantSlug/availability`, `POST /api/public/restaurant/reservations/:tenantSlug` (reservation creation likely has the same shape — needs separate verify, but if availability is broken the form can't reach the create call). Frontend page: `frontend/src/pages/public/ReservationBookingPage.jsx`.
+**Found via:** Phase 4 flow 4.4 walkthrough on 2026-05-08
+
+**Steps to reproduce:**
+1. Open `https://sanopos.com/reserve/sanoposlivetest1778021564659` in any browser.
+2. Page renders correctly: "Book a table" heading, Date picker, Party size dropdown, "Available times" section.
+3. Pick any future date (e.g. 2026-05-15) — page shows **"No times to show."** "Pick a time" CTA stays disabled.
+4. Tenant has `phase4_restaurant_reservations=true` and the underlying availability generator (09:00-22:00 in 30-min slots) is implemented and works.
+5. Direct curl to the API confirms the bug: `curl 'https://api.sanopos.com/api/public/restaurant/reservations/sanoposlivetest1778021564659/availability?date=2026-05-15&party_size=2'` returns `{"error":"tenant query param or x-tenant-slug header is required"}`.
+6. Adding `?tenant=<slug>&date=...` to the same curl returns 30 available slots.
+
+**Source-verified root cause** (per memory `feedback_verify_before_fixing` — re-read `main`):
+- `backend/routes/public-reservations.js:13-19` — wrapper `resolveForSlug` reads `req.params.tenantSlug || req.query.tenant`, then mutates **`req.query.tenant = tenantSlug`** before calling `resolvePublicTenantDb(req, deps)`.
+- `backend/services/public-tenant-context.js:11` — `resolvePublicTenantDb` reads `req.query.tenant || req.headers["x-tenant-slug"]`.
+- `backend/package.json` — `"express": "^5.2.1"`.
+- **Express 5 changed `req.query` from a parsed-once cached object to a getter that re-parses `req.url` on every access.** Mutations to `req.query.X = Y` write to a temporary object that's discarded on the next access.
+- So: line 17 of public-reservations.js writes into a temp object → `resolvePublicTenantDb` reads `req.query` again → gets a fresh re-parsed empty `{ tenant: undefined }` → returns 400 "tenant query param required".
+- Frontend (`ReservationBookingPage.jsx:34`) builds the URL with **path-only slug, no `?tenant=`** because the wrapper was supposed to handle the path slug. Frontend assumed the wrapper works; backend wrapper assumed Express 4 mutation semantics. Mismatch.
+
+**Effect — what's broken vs what's not:**
+- ❌ Public reservation booking page is non-functional in production for any tenant.
+- ❌ Tenant slug present in URL path is never consumed by the resolver.
+- ✅ Admin `/restaurant/reservations` flow unaffected (uses authenticated tenant middleware, not the public wrapper).
+- ✅ POST /api/public/restaurant/reservations/:tenantSlug likely has the same bug (same wrapper) — would only manifest if a customer somehow got past the broken availability page; not separately verified.
+
+**Other public routes audited for the same Express 5 mutation pattern:** `grep -nE "req\.query\.[a-z_]+\s*=" backend/routes` shows only `public-reservations.js:17` does the mutation. All other matches are `===` comparisons. **Bug isolated to this one file.**
+
+**Fix path:** trivial — drop the mutation, append the slug to the query string OR pass tenant directly into `resolvePublicTenantDb` as a positional arg. Recommended:
+```js
+async function resolveForSlug(req, deps) {
+  const tenantSlug = req.params.tenantSlug || req.query.tenant;
+  if (tenantSlug) req.headers["x-tenant-slug"] = tenantSlug; // headers ARE mutable in Express 5
+  return resolvePublicTenantDb(req, deps);
+}
+```
+~3 lines diff. Or even cleaner: extend `resolvePublicTenantDb` to also read `req.params.tenantSlug` directly, eliminating the wrapper.
+
+**Severity rationale:** 🟡 because (a) admin path works, (b) reservations may not be a v1 launch requirement (Phase 5/8 lists reservation reminders, plan §492 lists SMS as a launch decision). If reservations are launch-required, escalate to 🔴.
+
+**Source:** `backend/routes/public-reservations.js:13-19`, `backend/services/public-tenant-context.js:11`, Express 5 docs (`req.query` getter behavior), live test against `https://sanopos.com/reserve/sanoposlivetest1778021564659`.
+
+**Screenshot:** `restaurant-walkthrough-flow-4.4-reservation-page-2026-05-08.png` (showing "No times to show.").
+
+---
+
+### W34 — Customer portal login subtitle mentions tabs not enabled for restaurant tenants
+
+**Status:** OPEN — 🔵 Polish
+**Severity:** 🔵 Polish (cosmetic — subtitle copy mentions "invoices" + "bookings" but neither is in the restaurant `enabled_tabs` list, which is correctly server-controlled to `['orders', 'loyalty', 'profile']`)
+**Surfaces affected:** `/portal/:tenantSlug/login` page subtitle.
+**Found via:** Phase 4 flow 4.6 walkthrough on 2026-05-08
+
+**Steps to reproduce:**
+1. Open `https://sanopos.com/portal/sanoposlivetest1778021564659` (restaurant tenant).
+2. Login page subtitle reads: **"Access your invoices, bookings, and account."**
+3. `curl https://api.sanopos.com/api/portal/config?tenant=sanoposlivetest1778021564659` → `enabled_tabs: ['orders', 'loyalty', 'profile']`. Server-side tab gating per preset is correct.
+4. Customer who logs in based on the subtitle's "invoices and bookings" promise won't find them.
+
+**Effect:** misleading login copy. Server-side tab gating is correct; only the login page's static subtitle is generic.
+
+**Fix path:** make the login subtitle preset-aware. Either:
+1. Frontend reads `industry_type` (or `enabled_tabs`) from `/api/portal/config` (already a public endpoint) and dynamically composes "Access your orders, loyalty, and account." for restaurant; "appointments and treatments" for clinic; etc.
+2. Backend serves a `login_subtitle` field per preset.
+
+Lowest-effort fix is option 1 — reuse the same /api/portal/config call the dashboard makes, swap the subtitle string client-side.
+
+**Source:** `frontend/src/pages/portal/PortalLogin.jsx` (likely — not source-verified, but the shape matches), `backend/services/portal-config.js` or wherever `PORTAL_ENABLED_TABS_BY_PRESET` lives.
+
+**Severity rationale:** Pure cosmetic. Doesn't break anything. Filed for completeness; low priority.
+
+---
+
+### Session 2026-05-08 (continuation 9) — Phase 4 closed (7 of 7); W32 + W33 + W34 filed
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 4 — all 7 customer-facing surfaces (4.1 counter QR, 4.2 table QR, 4.3 pay-at-table, 4.4 reserve, 4.5 receipt, 4.6 portal, 4.7 storefront).
+**Duration:** ~90 min including operator-driven cleanup loops (revoke kiosks, reject inbox queue cleanup, enable Caesar Salad for storefront).
+
+**Result:** ✅ Phase 4 fully closed (7 of 7). **W32 🟡 + W33 🟡 + W34 🔵 filed.** **W28 🔵 verified live (already filed).** Total fixed: 25 unchanged. Total open: 19 (was 16, +W32 +W33 +W34).
+
+**Pre-flight (clean ✅):**
+- 0 open table sessions, 0 open drafts, 0 menu_schedules, 0 sold-out items, 0 active kiosk slots.
+- 2 reservations from earlier sittings (admin-created during Phase 3 walks) still in DB.
+- All 3 public-surface flags ON: `phase4_restaurant_qr`, `phase4_restaurant_pay_at_table`, `phase4_restaurant_reservations`.
+
+**Flow 4.1 — counter-mode QR menu walk:**
+- Minted counter slot via /order-kiosks UI (label "Phase 4 Counter", token `cc1b0684-...`).
+- Opened public menu URL → tenant header rendered ("SanoPOS Live Test 1778021564659"), 4 categories, 5 sample items.
+- Added Caesar Salad → sticky cart "1 item / Rs 650.00 / Place Order" rendered.
+- Added Iced Tea → "2 items / Rs 950.00".
+- Click Place Order → confirmation screen flashed but auto-reset within 5s; needed 2 retries to capture (window.setTimeout patched once to suppress reset). Captured: green check + "Order placed" + "Show this number when you collect your order at the counter." + big amber **K-30** + "Returning to menu in a few seconds…".
+- /restaurant/inbox → K-30 row appeared with full detail, Accept/Reject buttons. Click Accept → row disappeared. Click Reject on a stale K-29 row → expanded "Reason for rejection" textbox + Cancel/Confirm Reject. Filled reason "Test cleanup" → Confirm Reject → row disappeared.
+- Cleaned up 3 stale K-orders (K-27/28/29) from inbox via reject flow.
+- Counter mode flow ✅ end-to-end (mint → menu → cart → submit → confirmation → inbox accept → inbox reject with reason).
+
+**Flow 4.2 — table-mode QR menu walk:**
+- Click "Launch table kiosk" → modal with table picker (T1/T2/T3/T4) → selected T1 → Launch.
+- Slot minted (token `64f8bae1-...`). Opened in new tab.
+- Header now shows **"Table: T1"** subtitle (mode-specific).
+- Add 1× Caesar Salad → cart shows "1 item / Rs 650.00 / **Place Order**" — pre-submit CTA same as counter mode (plan §284 implied "Send to server" but actual UX uses generic "Place Order" until after submit).
+- Click Place Order → confirmation differs from counter: green check + "Order placed" + **"Sent to your server — please wait."** + "Need to add another course? Tap below." + "Back to menu" button. **No auto-reset** — table mode stays on confirmation indefinitely (per source).
+- Table mode flow ✅ end-to-end with mode-specific post-submit copy. Pre-submit CTA wording is generic but functional.
+
+**Flow 4.3 — pay-at-table walk:**
+- /restaurant/checks → row #32 (T1, 1 item, Rs 650, open) had "Pay this check" icon button — clicked.
+- Navigated to /pos/restaurant with the T1 check rehydrated (W23 cart-rehydrate path). Cart showed Caesar Salad, total Rs 650, full check detail.
+- Clicked "Request QR" footer button → "Request QR Payment" modal opened: QR code + "Ask the guest to scan this code with their phone camera." + Rs 650.00 + "Waiting for guest · expires in 14:47" + URL `http://localhost:5173/pay/abfd4bfe-...` ← **W28 verified live**.
+- Opened `/pay/<token>?tenant=<slug>` in new tab on sanopos.com → customer pay page rendered cleanly: order summary (1× Caesar Salad Rs 650), tip chips (No tip / 10% / **15% selected** / 18% / 20%) + custom field, totals (Subtotal 650 + Tip 97.50 = **Rs 747.50**), big "Pay Rs 747.50" CTA, "Powered by SanoPay" footer.
+- Click Pay → redirect to `https://api.sanopos.com/api/sandbox/pay/sandbox_rest_1778185448176_abfd4bfe`. Page renders: yellow "SANDBOX — NO REAL MONEY" + "Payment" heading + **"Payment reference not found in any context"** + 3 buttons.
+- Click Pay Successfully → page text appends **"Unknown transaction"**. Backed to /pos/restaurant tab → QR modal still says "Waiting for guest · expires in 11:46". POS never sees the payment.
+- Source-verified at `routes/sandbox.js:18-128` — sandbox queries `db-pg` (public pool) for `restaurant_payment_sessions` without setting `search_path` to a tenant. All three tenant-scoped lookups silently fail in catch blocks. **W32 🟡 filed** with full root-cause + 3 fix paths.
+- Cancelled the QR modal and the open T1 check via /restaurant/checks Close button.
+
+**Flow 4.4 — public reservation walk:**
+- Opened `/reserve/sanoposlivetest1778021564659` → page renders cleanly: "Book a table" heading, today's date, "2 guests" default, "Available times" / **"No times to show."**, "Pick a time" disabled.
+- Tried 2026-05-15 (future date) → still "No times to show."
+- Curl tests showed: `?date=...` alone → 400 "tenant query param required"; `?tenant=<slug>&date=...` → 30 available slots.
+- Source-verified at `routes/public-reservations.js:13-19` + `services/public-tenant-context.js:11` + `package.json` (Express 5.2.1). **Express 5 changed `req.query` to a getter — mutations don't persist.** The wrapper writes `req.query.tenant = tenantSlug` then calls `resolvePublicTenantDb` which reads a fresh re-parsed `req.query` and gets `undefined`. **W33 🟡 filed** with full root-cause + 3 fix paths.
+- Audited all `req.query.X =` mutations across `backend/routes` — only `public-reservations.js:17` does this. Bug isolated.
+
+**Flow 4.5 — public shareable receipt walk:**
+- Opened `/receipt/INV-2026-00001?tenant=sanoposlivetest1778021564659` → page title flipped to "Receipt INV-2026-00001 — SanoPOS Live Test 1778021564659" ✅
+- Clean rendered receipt: green branded header (tenant + phone), invoice metadata (INV-2026-00001 / May 7 2026 01:14 AM), "Served by Test Owner", items table (Iced Tea 300 + Caesar Salad 650 = 950), "PAYMENT Cash 950", "Please come again." closing, "Print Receipt" button, "Powered by SanoPOS" footer.
+- No tax line shown — correct, tenant has `tax_mode='none'`.
+- ✅ no findings.
+
+**Flow 4.6 — customer portal walk:**
+- Opened `/portal/sanoposlivetest1778021564659` → redirected to `/login`. Page rendered: "Customer Portal" + tenant name header, "Sign in" form, subtitle **"Access your invoices, bookings, and account."** ← W34 candidate (mentions invoices + bookings, neither enabled for restaurant).
+- Clicked "Create an account" → signup form (Full name / Email / Mobile / Password). Submitted with `phase4test@example.com` → redirected to OTP verify page. Couldn't proceed without inbox access — but the goal here was to verify the tab list, not the full signup flow.
+- Direct curl `GET /api/portal/config?tenant=sanoposlivetest1778021564659` → `enabled_tabs: ['orders', 'loyalty', 'profile']`, `industry_type: restaurant` ✅. Server-side tab gating is correct.
+- **W34 🔵 filed** for the cosmetic login subtitle mismatch.
+
+**Flow 4.7 — customer storefront walk:**
+- Opened `/store/sanoposlivetest1778021564659` → renders cleanly. "Welcome to SanoPOS Live Test 1778021564659" hero + "Browse our collection of products and find what you need." copy + "Shop Now" CTA + "Featured Products: No products available yet." + footer.
+- Plan §330 says "Verify it doesn't 500 at minimum." ✅ doesn't 500.
+- Operator request: enable a product for the storefront and re-verify. Went to /inventory → clicked Caesar Salad row (cursor=pointer) → loaded /products/1 edit page → SALES CHANNELS section showed Daraz / Facebook / Instagram / **Online Store** / Point of Sale / Shopify / WhatsApp / WooCommerce, all OFF (slate-200 toggle pills).
+- Toggled Online Store ON → Save Changes → returned to /inventory.
+- Re-walked /store/sanoposlivetest1778021564659 → header now shows **"All Products" + "Appetizers"** category nav, hero unchanged, new "Shop by Category" section with Appetizers card, "Featured Products" section with one card peeking from below the fold ("In Stock" badge visible).
+- /store/.../products → product grid: image placeholder, "In Stock" green badge, **Caesar Salad (Sample) / Rs 650 / 0** (trailing 0 likely review count without star icon, minor cosmetic).
+- ✅ storefront fully functional. P5 observation confirmed: storefront uses generic "products" copy regardless of tenant industry_type — but doesn't crash, doesn't 500.
+- Cleanup decision: **left Caesar Salad ON for the Online Store channel** as a useful default state for any future merchant demo. All other channels still OFF.
+
+**Cleanup at end:**
+- 2 kiosk slots (counter "Phase 4 Counter" + table "T1") revoked via /order-kiosks Revoke button.
+- T1 check #32 paid via QR (sandbox failed) → cancelled the W32-stale QR modal.
+- Open check #31 (leftover from earlier sittings) closed via /restaurant/checks Close icon.
+- 3 stale inbox K-orders (K-27/28/29) rejected with "Test cleanup" reason.
+- Test Owner attendance #3 still open. Cash shift #2 still open.
+- Caesar Salad: Online Store channel enabled (intentional, see above).
+- 0 open table sessions, 0 open drafts, 0 active kiosk slots, 0 inbox items.
+
+**Findings updates:**
+- W28 → status unchanged (🔵 OPEN), but verified live in this session — pay_url shown to staff in production really is `http://localhost:5173/pay/...`.
+- W32 → 🟡 OPEN. New finding.
+- W33 → 🟡 OPEN. New finding.
+- W34 → 🔵 OPEN. New finding.
+- Status Summary: 0 open blockers, **3 issues** (was 1: +W32 +W33), **16 polish** (was 15: +W34). Total fixed: 25 unchanged. Total open: 19.
+- Plan tracker: Phase 4 row → "✅ closed (7 of 7)".
+
+**Surprises / lessons:**
+- **W32 root cause** is the same shape as W27 (public route querying public schema for tenant data). Pattern recurring 3+ times now (W17 silent feature failure, W27 day-parting filter, W32 sandbox payment resolution). Worth a focused audit of every `db-pg.js` direct-query call in routes that are mounted before tenant middleware.
+- **W33 (Express 5)** is a stealth class of bug — production has been running Express 5 for some time and only one route file even attempted `req.query` mutation. If we'd added more such mutations during routine refactors (e.g. "stamp a default value"), they'd all silently break. Worth a lint rule (`no-mutate-req-query`) or a unit test that verifies the rewrite-and-passthrough pattern survives.
+- **The 5-second auto-reset on counter QR confirmation** ate two screenshot attempts before I patched window.setTimeout to suppress it. Worth a dev-only param like `?testing=1` that disables the reset for QA, or extend to 10s — 5s is barely enough for a real customer to register the K-30 number, let alone for a screenshot tool.
+- **Plan wording §284** ("Send to server CTA only (no final submit)") was loose — actual UX has a "Place Order" button in both modes, with the post-submit message differing. Functionally equivalent and fine. Plan should be updated.
+- **The storefront empty state** was a false positive — it's not that storefront is broken for restaurants, it's that no product had Online Store toggled on. Operator caught this. Lesson: empty-state pages should hint at the action that populates them ("Enable Online Store on a product to see it here" link).
+- **W32 webhook side** unverified: I tested only the sandbox payment page, not the webhook resolution path. The "Waiting for guest" never transitioned to "paid" so the webhook is also failing somewhere — but I didn't audit `processWebhookEvent` source. Filed as audit reminder in W32.
+
+**No code commits this session beyond docs (this finding entry + session log + plan tracker). All 4 new findings filed for future fix-it loops.**
+
+**Recommendation for next sitting:**
+1. **Phase 4 is done.** Move to Phase 5 — Worker-Driven Flows (course-release, reservation-reminder, kds-snapshot, retail-digest workers). Already verified `KDS_SNAPSHOT_WORKER_ENABLED` is live (95 snapshots in DB). Need to verify the other 3.
+2. Optional fix-it loop ranked by ROI:
+   - **W33** (10 lines, 5 min) — drop the `req.query.tenant =` mutation, use `req.headers["x-tenant-slug"]` instead. Unblocks /reserve/:slug entirely.
+   - **W31** (10 lines, 10 min) — gate FBR enqueue on tax_mode + credentials. Unblocks bounded queue growth for PK tenants.
+   - **W28** (1 env var, 2 min) — set `FRONTEND_URL=https://sanopos.com` on Railway. Unblocks pay-at-table guest-phone URL handoff.
+   - **W32** (~30 lines, 30 min) — prefix gatewayRef with tenant ID, parse + scope query in sandbox.js. Also need to audit webhook resolution for same shape.
+   - **W34** (~5 lines, 5 min) — preset-aware login subtitle.
+3. Phase 5 entry condition: tenant healthy. Test Owner attendance + shift still open from this sitting (continuous since 2026-05-07). Should re-verify on Phase 5 pre-flight in case the date rolls.
 
 ---
 
