@@ -21,12 +21,12 @@
 
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
-| 🔴 Blocker | 0 | 14 | 0 |
+| 🔴 Blocker | 0 | 15 | 0 |
 | 🟡 Issue | 1 | 6 | 0 |
 | 🔵 Polish | 13 | 3 | 0 |
-| **Total** | **14** | **23** | **0** |
+| **Total** | **14** | **24** | **0** |
 
-Last update: 2026-05-08 morning (flows 3.5 + 3.6 + 3.7 closed end-to-end. Counter slot mint → public submit → slot rotated current_draft_order_id null→21, web_orders#2 source='kiosk' K-20 (rejected to keep floor clean). Table token mint for T3 → public submit attached to dine_in draft #22 (NOT inbox; total Rs 1000, 2 items @ kitchen_status='pending'). Send-to-Kitchen → KDS ticket #13 station_1 status='new'. Pay-this-check → cart rehydrate works for table-mode kiosk drafts too (W23 path is universal). Cash Exact Add Complete Sale → INV-2026-00009 Rs 1000. Fresh T4 token minted → /menu/:token rendered "Table: T4" + 5 sample items, prices match products table exactly. 1 polish finding W26 filed (table-token + seated-session model has 3 disconnects: settled table-token URL becomes "Menu Unavailable", kiosk-minted dine_in draft doesn't auto-flip session to 'dirty' on settle, and the same /menu/:token URL stops working post-settle which contradicts plan 3.7 wording). Phase 3 = 7 of 12. Total fixed: 23. 0 open blockers. Floor healed: T4 token revoked + draft #23 cancelled, session #10 force-closed via DB (W17 dirty-flip didn't fire because draft #22 had table_session_id=null).)
+Last update: 2026-05-08 (flow 3.8 closed end-to-end after fixing W27. Created Lunch schedule pinned with Iced Tea + Garlic Bread → public /menu/:token still showed all 5 items outside the window → root caused as `getFeatureFlagsMap(req.tenantId)` on a public route mounted before `loadTenantAndPerms` (req.tenantId is undefined) → silently fell through to public.feature_flags where day_parting=false → filter never ran. Shipped W27 fix `f1a3cd0` (capture tenant.id from resolvePublicTenantDb destructure, pass to getFeatureFlagsMap; both menu and add-item callsites in routes/public-restaurant.js). Re-verified all 3 paths post-deploy: outside-window menu API hides Iced Tea+Garlic Bread (3 of 5 returned), inside-window shows all 5, add off-schedule item returns 422 "Item not available at this time", P7 (un-pinned items always available) holds. Phase 3 = 8 of 12. Total fixed: 24. 0 open blockers. Floor healed: schedule deleted, kiosk slot revoked, all open drafts cancelled.)
 
 ---
 
@@ -1917,6 +1917,110 @@ For 3.7 specifically: revise the plan wording to mint a fresh token for browse-v
 2. Optional fix-it loop for W26 if a merchant launches with both QR + POS-seat in the same restaurant. Pick fix path #1 (resolve open session in `routes/restaurant-kiosk.js` and link the draft) — single backend change, ~15 min.
 3. Future polish (still): W18 (Open-Tab CTA) + W19 (header label "Table N" instead of `tables.label`) + W26 (this) — ship together when convenient.
 4. Triage the 2 new frontend Sentry hook-order errors flagged in the 3.4 close-out (SANOPOS-FRONTEND-A and -B) — not blocking restaurant launch but worth a hook-order audit pass.
+
+---
+
+### W27 — Day-parting filter never fires on public QR menu (any MT tenant) ✅ FIXED
+
+**Status:** ✅ FIXED — commit `f1a3cd0` (2026-05-08)
+**Severity:** 🔴 BLOCKER — silent feature failure; entire day-parting feature non-functional in production
+**Surfaces affected:** `/api/public/restaurant/menu/:token` (public QR menu list), `/api/public/restaurant/checks/:token/items` (public add-to-cart). The two writes from authenticated /restaurant/menu-schedules (create/edit/delete) work fine — the failure is on the public consumer surface.
+**Found via:** Phase 3 flow 3.8 walkthrough on 2026-05-08
+
+**Steps to reproduce (live, before fix):**
+1. As Test Owner, create menu schedule `Lunch` 11:00-15:00 every day, outlet=All, pin Iced Tea + Garlic Bread.
+2. At a PKT time outside 11:00-15:00 (verified via `NOW() AT TIME ZONE 'Asia/Karachi'` in Supabase MCP), mint a counter kiosk slot.
+3. Hit `GET /api/public/restaurant/menu/<token>?tenant=<slug>` — returns all 5 sample items including the 2 pinned (Iced Tea, Garlic Bread). Expected: 3 items (un-pinned only).
+4. POST to `/api/public/restaurant/checks/<token>/items` with `product_id=3` (Iced Tea, off-schedule) — returns 201 with the line written. Expected: 422 "Item not available at this time".
+
+**Source-verified root cause** (read against current source on `main`, not CLAUDE.md):
+- `backend/routes/registerAllRoutes.js:172` mounts `public-restaurant` BEFORE `loadTenantAndPerms` (`:206`) and `resolveTenant` (`:209`). On these public routes, `req.tenantId` is undefined.
+- `backend/routes/public-restaurant.js:122` (menu list) and `:174` (add item) both call `getFeatureFlagsMap(req.tenantId)`.
+- `backend/middleware/feature-flags.js:138` falsy-tenantId branch falls through to `flagDb = db` (the public schema pool, not a tenant DB).
+- `flagDb.query("SELECT key, enabled FROM feature_flags")` therefore queries `public.feature_flags`, where `phase4_restaurant_day_parting=false` (verified live).
+- Returned map has `phase4_restaurant_day_parting=false`, route's `if (flags.phase4_restaurant_day_parting)` is false, `filterAvailableProducts` / `isProductAvailableNow` never invoked.
+- Tenant's actual flag was ON (`tenant_sanoposlivetest1778021564659.feature_flags.phase4_restaurant_day_parting=true`) but never read.
+- The CLAUDE.md description suggested the path "throws → caught → swallowed", which was wrong — actual behavior is "queries public schema → returns global default false → silently skips filter". Same outcome (filter doesn't fire), different mechanism.
+
+**Effect:** for any MT tenant relying on lunch / dinner / happy-hour menu schedules, the public QR-menu surface ignores the schedule entirely. Customers can scan a QR code, see and order items the kitchen hasn't prepped for, and there's no toast / error / log indicating anything is wrong. Highest-priority class of bug per memory `feedback_verify_before_fixing` and the W24 silent-tip-drop pattern: it doesn't break anything visibly, it just produces wrong data at scale.
+
+**Fix shipped (`f1a3cd0`):** capture the resolved tenant from `resolvePublicTenantDb` and pass `tenant?.id` to `getFeatureFlagsMap` instead of the unset `req.tenantId`. Two callsites in `backend/routes/public-restaurant.js`:
+- L98 + L122 (menu list): destructure `{ db, tenant }`, call `getFeatureFlagsMap(tenant?.id)`
+- L151 + L174 (add item): same shape
+
+Plus a comment on each callsite documenting why `req.tenantId` is unset on this route.
+
+**Live verification post-deploy** (PKT 00:00 Friday 2026-05-08 during verify):
+- Outside-window 11:00-15:00 (PKT was ~23:50 Thursday): `GET /menu/...` returned `["Caesar Salad", "Chocolate Cake", "Grilled Chicken"]` — 3 of 5, Iced Tea + Garlic Bread correctly hidden.
+- Add Iced Tea (id=3) outside-window via API: 422 + `{"error":"Item not available at this time"}` ✅
+- P7 verify outside-window: add Caesar Salad (id=1, un-pinned) returns 201 ✅
+- Updated schedule to `00:00-00:30` (current PKT range) via Supabase MCP, then triggered cache invalidation by clicking Save in the UI edit modal. Re-hit `/menu/...` → all 5 items returned ✅
+- Add Iced Tea (id=3) inside-window via API: 201 + line written ✅
+
+**Other public routes audited for the same `req.tenantId` pattern after `resolvePublicTenantDb`:** none. `customer-portal/data.js` defines its own `getFeatureFlagsMap(db)` helper that takes db directly — different pattern. `storefront.js`, `public-bookings.js`, `public-reservations.js` do not call `getFeatureFlagsMap`. Bug isolated to `public-restaurant.js`.
+
+**Source:** Phase 3 flow 3.8 walkthrough; root-caused live; live-verified before + after fix.
+
+**Screenshot:** `restaurant-walkthrough-w27-day-parting-not-enforced-2026-05-07.png` (the pre-fix repro showing 5/5 items + customer footer "5 items in your order").
+
+---
+
+### Session 2026-05-08 (continuation 5) — Flow 3.8 closed; W27 BLOCKER shipped + live-verified
+
+**Operator:** Hassan + Claude (headed Playwright)
+**Tenant:** `sanoposlivetest1778021564659`
+**Phases walked:** Phase 3 — flow 3.8 (Day-parting: lunch / dinner schedules). Found 1 🔴 BLOCKER mid-walk, fixed it, then completed the flow.
+**Duration:** ~30 min (split: ~10 min walk-and-find, ~10 min fix-and-deploy, ~10 min re-verify).
+
+**Result:** ✅ flow 3.8 fully closed. **W27 🔴 BLOCKER shipped + verified.** 0 open blockers. Phase 3 = 8 of 12.
+
+**Pre-flight (clean ✅):**
+- 0 open table sessions, 0 open drafts.
+- Test Owner attendance #2 still open from previous sittings.
+- Cash shift #2 still open.
+- Auto-close from prior `/kiosk` PIN-checkin already healed yesterday's stale attendance row (#2 closed `session_end=session_start`, #3 created fresh for today).
+
+**Walk and discover (10 min):**
+- Created `Lunch` schedule 11:00-15:00 every day (DB confirmed `menu_schedules.id=1 day_of_week=NULL outlet_id=NULL is_active=true`), pinned Iced Tea + Garlic Bread (DB confirmed `menu_schedule_products` rows `(1,3) (1,5)`).
+- Minted counter kiosk slot via /order-kiosks (slot.id=4 token `2ae1a6e9-…`).
+- Opened public `/menu/<token>?tenant=…` URL. PKT was 23:50 Thursday — well outside 11:00-15:00. Expected: Iced Tea + Garlic Bread hidden.
+- **Observed: all 5 items rendered.** Filed as W27 candidate. Source-verified before declaring (per memory `feedback_verify_before_fixing`).
+- Tested add-item path via direct curl — `POST /api/public/restaurant/checks/<token>/items` `product_id=3` returned 201 (created `draft_order_items.id=31`). Both filter paths broken.
+- Verified tenant feature flag `phase4_restaurant_day_parting=true` in tenant schema (so flag-on tenants don't get the filter). Then verified `public.feature_flags.phase4_restaurant_day_parting=false`. Read source: `req.tenantId` is undefined on public routes (mounted at registerAllRoutes.js:172, before loadTenantAndPerms at :206). `getFeatureFlagsMap(undefined)` queries the public schema, gets the global default OFF, filter silently skipped.
+
+**Fix-and-deploy (10 min):**
+- Two-callsite change in `backend/routes/public-restaurant.js`: destructure `{ db, tenant }` from `resolvePublicTenantDb`, pass `tenant?.id` to `getFeatureFlagsMap`.
+- Discussed with operator before shipping. Approved.
+- Committed as `f1a3cd0` and pushed. Railway redeployed cleanly.
+
+**Re-verify (10 min, post-deploy):**
+- **Outside-window** (PKT 23:55 Thursday, schedule 11-15 every day): `curl /api/public/restaurant/menu/...` → `["Caesar Salad", "Chocolate Cake", "Grilled Chicken"]` — pinned items correctly hidden ✅
+- **Add off-schedule** (PKT 23:55, schedule 11-15): `POST /checks/<token>/items {product_id:3}` → 422 `{"error":"Item not available at this time"}` ✅
+- **P7 outside-window**: `POST {product_id:1}` (Caesar Salad, un-pinned) → 201 ✅
+- **Inside-window**: clock rolled to 2026-05-08 00:00 PKT mid-verify. Updated schedule to `00:00-00:30` via Supabase MCP, then clicked Save in the UI edit modal to invalidate the 60s caches. `curl /api/public/restaurant/menu/...` → all 5 items returned ✅
+- **Add inside-window**: `POST {product_id:3}` (Iced Tea) → 201 ✅
+
+**Findings updates:**
+- W27 → ✅ FIXED — commit `f1a3cd0`.
+- Status Summary: 0 open blockers (was 0 → 1 transient → 0 again), 1 issue (W18), 13 polish (W26 + 12 prior). **Total fixed: 24** (was 23). Phase 3 row → "8 of 12 closed".
+
+**Floor healed for next sitting:**
+- Schedule deleted via API (`DELETE /api/restaurant/menu-schedules/1` → 200). DB: `menu_schedules` row count = 0.
+- Kiosk slot revoked via /order-kiosks UI (Revoke button).
+- All open drafts cancelled via Supabase MCP. DB: 0 open table sessions, 0 open drafts, 0 schedules.
+- Test Owner still clocked in (today's session #3 from yesterday's heal), shift #2 open.
+
+**Surprises:**
+- The bug was caught only because flow 3.8's plan literally walks the customer-facing path. Any unit / integration test that called `getFeatureFlagsMap` directly would have passed because `tenantId` was passed correctly. The only way to surface this was an end-to-end test that walks through the public route's actual call. Lesson: integration tests for public routes (storefront, kiosk, portal) need to be cross-checked against the actual mount order in registerAllRoutes.
+- The CLAUDE.md description of `getFeatureFlagsMap` failure path was almost-right but slightly wrong on the mechanism (suggested "throws → caught → swallowed", actual was "silently queries wrong schema, returns wrong default"). Same outcome but different reasoning. Confirms the project memory `feedback_frontend_claude_stale` extends to backend CLAUDE.md too — verify against source before describing root causes.
+- The fix was a 6-line diff (2 callsites × 3 lines each). Bugs of this severity rarely have such small fixes; the surface area was tiny precisely because the bug was a single-variable typo (`req.tenantId` vs `tenant.id`) shipped twice.
+- Tenant feature flags ON + global feature flag OFF + req.tenantId undefined = "feature is configured ON but quietly behaves as OFF". The combination is hard to spot in logs because there's no error to log. Worth a future audit of every other `getFeatureFlagsMap(req.tenantId)` callsite that runs on a public route. (None found in this audit — but the pattern itself is worth a lint rule or test fixture to prevent regression.)
+
+**Recommendation for next sitting:**
+1. Pick up from **flow 3.9** (86'd item — sold-out toggle + POS / kiosk / QR menu / pay-at-table refusal on a check containing a 86'd item). Floor is clean, tenant healthy.
+2. Optional follow-up: audit other public routes (storefront, public-bookings, public-reservations) for any callsite that uses `req.<auth-set-field>` after `resolvePublicTenantDb`. The pattern that bit W27 may exist elsewhere — different auth field, same shape.
+3. Future polish (still): W18 (Open-Tab CTA), W19 (header label), W26 (table-token / seat-session disconnects). Ship together when convenient.
+4. Triage the 2 frontend Sentry hook-order errors flagged in 3.4 close-out (SANOPOS-FRONTEND-A and -B) — not blocking restaurant launch but worth a hook-order audit pass.
 
 ---
 
