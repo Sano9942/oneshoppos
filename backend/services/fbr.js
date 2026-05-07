@@ -138,6 +138,42 @@ async function enqueueFbrInvoice(
   db,
   { saleId, returnId, invoiceType, payload, tenantSlug }
 ) {
+  // W31 gate: refuse to enqueue when the tenant cannot actually post to FBR.
+  // The PK country pack auto-seeds `fbr_integration=true` regardless of the
+  // wizard's tax_mode answer, so any tenant that picks "I don't charge GST"
+  // (or never finishes /settings/fbr) used to silently grow `fbr_invoices`
+  // by one stuck `pending` row per sale forever. The FBR worker correctly
+  // halts at the credential check before any HTTP call, so there's no API
+  // leak — but the queue grew unbounded. Two failure conditions:
+  //   1. tax_mode = 'none' — the merchant declined GST; no invoice should
+  //      be posted regardless of credentials.
+  //   2. tax_mode is set but FBR credentials are missing — credentials may
+  //      arrive later (merchant finishes /settings/fbr) but until then there
+  //      is nothing the worker can do; better to skip than to backlog.
+  // Read the gate from `company_profile` (one row per tenant). Fail-open if
+  // the lookup throws — preserves prior behavior on any unexpected error.
+  try {
+    const { rows: [cp] } = await db.query(
+      "SELECT tax_mode, fbr_api_token, ntn FROM company_profile WHERE id = 1"
+    );
+    if (!cp || cp.tax_mode === "none" || !cp.fbr_api_token || !cp.ntn) {
+      logger.info(
+        {
+          tenantSlug,
+          saleId: saleId || null,
+          returnId: returnId || null,
+          tax_mode: cp?.tax_mode || null,
+          has_token: !!cp?.fbr_api_token,
+          has_ntn: !!cp?.ntn,
+        },
+        "FBR enqueue skipped — tenant tax_mode=none or credentials missing"
+      );
+      return;
+    }
+  } catch (err) {
+    logger.warn({ err, tenantSlug }, "FBR enqueue gate lookup failed — falling through to insert");
+  }
+
   const { rows: [inserted] } = await db.query(
     `INSERT INTO fbr_invoices (sale_id, return_id, invoice_type, payload, status, next_retry_at)
      VALUES ($1, $2, $3, $4, 'pending', NOW())
