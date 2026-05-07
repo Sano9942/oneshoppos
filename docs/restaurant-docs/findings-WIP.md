@@ -26,7 +26,9 @@
 | 🔵 Polish | 14 | 7 | 0 |
 | **Total** | **16** | **31** | **0** |
 
-Last update: 2026-05-08 (Phase 6 closed — 13 of 13 sub-sections walked. **W36 🟡 NEW** KDS ticket cards unreadable in dark mode (`KDSRedesign.jsx:421` uses `bg-(--ui-bg)` page-bg token + item-name spans lack explicit text color → black-on-near-black ~1.0 contrast; verified live via Playwright DOM inspection). **W37 🔵 NEW** onboarding checklist `floor_plan` step always shows undone (`DashboardOnboarding.jsx:79` hardcoded `done: false` + 8 other vertical steps share the same shape). B2 (Manager 21 perms) live-verified end-to-end. Cashier-role tenant separation verified — no Restaurant section, direct nav blocked, but POS terminal accessible (correct since cashiers ring up restaurant orders). Cross-tenant isolation bulletproof — JWT `tid` wins, x-tenant-slug header ignored. Day-parting + pay-at-table edges + session-expired modal all source-verified (gates explicit; live triggers expensive). KDS stress test passes — 13 simultaneous tickets handled, recall mechanism works. Status Summary: 16 open (was 14, +W36 +W37), 31 fixed unchanged. Earlier entries below.)
+Last update: 2026-05-08 (Phase 7 Cafe Parity Pass closed — 0 new findings. Created `cafetest1` tenant via signup wizard (Cafe / Quick Service preset, PK, free plan), walked all 5 cafe-vs-restaurant diffs, deleted at end. **All 3 P5-documented diffs verified live:** (a) dashboard has NO floor plan widget tile, (b) sidebar group shows "CUSTOMERS" with all "Customer" labels (not "GUESTS" / "Guests" as restaurant), (c) onboarding step "Add employees" appears (NOT "Set up your floor plan"). **Sample products perfectly match plan §456:** Espresso + Cappuccino (Hot Drinks), Iced Latte (Cold Drinks), Croissant + Sandwich (Bakery). **Flag parity is exact:** FULL OUTER JOIN diff query returned 0 rows — both tenants have 25/34 identical flags + same `mode=restaurant` enabled. industry_type='cafe' vs 'restaurant' drives only preset (labels/widgets/onboarding/sample products), not flags. Cleanup: cafe tenant soft-deleted via /admin/tenants/100, schema dropped immediately. **Operator solved Cloudflare Turnstile manually** (Playwright can't render the widget due to CSP/TrustedHTML; agent filled rest of the form). 0 blockers · 2 issues · 14 polish · 31 fixed unchanged. Earlier entries below.)
+
+Earlier: 2026-05-08 (Phase 6 closed — 13 of 13 sub-sections walked. **W36 🟡 NEW** KDS ticket cards unreadable in dark mode (`KDSRedesign.jsx:421` uses `bg-(--ui-bg)` page-bg token + item-name spans lack explicit text color → black-on-near-black ~1.0 contrast; verified live via Playwright DOM inspection). **W37 🔵 NEW** onboarding checklist `floor_plan` step always shows undone (`DashboardOnboarding.jsx:79` hardcoded `done: false` + 8 other vertical steps share the same shape). B2 (Manager 21 perms) live-verified end-to-end. Cashier-role tenant separation verified — no Restaurant section, direct nav blocked, but POS terminal accessible (correct since cashiers ring up restaurant orders). Cross-tenant isolation bulletproof — JWT `tid` wins, x-tenant-slug header ignored. Day-parting + pay-at-table edges + session-expired modal all source-verified (gates explicit; live triggers expensive). KDS stress test passes — 13 simultaneous tickets handled, recall mechanism works. Status Summary: 16 open (was 14, +W36 +W37), 31 fixed unchanged. Earlier entries below.)
 
 Earlier: 2026-05-08 (post-Phase-5 fix-it loop closed — 6 fixes shipped + live-verified end-to-end. **W28** ✅ FIXED via Railway env var (`FRONTEND_URL=https://sanopos.com`) — pay_url now serves sanopos.com domain. **W33** ✅ FIXED `03577f8` — Express 5 `req.query` mutation replaced with header mutation; `/reserve/:slug` now shows 26 bookable slots end-to-end. **W31** ✅ FIXED `8091a07` — `enqueueFbrInvoice` gates on `tax_mode != 'none'` AND credentials present; verified on tenant default state by ringing up sale id=11 (fbr count stayed at 10, no new row). **W34** ✅ FIXED `a0aba0b` — portal login subtitle preset-aware via `/api/portal/config.enabled_tabs`; restaurant tenants see "Access your orders, loyalty, and account." **W35** ✅ FIXED `b2cef77` — admin worker-status panel supplements in-memory heartbeat with `pgboss.job MAX(completed_on)`; 6 daily/weekly workers that pre-fix showed "stopped" post-deploy now show "running" with actual last-completed timestamps. **W32** ✅ FIXED `dd231e4` — sandbox + webhook handlers cross-tenant scan to find tenant DB scope for the gateway_ref; sandbox page resolves "Restaurant Table Payment / Table check #34" instead of "Payment reference not found in any context"; clicking Pay Successfully fires the webhook → flips session to paid → creates sale → closes table session, all live-verified by ringing up sale id=12 Rs 747.50. Status Summary: 0 blockers (was 0), 1 issue (was 3 → -W32 -W33), 13 polish (was 17 → -W28 -W31 -W34 -W35), 31 fixed (was 25 → +6). Earlier entries below.)
 
@@ -2971,6 +2973,50 @@ Plan §431 explicitly asks: "verify checklist actually surfaces restaurant-speci
 3. **W18 (Open-Tab CTA on /restaurant/checks)** is now the only other open issue. Polish-tier; ship in same fix-it loop or close as won't-fix.
 4. **2 frontend Sentry hook-order errors** still untriaged — could be quick to clear if not relevant to current code.
 5. **Cleanup of test artifacts:** Test Manager and Test Cashier employees + draft order #36 can be archived/deleted before Phase 8 if launch-fresh state is needed. They're not blocking anything currently.
+
+---
+
+### Session 2026-05-08 (continuation 13) — Phase 7 Cafe Parity Pass walked end-to-end
+
+**Operator:** Hassan + Claude (headed Playwright + Supabase MCP + super-admin login)
+**Tenant created:** `cafetest1` (id=100, slug `cafetest1`, plan=free, country=PK, tz=Asia/Karachi, industry_type=cafe, business_model=food_service, mode=restaurant)
+**Tenant deleted at end:** ✅ soft-delete via /admin/tenants/100, status='deleted', schema `tenant_cafetest1` dropped immediately.
+**Scope:** Verify cafe preset is functionally a restaurant (mode + flags) but with the 3 documented UI diffs from P5: no floor plan widget on dashboard, "Customer" not "Guest" labels, `employees` step instead of `floor_plan` in onboarding.
+**Duration:** ~12 min (signup → wizard → 5 verifications → cleanup).
+
+**Result:** ✅ All 3 documented diffs verified. Plus all sample products + flag parity verified. **0 new findings.** Phase 7 closed.
+
+**Walk evidence:**
+
+| Plan check | Expected | Observed | Status |
+|---|---|---|---|
+| Sign up & wizard pick "Cafe / Quick Service" | Tenant provisioned, industry_type=cafe | DB row id=100, industry_type=cafe, business_model=food_service | ✅ |
+| Dashboard has NO floor plan widget | Main dashboard area should not show floor-plan tile | Main `<main>` text contains zero "floor plan" string post-tile rendering — confirmed via `/(floor\s*plan)/i` regex check on full innerText | ✅ |
+| Sidebar shows "Customers" not "Guests" | Per P5 `labels.customer = "Customer"` | Sidebar group reads "CUSTOMERS" with items "Customers / Customer Groups / CRM / Customer Invoices / Loyalty Tiers / Gift Cards / Inbox / Campaigns / Review Moderation". Restaurant tenant earlier showed "GUESTS / Guests / Guest Groups / Guest Invoices". | ✅ |
+| Onboarding has `employees` step, NOT `floor_plan` | Per P5 difference | Dashboard widget "Get started with SanoPOS — 2 of 5 steps complete" lists: store ✅, menu_item ✅, **Add employees** (NOT "Set up your floor plan"), Open a shift, Make your first order. | ✅ |
+| Sample products = Hot Drinks / Cold Drinks / Bakery | Espresso, cappuccino, iced latte, croissant, sandwich | DB query `tenant_cafetest1.products` JOIN categories: id=1 Espresso (Hot Drinks), id=2 Cappuccino (Hot Drinks), id=3 Iced Latte (Cold Drinks), id=4 Croissant (Bakery), id=5 Sandwich (Bakery). **Exact match** to plan §456. | ✅ |
+| 23 flags match restaurant | Per `setup.js:279` cafe seeds same `RESTAURANT_SEED_FLAGS` | DB count: cafe = 25 enabled / 34 total · restaurant = 25/34. FULL OUTER JOIN diff query returned **0 rows** — every single flag is identical in both presence AND enabled-state across both tenants. (Plan said 23, actual is 25 — plan estimate was approximate.) | ✅ |
+| `tenant_modes` parity | Both should have `mode=restaurant` enabled | DB confirmed: cafe.mode=restaurant enabled=true, restaurant.mode=restaurant enabled=true. | ✅ |
+| Cleanup: delete cafe tenant after | Per plan §458 | `/admin/tenants/100` → Delete → confirm → 200. DB now `status='deleted', deleted_at=2026-05-07 22:55:54.764`. Schema `tenant_cafetest1` no longer in `information_schema.schemata` (cascade-dropped). | ✅ |
+
+**Notes for next sittings:**
+- **Cafetest1 is fully cleaned up** — no orphan rows, no orphan schema, no lingering test artifacts.
+- **Pakistan country pack auto-seeded `fbr_integration=true`** during signup (W31 territory) — but since W31's fix is shipped (`8091a07`), no FBR queue rows accumulated for cafetest1. ✅ verified W31 fix scope holds for fresh tenants too.
+- **Signup flow gotcha for next sitting:** Cloudflare Turnstile in headless Playwright fails (CSP / TrustedHTML restrictions). Operator solves Turnstile manually; agent fills the rest of the form. Email verification token can be hit directly via `/verify-email?token=X&tenant=Y` — the verify endpoint doesn't gate on the click-from-email path, just exchanges the token.
+
+**Surprises / lessons:**
+- **Cafe vs Restaurant is a thin cosmetic shell over identical infrastructure.** Same 25 flags, same `mode=restaurant`, same backend routes available, same Restaurant section in sidebar (Floor Plan, Checks, KDS — all visible on cafe too). The differences are purely the dashboard widget filter, the customer/guest labels, the onboarding step list, and the sample product seed. This is the right design — cafe merchants can still set up tables / floor plan if they want, they just don't get pushed there during onboarding.
+- **Industry_type stored as 'cafe' not 'restaurant'.** This is what drives the preset (PresetContext.industry_type → labels + dashboard_widgets + onboarding_steps). The flag table doesn't differ by industry — only the preset config does. Means future preset changes (e.g. adding a new label) need to be tested per-industry, not per-flag-set.
+- **Sample products seed is independent of mode.** The 5 cafe products are seeded by `setup.js` based on industry_type after the wizard, not by the country pack or mode. Different from how Restaurant gets its appetizer/main/dessert seed. This means the preset seed-data lives in setup.js logic, not in a shared tenant_provisioner pathway.
+- **Phase 7 closed cleanly with 0 new findings** — first phase of this walkthrough to do so. The cafe preset has been live in production from day 1 and works as documented.
+
+**Recommendation for next sitting:**
+1. **Phase 8 — Pre-Launch Operational Decisions.** Not click-throughs — 12 operational questions to answer before launch (browser compat, Sentry hookup, R2 image upload, email deliverability, SMS provider, payment gateway, backup/restore, worker monitoring, rate limit smoke, receipt templates, KDS hardware docs, decisions to commit). Most are decisions, not testing. Quick to walk if operator just wants the answers documented.
+2. **Phase 9 — Cleanup.** Already partly done (cafe tenant deleted in this sitting). Remaining: confirm orphan-schema cleanup worker has nothing to do for cafetest1 (it's already gone), verify Resend has stopped sending to cafetest1@example.com, final commit of findings-WIP.md.
+3. **W36 + W37 fix-it loop** if operator wants those shipped before launch. W36 (KDS dark mode) is the higher priority given kitchen-critical surface.
+4. **W18 (`/restaurant/checks` Open-Tab CTA)** is the only other open issue — polish-tier; ship in same loop or close as won't-fix.
+
+Screenshot: `restaurant-walkthrough-7-cafe-dashboard-2026-05-08.png` (cafe dashboard with no floor plan widget + "Add employees" onboarding step visible).
 
 ---
 
