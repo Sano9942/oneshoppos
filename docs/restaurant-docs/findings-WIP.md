@@ -3020,4 +3020,196 @@ Screenshot: `restaurant-walkthrough-7-cafe-dashboard-2026-05-08.png` (cafe dashb
 
 ---
 
+### W38 — `subscription-grace-worker` errors hourly for tenant `livetestauto` (`column cs.grace_period_end does not exist`)
+
+**Status:** OPEN
+**Severity:** 🟡 Issue (silent per-tenant data corruption — grace period transitions never run for affected tenants; any others with the same drift would also be silently skipped)
+**Surfaces affected:** `backend/workers/subscription-grace-worker-boss.js:68` + `tenant_livetestauto.customer_subscriptions` schema (column missing)
+**Found via:** Phase 8 pre-launch `/check-services` 2026-05-08
+
+**Steps to reproduce:**
+1. Tail Railway logs: `railway logs | grep subscription-grace`.
+2. Observe: every hour at HH:00, a `Grace check failed for tenant` log line for `tenantSlug=livetestauto` with `code=42703 column cs.grace_period_end does not exist`.
+
+**Observed (Railway logs 2026-05-08):**
+6 consecutive hourly failures captured between 14:00 and 19:00 UTC, all for `livetestauto`, all the same error:
+```
+err.message = "column cs.grace_period_end does not exist"
+err.code    = 42703
+file        = parse_relation.c
+position    = 93
+worker      = subscription-grace-worker
+tenantSlug  = livetestauto
+```
+The worker's per-tenant try/catch swallows the error, so pgboss marks the parent `subscription-grace-check` job as `state='completed'` (191 completed in queue, zero failed/retry). This means the worker's monitoring panel + the job-state check both falsely report the worker as "healthy."
+
+**Expected:**
+`tenant_livetestauto.customer_subscriptions` should have a `grace_period_end` column (added by some prior migration that this tenant missed). Worker should run end-to-end without DB errors.
+
+**Source-verified root cause:**
+Schema drift on `livetestauto` only. Comparison query: list tenants where `customer_subscriptions.grace_period_end` exists vs not. Most likely cause: a migration that added the column was applied to public + most tenants but failed (or was skipped) for `livetestauto`. The migrate runner catches per-tenant failures and continues, so this kind of partial drift is invisible unless someone tails workers.
+
+**Effect:**
+- ❌ Grace period transitions never run for `livetestauto` — if a customer's subscription enters grace, the worker can't transition them to `expired` after 7 days.
+- ❌ The `customer_subscriptions` workflow is broken for any tenant with the same drift. Need a comprehensive schema-drift sweep across all tenant schemas to find others.
+- ✅ Worker doesn't crash globally — the per-tenant catch keeps it running for the other 4 tenants.
+
+**Fix paths:**
+1. **Immediate:** Apply the missing migration to `tenant_livetestauto` manually:
+   ```sql
+   SET search_path TO tenant_livetestauto;
+   ALTER TABLE customer_subscriptions ADD COLUMN IF NOT EXISTS grace_period_end TIMESTAMPTZ;
+   -- Re-record migration version if migrate-pg.js tracks per-tenant
+   ```
+   Verify next hourly worker run passes.
+2. **Longer-term:** Add a startup `schemaDriftCheck()` that compares each active tenant's `information_schema.columns` against `public.schema_version` expected columns and either auto-heals or fails-loud at boot. Currently the migrate runner's "best-effort, skip failed tenant" policy hides this drift class.
+3. **Worker fix-up:** Surface per-tenant errors as job failures (not swallowed) so `pgboss.job state='failed'` actually catches schema drift. Right now the only way to find this is tailing logs.
+
+**Severity rationale:** 🟡 not 🔴 because (a) only 1 known affected tenant, (b) `livetestauto` is the sweep test tenant — not a production paying merchant, (c) the worker is hourly so impact is bounded. But not 🔵 because the drift is invisible to monitoring and could be wider — the same migration may be missing on other tenant schemas too. Upgrade severity if a sweep finds production tenants affected.
+
+**Source:** Railway logs `subscription-grace-worker` channel, `backend/workers/subscription-grace-worker-boss.js:68` (the failing query call site).
+
+---
+
+### W39 — `backup_log` rows have NULL `filename`/`url`/`tenant_slug`/`performed_by` — can't audit where backup files went
+
+**Status:** OPEN
+**Severity:** 🔵 Polish (audit trail incomplete; primary DR is Supabase Pro PITR, not app-level backups)
+**Surfaces affected:** `backend/utils/backup-pg.js` (writer) + `backend/routes/admin/system.js` backup endpoint + `backup_log` table on every tenant schema
+**Found via:** Phase 8.7 backup/restore verification 2026-05-08
+
+**Steps to reproduce:**
+1. Query `tenant_livetest1.backup_log` (only tenant with rows): `SELECT * FROM tenant_livetest1.backup_log ORDER BY id DESC;`
+2. Observe: 2 rows exist (IDs 1 + 2, both `created_at` 2026-04-30 12:15), `status='success'`, `size_bytes` populated (~1.18MB each), `duration_ms` populated. But `action`, `filename`, `url`, `tenant_slug`, `performed_by`, `error_message`, `note` all NULL.
+
+**Observed:**
+```
+id | status  | size_bytes | duration_ms | action | filename | url | tenant_slug | performed_by | error_message | created_at
+ 1 | success | 1182096    | 3269        | null   | null     | null| null        | null         | null          | 2026-04-30 12:15:06
+ 2 | success | 1182166    | 2782        | null   | null     | null| null        | null         | null          | 2026-04-30 12:15:09
+```
+
+**Expected:**
+- `action` should be `'backup'` or `'restore'`.
+- `filename` should be the R2 object key like `backups/tenant_livetest1/backup_20260430.sql.gz`.
+- `url` should be the R2 public URL or a presigned-download URL.
+- `tenant_slug` should be `'livetest1'`.
+- `performed_by` should be the super-admin email (manual trigger) or `'system'` (scheduled).
+
+**Source-verified root cause:**
+v84 migration added a column union for `backup_log` (per CLAUDE.md "v84: backup_log column union"). The columns are present in the schema, but the code path that writes to `backup_log` is only populating the original 4 columns (`status`, `size_bytes`, `duration_ms`, `created_at`) and not the new ones added by v84. Either the writer was never updated post-v84, or the new columns are intended for a different code path that doesn't run on the manual-backup endpoint.
+
+**Effect:**
+- ❌ Can't tell from `backup_log` alone where any backup file went or who triggered it.
+- ❌ Can't easily diagnose "did we have a backup for tenant X on day Y" without listing R2 directly (which requires wrangler or Cloudflare dashboard since the existing `CLOUDFLARE_API_TOKEN` lacks R2 read scope).
+- ⚠️ Restaurant test tenant (`sanoposlivetest1778021564659`) has zero rows in its `backup_log` — never backed up at app level. Same for `cafetest1` (already deleted) — but Supabase Pro daily auto-backups + 7d PITR cover all tenants automatically, so this is **audit-trail completeness** not a DR gap.
+
+**Fix paths:**
+1. **Smallest:** Update `backend/utils/backup-pg.js` to populate `action`, `filename`, `url`, `tenant_slug`, `performed_by` on insert. ~15-line change.
+2. **Optional:** Backfill the 2 existing Apr-30 rows from R2 listing (if files still exist there) for completeness. Low value — they're 9 days old test runs.
+3. **Monitor improvement:** add a `/api/admin/backup-status` endpoint that joins `backup_log` with R2 file existence (HEAD on each `filename`) — would surface "backup ran but file not in R2" failure mode.
+
+**Severity rationale:** 🔵 because (a) primary DR is Supabase Pro PITR, not app-level dumps; (b) the column data IS captured in size + duration + status — just not the routing fields; (c) merchants never see this table. Upgrade to 🟡 only if app-level backups become the primary restore strategy (they are documented as "supplementary for tenant-self-export" per CLAUDE.md).
+
+**Source:** `tenant_livetest1.backup_log` rows (DB), `backend/utils/backup-pg.js` (writer code path needs source-read to confirm), v84 migration (added the column union per CLAUDE.md).
+
+---
+
+### W40 — Restaurant route handlers swallow errors locally — production errors never reach Sentry
+
+**Status:** OPEN
+**Severity:** 🟡 Issue (production observability gap — every restaurant-route bug becomes invisible)
+**Surfaces affected:** `backend/routes/restaurant.js` (29 try/catch blocks), `backend/routes/public-restaurant.js` (3 handlers — same pattern), likely other domain routes by extension
+**Found via:** Phase 8.2 Sentry hookup verification 2026-05-08
+
+**Steps to reproduce:**
+1. Trigger any error inside a restaurant route handler (e.g. send a malformed payload that bypasses Zod, or an ID that hits a constraint violation in pg).
+2. Observe: client gets `500 {"error": "<err.message>"}`. Server logs the error (via `req.log` or default).
+3. **Open Sentry → no event captured.**
+
+**Observed (live verification 2026-05-08):**
+- `sentry-cli issues list --project node-express` shows ZERO captures since 2026-04-20 (last fatal: `DbHandler exited`). All 4 prior captures are fatal-level boot/connection errors, not handler-level errors.
+- The synthetic event `NODE-EXPRESS-6` (Phase 8.2 ping via `sentry-cli send-event`) lands in <30s, proving the DSN + ingest pipeline work.
+- The global error handler at `backend/index.js:247-262` correctly calls `Sentry.captureException(err, {tags: {tenantSlug, reqId}, user: {id, name}})` — but it only fires for errors that propagate up to it.
+- `backend/routes/restaurant.js` has **29 `try { ... } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }) }`** blocks. None of them rethrow. None of them call `Sentry.captureException`. Every handler-level error is swallowed at the route level.
+
+Sample (one of 29):
+```js
+// backend/routes/restaurant.js:33-41
+app.get("/api/restaurant/floor-plans/:id", ...gate, async (req, res) => {
+  try {
+    const plan = await floor.getFloorPlanWithTables(deps.db, Number(req.params.id));
+    if (!plan) return res.status(404).json({ error: "Floor plan not found" });
+    res.json(plan);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });   // ← swallowed
+  }
+});
+```
+
+**Expected:**
+Either (a) remove the per-route try/catch entirely and let Express v5 propagate async errors to the global handler (simplest, most consistent), OR (b) keep the try/catch for the user-facing 500 response but ALSO call `Sentry.captureException(err, {...})` inside the catch (more explicit, allows custom enrichment).
+
+**Source-verified root cause:**
+Pattern was likely written defensively before Express 5 (which auto-catches async errors). In Express 5 the try/catch is unnecessary AND actively harmful for observability. The same pattern likely repeats across most route files — `restaurant.js` is the worst (29 instances) but I observed the same shape in `public-restaurant.js:143-145`, `public-restaurant.js:208`, etc.
+
+**Effect:**
+- ❌ Any production bug in restaurant routes is invisible to Sentry. We learn about it only if a merchant complains, or if we tail Railway logs proactively.
+- ❌ Backend Sentry has zero meaningful captures in 19 days — not because the system is bug-free, but because the handlers swallow them all.
+- ❌ Same pattern in other route files (sales, products, customers, etc.) means this gap is system-wide, not restaurant-specific. Restaurant is just where I noticed it.
+
+**Fix paths:**
+1. **Recommended:** Remove the try/catch entirely from async handlers — Express 5 auto-propagates rejected promises to the global error handler, which already does the right thing (Sentry + alerting + 500 response with `reqId`). Net: less code, better observability.
+2. **Conservative:** Keep try/catch but inject `Sentry.captureException(err, {tags: {tenantSlug: req.tenantSlug}, user: {id: req.employee?.id}})` inside each catch. ~30 lines across `restaurant.js` alone, more across other files.
+3. **Mid-ground:** Write a small `asyncHandler(fn)` wrapper that catches and forwards to `next(err)`, replace `(req, res) =>` with `asyncHandler(async (req, res) => ...)`. Refactor route by route.
+
+**Severity rationale:** 🟡 because the system genuinely works — merchants don't see degraded service from this. But it's a 🟡 not 🔵 because **production observability is a launch-readiness item**, and shipping with 0% backend handler-error capture is a meaningful operational risk. Upgrade to 🔴 if a real incident happens that we can't diagnose because Sentry has nothing.
+
+**Source:** `backend/routes/restaurant.js` (29 try/catch blocks, lines 22-end), `backend/routes/public-restaurant.js:143-145, :208`, `backend/index.js:247-262` (global handler that's not being reached). Verified live: `sentry-cli issues list` shows no handler-level captures since 2026-04-20.
+
+---
+
+### Session 2026-05-08 (continuation 13) — Phase 8 agent-runnable pass
+
+**Operator:** Hassan + Claude (sentry-cli + Railway CLI + Supabase MCP + curl rate-limit smoke)
+**Tenant:** `sanoposlivetest1778021564659` (auth verified) + `livetestauto` (worker errors observed) + `livetest1` (backup_log audit)
+**Scope:** Phase 8 agent-runnable sub-sections (8.2 Sentry, 8.3 R2_PUBLIC_URL config, 8.7 backup/restore audit, 8.8 worker monitoring, 8.9 rate limit smoke). Operator-decision sub-sections (8.1, 8.4, 8.5, 8.6, 8.10, 8.11, 8.12) deferred per plan.
+**Duration:** ~25 min
+
+**Result:** ✅ all 5 agent-runnable sub-sections completed. **3 new findings filed (W38 🟡 + W39 🔵 + W40 🟡).**
+
+**Walk evidence:**
+
+| Sub-section | Verification | Outcome |
+|---|---|---|
+| **8.2 Sentry hookup** | `sentry-cli send-event` → DSN https://5fcfd...@sentry.io/4511118221574144. Event id `b2e01458-8369-4744-965d-6697a84c9918` ingested as `NODE-EXPRESS-6` in <30s with custom tags (`test:phase8`, `tenantSlug:sanoposlivetest1778021564659`). | ✅ pipeline works. ⚠️ but uncovered W40: handler-level errors in restaurant routes swallowed locally and never reach the pipeline. |
+| **8.3 R2_PUBLIC_URL** | `railway variables --kv \| grep R2_` — `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_ENDPOINT`, `R2_SECRET_ACCESS_KEY` all set. `R2_PUBLIC_URL` NOT set. `APP_PUBLIC_BASE_URL=https://api.sanopos.com` IS set → fallback path in `r2.js:68-75` resolves to `https://api.sanopos.com/r2/<key>` proxied through Railway. | ✅ functional. ⚠️ deferred-decision: every R2 image byte traverses Railway bandwidth instead of going direct to CDN. Set `R2_PUBLIC_URL` to a Cloudflare custom domain for direct fetches when bandwidth becomes a concern. |
+| **8.7 Backup/restore** | Supabase MCP `get_organization` confirms `plan: pro` → daily auto-backups + 7d PITR active (primary DR). `tenant_livetest1.backup_log` shows 2 success rows from 2026-04-30 (~1.18MB each, durations 2.7-3.3s) but with NULL routing fields. `tenant_sanoposlivetest1778021564659.backup_log` is empty (never backed up at app level). R2 bucket `sanopos-uploads` confirmed exists via `mcp__claude_ai_Cloudflare_Developer_Platform__r2_buckets_list`. R2 object listing for `backups/` prefix blocked: `CLOUDFLARE_API_TOKEN` lacks R2 read scope. | ✅ DR primary path verified (Supabase Pro). ⚠️ filed W39 for app-level audit-trail gap. R2 file-existence verification deferred to manual wrangler / dashboard sweep. |
+| **8.8 Worker monitoring** | `pgboss.job` direct query: `kds-load-snapshot` 197 completed, latest 19:30:58 UTC; `expire-reservations` 2268 completed, latest 19:30:58 UTC; `reservation-reminder-check` 197 completed, latest 19:30:58 UTC; `subscription-grace-check` 191 completed, latest 19:00 UTC (hourly); `marketplace-feed-check` 32 completed (6h); `rental-overdue-check` 7 completed (daily). Zero `failed`/`retry`/`cancelled` rows in last 24h across all queues. | ✅ all restaurant-relevant workers fresh. ⚠️ uncovered W38: `subscription-grace-worker` errors hourly for `livetestauto` (column drift) but per-tenant catch swallows the error so pgboss reports the parent job as completed — invisible in queue-state monitoring. |
+| **8.9 Rate limit smoke** | `for i in 1..65; curl -o /dev/null -w "%{http_code}" "/api/public/restaurant/menu/fake-token-phase8?tenant=sanoposlivetest1778021564659" &; wait` → 60×404 + 5×429. Limiter at `windowMs:60s, max:60, key:pubrest:{tenant}:{ip}` — fires exactly as configured. | ✅ rate limit working. **Plan said "blast 121" but the route uses `publicRestaurantLimiter` (60/min) not the global limiter (600/min) — 65 was sufficient. Plan §472 has the wrong number.** |
+
+**Notes for next sittings:**
+- **`/check-services` was 43h stale at start of session — ran first.** Surfaced the Railway worker-error log signal that became W38. Discipline note: the hook reminder to run `/check-services` actually matters; it caught a finding the operational walk wouldn't have.
+- **NODE-EXPRESS-6 (synthetic test event) is left unresolved in Sentry** — `sentry-cli` token lacks resolve permission (403). Manual cleanup via Sentry web UI, or grant resolve scope to the token.
+- **Phase 8 operator-decision sub-sections (8.1, 8.4, 8.5, 8.6, 8.10, 8.11, 8.12) remain.** None of them are agent-runnable. Operator picks them up when ready to commit launch decisions.
+- **Frontend Sentry has 4 unresolved errors** (May 4 + May 6) — `SANOPOS-FRONTEND-A/B` (React hooks order), `SANOPOS-FRONTEND-9` (`Cannot read properties of undefined (reading 'default')`), `SANOPOS-FRONTEND-8` (likely benign UX "Draft order not found"). Triage before launch.
+- **Phase 9 cleanup is small** — already partly done (cafetest1 deleted). Remaining: confirm Test Owner lingering attendance #3 + cash shift #2 + Test Manager + Test Cashier (kept across sittings) get cleaned at the end. Final commit of findings-WIP.md.
+
+**Surprises / lessons:**
+- **Sentry pipeline works, but restaurant Sentry capture rate is effectively zero.** The 19-day silence on backend Sentry (last capture Apr 20) is not because the system is bug-free — it's because every restaurant route handler swallows errors with try/catch before they can propagate. W40 is the most actionable Phase 8 finding.
+- **Worker-state monitoring has a blind spot.** Per-tenant errors that the worker catches and logs (but doesn't rethrow) don't show up as `pgboss.job state='failed'` — they show up only in Railway logs. W38 falls into exactly this blind spot. Either workers need to surface per-tenant failures as job failures, or there needs to be a separate "tenant-level worker health" panel that tails the log lines.
+- **Supabase Pro DR is the real safety net.** App-level `pg_dump → R2` is described in CLAUDE.md as "supplementary for tenant-self-export, not the primary DR strategy" — and the W39 audit-trail gap reinforces that. Daily auto-backups + 7d PITR are the actual disaster recovery; app-level backups are merchant-self-export convenience.
+- **The plan's "blast 121 requests" guidance was off-by-2x.** Plan §472 expected the global 120/min webhook-tier limiter, but `app.use("/api/public/restaurant", publicRestaurantLimiter)` at registerAllRoutes.js:171 mounts a tighter 60/min limiter specifically for this path. Easy to miss when reading the plan; should be corrected if anyone re-walks this.
+
+**Status Summary:** **17 open** (was 14: +W38 +W39 +W40), **31 fixed** (unchanged). Open issues: W18 + W36 + W38 + W40 (= **4 issues**, was 2). Open polish: W37 + W39 + … (= **13 polish**, was 12).
+
+**Recommendation for next sitting:**
+1. **Phase 9 cleanup** + final findings-WIP.md commit. Quick (~10 min) once operator decides whether to leave Test Manager + Test Cashier in place or clean them up.
+2. **W38 quick fix** — apply missing `grace_period_end` column to `tenant_livetestauto` via direct SQL. Low risk, immediate observability win. Optional sweep across other tenant schemas to catch any other drift.
+3. **W40 fix** — recommend option 1 (remove try/catch and let Express v5 propagate). Single-PR refactor across `restaurant.js` first, then audit other route files. Major observability uplift before launch.
+4. **W39** — punt to post-launch unless app-level backups become the primary DR strategy.
+5. **Operator-decision Phase 8 sub-sections (8.5/8.6/8.10/8.11/8.12)** — bundle into one "launch decisions" sitting once you're ready to commit on SMS provider, payment gateway A/B/C, receipt template, KDS docs, FBR `tax_mode=none` combo, cafe preset sign-off, Lighthouse baseline.
+
+---
+
 *This file is uncommitted by intent until first fix lands. Edit freely during active work; commit alongside the first fix.*
