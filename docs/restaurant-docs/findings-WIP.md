@@ -3212,4 +3212,236 @@ Pattern was likely written defensively before Express 5 (which auto-catches asyn
 
 ---
 
+### W42 — Cafe POS UX is restaurant-shaped (Seat picker, Course buttons C1-C5) — counter-service merchants see UI for an ops model they don't run
+
+**Status:** OPEN
+**Severity:** 🟡 Issue (cafe POS is functional via search bar; UX is misleading/restaurant-shaped, not blocking)
+**Surfaces affected:** `/pos` route resolves to `/pos/restaurant` for both cafe and restaurant presets. Frontend POS UI: top bar shows "New Takeaway / New Delivery / New Drive-Thru" buttons; main area shows "No tables in this floor plan yet. Add tables in Settings → Restaurant Floor." for any tenant where `restaurant_tables` is empty.
+**Found via:** Phase 8.12c cafe ops sweep 2026-05-08, fresh tenant `cafetestphase8` (industry_type=cafe, mode=restaurant)
+
+**Steps to reproduce:**
+1. Sign up new tenant via /signup, pick **Cafe / Quick Service** in wizard step 1.
+2. Complete wizard, login, clock in via /kiosk.
+3. Navigate to `/pos`.
+
+**Observed:**
+- URL redirects to `/pos/restaurant`.
+- Top bar shows three quick-action buttons designed for restaurant ops: **New Takeaway**, **New Delivery**, **New Drive-Thru**.
+- Main area shows: **"No tables in this floor plan yet. Add tables in Settings → Restaurant Floor."** — pushes the merchant toward setting up a floor plan.
+- Right sidebar shows correct opening-shift cash denominations panel (consistent across all POS surfaces).
+
+**Expected:**
+A counter-service / quick-service cafe doesn't have tables. The POS for a cafe should:
+- Either land on a counter-order entry surface (tap menu items, ring up, done — no table picker),
+- Or at minimum NOT show "No tables yet — set up floor plan" messaging that nudges them toward an unneeded workflow.
+
+The cafe preset should also feel different from full restaurant — currently they share 100% of the POS surface even though Phase 7 documented cafe as a distinct preset (no floor plan widget on dashboard, "Customer" not "Guest" labels, `employees` step instead of `floor_plan` in onboarding).
+
+**Source-verified context:**
+Phase 7 (Session 2026-05-08, continuation 12 in this file) found cafe = restaurant + 3 cosmetic diffs. None of those 3 diffs touch the POS surface — they're all on the dashboard / sidebar / onboarding. So the POS treats both presets identically.
+
+The `pos_layout_mode` field exists on `PresetContext` (per frontend/src/CLAUDE.md `usePreset()` returns `pos_layout_mode`) — this could be the discriminator for a cafe-specific layout, but no `cafe`-mode branch is currently rendered.
+
+**Effect:**
+- ❌ Cafe merchants on day 1 see "set up your floor plan" messaging that doesn't apply to their business model.
+- ❌ The promoted entry points are "Takeaway / Delivery / Drive-Thru" — Takeaway is fine, Drive-Thru is borderline (only large fast-food chains have it), Delivery is sometimes-relevant.
+- 🔴 **The "New Takeaway" flow forces a Seat picker (Seat 1 default) and requires picking a Course (C1 Appetizer / C2 Salad / C3 Entrée / C4 Dessert / C5 Drinks)** before any items can be added. None of these concepts apply to a cafe selling espresso + bakery items.
+- 🔴 **Menu never loads on the takeaway flow.** Live verification on `cafetestphase8`: spent 5+ minutes on the takeaway screen, "Loading menu" spinner persists indefinitely. Network trace shows ZERO requests to `/api/products`, `/api/menu`, or `/api/categories` while in this view (only repeated `/api/restaurant/reservations` polls every 30s, even though we're in a takeaway flow). The 5 sample products exist in the DB (`tenant_cafetestphase8.products` rows id=1..5: Espresso, Cappuccino, Iced Latte, Croissant, Sandwich) but the POS never asks for them.
+- 🔴 **No sale can be rung at all** for cafe tenants via the default POS surface. There is no functional workaround within the cafe POS today.
+- ⚠️ Affects every cafe / quick-service merchant signup. Not a one-off bug — it's the default first-impression POS.
+
+**Live evidence (network trace from /pos/restaurant on takeaway flow, cafetestphase8, 2026-05-08):**
+```
+GET /api/restaurant/floor-plans                      → 200
+GET /api/restaurant/reservations?from=...&to=...     → 200  (polls every 30s)
+GET /api/restaurant/reservations?from=...&to=...     → 200
+GET /api/restaurant/reservations?from=...&to=...     → 200
+[12 more reservation polls...]
+```
+Zero `/api/products`, `/api/menu`, `/api/categories` requests. No console errors. The component-level fetch for the menu either is never triggered for the cafe preset or is gated on a precondition (e.g. course selected, table assigned) that the cafe seed data doesn't satisfy.
+
+**Browser console:** 0 errors, 0 warnings during the 5-minute observation window. Silent failure — no diagnostic surface for the merchant or for support.
+
+**Why filed:**
+Phase 7 walked the cafe preset statically (sidebar, sample products, dashboard widget filtering) and found 0 issues. Phase 8.12c is the first session that ACTUALLY USES the cafe POS to ring sales — and the experience is restaurant-shaped. This wouldn't have been caught without an ops-shape sweep. Plan §458 explicitly recommended this sweep "with realistic cafe ops" — finding is exactly what the sweep was designed to surface.
+
+**Fix paths:**
+1. **Smallest:** change the empty-state message at the POS top of cafe tenants (`industry_type=cafe`) from "No tables yet — set up floor plan" to something like "Tap a menu item to start a counter order". ~10-line frontend change. Keeps the floor-plan affordance for merchants who DO want a counter+seating hybrid (some cafes do).
+2. **Mid-ground:** add a `pos_layout_mode='counter'` preset that hides the table picker entirely and lands on a quick-pick menu grid by default. Cafe preset sets this; restaurant preset stays on `floor_plan` mode. Bigger refactor (~half-day) but properly distinct UX.
+3. **Skip for launch:** accept that merchants will use the Takeaway button. Document the workflow in the cafe-onboarding email or checklist. Treat as post-launch UX polish.
+
+**Severity rationale (revised after deeper code investigation):**
+
+Originally rated 🔴 BLOCKER under the assumption that "menu never loads → cannot ring sales." Source-code investigation walked back the severity:
+
+- The "Loading menu" skeleton in `RestaurantCheckView.jsx:62` shows **only the POS-layout tile grid loading state**, NOT a menu-product loading state. That skeleton stays forever when `phase2_pos_layouts` flag isn't seeded for the tenant (which is true for BOTH cafe AND restaurant tenants — neither has the row, both fall back to undefined → falsy → fetch skipped per `useCart.js:85`).
+- Critically: **`<POSSearchArea />` is rendered above the tile grid (line 39) and is fully functional** — the merchant can type the product name/barcode and add to cart through the existing `phase2g_omni_input` OR the legacy multi-input search.
+- The restaurant test tenant ALSO has 0 `pos_layouts` rows AND no `phase2_pos_layouts` flag row, AND Phase 1-7 sweeps successfully rang ~50+ sales through `/pos/restaurant` for that tenant. This proves the search-bar workflow works.
+- So the cafe POS is **functional**, just visually rough: an indefinite skeleton sits where tiles would go.
+
+**Real findings split into:**
+1. **W42 (this finding, downgraded to 🟡):** cafe POS leads with restaurant UX — Seat picker / Course buttons (C1 Appetizer / C2 Salad / C3 Entrée / C4 Dessert / C5 Drinks) — confusing for cafe ops. **Workaround:** merchant uses Takeaway button + ignores Seat 1 / Course buttons + types into the search bar to add items. Functional but UX-shaped wrong for cafe.
+2. **W43 (filed separately):** "Loading menu" skeleton stuck forever for any tenant where `phase2_pos_layouts` flag isn't seeded as a row. Affects BOTH cafe AND restaurant tenants out of the box. The skeleton is purely visual — not blocking — but looks broken.
+
+**Cafe launch posture:**
+Cafe CAN ship at launch alongside restaurant if Phase 8.12c decision is to keep both. Merchant onboarding should warn cafe users to ignore the Seat/Course picker and use the Takeaway flow. Better long-term fix: cafe-specific POS layout (counter mode, no seats/courses) per the W42 fix paths above.
+
+**Source:** Live verification on `cafetestphase8` tenant (id=101, slug=`cafetestphase8`, industry_type=`cafe`). URL `https://sanopos.com/pos` redirects to `/pos/restaurant`. Snapshot captured during 8.12c walkthrough. Source-code investigation: `frontend/src/pages/POSRoute.jsx:19` (cafe tenant has `tenant_modes.mode='restaurant', enabled=true` so passes the redirect check), `frontend/src/pages/redesign/pos/restaurant/RestaurantCheckView.jsx:42-67` (skeleton/tile branch logic), `frontend/src/pages/redesign/pos/hooks/useCart.js:84-93` (POS layout fetch gated by `phase2_pos_layouts`), `frontend/src/pages/redesign/pos/POSContext.jsx:99-106` (flag map built from `/api/feature-flags` response without merging defaults).
+
+---
+
+### W43 — POS layout tile skeleton stuck forever when `phase2_pos_layouts` flag isn't seeded — affects all new tenants (cafe AND restaurant)
+
+**Status:** OPEN
+**Severity:** 🟡 Issue (looks broken to merchants on day 1; not blocking — search bar still works above the skeleton)
+**Surfaces affected:** `/pos/restaurant` route — anyone landing on `RestaurantCheckView` while `posFlags.phase2_pos_layouts` evaluates falsy.
+**Found via:** Phase 8.12c cafe ops sweep 2026-05-08 — observed on `cafetestphase8`. Confirmed via source review affects restaurant tenants too.
+
+**Steps to reproduce:**
+1. Sign up any new tenant (cafe or restaurant preset). Both presets seed feature_flags rows but NEITHER includes `phase2_pos_layouts`.
+2. Login → /pos → (redirect to /pos/restaurant if mode=restaurant) → click "New Takeaway".
+3. Observe the menu column.
+
+**Observed:**
+A skeleton grid (8 grey pulsing rectangles) labelled `aria-label="Loading menu"` shows indefinitely. Search bar above it is still functional — typing a product name returns results in a dropdown. But the merchant sees a perpetual loading state in the main menu area.
+
+**Source-verified root cause:**
+- `frontend/src/pages/redesign/pos/POSContext.jsx:99-106` builds `posFlags` map by reading `/api/feature-flags` response and ONLY including keys that exist as DB rows. Does NOT merge `DEFAULT_FEATURE_FLAGS` from the backend.
+- For new tenants seeded by `RESTAURANT_SEED_FLAGS` (restaurant + cafe presets), `phase2_pos_layouts` is not in the seed list. So `posFlags.phase2_pos_layouts` returns `undefined`.
+- `frontend/src/pages/redesign/pos/hooks/useCart.js:85` short-circuits the POS layout fetch when this flag is falsy: `setPosLayout(null); return;`.
+- `frontend/src/pages/redesign/pos/restaurant/RestaurantCheckView.jsx:62` interprets `posLayout === null` as "loading" and renders the skeleton:
+  ```jsx
+  ) : posLayout === null ? (
+    <div className="grid grid-cols-4 gap-2" aria-label="Loading menu">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="h-14 rounded-lg bg-slate-200/60 animate-pulse" />
+      ))}
+    </div>
+  ) : null}
+  ```
+- Should be: render `null` (no tile grid) when the flag is off, since the feature is intentionally disabled. The skeleton represents an in-flight fetch — there is no fetch in flight; the fetch was deliberately skipped.
+
+**Effect:**
+- 🟡 Restaurant POS shows a pulsing "loading" skeleton FOREVER for any new tenant. Looks like a hung component / network failure.
+- ✅ Functional: search bar above the skeleton works. Merchants can ring sales via product search.
+- ❌ Day-1 first impression: merchant lands on takeaway screen, sees a skeleton that never resolves, panics, files a support ticket.
+- This affects cafe AND restaurant tenants identically. Phase 1-7 restaurant walkthroughs missed this because they used the search bar workflow without commenting on the skeleton.
+
+**Fix paths:**
+1. **Smallest:** flip `RestaurantCheckView.jsx:62` to `posLayout === null && posFlags.phase2_pos_layouts ? <skeleton /> : null`. ~3 char change. Hides the skeleton when the feature is intentionally off.
+2. **Next-smallest:** at `useCart.js:85`, set `setPosLayout({ layout_json: [] })` instead of `setPosLayout(null)` when flag is off. Same effect (skeleton branch never triggers because state is no longer null) but more explicit.
+3. **Mid-ground:** add `phase2_pos_layouts: true` to `RESTAURANT_SEED_FLAGS` so all new restaurant + cafe tenants get the row. Plus the same change for retail seed for consistency. Won't backfill existing tenants but new signups would be fine.
+
+**Severity rationale:** 🟡 not 🔵 because it's the very first thing every restaurant/cafe merchant sees on day 1 in the POS, and "perpetual loading" is a credibility-destroying first impression. But not 🔴 because product search works around it cleanly.
+
+**Source:** Live observation on `cafetestphase8` (Phase 8.12c walkthrough). Source files: `frontend/src/pages/redesign/pos/POSContext.jsx:99-106`, `frontend/src/pages/redesign/pos/hooks/useCart.js:84-93`, `frontend/src/pages/redesign/pos/restaurant/RestaurantCheckView.jsx:42-67`. DB confirmation: `tenant_cafetestphase8.feature_flags` (35 rows, no `phase2_pos_layouts`); `tenant_sanoposlivetest1778021564659.feature_flags` (also no `phase2_pos_layouts` row); both `pos_layouts` tables are empty. Backend `DEFAULT_FEATURE_FLAGS.phase2_pos_layouts = true` per `backend/middleware/feature-flags.js:39` — the default value is fine; the bug is that frontend doesn't read it.
+
+---
+
+### W41 — Stuck `fbr_invoices` rows infinite-loop on "Missing FBR credentials" — never increment `retry_count`, never give up
+
+**Status:** OPEN
+**Severity:** 🔵 Polish (no production impact today; queue rows accumulate forever for any tenant that enqueued under W31's pre-fix behavior)
+**Surfaces affected:** `backend/workers/fbr-worker-boss.js` (per workers/CLAUDE.md: missing credentials → resets to `pending` with `next_retry_at = NOW() + 10 min` and returns without rethrowing — no `retry_count` increment, no `max_retries` cap consumption)
+**Found via:** Phase 8.12b FBR + tax_mode=none verification 2026-05-08
+
+**Steps to reproduce:**
+1. Query a tenant that historically had FBR enqueue happening pre-W31 (e.g. `tenant_sanoposlivetest1778021564659`).
+2. `SELECT id, status, retry_count, last_error, next_retry_at FROM fbr_invoices ORDER BY id;`
+3. Observe rows with `status='pending'`, `retry_count=0`, `last_error='Missing FBR credentials'`, `next_retry_at` always being bumped 10 minutes ahead.
+
+**Observed (live, `tenant_sanoposlivetest1778021564659`, 2026-05-08):**
+10 rows, all `status=pending`, all `retry_count=0`, all `last_error='Missing FBR credentials'`, `next_retry_at` continually rolling forward by 10-minute increments. Created between 2026-05-06 20:14 and 2026-05-07 19:19 (pre-W31-fix-deploy window).
+
+**Source-verified root cause:**
+Per `backend/workers/CLAUDE.md` documentation of `fbr-worker-boss.js`:
+> If missing, resets to `pending` with `next_retry_at = NOW() + 10 min` and returns without rethrowing — pg-boss records this as complete (no retry). Credential absence is treated as configuration error, not transient failure.
+
+This is by design — but it means rows enqueued by tenants that later removed FBR config (or had FBR config cleared, or were never fully configured) will infinite-loop forever. The `retry_count >= 5` cap that normally moves rows to `status='failed'` never trips because `retry_count` is only incremented on transient failures (network errors, FBR API errors), not on "missing credentials."
+
+**Effect:**
+- 🔵 No production impact today — these rows are inert. Worker fetches them, sees missing creds, resets, repeats. No DB load issue at small scale.
+- ⚠️ Queue grows indefinitely for tenants that hit this state. At very large scale (1000+ tenants × 10+ stuck rows × hourly worker poll) it could become DB load.
+- ⚠️ Confuses post-launch debugging: `pg_dump` of `fbr_invoices` will show stuck rows that look like queue backlog but are really dead.
+
+**Fix paths:**
+1. **Smallest:** also increment `retry_count` on the missing-credentials path. After 5 attempts, mark `status='abandoned_no_creds'` (new status enum) so they don't requeue. ~5-line worker change.
+2. **Mid-ground:** add a startup sweep that marks any `status='pending'` row with `last_error='Missing FBR credentials'` AND `created_at < NOW() - INTERVAL '7 days'` as `abandoned_no_creds`. Backfills the historical ones.
+3. **Manual cleanup:** for the affected `sanoposlivetest1778021564659` rows specifically — direct SQL: `UPDATE tenant_sanoposlivetest1778021564659.fbr_invoices SET status='cancelled' WHERE last_error='Missing FBR credentials' AND retry_count=0;`. One-time, removes the noise.
+
+**Severity rationale:** 🔵 because (a) zero production impact today; (b) the worker design choice to not count config errors against the retry cap is defensible; (c) only affects tenants that enqueued before the W31 fix at the FBR boundary. Not 🟡 because nothing is broken from a merchant-facing perspective.
+
+**Source:** Live query on `tenant_sanoposlivetest1778021564659.fbr_invoices` (10 rows, all stuck pending). `backend/workers/fbr-worker-boss.js` (worker logic per workers/CLAUDE.md). W31 fix commit `8091a07` shipped Apr 29; rows pre-date that.
+
+---
+
+### Session 2026-05-08 (continuation 14) — Phase 8 closed (operator decisions + agent-runnable verifies)
+
+**Operator:** Hassan + Claude (Lighthouse via npx + Supabase MCP + Playwright + super-admin sandboxing)
+**Tenants used:** `sanoposlivetest1778021564659` (FBR + tax_mode verify), `cafetestphase8` (cafe ops sweep — created + deleted in same sitting)
+**Scope:** Phase 8 sub-sections per plan §462-528. Operator decisions captured first, then 4 of 5 agent-runnable items walked end-to-end.
+**Duration:** ~95 min
+
+**Result:** ✅ Phase 8 closed end-to-end. **3 new findings filed (W41 🔵 + W42 🟡 + W43 🟡).** KDS one-pager doc written. Lighthouse baseline captured.
+
+**Operator decisions captured (8.5, 8.6, 8.10, 8.11, 8.12):**
+
+| § | Decision | Action |
+|---|---|---|
+| 8.5 SMS provider | Defer Twilio entirely — post-launch work | No code change. `phase5_sms_providers` flag stays seeded but adapter never initialized. Brainstorming session left a paper trail for future wiring (Twilio test creds + free trial recommended path). |
+| 8.6 Payment gateway | C — keep `PAYMENT_GATEWAY=sandbox` for soft launch | No env change needed; matches current Railway state. Pay-at-table works with fake confirmations. Switch to xPay live post-launch when merchant agreement signed. |
+| 8.10 Restaurant receipt template | Punt — ship generic default | No code change. Merchants customize via /receipt-templates if they want seat numbers / course tags. |
+| 8.11 KDS hardware docs | One-pager written | New file: `docs/restaurant-docs/kds-setup-onepager.md` (~150 lines). Covers always-on tablet config, /kds fullscreen, station setup, network printer config (port 9100, IP discovery, ESC/POS encoding), common problems, hardware shortlist. |
+| 8.12a Lighthouse | Run baseline (desktop + mobile, public surfaces only — auth'd routes need session-stored Lighthouse runs which we don't have tooling for) | See scores below. |
+| 8.12b FBR + tax_mode=none | Verify on existing tenant | ✅ W31 fix verified. Receipt rendering correctly hides FBR block when `slip.fbr_irn` is null (frontend/src/utils/receipt.js:361). 🔵 W41 filed for stuck pre-W31 fbr_invoices rows. |
+| 8.12c Cafe ops sweep | Stop after source investigation (option B) — W42 + W43 filed. | ✅ Cafe is functional via search bar. Restaurant-shaped UX (Seat / Course buttons) on takeaway flow is misleading but not blocking. POS layout skeleton stuck for ALL new tenants. |
+
+**Lighthouse baseline (production, 2026-05-08, public surfaces only):**
+
+| Surface | Mode | Perf | A11y | BP | SEO | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|---|
+| sanopos.com (landing) | Desktop | 90 | 95 | 100 | 100 | 1.3s | 0ms | 0 |
+| /signup | Desktop | 99 | 93 | 100 | 91 | 0.7s | 0ms | 0.008 |
+| /login | Desktop | 98 | 96 | 100 | 92 | 1.1s | 0ms | 0 |
+| sanopos.com (landing) | Mobile (4G + 4× CPU) | **78** | 95 | 100 | 100 | **4.0s** | 0ms | 0 |
+
+JSON reports saved to `.claude/lighthouse-2026-05-08/{landing,signup,login,landing-mobile}.json`.
+
+Mobile LCP 4.0s = "needs improvement" per Google's Web Vitals threshold (good <2.5s, needs improvement 2.5-4s, poor >4s). Speed Index 5.2s on mobile is the soft spot — typical for an React SPA on simulated 4G. Post-launch optimization target.
+
+Authenticated routes (/dashboard, /pos, /restaurant, /kds) NOT measured — Lighthouse-via-npx can't easily replay an authenticated session without Puppeteer scripting we haven't built. Worth adding a stored-session Playwright runner post-launch if we want to track perf regressions on tenant pages.
+
+**Agent-runnable walk evidence (8.12b + 8.12c):**
+
+| Sub-section | Key finding | Outcome |
+|---|---|---|
+| **8.12b** FBR + tax_mode=none | `tenant_sanoposlivetest1778021564659` has `tax_mode=none` + `fbr_integration=true` flag + `fbr_environment=sandbox` (no token). Sales 1-10 (pre-W31, May 6-7) all enqueued to `fbr_invoices`. Sales 11+12 (post-W31, May 7 21:28+21:31) have `fbr_invoice_id=NULL`. Receipt API returns `fbr: null` for these. Frontend `receipt.js:361` double-gates `s.showFbr && slip.fbr_irn` so FBR block hides cleanly. ✅ all 3 verifications pass. | ✅ Pass. W41 🔵 filed for the 10 stuck pre-W31 rows. |
+| **8.12c** Cafe ops sweep | Created `cafetestphase8` (id=101) via real signup flow + wizard (Cafe / Quick Service preset). Logged in via /kiosk PIN. Opened POS — redirected to `/pos/restaurant`. Opened cash shift Rs 5,000 float. Clicked New Takeaway. Saw: Seat picker (Seat 1) + Course buttons (C1 Appetizer / C2 Salad / C3 Entrée / C4 Dessert / C5 Drinks) + "Loading menu" skeleton stuck forever. Network trace: zero `/api/products` requests, repeated `/api/restaurant/reservations` polls. Source investigation found the skeleton is a POS-layout-tile loading state, not a menu fetch — search bar above is functional. Restaurant tenants have the same skeleton bug too. | ✅ "Done" via option B (stopped after source investigation rather than ringing live sales). W42 🟡 + W43 🟡 filed. Cafe is functional but UX-rough; merchant hand-holding required at launch. |
+
+**Cleanup performed:**
+- `cafetestphase8` (id=101) — **kept intentionally**. Operator decision: hold the tenant active for follow-up cafe / fast-food testing rather than delete it after the sweep. Counter to Phase 7 (where cafetest1 was deleted same-session). Means there's now a known cafe test tenant available for the next session that wants to walk cafe/QSR scenarios without re-doing signup. Login: store code `cafetestphase8`, employee `Test Owner`, password `TestPass1935!`, PIN `1234`.
+- Sentry test event `NODE-EXPRESS-6` (synthetic from 8.2) — still unresolved in Sentry dashboard. `sentry-cli` token lacks resolve permission. Manual cleanup via Sentry web UI.
+
+**Notes for next sittings:**
+- Phase 8 is now CLOSED. Phase 9 (Cleanup) is the only remaining phase. Estimated 10-15 min: confirm Test Owner + Test Manager + Test Cashier + cafetestphase8 are cleaned up, verify orphan-schema worker has nothing to do, final findings-WIP commit if anything else moves.
+- **Open issues count: 7** (was 4 before this session: +W41 +W42 +W43; W41 is 🔵 polish so really 6 issue-tier). W18 + W36 + W38 + W40 + W42 + W43 are 🟡 issues. W37 + W39 + W41 are 🔵 polish.
+- **Total fixed: 31 (unchanged).**
+- W43 has the smallest fix path (3-char change) and the highest day-1 visibility — could be a quick win in the next fix-it loop alongside W36 (KDS dark mode) and W38 (subscription-grace column drift).
+
+**Surprises / lessons:**
+- **First-impression bug surface area is bigger than we measured during Phase 1-7.** W43 has been broken for the restaurant tenant the whole time but Phase 1-7 didn't comment on it because the search bar workflow rendered it invisible. New-tenant first impression = perpetual loading skeleton. The fix is tiny but the discovery cost was the cafe sweep.
+- **Phase 7 was right that cafe = restaurant + 3 cosmetic diffs.** Phase 8.12c found that the implication of that design — cafe POS = restaurant POS — is genuinely problematic for merchant UX even though it's functional. Worth revisiting cafe-as-distinct-preset post-launch (W42 fix path 2: `pos_layout_mode='counter'`).
+- **`/api/feature-flags` doesn't merge defaults on the frontend.** This is a quiet but impactful gotcha. `posFlags` map only contains keys that exist as DB rows. Backend's `requireFeature()` middleware DOES merge defaults via `getFeatureFlagsMap()`, so backend-gated features behave correctly even when frontend code thinks the flag is off. Worth a wider audit — there may be other "silently disabled" frontend features that should be on by default.
+- **Lighthouse baseline only covered public surfaces.** Authenticated tenant surfaces (dashboard, POS, restaurant, KDS) were not measured because the tooling we used (Lighthouse via npx + headless Chrome) doesn't carry auth cookies easily. Post-launch we should add a Playwright-driven Lighthouse runner that logs in first, then audits.
+
+**Status Summary:** **20 open** (was 17 before this session: +W41 +W42 +W43), **31 fixed** (unchanged). Open issues: W18 + W36 + W38 + W40 + **W42 + W43** (= **6 issues**, was 4). Open polish: W37 + W39 + **W41** (= **3 polish**, was 2; +W41).
+
+**Recommendation for next sitting:**
+1. **Phase 9 cleanup** — final findings-WIP commit, verify orphan tenants gone, retire any open Test Owner attendance / cash shift rows, confirm Sentry test event resolved manually. ~10 min.
+2. **Quick fix-it loop before launch** — W43 (3-char fix, 5 min), W38 (single ALTER TABLE on tenant_livetestauto, 5 min), W36 (KDS dark mode CSS, 15 min). All three are high-value low-effort. ~30 min total.
+3. **W40** (restaurant route try/catch swallow) — recommended but bigger refactor. Half-day. Fix before launch if observability is a launch-blocker for you, post-launch if not.
+4. **W42** (cafe POS UX) — punt to post-launch. Either fix paths 2 (cafe-specific layout) or 3 (merchant onboarding doc) work. Not blocking.
+
+---
+
 *This file is uncommitted by intent until first fix lands. Edit freely during active work; commit alongside the first fix.*
