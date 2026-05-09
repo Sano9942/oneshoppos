@@ -3226,7 +3226,26 @@ Pattern was likely written defensively before Express 5 (which auto-catches asyn
 - `POSContext.jsx:435` — `buildSeatCourseOverlay` now early-returns `undefined` when `pos_layout_mode === 'counter'`, so cart lines fall through to schema defaults (`seat_number=null`, `course_name='main'`). KDS routing, reports, and FBR exports treat counter sales as standard sales.
 - Restaurant POS (`pos_layout_mode='list'`) is byte-identical to before — every conditional gates on `=== 'counter'`.
 **Tests:** `pg-batch13-restaurant.test.js` 40/41 (1 pre-existing 503/403 failure on main, unrelated). `pg-phase21c-tips` + `pg-restaurant-kiosk` 24/24. Frontend unit tests 155/155 (incl. cartMath, restaurant-cart-grouping, pos-context-open-check).
-**Live verification:** deferred to post-deploy on `cafetestphase8` + `sanoposlivetest1778021564659` (production tenants — backend config flip needs Railway redeploy first).
+**Live verification:** ✅ completed post-deploy on 2026-05-10 against commit `0b06727`.
+- **`cafetestphase8` (cafe / counter):** logged in, kiosk PIN clock-in, opened `/pos` → redirects to `/pos/restaurant`. Floor view shows Takeaway/Delivery/Drive-Thru/Open Tab buttons but no tables (cafe doesn't add them). Tapped New Takeaway → check view rendered:
+  - ✅ NO SeatCoursePicker visible
+  - ✅ Category tabs render: All Items / Bakery / Cold Drinks / Hot Drinks (auto-derived from `category_name`)
+  - ✅ 5 product tiles render with name + price (Cappuccino Rs 450, Croissant Rs 300, Espresso Rs 350, Iced Latte Rs 500, Sandwich Rs 600)
+  - ✅ Action bar shows only Send to Kitchen + Pay (Fire C{N} hidden)
+  - ✅ Cold Drinks tab filter works: clicking it leaves only Iced Latte visible.
+  - Rang 3 sales: INV-2026-00001 (Espresso + Croissant Rs 650), INV-2026-00002 (Cappuccino + Sandwich Rs 1,050), INV-2026-00003 (Iced Latte Rs 500). All Cash.
+  - DB confirmed via `GET /api/sales/{1,2,3}`: every item line on every sale has `seat_number: null`. POSContext sessionStorage cart snapshot also confirmed `course_name: "main"`.
+  - Sales History `/sales-history` shows all 3 with correct totals + cashier + outlet.
+  - Item-Wise Sales report shows all 5 unique products with 1 unit each + correct revenue (Rs 2,200 total = sum of all 3 sales).
+- **`sanoposlivetest1778021564659` (restaurant / list):** logged in, kiosk clock-in, opened `/pos` → redirects to `/pos/restaurant`. Tapped T1 → guest count modal (Guests=2) → Seat → check view rendered:
+  - ✅ SeatCoursePicker visible: Seat dropdown (Seat 1 / Seat 2) + Course buttons C1 Appetizer / C2 Salad / C3 Entrée / C4 Dessert / C5 Drinks
+  - ✅ Fire C1/C3 button visible in action bar
+  - ✅ Request QR (pay-at-table) visible (dine-in context)
+  - Selected Course C3 (Entrée), typed "caesar" in search, added Caesar Salad. Cart line stamped `seat_number: 1`, `course_name: "course_3"` ✅
+  - Send to Kitchen succeeded silently. Pay → Cash → Complete → INV-2026-00012, Rs 747.50 (incl. 15% GST per existing tenant tax_mode). DB confirmed Caesar Salad with `seat_number: 1`.
+  - **Zero regression.** Restaurant POS surface byte-identical to pre-W42 behavior.
+
+**One cosmetic carry-over noted (deferred — not a regression):** in counter mode, `RestaurantCartGrouped` displays the line group header as "Shared · Course 1 · Appetizer" because `cartGrouping.js → groupCartBySeatAndCourse` falls back to course label "Appetizer" when `course_name` doesn't parse as `course_N`. The DB write is correct (`course_name='main'`) and FBR/reports are unaffected, but the cart UI label is misleading on cafe. Track separately if a future cleanup pass touches restaurant cart grouping — fix is to add a counter-mode branch that renders the cart as a flat list.
 **Prior status:** ✅ DOC-FIX 2026-05-10. Per the launch posture in the original finding ("merchant onboarding should warn cafe users to ignore the Seat/Course picker and use the Takeaway flow"), shipped `docs/restaurant-docs/cafe-pos-onboarding-note.md` — operator guide explaining (a) cafe POS lands on `/pos/restaurant`, (b) ignore Seat picker + Course buttons, (c) use the search bar to add items, (d) use the new W18 Open Tab button for named bar tabs. That note is now superseded by this code fix.
 **Severity:** 🟡 Issue (cafe POS is functional via search bar; UX is misleading/restaurant-shaped, not blocking)
 **Surfaces affected:** `/pos` route resolves to `/pos/restaurant` for both cafe and restaurant presets. Frontend POS UI: top bar shows "New Takeaway / New Delivery / New Drive-Thru" buttons; main area shows "No tables in this floor plan yet. Add tables in Settings → Restaurant Floor." for any tenant where `restaurant_tables` is empty.
