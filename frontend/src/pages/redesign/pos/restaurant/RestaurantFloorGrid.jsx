@@ -191,8 +191,10 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     }
     setTabBusy(true);
     try {
+      // selectedOutletId from useShiftGate is stored as a String — coerce to
+      // number so the backend Zod schema (createTabSchema expects int) accepts it.
       const tab = await api.post("/api/restaurant/tabs", {
-        outlet_id: selectedOutletId,
+        outlet_id: Number(selectedOutletId),
         customer_name: trimmed,
       });
       setTabModalOpen(false);
