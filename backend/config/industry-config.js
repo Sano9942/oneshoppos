@@ -30,7 +30,7 @@ const INDUSTRY_PRESETS = Object.freeze({
   restaurant: {
     industry_type: "restaurant",
     business_model: "food_service",
-    display_name: "Restaurant / Cafe",
+    display_name: "Restaurant",
     modes: ["restaurant"],
     labels: {
       product: "Menu Item",
@@ -114,7 +114,7 @@ const INDUSTRY_PRESETS = Object.freeze({
   cafe: {
     industry_type: "cafe",
     business_model: "food_service",
-    display_name: "Cafe / Quick Service",
+    display_name: "Cafe / Fast Food / Counter",
     modes: ["restaurant"],
     labels: {
       product: "Menu Item",

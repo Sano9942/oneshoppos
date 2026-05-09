@@ -27,8 +27,8 @@ const BUSINESS_TYPE_CATEGORIES = [
   {
     label: "Food & Beverage",
     types: [
-      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
-      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600" },
+      { value: "restaurant", label: "Restaurant", description: "Sit-down dining with tables. For full-service restaurants, BBQ houses, dhabas — guests order at the table. Floor plan, seat-by-seat checks, course timing, KDS.", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+      { value: "cafe", label: "Cafe / Fast Food / Counter", description: "Counter or kiosk service. For cafes, fast-food shops, takeaway joints, juice bars, bakeries — customers order at the counter. Menu tile grid, takeaway/delivery, no tables.", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600" },
     ],
   },
   {
