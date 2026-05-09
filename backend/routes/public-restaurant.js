@@ -141,6 +141,16 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
         items,
       });
     } catch (err) {
+      // W40 fix: surface to Sentry but keep public response generic so we don't
+      // leak DB / internal error messages to unauthenticated callers.
+      try {
+        if (process.env.SENTRY_DSN) {
+          require("@sentry/node").captureException(err, {
+            tags: { route: "public-restaurant", reqId: req.id },
+          });
+        }
+      } catch { /* sentry best-effort */ }
+      if (req.log) req.log.error({ err }, "public-restaurant route error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -197,6 +207,16 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
 
       res.status(201).json(item);
     } catch (err) {
+      // W40 fix: surface to Sentry but keep public response generic so we don't
+      // leak DB / internal error messages to unauthenticated callers.
+      try {
+        if (process.env.SENTRY_DSN) {
+          require("@sentry/node").captureException(err, {
+            tags: { route: "public-restaurant", reqId: req.id },
+          });
+        }
+      } catch { /* sentry best-effort */ }
+      if (req.log) req.log.error({ err }, "public-restaurant route error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -315,6 +335,16 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
         total: Number(draft.total || 0),
       });
     } catch (err) {
+      // W40 fix: surface to Sentry but keep public response generic so we don't
+      // leak DB / internal error messages to unauthenticated callers.
+      try {
+        if (process.env.SENTRY_DSN) {
+          require("@sentry/node").captureException(err, {
+            tags: { route: "public-restaurant", reqId: req.id },
+          });
+        }
+      } catch { /* sentry best-effort */ }
+      if (req.log) req.log.error({ err }, "public-restaurant route error");
       res.status(500).json({ error: "Internal server error" });
     }
   });

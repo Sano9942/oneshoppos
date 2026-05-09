@@ -19,50 +19,50 @@ module.exports = function registerRestaurantRoutes(app, deps) {
 
   // ── Floor Plans ──────────────────────────────────────────────
 
-  app.get("/api/restaurant/floor-plans", ...gate, async (req, res) => {
+  app.get("/api/restaurant/floor-plans", ...gate, async (req, res, next) => {
     try {
       const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const plans = await floor.getFloorPlans(deps.db, Number(outletId));
       res.json({ floor_plans: plans });
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.get("/api/restaurant/floor-plans/:id", ...gate, async (req, res) => {
+  app.get("/api/restaurant/floor-plans/:id", ...gate, async (req, res, next) => {
     try {
       const plan = await floor.getFloorPlanWithTables(deps.db, Number(req.params.id));
       if (!plan) return res.status(404).json({ error: "Floor plan not found" });
       res.json(plan);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/floor-plans", ...gate, validate(createFloorPlanSchema), async (req, res) => {
+  app.post("/api/restaurant/floor-plans", ...gate, validate(createFloorPlanSchema), async (req, res, next) => {
     try {
       const plan = await floor.createFloorPlan(deps.db, req.body);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_floor_plan_created", JSON.stringify({ id: plan.id })]); } catch {}
       res.status(201).json(plan);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.put("/api/restaurant/floor-plans/:id", ...gate, validate(updateFloorPlanSchema), async (req, res) => {
+  app.put("/api/restaurant/floor-plans/:id", ...gate, validate(updateFloorPlanSchema), async (req, res, next) => {
     try {
       const plan = await floor.updateFloorPlan(deps.db, Number(req.params.id), req.body);
       if (!plan) return res.status(404).json({ error: "Floor plan not found" });
       res.json(plan);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
   // ── Tables ───────────────────────────────────────────────────
 
-  app.get("/api/restaurant/tables", ...gate, async (req, res) => {
+  app.get("/api/restaurant/tables", ...gate, async (req, res, next) => {
     try {
       const { floor_plan_id } = req.query;
       if (!floor_plan_id) return res.status(400).json({ error: "floor_plan_id required" });
@@ -72,11 +72,11 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       );
       res.json({ tables: rows });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/tables", ...gate, validate(createTableSchema), async (req, res) => {
+  app.post("/api/restaurant/tables", ...gate, validate(createTableSchema), async (req, res, next) => {
     try {
       const { rows: [table] } = await deps.db.query(
         `INSERT INTO restaurant_tables (floor_plan_id, section_id, label, capacity, shape, pos_x, pos_y)
@@ -85,11 +85,11 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       );
       res.status(201).json(table);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.put("/api/restaurant/tables/:id", ...gate, validate(updateTableSchema), async (req, res) => {
+  app.put("/api/restaurant/tables/:id", ...gate, validate(updateTableSchema), async (req, res, next) => {
     try {
       const sets = []; const params = []; let idx = 0;
       for (const [key, val] of Object.entries(req.body)) {
@@ -104,13 +104,13 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       if (!table) return res.status(404).json({ error: "Table not found" });
       res.json(table);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
   // ── Table Sessions ───────────────────────────────────────────
 
-  app.get("/api/restaurant/table-sessions", ...gate, async (req, res) => {
+  app.get("/api/restaurant/table-sessions", ...gate, async (req, res, next) => {
     try {
       const outletId = req.query.outlet_id || req.context?.outletId;
       const status = req.query.status;
@@ -132,62 +132,62 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       );
       res.json({ sessions: rows });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/table-sessions", ...gate, validate(createSessionSchema), async (req, res) => {
+  app.post("/api/restaurant/table-sessions", ...gate, validate(createSessionSchema), async (req, res, next) => {
     try {
       const session = await floor.openTableSession(deps.db, req.body);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_session_opened", JSON.stringify({ session_id: session.id, table_id: req.body.table_id })]); } catch {}
       res.status(201).json(session);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.put("/api/restaurant/table-sessions/:id", ...gate, async (req, res) => {
+  app.put("/api/restaurant/table-sessions/:id", ...gate, async (req, res, next) => {
     try {
       const session = await floor.updateTableSession(deps.db, Number(req.params.id), req.body);
       if (!session) return res.status(404).json({ error: "Session not found" });
       res.json(session);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
   // ── Checks (restaurant draft orders) ─────────────────────────
 
-  app.get("/api/restaurant/checks", ...gate, async (req, res) => {
+  app.get("/api/restaurant/checks", ...gate, async (req, res, next) => {
     try {
       const outletId = req.query.outlet_id || req.context?.outletId;
       if (!outletId) return res.status(400).json({ error: "outlet_id required" });
       const rows = await checks.getOpenChecks(deps.db, Number(outletId), req.query);
       res.json({ checks: rows });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks", ...gate, validate(createCheckSchema), async (req, res) => {
+  app.post("/api/restaurant/checks", ...gate, validate(createCheckSchema), async (req, res, next) => {
     try {
       const order = await checks.createRestaurantCheck(deps.db, req.body, req.employee.id);
       res.status(201).json(order);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks/:id/send-to-kitchen", ...gate, async (req, res) => {
+  app.post("/api/restaurant/checks/:id/send-to-kitchen", ...gate, async (req, res, next) => {
     try {
       const tickets = await kds.sendToKitchen(deps.db, Number(req.params.id));
       res.json({ tickets });
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks/:id/fire-course", ...gate, validate(fireCourseSchema), async (req, res) => {
+  app.post("/api/restaurant/checks/:id/fire-course", ...gate, validate(fireCourseSchema), async (req, res, next) => {
     try {
       const fire = await checks.fireCourse(deps.db, Number(req.params.id), req.body.course_name, req.employee.id);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_course_fired", JSON.stringify({ draft_order_id: Number(req.params.id), course_name: req.body.course_name })]); } catch {}
@@ -248,7 +248,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
 
       res.json(fire);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
@@ -259,7 +259,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     requireMode("restaurant"),
     requireFeature("phase4_restaurant_fire_chits"),
     requirePerm("manage_restaurant"),
-    async (req, res) => {
+    async (req, res, next) => {
       try {
         const checkId = Number(req.params.id);
         const { rows: [order] } = await deps.db.query(
@@ -298,34 +298,34 @@ module.exports = function registerRestaurantRoutes(app, deps) {
         if (result?.ok) res.json({ ok: true });
         else res.status(500).json({ error: result?.error || "Print failed" });
       } catch (err) {
-        res.status(err.statusCode || 500).json({ error: err.message });
+        next(err);
       }
     }
   );
 
-  app.post("/api/restaurant/checks/:id/courses/hold", ...gate, validate(holdCourseSchema), async (req, res) => {
+  app.post("/api/restaurant/checks/:id/courses/hold", ...gate, validate(holdCourseSchema), async (req, res, next) => {
     try {
       const fire = await checks.holdCourse(
         deps.db, Number(req.params.id), req.body.course_name, req.body.hold_until, req.employee.id
       );
       res.json(fire);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks/:id/courses/expedite", ...gate, validate(expediteCourseSchema), async (req, res) => {
+  app.post("/api/restaurant/checks/:id/courses/expedite", ...gate, validate(expediteCourseSchema), async (req, res, next) => {
     try {
       const fire = await checks.expediteCourse(
         deps.db, Number(req.params.id), req.body.course_name, req.employee.id
       );
       res.json(fire);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks/:id/split", ...gate, validate(splitCheckSchema), async (req, res) => {
+  app.post("/api/restaurant/checks/:id/split", ...gate, validate(splitCheckSchema), async (req, res, next) => {
     try {
       let result;
       const sourceId = Number(req.params.id);
@@ -348,7 +348,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: sourceId, type: req.body.split_type })]); } catch {}
       res.json({ new_checks: result });
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
@@ -358,7 +358,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   // common flow doesn't go through here. Limited to 'cancelled' / 'completed'
   // statuses by updateCheckSchema; the other draft_orders.status values
   // (open / claimed / merged) are internal lifecycle and not exposed.
-  app.put("/api/restaurant/checks/:id", ...gate, validate(updateCheckSchema), async (req, res) => {
+  app.put("/api/restaurant/checks/:id", ...gate, validate(updateCheckSchema), async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       const { status } = req.body;
@@ -370,37 +370,37 @@ module.exports = function registerRestaurantRoutes(app, deps) {
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_status_changed", JSON.stringify({ id, status })]); } catch {}
       res.json(rows[0]);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/checks/merge", ...gate, validate(mergeChecksSchema), async (req, res) => {
+  app.post("/api/restaurant/checks/merge", ...gate, validate(mergeChecksSchema), async (req, res, next) => {
     try {
       const merged = await checks.mergeChecks(deps.db, req.body.target_id, req.body.source_ids, req.employee.id);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_checks_merged", JSON.stringify({ target_id: req.body.target_id, source_ids: req.body.source_ids })]); } catch {}
       res.json(merged);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
   // ── Tabs ─────────────────────────────────────────────────────
 
-  app.post("/api/restaurant/tabs", ...gate, validate(createTabSchema), async (req, res) => {
+  app.post("/api/restaurant/tabs", ...gate, validate(createTabSchema), async (req, res, next) => {
     try {
       const tab = await checks.openTab(deps.db, req.body, req.employee.id);
       res.status(201).json(tab);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/restaurant/tabs/:id/close", ...gate, async (req, res) => {
+  app.post("/api/restaurant/tabs/:id/close", ...gate, async (req, res, next) => {
     try {
       const tab = await checks.closeTab(deps.db, Number(req.params.id));
       res.json(tab);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      next(err);
     }
   });
 };

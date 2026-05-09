@@ -499,8 +499,15 @@ module.exports = function (app, deps) {
       // customerCount drives the "Add your first customer" step;
       // testReceiptPrinted drives "Print a test receipt"; the country_code +
       // fbr_banner_dismissed pair drives the PK-only FBR prompt banner.
-      // All best-effort so dashboard render never fails on stale schemas.
+      // floorPlanCount + bookingCount + ticketCount + contractCount + roomCount
+      // drive vertical-specific onboarding steps (W37 fix). All best-effort
+      // so dashboard render never fails on stale schemas.
       let customerCount = 0;
+      let floorPlanCount = 0;
+      let bookingCount = 0;
+      let ticketCount = 0;
+      let contractCount = 0;
+      let roomCount = 0;
       let testReceiptPrinted = false;
       let countryCode = req.company?.country_code || null;
       let fbrBannerDismissed = false;
@@ -511,6 +518,36 @@ module.exports = function (app, deps) {
         );
         customerCount = Number(r?.cnt || 0);
       } catch { /* table missing on legacy tenant — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM restaurant_floor_plans"
+        );
+        floorPlanCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM bookings"
+        );
+        bookingCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM service_tickets"
+        );
+        ticketCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM rental_contracts"
+        );
+        contractCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM rooms"
+        );
+        roomCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
       try {
         const { rows: [r] } = await db.query(
           "SELECT test_receipt_printed_at, country_code, fbr_banner_dismissed FROM company_profile WHERE id = 1"
@@ -532,6 +569,11 @@ module.exports = function (app, deps) {
           code: req.company?.currency_code || "PKR",
         },
         customerCount,
+        floorPlanCount,
+        bookingCount,
+        ticketCount,
+        contractCount,
+        roomCount,
         testReceiptPrinted,
         countryCode,
         fbrBannerDismissed,

@@ -258,7 +258,10 @@ app.use((err, req, res, _next) => {
     });
   }
   alerting.recordError({ tenant: req.tenantSlug, message: err.message, reqId }).catch(() => {});
-  res.status(err.status || 500).json({ error: err.message || "Internal server error", reqId });
+  // Honor both err.status (Express convention) and err.statusCode (commonly used
+  // in service layers throughout this codebase) so handlers that throw with
+  // either field land on the right HTTP code.
+  res.status(err.status || err.statusCode || 500).json({ error: err.message || "Internal server error", reqId });
 });
 
 // ─── Critical route verification ────────────────────────────────────────────

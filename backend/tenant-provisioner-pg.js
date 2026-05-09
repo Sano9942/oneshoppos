@@ -102,7 +102,7 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
 
     // Admin role
     const roleRes = await client.query(
-      "INSERT INTO roles (name, description) VALUES ('Admin', 'Full access admin role') RETURNING id"
+      "INSERT INTO roles (name, description) VALUES ('Administrator', 'Full access admin role') RETURNING id"
     );
     const roleId = roleRes.rows[0].id;
 
@@ -119,7 +119,7 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
     // and any UI surface that still reads the text column instead of joining
     // through role_id would otherwise show the owner as a cashier.
     const empRes = await client.query(
-      "INSERT INTO employees (name, role, pin_hash, role_id) VALUES ('Admin', 'Administrator', $1, $2) RETURNING id",
+      "INSERT INTO employees (name, role, pin_hash, role_id) VALUES ('Administrator', 'Administrator', $1, $2) RETURNING id",
       [pinHash, roleId]
     );
     const employeeId = empRes.rows[0].id;

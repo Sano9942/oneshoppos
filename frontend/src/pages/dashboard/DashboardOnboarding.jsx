@@ -76,30 +76,32 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
     floor_plan: {
       id: "floor_plan",
       label: "Set up your floor plan",
-      done: false,
+      done: (data?.floorPlanCount ?? 0) > 0,
       navigate: () => onNavigate("/restaurant/floor"),
     },
     calendar: {
       id: "calendar",
       label: "Set up your calendar",
-      done: false,
+      // No dedicated count yet — treat as done when tenant has any bookings
+      done: (data?.bookingCount ?? 0) > 0,
       navigate: () => onNavigate("/appointments/calendar"),
     },
     booking: {
       id: "booking",
       label: "Create your first booking",
-      done: false,
+      done: (data?.bookingCount ?? 0) > 0,
       navigate: () => onNavigate("/appointments/bookings"),
     },
     ticket: {
       id: "ticket",
       label: "Create your first job ticket",
-      done: false,
+      done: (data?.ticketCount ?? 0) > 0,
       navigate: () => onNavigate("/service-tickets"),
     },
     membership: {
       id: "membership",
       label: "Set up your first membership plan",
+      // No count exposed — leave manual until membership plans get a counter
       done: false,
       navigate: () => onNavigate("/subscriptions"),
     },
@@ -112,32 +114,34 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
     contract: {
       id: "contract",
       label: "Create your first rental contract",
-      done: false,
+      done: (data?.contractCount ?? 0) > 0,
       navigate: () => onNavigate("/rentals/contracts"),
     },
     checkout: {
       id: "checkout",
       label: "Check out a rental",
-      done: false,
+      // Same proxy: any contract row is good enough
+      done: (data?.contractCount ?? 0) > 0,
       navigate: () => onNavigate("/rentals/contracts"),
     },
     // M9 — Room management
     room: {
       id: "room",
       label: "Add rooms and room types",
-      done: false,
+      done: (data?.roomCount ?? 0) > 0,
       navigate: () => onNavigate("/rooms"),
     },
     rate: {
       id: "rate",
       label: "Set your nightly rates",
-      done: false,
+      // No rate count exposed — proxy via roomCount until separate counter ships
+      done: (data?.roomCount ?? 0) > 0,
       navigate: () => onNavigate("/rooms/rates"),
     },
     checkin: {
       id: "checkin",
       label: "Check in your first guest",
-      done: false,
+      done: (data?.bookingCount ?? 0) > 0,
       navigate: () => onNavigate("/rooms/bookings"),
     },
   };

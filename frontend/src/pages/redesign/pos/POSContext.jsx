@@ -375,6 +375,9 @@ export const POSProvider = ({ children }) => {
   const [draftOrderId, setDraftOrderId] = useState(null);
   const [orderContext, setOrderContext] = useState(null);
   const [tableSessionId, setTableSessionId] = useState(null);
+  const [tableLabel, setTableLabel] = useState(null);
+  const [tabId, setTabId] = useState(null);
+  const [tabName, setTabName] = useState(null);
   const [seatCount, setSeatCount] = useState(0);
   const [activeSeat, setActiveSeat] = useState(1);
   const [activeCourse, setActiveCourse] = useState(1);
@@ -383,9 +386,12 @@ export const POSProvider = ({ children }) => {
   const [showGuestMode, setShowGuestMode] = useState(false);
   const [signatureSvg, setSignatureSvg] = useState(null);
 
-  const openCheck = useCallback(({ context, tableSessionId: tsid = null, draftOrderId: doid = null, seatCount: sc = 0 } = {}) => {
+  const openCheck = useCallback(({ context, tableSessionId: tsid = null, tableLabel: tlabel = null, tabId: tbid = null, tabName: tbname = null, draftOrderId: doid = null, seatCount: sc = 0 } = {}) => {
     setOrderContext(context || null);
     setTableSessionId(tsid);
+    setTableLabel(tlabel);
+    setTabId(tbid);
+    setTabName(tbname);
     setDraftOrderId(doid);
     setSeatCount(sc);
     setActiveSeat(1);
@@ -397,6 +403,9 @@ export const POSProvider = ({ children }) => {
     setDraftOrderId(null);
     setOrderContext(null);
     setTableSessionId(null);
+    setTableLabel(null);
+    setTabId(null);
+    setTabName(null);
     setSeatCount(0);
     setActiveSeat(1);
     setActiveCourse(1);
@@ -407,12 +416,13 @@ export const POSProvider = ({ children }) => {
     const data = await api.post("/api/draft-orders", {
       order_context: orderContext,
       table_session_id: tableSessionId,
+      tab_id: tabId,
       seat_count: seatCount,
     });
     const newId = data?.draftOrder?.id ?? data?.id ?? null;
     setDraftOrderId(newId);
     return newId;
-  }, [draftOrderId, orderContext, tableSessionId, seatCount]);
+  }, [draftOrderId, orderContext, tableSessionId, tabId, seatCount]);
 
   // ── Modifier picker (Phase 2.1 A2 wiring) ──────────────────────────────────
   // When a product with linked modifier groups is added, pause the add flow
@@ -582,6 +592,9 @@ export const POSProvider = ({ children }) => {
     draftOrderId,
     orderContext,
     tableSessionId,
+    tableLabel,
+    tabId,
+    tabName,
     seatCount,
     closeCheck,
     signatureSvg,
@@ -1108,6 +1121,12 @@ export const POSProvider = ({ children }) => {
     orderContext,
     tableSessionId,
     setTableSessionId,
+    tableLabel,
+    setTableLabel,
+    tabId,
+    setTabId,
+    tabName,
+    setTabName,
     seatCount,
     setSeatCount,
     activeSeat,

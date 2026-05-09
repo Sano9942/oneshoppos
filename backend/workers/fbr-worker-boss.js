@@ -44,12 +44,32 @@ async function handleFbrInvoiceJob(job, pool, logger) {
     `SELECT fbr_api_token, fbr_environment FROM ${schema}.company_profile WHERE id = 1`
   );
   if (!profile?.fbr_api_token) {
-    logger.warn({ tenantSlug }, "FBR credentials missing — cannot post invoice");
-    // Reset to pending so it can be retried when credentials are configured
+    // W41 fix: increment retry_count on missing-credentials path so the existing
+    // 5-retry cap eventually trips. After 5 hourly attempts (~50 min), mark as
+    // abandoned_no_creds so the row stops requeueing forever. Operator can
+    // re-enqueue manually via /fbr dashboard once credentials are configured.
+    const newRetryCount = (invoice.retry_count || 0) + 1;
+    if (newRetryCount >= (invoice.max_retries || 5)) {
+      logger.warn({ tenantSlug, invoiceId, newRetryCount }, "FBR invoice abandoned — credentials still missing after max retries");
+      await pool.query(
+        `UPDATE ${schema}.fbr_invoices
+            SET status = 'abandoned_no_creds',
+                retry_count = $1,
+                last_error = 'Missing FBR credentials (abandoned after max retries)'
+          WHERE id = $2`,
+        [newRetryCount, invoiceId]
+      );
+      return;
+    }
+    logger.warn({ tenantSlug, invoiceId, newRetryCount }, "FBR credentials missing — cannot post invoice");
     await pool.query(
-      `UPDATE ${schema}.fbr_invoices SET status = 'pending', last_error = 'Missing FBR credentials', next_retry_at = NOW() + INTERVAL '10 minutes'
-       WHERE id = $1`,
-      [invoiceId]
+      `UPDATE ${schema}.fbr_invoices
+          SET status = 'pending',
+              retry_count = $1,
+              last_error = 'Missing FBR credentials',
+              next_retry_at = NOW() + INTERVAL '10 minutes'
+        WHERE id = $2`,
+      [newRetryCount, invoiceId]
     );
     return;
   }

@@ -71,12 +71,27 @@ module.exports = function registerRestaurantKioskRoutes(app, deps) {
           draftId = existing.id;
         } else {
           token = crypto.randomUUID();
+          // W26 fix path 1: resolve any open table session for this table and
+          // link the new draft to it via table_session_id. Without this, a
+          // server seating the table via POS while a customer scans the QR
+          // creates two parallel checks (one with table_session_id, one without).
+          // Linking here means W17's post-sale dirty-flip update fires correctly
+          // when the kiosk-minted draft settles.
+          const { rows: [openSession] } = await deps.db.query(
+            `SELECT id FROM restaurant_table_sessions
+              WHERE table_id = $1
+                AND status IN ('seated','dirty')
+                AND closed_at IS NULL
+              ORDER BY id DESC LIMIT 1`,
+            [table_id]
+          );
+          const tableSessionId = openSession?.id || null;
           const { rows: [draft] } = await deps.db.query(
             `INSERT INTO draft_orders
-               (outlet_id, created_by, order_context, table_id, source_token_id, source_channel, status)
-             VALUES ($1, $2, 'dine_in', $3, $4, 'kiosk', 'open')
+               (outlet_id, created_by, order_context, table_id, table_session_id, source_token_id, source_channel, status)
+             VALUES ($1, $2, 'dine_in', $3, $4, $5, 'kiosk', 'open')
              RETURNING id`,
-            [outlet_id, req.employee.id, table_id, token]
+            [outlet_id, req.employee.id, table_id, tableSessionId, token]
           );
           draftId = draft.id;
         }

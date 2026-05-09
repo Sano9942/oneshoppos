@@ -103,6 +103,7 @@ export default function RestaurantChecksRedesign() {
         resumeCheck: {
           draftOrderId: check.id,
           tableSessionId: check.table_session_id || null,
+          tableLabel: check.table_label || null,
           orderContext: check.order_context || "dine_in",
           seatCount: check.seat_count || 0,
         },

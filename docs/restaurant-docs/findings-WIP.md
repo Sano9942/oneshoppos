@@ -22,11 +22,13 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
-| 🟡 Issue | 4 | 11 | 0 |
-| 🔵 Polish | 13 | 8 | 0 |
-| **Total** | **17** | **35** | **0** |
+| 🟡 Issue | 0 | 15 | 0 |
+| 🔵 Polish | 4 | 17 | 0 |
+| **Total** | **4** | **48** | **0** |
 
-Last update: 2026-05-10 (pre-launch fix-it loop closed — 4 of 4 high-priority items shipped: **W43 ✅** POS layout skeleton now hidden when `phase2_pos_layouts` flag is off (single-line guard at `RestaurantCheckView.jsx:61`); **W38 ✅** healed `grace_period_end` + `cancel_reason` column drift across 3 affected tenants (`livetestauto`, `sanoposlivetest1778021564659`, `cafetestphase8`) AND patched `schema-pg.sql:3711-3717` so all future tenants ship correct (root cause was v32 migration's ALTER TABLE never made it into the schema dump); **W36 ✅** KDS ticket cards now use `bg-(--ui-surface) text-(--ui-text)` instead of `bg-(--ui-bg)` — fixes dark mode contrast cliff at `KDSRedesign.jsx:421`; **W6 ✅** grep audit confirms no code path reads `permissions.includes()` for a Phase 4 perm without first OR-ing `all_access` — Owner's missing literal perms are dead-code-safe by convention. Status Summary: 17 open (was 20: −W43 −W38 −W36; W6 was OPEN-but-untriaged, now FIXED-by-audit so −1 issue), 35 fixed (was 31: +W43 +W38 +W36 +W6). Earlier entries below.)
+Last update: 2026-05-10 (full pre-launch sweep closed — 12 of 12 items shipped or verified-clean. **W41 ✅** stuck `Missing FBR credentials` rows on `sanoposlivetest1778021564659` cancelled (10 rows); worker patched to increment `retry_count` so cap eventually trips at `abandoned_no_creds` instead of looping forever. **W39 ✅** 2 historical NULL `backup_log` rows on `tenant_livetest1` backfilled with `action='backup', tenant_slug='livetest1'`; current writers in `system.js` + `barcode-expenses.js` already populate routing fields correctly — finding was about historical data, not current code. **W19 ✅** `RestaurantHeader.jsx` now reads `tableLabel` from POSContext (via `RestaurantFloorGrid.openTableCheck` + `seatTable` + `RestaurantChecksRedesign.payCheck` + `POSRestaurantRedesign` resume); shows "Table T1" instead of "Table 4" (session_id). **W37 ✅** dashboard route now exposes `floorPlanCount`, `bookingCount`, `ticketCount`, `contractCount`, `roomCount`; `DashboardOnboarding.jsx` wires all 9 vertical step `done` checks against actual counts (was hardcoded `done: false`). **W5/P10 ✅** all 4 active tenants healed `roles.id=1` from `'Admin'` → `'Administrator'`; `tenant-provisioner-pg.js:105+122` updated so future tenants ship correct; setup.js seed loop's `Administrator` branch is no longer dead code. **P2 ✅** `routes/modifiers.js` + `routes/tips.js` now gate on `requireMode('restaurant')` (defense-in-depth — prevents flag-only abuse on retail tenants). **P3 ✅** verified-clean — `restaurant-inbox.js` returns `{orders:[]}` cleanly when empty; no code change needed. **W26 ✅** `routes/restaurant-kiosk.js:73-80` now resolves any open `restaurant_table_sessions` for the table and links the new draft via `table_session_id`; W17 dirty-flip will now fire correctly when a kiosk-minted draft settles, no more parallel checks per table. **W18 ✅** Open Tab CTA shipped end-to-end: 4-button entry strip (was 3), modal captures tab name, POSTs `/api/restaurant/tabs`, transitions to POS with `orderContext='bar'` + `tabId` + `tabName` threaded via POSContext, `ensureDraftOrder` passes `tab_id` to backend (route already supported it since v32), header renders "Tab: <name>". **W40 ✅** `routes/restaurant.js` 22 try/catch blocks now call `next(err)` instead of swallowing — errors propagate to global handler at `index.js:247-262` which captures to Sentry; global handler also now honors `err.statusCode` alongside `err.status` for back-compat. `routes/public-restaurant.js` 3 catch blocks call `Sentry.captureException` inline before sending generic 500 (preserves public-safe response shape). **W42 ✅** doc note written at `docs/restaurant-docs/cafe-pos-onboarding-note.md` — operator guide for cafe POS workflow until counter-mode preset ships post-launch. **B1.5** kept deferred — W38's widened scope (3 tenants, not 1) is direct evidence drift extends beyond restaurant; needs focused full-v1..v85 schema-sync session. Status Summary: **4 open** (was 17: −W19 −W26 −W37 −W18 −W36-already-fixed −W38-already-fixed −W40 −W42 −W41 −W39 −W5 −W6 −P2 −P3, plus P5/P7/P8/P9 closed-by-prior-work). Open polish: P1, P4, P6, P10-residual. **48 fixed** (was 35: +13). Earlier entries below.)
+
+Earlier: 2026-05-10 (pre-launch fix-it loop closed — 4 of 4 high-priority items shipped: **W43 ✅** POS layout skeleton now hidden when `phase2_pos_layouts` flag is off (single-line guard at `RestaurantCheckView.jsx:61`); **W38 ✅** healed `grace_period_end` + `cancel_reason` column drift across 3 affected tenants (`livetestauto`, `sanoposlivetest1778021564659`, `cafetestphase8`) AND patched `schema-pg.sql:3711-3717` so all future tenants ship correct (root cause was v32 migration's ALTER TABLE never made it into the schema dump); **W36 ✅** KDS ticket cards now use `bg-(--ui-surface) text-(--ui-text)` instead of `bg-(--ui-bg)` — fixes dark mode contrast cliff at `KDSRedesign.jsx:421`; **W6 ✅** grep audit confirms no code path reads `permissions.includes()` for a Phase 4 perm without first OR-ing `all_access` — Owner's missing literal perms are dead-code-safe by convention. Status Summary: 17 open (was 20: −W43 −W38 −W36; W6 was OPEN-but-untriaged, now FIXED-by-audit so −1 issue), 35 fixed (was 31: +W43 +W38 +W36 +W6). Earlier entries below.)
 
 Earlier: 2026-05-08 (Phase 7 Cafe Parity Pass closed — 0 new findings. Created `cafetest1` tenant via signup wizard (Cafe / Quick Service preset, PK, free plan), walked all 5 cafe-vs-restaurant diffs, deleted at end. **All 3 P5-documented diffs verified live:** (a) dashboard has NO floor plan widget tile, (b) sidebar group shows "CUSTOMERS" with all "Customer" labels (not "GUESTS" / "Guests" as restaurant), (c) onboarding step "Add employees" appears (NOT "Set up your floor plan"). **Sample products perfectly match plan §456:** Espresso + Cappuccino (Hot Drinks), Iced Latte (Cold Drinks), Croissant + Sandwich (Bakery). **Flag parity is exact:** FULL OUTER JOIN diff query returned 0 rows — both tenants have 25/34 identical flags + same `mode=restaurant` enabled. industry_type='cafe' vs 'restaurant' drives only preset (labels/widgets/onboarding/sample products), not flags. Cleanup: cafe tenant soft-deleted via /admin/tenants/100, schema dropped immediately. **Operator solved Cloudflare Turnstile manually** (Playwright can't render the widget due to CSP/TrustedHTML; agent filled rest of the form). 0 blockers · 2 issues · 14 polish · 31 fixed unchanged. Earlier entries below.)
 
@@ -168,19 +170,19 @@ Each item is `to_regclass`/`information_schema.columns` NULL on a fresh tenant f
 
 ---
 
-### P2 — `routes/modifiers.js` and `routes/tips.js` lack `requireMode` check
+### P2 — `routes/modifiers.js` and `routes/tips.js` lack `requireMode` check ✅ FIXED
 
-**Status:** OPEN | **Source:** discovery §8.2.E
+**Status:** ✅ FIXED 2026-05-10 | **Source:** discovery §8.2.E
 
-Both gate on `requireFeature("phase4_restaurant")` only (`modifiers.js:20-21`, `tips.js:21-22`) without `requireMode("restaurant")`. Defense-in-depth gap: an admin manually flipping `phase4_restaurant` ON for a retail tenant would activate modifiers/tips without `tenant_modes.restaurant`. Not a launch blocker.
+`modifiers.js` — `readGate` and `writeGate` arrays now lead with `requireMode("restaurant")` followed by the existing `requireFeature("phase4_restaurant")` + perm check. `tips.js` — added `mode` middleware and updated all 9 route mount sites to use `mode, feat, guard` instead of `feat, guard`. `requireMode` falls through with empty `tenant_modes` map (back-compat for pre-M1 tenants), so this is purely additive defense-in-depth — no regression risk for tenants that haven't run the M1 mode-engine migration.
 
 ---
 
-### P3 — `routes/restaurant-inbox.js` empty-state risk
+### P3 — `routes/restaurant-inbox.js` empty-state risk ✅ VERIFIED CLEAN
 
-**Status:** OPEN | **Source:** discovery §8.2.F
+**Status:** ✅ VERIFIED CLEAN 2026-05-10 | **Source:** discovery §8.2.F
 
-If no `web_orders` rows of type `kiosk` / `daraz` / `shopify` exist, inbox page renders empty. Verify in walkthrough that empty state renders cleanly, not as a 500.
+Source-investigated `routes/restaurant-inbox.js:22-34`: when no rows match, `inbox.listInbox()` returns `[]` and the route responds with `200 {orders: []}` cleanly — no special empty-state handling needed on the backend, the empty array is the empty state. Frontend renders an empty list naturally. No 500 risk. No code change required.
 
 ---
 
@@ -409,9 +411,9 @@ React error #310 = "Rendered more hooks than during the previous render" — i.e
 
 ---
 
-### W5 — P10 confirmed live: provisioner role name "Admin" wins over setup.js "Administrator"
+### W5 — P10 confirmed live: provisioner role name "Admin" wins over setup.js "Administrator" ✅ FIXED
 
-**Status:** OPEN (live confirmation of pre-existing P10)
+**Status:** ✅ FIXED 2026-05-10. `tenant-provisioner-pg.js:105` changed from `'Admin'` → `'Administrator'`; `:122` changed employee placeholder name from `'Admin'` → `'Administrator'` (overwritten by `setup.js:359` with the real owner name immediately after; this is back-up alignment for the CLI provisioner-only path). Then `UPDATE roles SET name='Administrator' WHERE id=1 AND name='Admin'` ran across all 4 active tenant schemas — verified post-fix, all 4 now report `'Administrator'`. The `setup.js:332-344` seed loop's `Administrator` branch is no longer dead code (it still no-ops because perms are already seeded by provisioner, but it's now consistent with `DEFAULT_ROLE_PERMISSIONS.Administrator`). Pre-fix grep confirmed no code reads the literal string `'Admin'` in `roles.name` — frontend reads `role_id`, not name.
 **Severity:** 🔵 POLISH
 **Surfaces affected:** anywhere code joins on role.name or matches `DEFAULT_ROLE_PERMISSIONS` keys by name
 **Found via:** Playwright walkthrough 2026-05-07, Phase 1 — `/api/context/bootstrap` response inspection
@@ -963,9 +965,9 @@ Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Own
 
 ---
 
-### W18 — No "Open Tab" / bar-tab CTA on Restaurant POS landing despite backend support
+### W18 — No "Open Tab" / bar-tab CTA on Restaurant POS landing despite backend support ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. End-to-end wire-up: **Frontend POSContext** — added `tabId` + `tabName` state, threaded through `openCheck`/`closeCheck`, exposed in context value; `ensureDraftOrder` now passes `tab_id` alongside `table_session_id` when creating drafts. **Frontend FloorGrid** — entry strip widened from 3 columns to `grid-cols-2 sm:grid-cols-4`; new `EntryButton` with `Wine` icon + label "Open Tab"; modal captures tab name (text input, Enter-to-submit, max 80 chars); `openBarTab` async handler POSTs `/api/restaurant/tabs` with `{outlet_id, customer_name}`, on success calls `requestOpen({context: 'bar', tabId, tabName})`. **Frontend RestaurantHeader** — destructures `tabName`, renders `Tab: ${tabName || "—"}` for `orderContext === 'bar'`; also added explicit "Drive-Thru" branch (was previously falling through to "New Check"). **Backend** — no changes; `POST /api/restaurant/tabs` (route `restaurant.js:389`) and `POST /api/draft-orders` (`tab_id` accepted at `routes/draft-orders.js:79+137`) both already shipped in v32 (M2).
 **Severity:** 🟡 ISSUE (functional gap — backend feature unreachable from UI)
 **Surfaces affected:** Restaurant POS landing (`/pos/restaurant`); flow 3.2 (Walk-in tab) per `pre-launch-walkthrough-plan-2026-05-07.md` line 230
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 1
@@ -1005,9 +1007,9 @@ Verify (`SELECT id, name, role, role_id FROM employees`): `{id:1, name:"Test Own
 
 ---
 
-### W19 — Restaurant header labels session_id as "Table N" instead of using table label
+### W19 — Restaurant header labels session_id as "Table N" instead of using table label ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. Threaded `tableLabel` through POSContext (new state + setter, included in `openCheck`/`closeCheck` payload, exposed in context value at lines 588 + 1115). Producers updated: `RestaurantFloorGrid.openTableCheck` reads `table.label` from the floor-grid table list; `seatTable` looks up the table by id from local `tables` state and passes `seatedTable.label`; `RestaurantChecksRedesign.payCheck` passes `check.table_label` (already exposed by `getOpenChecks` query); `POSRestaurantRedesign` resume effect threads `resume.tableLabel` from location state. Consumer `RestaurantHeader.jsx:33` now renders `Table ${tableLabel || tableSessionId || "—"}`. Cart-collision confirm modal in `RestaurantFloorGrid.jsx:345` also uses the new label. Production impact: no more "Table 5000" once session ids monotonically grow; "Table T1" / "Table B-3" reflects what the cashier and kitchen actually call the table.
 **Severity:** 🔵 POLISH (cosmetic; functional flow is unaffected)
 **Surfaces affected:** `RestaurantHeader.jsx` — Restaurant POS check view header strip (and its collapsed variant). Visible from the moment a cashier seats a table until they leave the check.
 **Found via:** Playwright walkthrough 2026-05-07, Phase 3, flow 3.2 step 1 (post-seat). Seated T1 (`table_id=1`, `label='T1'`) → header rendered `"Table 4"`. Verified via Supabase MCP that the seated session_id is 4 and the matching table is T1.
@@ -1832,9 +1834,9 @@ After those ship, the next walkthrough sitting can resume Phase 2 from the unwal
 2. Or jump to **flow 3.6** (Table Order Kiosk — mint a Table Token, attach order to existing dine_in draft on a seated table). Needs a seated table first.
 3. Optional follow-up: triage the 2 new frontend Sentry hook-order errors. Not blocking restaurant launch.
 
-### W26 — Table-token kiosk model and seat-via-POS session model are not linked (3 disconnects)
+### W26 — Table-token kiosk model and seat-via-POS session model are not linked (3 disconnects) ✅ FIXED (path 1)
 
-**Status:** OPEN — 🔵 Polish
+**Status:** ✅ FIXED 2026-05-10 — disconnects #1 + #2 resolved via fix path 1 (resolve open session in kiosk mint, link draft via `table_session_id`). `routes/restaurant-kiosk.js:73-92` now queries `restaurant_table_sessions WHERE table_id=$1 AND status IN ('seated','dirty') AND closed_at IS NULL` before INSERTing the draft; if a session exists, the draft is created with `table_session_id` set, otherwise NULL. Effect: (1) staff who seat a table via POS while a customer scans the QR now share one logical check, not two parallel ones; (2) W17 dirty-flip post-sale UPDATE now matches the session row when settling kiosk-minted drafts (was previously skipped because `table_session_id` was NULL). Disconnect #3 (settled-token returns "Menu Unavailable") is by design per the kiosk-design doc — that part stays as a documented operator behavior, not a code fix.
 **Severity:** 🔵 Polish (functional today, but creates two parallel "checks" per table when both paths are used; merchant-visible if a server seats a table via POS while a customer simultaneously scans the table QR)
 **Surfaces affected:** /order-kiosks (table-mode mint), /pos/restaurant (seat → check view), /restaurant/checks, public /menu/:token
 **Found via:** Phase 3 flow 3.6 + 3.7 walkthrough on 2026-05-08
@@ -2876,9 +2878,9 @@ Screenshot: `restaurant-walkthrough-6.2-kds-dark-2026-05-08.png` (visible black-
 
 ---
 
-### W37 — Onboarding checklist `floor_plan` step hardcoded done=false even when floor plan exists
+### W37 — Onboarding checklist `floor_plan` step hardcoded done=false even when floor plan exists ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. **Backend:** `routes/reports/dashboard.js:499-555` now exposes 5 vertical-step counters: `floorPlanCount` (restaurant), `bookingCount` (appointments / room check-ins), `ticketCount` (service tickets), `contractCount` (rentals), `roomCount` (rooms / rates). Each best-effort with try/catch so dashboard render never fails on tenants where the table doesn't exist. **Frontend:** `DashboardOnboarding.jsx:76-143` — 9 previously-hardcoded `done: false` checks rewired against the new counts. `floor_plan` → `(data?.floorPlanCount ?? 0) > 0`; `booking` + `calendar` + `checkin` → `(data?.bookingCount ?? 0) > 0`; `ticket` → `(data?.ticketCount ?? 0) > 0`; `contract` + `checkout` → `(data?.contractCount ?? 0) > 0`; `room` + `rate` → `(data?.roomCount ?? 0) > 0`. Only `membership` remains hardcoded (no count exposed for membership plans yet — separate followup if it becomes a complaint). Restaurant tenants will now see "5 of 5 steps complete" once they add a floor plan; auto-dismiss kicks in 3s after that.
 **Severity:** 🔵 Polish (cosmetic — doesn't block any function, just shows a perpetually-incomplete checklist)
 **Surfaces affected:** `frontend/src/pages/dashboard/DashboardOnboarding.jsx:76-81` (one of N step builders)
 **Found via:** Phase 6.12 onboarding-checklist walk-through 2026-05-08
@@ -3073,9 +3075,9 @@ Schema drift on `livetestauto` only. Comparison query: list tenants where `custo
 
 ---
 
-### W39 — `backup_log` rows have NULL `filename`/`url`/`tenant_slug`/`performed_by` — can't audit where backup files went
+### W39 — `backup_log` rows have NULL `filename`/`url`/`tenant_slug`/`performed_by` — can't audit where backup files went ✅ FIXED (current writers verified clean; historical rows backfilled)
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. **Source-investigation reversed the original "writer is broken" hypothesis:** all 3 active backup_log writers (`routes/admin/system.js:244`, `routes/barcode-expenses.js:416/423/437/487/504`) already populate `action`, `tenant_slug`, `performed_by`, `filename`. The 2 NULL rows on `tenant_livetest1.backup_log` from 2026-04-30 are historical — they predate the v84 column-union migration. Backfilled both rows with `action='backup', tenant_slug='livetest1'` (the rest stay NULL since we have no record of the original filename / URL). No further code change required. Note: this finding is duplicated by the broader `backup_log INSERT shapes` test at `tests/integration/pg-p33-backup-log-insert-shapes.test.js` which already validates 6 distinct INSERT shapes.
 **Severity:** 🔵 Polish (audit trail incomplete; primary DR is Supabase Pro PITR, not app-level backups)
 **Surfaces affected:** `backend/utils/backup-pg.js` (writer) + `backend/routes/admin/system.js` backup endpoint + `backup_log` table on every tenant schema
 **Found via:** Phase 8.7 backup/restore verification 2026-05-08
@@ -3117,9 +3119,9 @@ v84 migration added a column union for `backup_log` (per CLAUDE.md "v84: backup_
 
 ---
 
-### W40 — Restaurant route handlers swallow errors locally — production errors never reach Sentry
+### W40 — Restaurant route handlers swallow errors locally — production errors never reach Sentry ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. **`backend/routes/restaurant.js`** — all 22 async handlers updated: signature changed from `(req, res) =>` to `(req, res, next) =>`, and all 19 standard catch bodies (`res.status(err.statusCode || 500).json({error: err.message})`) replaced with `next(err)` to forward to the global Express handler. The 2 bare-500 catches and the 1 print-bill 4-space-indent catch were also converted. Inner try/catch around printer routing (`fire-course` route line 247) and around action_history INSERTs are intentionally left swallowing — those are best-effort side effects, not the request's primary path. **`backend/index.js:247-262`** — global handler updated to honor `err.statusCode` alongside `err.status`; previously routes throwing `Object.assign(new Error(...), { statusCode: 400 })` would have landed on 500 if forwarded, this preserves the original HTTP code. **`backend/routes/public-restaurant.js`** — 3 catch blocks now call `Sentry.captureException(err, {tags:{route, reqId}})` inline + `req.log.error()` before sending the existing generic 500 response (preserves no-error-leak behavior on unauthenticated routes). Net: every restaurant-route handler error now reaches Sentry, where Phase 8.2 verified the pipeline works. Pre-fix Sentry had been silent for 19 days because handlers swallowed everything.
 **Severity:** 🟡 Issue (production observability gap — every restaurant-route bug becomes invisible)
 **Surfaces affected:** `backend/routes/restaurant.js` (29 try/catch blocks), `backend/routes/public-restaurant.js` (3 handlers — same pattern), likely other domain routes by extension
 **Found via:** Phase 8.2 Sentry hookup verification 2026-05-08
@@ -3214,9 +3216,9 @@ Pattern was likely written defensively before Express 5 (which auto-catches asyn
 
 ---
 
-### W42 — Cafe POS UX is restaurant-shaped (Seat picker, Course buttons C1-C5) — counter-service merchants see UI for an ops model they don't run
+### W42 — Cafe POS UX is restaurant-shaped (Seat picker, Course buttons C1-C5) — counter-service merchants see UI for an ops model they don't run ✅ DOC-FIX (code fix path 2 deferred to post-launch)
 
-**Status:** OPEN
+**Status:** ✅ DOC-FIX 2026-05-10. Per the launch posture in the original finding ("merchant onboarding should warn cafe users to ignore the Seat/Course picker and use the Takeaway flow"), shipped `docs/restaurant-docs/cafe-pos-onboarding-note.md` — operator guide explaining (a) cafe POS lands on `/pos/restaurant`, (b) ignore Seat picker + Course buttons, (c) use the search bar to add items, (d) use the new W18 Open Tab button for named bar tabs. Code fix path 2 (`pos_layout_mode='counter'` preset that hides the Seat/Course UI entirely) is post-launch work — half-day refactor with bigger blast radius than this loop should take. The doc note is the launch-day workaround.
 **Severity:** 🟡 Issue (cafe POS is functional via search bar; UX is misleading/restaurant-shaped, not blocking)
 **Surfaces affected:** `/pos` route resolves to `/pos/restaurant` for both cafe and restaurant presets. Frontend POS UI: top bar shows "New Takeaway / New Delivery / New Drive-Thru" buttons; main area shows "No tables in this floor plan yet. Add tables in Settings → Restaurant Floor." for any tenant where `restaurant_tables` is empty.
 **Found via:** Phase 8.12c cafe ops sweep 2026-05-08, fresh tenant `cafetestphase8` (industry_type=cafe, mode=restaurant)
@@ -3340,9 +3342,9 @@ A skeleton grid (8 grey pulsing rectangles) labelled `aria-label="Loading menu"`
 
 ---
 
-### W41 — Stuck `fbr_invoices` rows infinite-loop on "Missing FBR credentials" — never increment `retry_count`, never give up
+### W41 — Stuck `fbr_invoices` rows infinite-loop on "Missing FBR credentials" — never increment `retry_count`, never give up ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. Two-part fix: (a) cleanup — `UPDATE ... SET status='cancelled' WHERE last_error='Missing FBR credentials' AND retry_count=0` ran across all 4 tenants; only `tenant_sanoposlivetest1778021564659` had matching rows (10 rows, all from pre-W31-fix May 6-7); cleared. (b) worker fix — `backend/workers/fbr-worker-boss.js:46-72` now increments `retry_count` on the missing-credentials path; after `max_retries` (5 attempts ≈ 50 min at 10-min intervals) the row is marked `status='abandoned_no_creds'` and stops requeueing. New status value is free-text (no CHECK constraint on `fbr_invoices.status`), backward compatible. Operator can re-enqueue manually via `/fbr` dashboard once credentials are configured.
 **Severity:** 🔵 Polish (no production impact today; queue rows accumulate forever for any tenant that enqueued under W31's pre-fix behavior)
 **Surfaces affected:** `backend/workers/fbr-worker-boss.js` (per workers/CLAUDE.md: missing credentials → resets to `pending` with `next_retry_at = NOW() + 10 min` and returns without rethrowing — no `retry_count` increment, no `max_retries` cap consumption)
 **Found via:** Phase 8.12b FBR + tax_mode=none verification 2026-05-08

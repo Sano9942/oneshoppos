@@ -18,13 +18,17 @@ const tipsService = require("../services/tips");
  */
 module.exports = function registerTipsRoutes(app, deps) {
   const { db, requirePerm, requireFeature } = deps;
+  const { requireMode } = require("../middleware/feature-flags");
+  // P2 fix: defense-in-depth — gate on restaurant mode in addition to flag.
+  // requireMode falls through with empty modes map (back-compat for pre-M1 tenants).
+  const mode = requireMode("restaurant");
   const feat = requireFeature("phase4_restaurant");
   const guard = requirePerm("manage_tips");
 
   // ── Pools ─────────────────────────────────────────────────────────────────
 
   // GET /api/tips/pools?outlet_id=&from=&to=&status=
-  app.get("/api/tips/pools", feat, guard, async (req, res) => {
+  app.get("/api/tips/pools", mode, feat, guard, async (req, res) => {
     const { outlet_id, from, to, status } = req.query;
     try {
       let where = "1=1";
@@ -57,7 +61,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // POST /api/tips/pools — open (idempotent)
-  app.post("/api/tips/pools", feat, guard, validate(openPoolSchema), async (req, res) => {
+  app.post("/api/tips/pools", mode, feat, guard, validate(openPoolSchema), async (req, res) => {
     const { outlet_id, business_date } = req.body;
     try {
       const pool = await tipsService.openTipPool(db, outlet_id, business_date);
@@ -68,7 +72,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // POST /api/tips/pools/:id/close
-  app.post("/api/tips/pools/:id/close", feat, guard, validate(closePoolSchema), async (req, res) => {
+  app.post("/api/tips/pools/:id/close", mode, feat, guard, validate(closePoolSchema), async (req, res) => {
     try {
       const pool = await tipsService.closeTipPool(db, Number(req.params.id), req.employee?.id || null);
       res.json({ pool });
@@ -78,7 +82,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // POST /api/tips/pools/:id/distribute
-  app.post("/api/tips/pools/:id/distribute", feat, guard, validate(distributePoolSchema), async (req, res) => {
+  app.post("/api/tips/pools/:id/distribute", mode, feat, guard, validate(distributePoolSchema), async (req, res) => {
     try {
       const result = await tipsService.distributeTipPool(db, Number(req.params.id), req.body.rule_id || null);
       res.json(result);
@@ -88,7 +92,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // POST /api/tips/pools/:id/void
-  app.post("/api/tips/pools/:id/void", feat, guard, validate(voidPoolSchema), async (req, res) => {
+  app.post("/api/tips/pools/:id/void", mode, feat, guard, validate(voidPoolSchema), async (req, res) => {
     try {
       const pool = await tipsService.voidTipPool(db, Number(req.params.id), req.body.reason || null);
       res.json({ pool });
@@ -100,7 +104,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   // ── Distribution rules ────────────────────────────────────────────────────
 
   // GET /api/tips/distribution-rules?outlet_id=
-  app.get("/api/tips/distribution-rules", feat, guard, async (req, res) => {
+  app.get("/api/tips/distribution-rules", mode, feat, guard, async (req, res) => {
     const { outlet_id } = req.query;
     try {
       let where = "is_active = TRUE";
@@ -119,7 +123,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // POST /api/tips/distribution-rules
-  app.post("/api/tips/distribution-rules", feat, guard, validate(createDistributionRuleSchema), async (req, res) => {
+  app.post("/api/tips/distribution-rules", mode, feat, guard, validate(createDistributionRuleSchema), async (req, res) => {
     const { outlet_id, name, strategy, config_jsonb, is_default, is_active } = req.body;
     try {
       const result = await db.transaction(async (client) => {
@@ -156,7 +160,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   });
 
   // PUT /api/tips/distribution-rules/:id
-  app.put("/api/tips/distribution-rules/:id", feat, guard, validate(updateDistributionRuleSchema), async (req, res) => {
+  app.put("/api/tips/distribution-rules/:id", mode, feat, guard, validate(updateDistributionRuleSchema), async (req, res) => {
     try {
       const result = await db.transaction(async (client) => {
         const { rows: existing } = await client.query(
@@ -209,7 +213,7 @@ module.exports = function registerTipsRoutes(app, deps) {
   // ── Payouts ───────────────────────────────────────────────────────────────
 
   // GET /api/tips/payouts?employee_id=&from=&to=&pool_id=
-  app.get("/api/tips/payouts", feat, guard, async (req, res) => {
+  app.get("/api/tips/payouts", mode, feat, guard, async (req, res) => {
     const { employee_id, from, to, pool_id } = req.query;
     try {
       let where = "1=1";

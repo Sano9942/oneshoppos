@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Users, Package, Truck, ShoppingBag, X, Save, Trash2 } from "lucide-react";
+import { Users, Package, Truck, ShoppingBag, Wine, X, Save, Trash2 } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
 import ReservationBadge from "./ReservationBadge";
@@ -23,7 +23,7 @@ const STATUS_TONE = {
 };
 
 export default function RestaurantFloorGrid({ onOpenCheck }) {
-  const { openCheck, cart, setCart, parkSale, tableSessionId, orderContext, posFlags } = usePOS();
+  const { openCheck, cart, setCart, parkSale, tableSessionId, tableLabel, orderContext, posFlags, selectedOutletId } = usePOS();
 
   const [plans, setPlans] = useState([]);
   const [activePlan, setActivePlan] = useState(null);
@@ -32,6 +32,10 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
   const [seatModalTableId, setSeatModalTableId] = useState(null);
   const [seatForm, setSeatForm] = useState({ guest_count: 2 });
   const [seatBusy, setSeatBusy] = useState(false);
+  // W18 — Open Tab modal state
+  const [tabModalOpen, setTabModalOpen] = useState(false);
+  const [tabName, setTabName] = useState("");
+  const [tabBusy, setTabBusy] = useState(false);
   // Cart-collision prompt: when the cart has items from a prior check
   // and the user opens a different table / takeout context, ask before
   // wiping the cart. `pendingOpen` is the deferred openCheck() args.
@@ -174,10 +178,42 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     requestOpen({ context });
   };
 
+  // W18 — Open a bar tab. Posts to /api/restaurant/tabs to mint a tabId, then
+  // transitions to the POS check view with order_context='bar' so subsequent
+  // cart actions create a draft linked to this tab via tab_id (resolved by
+  // ensureDraftOrder). Header renders "Tab: <customer_name>" via RestaurantHeader.
+  const openBarTab = async () => {
+    const trimmed = (tabName || "").trim();
+    if (!trimmed) return;
+    if (!selectedOutletId) {
+      console.warn("Open Tab requires an active outlet");
+      return;
+    }
+    setTabBusy(true);
+    try {
+      const tab = await api.post("/api/restaurant/tabs", {
+        outlet_id: selectedOutletId,
+        customer_name: trimmed,
+      });
+      setTabModalOpen(false);
+      setTabName("");
+      requestOpen({
+        context: "bar",
+        tabId: tab?.id ?? null,
+        tabName: tab?.customer_name || trimmed,
+      });
+    } catch (e) {
+      console.error("Failed to open tab:", e);
+    } finally {
+      setTabBusy(false);
+    }
+  };
+
   const openTableCheck = (table) => {
     requestOpen({
       context: "dine_in",
       tableSessionId: table.session_id,
+      tableLabel: table.label || null,
       seatCount: Number(table.guest_count) || 1,
     });
   };
@@ -213,12 +249,14 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
         table_id: seatModalTableId,
         guest_count: Number(seatForm.guest_count) || 1,
       });
+      const seatedTable = tables.find((t) => t.id === seatModalTableId);
       setSeatModalTableId(null);
       // Skip the next poll round — go straight into the check.
       const sessionId = data?.session?.id ?? data?.id ?? null;
       requestOpen({
         context: "dine_in",
         tableSessionId: sessionId,
+        tableLabel: seatedTable?.label || null,
         seatCount: Number(seatForm.guest_count) || 1,
       });
     } catch (e) {
@@ -246,7 +284,7 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     <div className="flex flex-col h-full overflow-y-auto bg-[#F8FAFC]">
       {/* Sticky takeout entry strip */}
       <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <EntryButton
             icon={ShoppingBag}
             label="New Takeaway"
@@ -269,6 +307,14 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
                 posFlags?.phase4_restaurant_drive_thru ? "drive_thru" : "takeout",
               )
             }
+          />
+          {/* W18: Open Tab — bar-tab pattern (named patron, persistent ledger,
+              not seated). Backend support has shipped since v32; this is the
+              first frontend entry point. */}
+          <EntryButton
+            icon={Wine}
+            label="Open Tab"
+            onClick={() => { setTabName(""); setTabModalOpen(true); }}
           />
         </div>
       </div>
@@ -339,7 +385,7 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
             <h3 className="text-lg font-bold text-slate-900">Save current check?</h3>
             <p className="mt-1 text-sm text-slate-600">
               {orderContext === "dine_in" && tableSessionId
-                ? `Save the cart for Table ${tableSessionId} before switching?`
+                ? `Save the cart for Table ${tableLabel || tableSessionId} before switching?`
                 : "Save the current cart as a draft before switching?"}
             </p>
             <div className="mt-5 grid grid-cols-3 gap-2">
@@ -412,6 +458,61 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
                 className="flex-1 py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold disabled:opacity-50"
               >
                 {seatBusy ? "Seating…" : "Seat"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* W18 — Open Tab modal */}
+      {tabModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => !tabBusy && setTabModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Open Tab</h3>
+              <button
+                onClick={() => !tabBusy && setTabModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+              Tab name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. John W"
+              value={tabName}
+              onChange={(e) => setTabName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && tabName.trim()) openBarTab(); }}
+              className="w-full text-lg px-3 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF] focus:border-[#8066FF]"
+              autoFocus
+              maxLength={80}
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              Stays open until you settle. Add items, send to kitchen, pay later.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setTabModalOpen(false)}
+                disabled={tabBusy}
+                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={openBarTab}
+                disabled={tabBusy || !tabName.trim()}
+                className="flex-1 py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold disabled:opacity-50"
+              >
+                {tabBusy ? "Opening…" : "Open Tab"}
               </button>
             </div>
           </div>

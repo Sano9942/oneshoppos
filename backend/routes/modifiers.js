@@ -4,7 +4,7 @@
  * per plan "no new feature flags").
  */
 module.exports = function registerModifierRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm, requireAnyPerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -17,8 +17,10 @@ module.exports = function registerModifierRoutes(app, deps) {
   } = require("../schemas/modifiers");
   const modifiers = require("../services/modifiers");
 
-  const readGate = [requireFeature("phase4_restaurant"), requireAnyPerm(["manage_restaurant", "manage_inventory"])];
-  const writeGate = [requireFeature("phase4_restaurant"), requirePerm("manage_restaurant")];
+  // P2 fix: defense-in-depth — gate on restaurant mode in addition to flag.
+  // requireMode falls through with empty modes map (back-compat for pre-M1 tenants).
+  const readGate = [requireMode("restaurant"), requireFeature("phase4_restaurant"), requireAnyPerm(["manage_restaurant", "manage_inventory"])];
+  const writeGate = [requireMode("restaurant"), requireFeature("phase4_restaurant"), requirePerm("manage_restaurant")];
 
   // ── Groups ──────────────────────────────────────────────────
 

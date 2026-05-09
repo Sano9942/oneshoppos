@@ -8,7 +8,7 @@ import { usePOS } from "../POSContext";
 // supplied scrollable container, so the menu/cart get more vertical space.
 
 export default function RestaurantHeader({ onBack, scrollRef }) {
-  const { orderContext, tableSessionId, seatCount, employee } = usePOS();
+  const { orderContext, tableSessionId, tableLabel, tabName, seatCount, employee } = usePOS();
   const [collapsed, setCollapsed] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const startedAt = useRef(Date.now());
@@ -30,9 +30,11 @@ export default function RestaurantHeader({ onBack, scrollRef }) {
   }, [scrollRef]);
 
   const contextLabel =
-    orderContext === "dine_in"   ? `Table ${tableSessionId ?? "—"}` :
+    orderContext === "dine_in"   ? `Table ${tableLabel || tableSessionId || "—"}` :
     orderContext === "takeout"   ? "Takeaway" :
     orderContext === "delivery"  ? "Delivery" :
+    orderContext === "drive_thru" ? "Drive-Thru" :
+    orderContext === "bar"       ? `Tab: ${tabName || "—"}` :
     "New Check";
 
   const elapsed = formatElapsed(elapsedSec);

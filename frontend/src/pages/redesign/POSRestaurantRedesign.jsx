@@ -61,6 +61,7 @@ function RestaurantContent() {
     openCheck({
       context: resume.orderContext || "dine_in",
       tableSessionId: resume.tableSessionId || null,
+      tableLabel: resume.tableLabel || null,
       draftOrderId: resume.draftOrderId,
       seatCount: resume.seatCount || 0,
     });
