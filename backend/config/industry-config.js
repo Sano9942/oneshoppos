@@ -133,7 +133,7 @@ const INDUSTRY_PRESETS = Object.freeze({
       appointments_today: false,
     },
     onboarding_steps: ["store", "menu_item", "employees", "shift", "order"],
-    pos_layout_mode: "list",
+    pos_layout_mode: "counter",
     visible_report_groups: ["Sales", "Customers", "Inventory", "Operations", "Finance", "HR", "Governance"],
     pos_search_config: { show_barcode: false, show_sku: false, show_price: false },
   },

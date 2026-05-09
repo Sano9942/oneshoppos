@@ -1,5 +1,7 @@
 # Cafe / Quick-Service POS — Operator Note (Launch v1)
 
+> ⚠️ **SUPERSEDED 2026-05-10** — W42 was code-fixed. Cafe tenants now get a counter-service POS with a category-tabbed menu tile grid; the Seat picker and Course buttons no longer render for cafe. This note is kept for historical reference but no longer reflects the live UI. See findings-WIP.md → W42 for the current behavior.
+>
 > Source: W42 finding in `findings-WIP.md`. Filed during Phase 8.12c cafe-ops sweep on 2026-05-08. The cafe POS today is the same surface as restaurant POS — same Seat picker, same Course buttons (C1 Appetizer → C5 Drinks). For counter-service ops, that UI is shaped wrong but the workflow still rings sales correctly.
 
 ## What you'll see

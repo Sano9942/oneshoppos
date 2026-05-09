@@ -82,7 +82,7 @@ export const POSProvider = ({ children }) => {
   // P8 (3.14): tenant-wide tax stance — drives toggle default + visibility.
   const taxMode = company?.tax_mode || "none";
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
-  const { labels: presetLabels } = usePreset();
+  const { labels: presetLabels, pos_layout_mode } = usePreset();
 
   // ── Notices (shared across hooks via showNotice / setError) ──────────────
   const [notice, setNotice] = useState("");
@@ -434,11 +434,17 @@ export const POSProvider = ({ children }) => {
   // the schema defaults (seat_number=null, course_name="main").
   const buildSeatCourseOverlay = useCallback(() => {
     if (!orderContext) return undefined;
+    // W42: counter-service tenants (cafe / quick-service) inherit the
+    // restaurant POS shell but never use seats or courses. Force the cart
+    // line to fall through to schema defaults (seat_number=null,
+    // course_name='main') so KDS routing, reports, and FBR exports treat
+    // these as standard sales — and so the picker UI can stay hidden.
+    if (pos_layout_mode === "counter") return undefined;
     return {
       seat_number: activeSeat ?? null,
       course_name: `course_${activeCourse || 1}`,
     };
-  }, [orderContext, activeSeat, activeCourse]);
+  }, [orderContext, activeSeat, activeCourse, pos_layout_mode]);
 
   const addToCartWithModifiers = useCallback(async (product) => {
     if (!product || !product.id) return;

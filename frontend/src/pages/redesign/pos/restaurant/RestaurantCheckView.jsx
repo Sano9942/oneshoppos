@@ -1,10 +1,12 @@
 import { useRef } from "react";
 import { usePOS } from "../POSContext";
+import { usePreset } from "../../../../contexts/PresetContext";
 import POSSearchArea from "../POSSearchArea";
 import RestaurantHeader from "./RestaurantHeader";
 import RestaurantCartGrouped from "./RestaurantCartGrouped";
 import RestaurantActionBar from "./RestaurantActionBar";
 import SeatCoursePicker, { useIsPortrait } from "./SeatCoursePicker";
+import CounterTileGrid from "./CounterTileGrid";
 
 // Phase 2-R.0 Day 3 + 5 — The check view at /pos/restaurant.
 // Composition: RestaurantHeader (top) + 2-column body (menu left,
@@ -19,6 +21,8 @@ import SeatCoursePicker, { useIsPortrait } from "./SeatCoursePicker";
 
 export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp, onOpenPayAtTable }) {
   const { posLayout, posFlags, addToCart, suggestions, money, total } = usePOS();
+  const { pos_layout_mode } = usePreset();
+  const isCounter = pos_layout_mode === "counter";
   const scrollRef = useRef(null);
   const isPortrait = useIsPortrait(900);
 
@@ -34,12 +38,16 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
         <div className={`flex ${isPortrait ? "flex-col-reverse" : "flex-row"} gap-4 p-4`}>
           {/* Menu column */}
           <div className={`${isPortrait ? "w-full" : "flex-1"} min-w-0 flex flex-col gap-3`}>
-            {!isPortrait && <SeatCoursePicker />}
+            {!isPortrait && !isCounter && <SeatCoursePicker />}
 
             <POSSearchArea />
 
-            {/* Existing POS layout tiles — identical to POSRedesign */}
-            {posLayout?.layout_json?.length > 0 ? (
+            {/* W42: counter-service tenants (cafe / quick-service) get a full
+                category-tabbed menu grid. Restaurant ('list') tenants keep the
+                existing POSLayouts-driven tile block below. */}
+            {isCounter ? (
+              <CounterTileGrid />
+            ) : posLayout?.layout_json?.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
                 {posLayout.layout_json.map((tile, i) => (
                   <button
@@ -94,7 +102,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
       </div>
 
       {/* Bottom sheet seat/course picker on portrait */}
-      {isPortrait && <SeatCoursePicker asSheet />}
+      {isPortrait && !isCounter && <SeatCoursePicker asSheet />}
 
       {/* Sticky action bar — pinned to viewport */}
       <RestaurantActionBar onOpenSplit={onOpenSplit} onOpenTransfer={onOpenTransfer} onOpen86={onOpen86} onOpenVoidComp={onOpenVoidComp} onOpenPayAtTable={onOpenPayAtTable} />

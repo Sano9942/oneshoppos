@@ -3216,9 +3216,18 @@ Pattern was likely written defensively before Express 5 (which auto-catches asyn
 
 ---
 
-### W42 — Cafe POS UX is restaurant-shaped (Seat picker, Course buttons C1-C5) — counter-service merchants see UI for an ops model they don't run ✅ DOC-FIX (code fix path 2 deferred to post-launch)
+### W42 — Cafe POS UX is restaurant-shaped (Seat picker, Course buttons C1-C5) — counter-service merchants see UI for an ops model they don't run ✅ FIXED
 
-**Status:** ✅ DOC-FIX 2026-05-10. Per the launch posture in the original finding ("merchant onboarding should warn cafe users to ignore the Seat/Course picker and use the Takeaway flow"), shipped `docs/restaurant-docs/cafe-pos-onboarding-note.md` — operator guide explaining (a) cafe POS lands on `/pos/restaurant`, (b) ignore Seat picker + Course buttons, (c) use the search bar to add items, (d) use the new W18 Open Tab button for named bar tabs. Code fix path 2 (`pos_layout_mode='counter'` preset that hides the Seat/Course UI entirely) is post-launch work — half-day refactor with bigger blast radius than this loop should take. The doc note is the launch-day workaround.
+**Status:** ✅ FIXED 2026-05-10 — fix path 2 from below shipped (`pos_layout_mode='counter'`).
+- `backend/config/industry-config.js:136` flipped cafe `pos_layout_mode` from `"list"` to `"counter"`.
+- New component `frontend/src/pages/redesign/pos/restaurant/CounterTileGrid.jsx` — category tabs at top (auto-derived from products' `category_name`, "All Items" tab as fallback) + 4-column tile grid (≥100px tall, image + name + price). Tiles click through to `addToCart` from POSContext, which is `addToCartWithModifiers` under the hood — modifier-bearing items still trigger `POSModifierModal` automatically.
+- `RestaurantCheckView.jsx` — gates `<SeatCoursePicker />` (both desktop and portrait sheet) and the legacy POSLayouts tile block behind `pos_layout_mode !== 'counter'`. Cafe tenants see `<CounterTileGrid />` instead.
+- `RestaurantActionBar.jsx` — hides the `Fire C{N}` button when counter mode. `Send to Kitchen` and `Pay` stay (still valid for cafes with a kitchen station for sandwiches/bakery). `Request QR` already gated to `dine_in` only, so naturally hidden.
+- `POSContext.jsx:435` — `buildSeatCourseOverlay` now early-returns `undefined` when `pos_layout_mode === 'counter'`, so cart lines fall through to schema defaults (`seat_number=null`, `course_name='main'`). KDS routing, reports, and FBR exports treat counter sales as standard sales.
+- Restaurant POS (`pos_layout_mode='list'`) is byte-identical to before — every conditional gates on `=== 'counter'`.
+**Tests:** `pg-batch13-restaurant.test.js` 40/41 (1 pre-existing 503/403 failure on main, unrelated). `pg-phase21c-tips` + `pg-restaurant-kiosk` 24/24. Frontend unit tests 155/155 (incl. cartMath, restaurant-cart-grouping, pos-context-open-check).
+**Live verification:** deferred to post-deploy on `cafetestphase8` + `sanoposlivetest1778021564659` (production tenants — backend config flip needs Railway redeploy first).
+**Prior status:** ✅ DOC-FIX 2026-05-10. Per the launch posture in the original finding ("merchant onboarding should warn cafe users to ignore the Seat/Course picker and use the Takeaway flow"), shipped `docs/restaurant-docs/cafe-pos-onboarding-note.md` — operator guide explaining (a) cafe POS lands on `/pos/restaurant`, (b) ignore Seat picker + Course buttons, (c) use the search bar to add items, (d) use the new W18 Open Tab button for named bar tabs. That note is now superseded by this code fix.
 **Severity:** 🟡 Issue (cafe POS is functional via search bar; UX is misleading/restaurant-shaped, not blocking)
 **Surfaces affected:** `/pos` route resolves to `/pos/restaurant` for both cafe and restaurant presets. Frontend POS UI: top bar shows "New Takeaway / New Delivery / New Drive-Thru" buttons; main area shows "No tables in this floor plan yet. Add tables in Settings → Restaurant Floor." for any tenant where `restaurant_tables` is empty.
 **Found via:** Phase 8.12c cafe ops sweep 2026-05-08, fresh tenant `cafetestphase8` (industry_type=cafe, mode=restaurant)

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Send, Flame, CreditCard, MoreVertical, WifiOff, QrCode } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
+import { usePreset } from "../../../../contexts/PresetContext";
 import RestaurantOverflowMenu from "./RestaurantOverflowMenu";
 
 function useOnlineStatus() {
@@ -44,6 +45,9 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
     orderContext,
     posFlags,
   } = usePOS();
+
+  const { pos_layout_mode } = usePreset();
+  const isCounter = pos_layout_mode === "counter";
 
   const [sending, setSending] = useState(false);
   const [firing, setFiring] = useState(false);
@@ -165,13 +169,15 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
           disabled={cartEmpty || sending || !online}
           tone="ghost"
         />
-        <ActionButton
-          icon={Flame}
-          label={firing ? "Firing…" : `Fire C${activeCourse || 1}`}
-          onClick={fireNextCourse}
-          disabled={firing || !online}
-          tone="ghost"
-        />
+        {!isCounter && (
+          <ActionButton
+            icon={Flame}
+            label={firing ? "Firing…" : `Fire C${activeCourse || 1}`}
+            onClick={fireNextCourse}
+            disabled={firing || !online}
+            tone="ghost"
+          />
+        )}
         {showPayAtTable && (
           <ActionButton
             icon={QrCode}
