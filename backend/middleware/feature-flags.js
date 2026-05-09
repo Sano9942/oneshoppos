@@ -198,6 +198,12 @@ async function getModesMap(tenantId) {
   if (IS_MULTI_TENANT && tenantId && tenantDbManager) {
     try { modeDb = await tenantDbManager.getDb(tenantId); } catch { /* fall back */ }
   }
+  // If init() was never called (e.g. integration tests that build their own
+  // app via createTestApp-pg.js without calling featureFlags.init), modeDb is
+  // undefined. Treat this the same as "tenant_modes table absent" so
+  // requireMode() falls through to its back-compat empty-map branch instead
+  // of 500-ing on .query() of undefined.
+  if (!modeDb) return {};
 
   try {
     const { rows } = await modeDb.query(
