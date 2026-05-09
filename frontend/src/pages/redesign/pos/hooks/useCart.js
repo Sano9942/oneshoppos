@@ -81,15 +81,22 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
   // ── POS Layout fetch (phase2_pos_layouts) — 2-G.13 includes device_id so
   // the backend cascade prefers device > employee > role > outlet > global.
   // Skipped when phase2_pos_layouts is off (default for new tenants).
+  // W43 (2026-05-10): backend returns {layout: null} when no layout is
+  // configured for the outlet. Coerce that to an empty-layout object so the
+  // RestaurantCheckView skeleton (gated on `posLayout === null`) doesn't
+  // render forever for tenants where the flag is ON but no layout exists.
   useEffect(() => {
     if (!posFlags.phase2_pos_layouts) {
-      setPosLayout(null);
+      setPosLayout({ layout_json: [] });
       return;
     }
     const params = new URLSearchParams();
     if (selectedOutletId) params.set("outlet_id", selectedOutletId);
     if (posDeviceId) params.set("device_id", posDeviceId);
-    api.get(`/api/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
+    api
+      .get(`/api/pos-layouts?${params}`)
+      .then((d) => setPosLayout(d.layout || { layout_json: [] }))
+      .catch(() => setPosLayout({ layout_json: [] }));
   }, [selectedOutletId, posDeviceId, posFlags.phase2_pos_layouts]);
 
   // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
