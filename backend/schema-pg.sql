@@ -3712,6 +3712,11 @@ ALTER TABLE customer_subscriptions
   ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES service_projects(id),
   ADD COLUMN IF NOT EXISTS billing_template_id INTEGER;
 
+-- v32 (M2) — subscription billing polish
+ALTER TABLE customer_subscriptions
+  ADD COLUMN IF NOT EXISTS cancel_reason TEXT,
+  ADD COLUMN IF NOT EXISTS grace_period_end TIMESTAMPTZ;
+
 -- ══════════════════════════════════════════════════════════════════════
 -- Phase 5 — Pakistan Integration Depth (v25)
 -- ══════════════════════════════════════════════════════════════════════

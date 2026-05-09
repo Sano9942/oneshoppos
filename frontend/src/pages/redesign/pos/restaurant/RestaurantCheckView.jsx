@@ -18,7 +18,7 @@ import SeatCoursePicker, { useIsPortrait } from "./SeatCoursePicker";
 // active seat / course. No duplicate add logic here.
 
 export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp, onOpenPayAtTable }) {
-  const { posLayout, addToCart, suggestions, money, total } = usePOS();
+  const { posLayout, posFlags, addToCart, suggestions, money, total } = usePOS();
   const scrollRef = useRef(null);
   const isPortrait = useIsPortrait(900);
 
@@ -58,7 +58,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
                   </button>
                 ))}
               </div>
-            ) : posLayout === null ? (
+            ) : posLayout === null && posFlags?.phase2_pos_layouts ? (
               <div className="grid grid-cols-4 gap-2" aria-label="Loading menu">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="h-14 rounded-lg bg-slate-200/60 animate-pulse" />

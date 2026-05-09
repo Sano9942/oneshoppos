@@ -22,11 +22,13 @@
 | Severity | Open | Fixed | Deferred |
 |---|---|---|---|
 | 🔴 Blocker | 0 | 16 | 0 |
-| 🟡 Issue | 2 | 8 | 0 |
-| 🔵 Polish | 14 | 7 | 0 |
-| **Total** | **16** | **31** | **0** |
+| 🟡 Issue | 4 | 11 | 0 |
+| 🔵 Polish | 13 | 8 | 0 |
+| **Total** | **17** | **35** | **0** |
 
-Last update: 2026-05-08 (Phase 7 Cafe Parity Pass closed — 0 new findings. Created `cafetest1` tenant via signup wizard (Cafe / Quick Service preset, PK, free plan), walked all 5 cafe-vs-restaurant diffs, deleted at end. **All 3 P5-documented diffs verified live:** (a) dashboard has NO floor plan widget tile, (b) sidebar group shows "CUSTOMERS" with all "Customer" labels (not "GUESTS" / "Guests" as restaurant), (c) onboarding step "Add employees" appears (NOT "Set up your floor plan"). **Sample products perfectly match plan §456:** Espresso + Cappuccino (Hot Drinks), Iced Latte (Cold Drinks), Croissant + Sandwich (Bakery). **Flag parity is exact:** FULL OUTER JOIN diff query returned 0 rows — both tenants have 25/34 identical flags + same `mode=restaurant` enabled. industry_type='cafe' vs 'restaurant' drives only preset (labels/widgets/onboarding/sample products), not flags. Cleanup: cafe tenant soft-deleted via /admin/tenants/100, schema dropped immediately. **Operator solved Cloudflare Turnstile manually** (Playwright can't render the widget due to CSP/TrustedHTML; agent filled rest of the form). 0 blockers · 2 issues · 14 polish · 31 fixed unchanged. Earlier entries below.)
+Last update: 2026-05-10 (pre-launch fix-it loop closed — 4 of 4 high-priority items shipped: **W43 ✅** POS layout skeleton now hidden when `phase2_pos_layouts` flag is off (single-line guard at `RestaurantCheckView.jsx:61`); **W38 ✅** healed `grace_period_end` + `cancel_reason` column drift across 3 affected tenants (`livetestauto`, `sanoposlivetest1778021564659`, `cafetestphase8`) AND patched `schema-pg.sql:3711-3717` so all future tenants ship correct (root cause was v32 migration's ALTER TABLE never made it into the schema dump); **W36 ✅** KDS ticket cards now use `bg-(--ui-surface) text-(--ui-text)` instead of `bg-(--ui-bg)` — fixes dark mode contrast cliff at `KDSRedesign.jsx:421`; **W6 ✅** grep audit confirms no code path reads `permissions.includes()` for a Phase 4 perm without first OR-ing `all_access` — Owner's missing literal perms are dead-code-safe by convention. Status Summary: 17 open (was 20: −W43 −W38 −W36; W6 was OPEN-but-untriaged, now FIXED-by-audit so −1 issue), 35 fixed (was 31: +W43 +W38 +W36 +W6). Earlier entries below.)
+
+Earlier: 2026-05-08 (Phase 7 Cafe Parity Pass closed — 0 new findings. Created `cafetest1` tenant via signup wizard (Cafe / Quick Service preset, PK, free plan), walked all 5 cafe-vs-restaurant diffs, deleted at end. **All 3 P5-documented diffs verified live:** (a) dashboard has NO floor plan widget tile, (b) sidebar group shows "CUSTOMERS" with all "Customer" labels (not "GUESTS" / "Guests" as restaurant), (c) onboarding step "Add employees" appears (NOT "Set up your floor plan"). **Sample products perfectly match plan §456:** Espresso + Cappuccino (Hot Drinks), Iced Latte (Cold Drinks), Croissant + Sandwich (Bakery). **Flag parity is exact:** FULL OUTER JOIN diff query returned 0 rows — both tenants have 25/34 identical flags + same `mode=restaurant` enabled. industry_type='cafe' vs 'restaurant' drives only preset (labels/widgets/onboarding/sample products), not flags. Cleanup: cafe tenant soft-deleted via /admin/tenants/100, schema dropped immediately. **Operator solved Cloudflare Turnstile manually** (Playwright can't render the widget due to CSP/TrustedHTML; agent filled rest of the form). 0 blockers · 2 issues · 14 polish · 31 fixed unchanged. Earlier entries below.)
 
 Earlier: 2026-05-08 (Phase 6 closed — 13 of 13 sub-sections walked. **W36 🟡 NEW** KDS ticket cards unreadable in dark mode (`KDSRedesign.jsx:421` uses `bg-(--ui-bg)` page-bg token + item-name spans lack explicit text color → black-on-near-black ~1.0 contrast; verified live via Playwright DOM inspection). **W37 🔵 NEW** onboarding checklist `floor_plan` step always shows undone (`DashboardOnboarding.jsx:79` hardcoded `done: false` + 8 other vertical steps share the same shape). B2 (Manager 21 perms) live-verified end-to-end. Cashier-role tenant separation verified — no Restaurant section, direct nav blocked, but POS terminal accessible (correct since cashiers ring up restaurant orders). Cross-tenant isolation bulletproof — JWT `tid` wins, x-tenant-slug header ignored. Day-parting + pay-at-table edges + session-expired modal all source-verified (gates explicit; live triggers expensive). KDS stress test passes — 13 simultaneous tickets handled, recall mechanism works. Status Summary: 16 open (was 14, +W36 +W37), 31 fixed unchanged. Earlier entries below.)
 
@@ -428,9 +430,9 @@ Confirms P10 is live: provisioner-set role name `"Admin"` persists despite setup
 
 ---
 
-### W6 — Owner's `permissions` array lacks literal Phase 4 perms; `hasPerm("all_access")` short-circuit is the only thing keeping Restaurant routes accessible
+### W6 — Owner's `permissions` array lacks literal Phase 4 perms; `hasPerm("all_access")` short-circuit is the only thing keeping Restaurant routes accessible ✅ FIXED (verified-clean-by-audit)
 
-**Status:** OPEN
+**Status:** ✅ FIXED — grep audit 2026-05-10 confirmed no code path reads `permissions.includes()` for a Phase 4 perm without first OR-ing `all_access`. Frontend: only `auth/AuthProvider.jsx:159` reads `permissions.includes` directly (the `hasPerm` definition itself, which short-circuits on `all_access`). Backend: every `perms.includes(specificPerm)` check is preceded by `perms.includes("all_access")` OR-clause (verified across `middleware/permissions.js`, `middleware/tenant-auth.js`, `routes/auth.js`, `routes/approval-policies.js`, `routes/employees.js`, `services/manager-pin.js`, `routes/outlets.js`, `routes/registerAllRoutes.js`, `routes/roles.js`, `tests/`). The Owner's missing literal Phase 4 perms are dead-code-safe by convention. No fix shipped — the lint/grep-rule path (option b in the original Fix Path) is satisfied by current code already. If a future contributor adds a check that violates the convention, it would be introduced fresh, not retrofitted.
 **Severity:** 🟡 ISSUE (latent — depends on whether any code does `permissions.includes("manage_restaurant")` instead of `hasPerm("manage_restaurant")`)
 **Surfaces affected:** any route or component that bypasses `hasPerm()` and reads the `permissions` array directly
 **Found via:** Playwright walkthrough 2026-05-07, Phase 1 — `/api/auth/me` response inspection
@@ -2824,9 +2826,9 @@ Screenshots: `restaurant-walkthrough-fix-w28-verified-2026-05-08.png`, `restaura
 
 ---
 
-### W36 — KDS ticket cards unreadable in dark mode (text-on-bg contrast ~1.0)
+### W36 — KDS ticket cards unreadable in dark mode (text-on-bg contrast ~1.0) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10 — `KDSRedesign.jsx:421` ticket card root now uses `bg-(--ui-surface) text-(--ui-text)` instead of `bg-(--ui-bg)` with no text color. Card body now differs from page bg, and item-name spans inherit `--ui-text` (light in dark mode, dark in light). Existing `text-(--ui-text-muted)` on server name + notes still wins (explicit override). Header strip retains `bg-(--ui-bg-hover)` for visual hierarchy. Footer (Bump/Recall buttons) unaffected — Button components have own colors.
 **Severity:** 🟡 Issue (kitchen staff can't read tickets if dark mode is enabled)
 **Surfaces affected:** `frontend/src/pages/redesign/KDSRedesign.jsx:421` (ticket card outer div), all KDS ticket items
 **Found via:** Phase 6.2 dark-mode walk-through 2026-05-08
@@ -3020,9 +3022,9 @@ Screenshot: `restaurant-walkthrough-7-cafe-dashboard-2026-05-08.png` (cafe dashb
 
 ---
 
-### W38 — `subscription-grace-worker` errors hourly for tenant `livetestauto` (`column cs.grace_period_end does not exist`)
+### W38 — `subscription-grace-worker` errors hourly for tenant `livetestauto` (`column cs.grace_period_end does not exist`) ✅ FIXED (root-cause + heal)
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10. Audit found drift was wider than originally reported: **3 of 4 active tenant schemas** were missing `grace_period_end` AND `cancel_reason` columns (only `tenant_livetest1` had them). All 4 tenants reported `schema_version=85` despite the v32 migration silently never applying — classic B1-class drift where provisioner pre-stamps `schema_version` but `schema-pg.sql` lacks the corresponding DDL. **Two-part fix:** (1) ALTER TABLE on all 3 affected tenants (`livetestauto`, `sanoposlivetest1778021564659`, `cafetestphase8`) added both columns — verified via post-fix `information_schema.columns` query that all 4 schemas now have both; (2) added matching `ALTER TABLE customer_subscriptions ADD COLUMN IF NOT EXISTS cancel_reason TEXT, ADD COLUMN IF NOT EXISTS grace_period_end TIMESTAMPTZ;` to `backend/schema-pg.sql:3715-3717` so all future tenants ship correct. Worker should now run end-to-end on next hourly tick without the `42703` error for `livetestauto`. **Note:** this likely indicates other v32+ migrations also drifted from `schema-pg.sql` — feeds into B1.5's broader schema-sync session.
 **Severity:** 🟡 Issue (silent per-tenant data corruption — grace period transitions never run for affected tenants; any others with the same drift would also be silently skipped)
 **Surfaces affected:** `backend/workers/subscription-grace-worker-boss.js:68` + `tenant_livetestauto.customer_subscriptions` schema (column missing)
 **Found via:** Phase 8 pre-launch `/check-services` 2026-05-08
@@ -3290,9 +3292,9 @@ Cafe CAN ship at launch alongside restaurant if Phase 8.12c decision is to keep 
 
 ---
 
-### W43 — POS layout tile skeleton stuck forever when `phase2_pos_layouts` flag isn't seeded — affects all new tenants (cafe AND restaurant)
+### W43 — POS layout tile skeleton stuck forever when `phase2_pos_layouts` flag isn't seeded — affects all new tenants (cafe AND restaurant) ✅ FIXED
 
-**Status:** OPEN
+**Status:** ✅ FIXED 2026-05-10 — `RestaurantCheckView.jsx:61` now gates the skeleton on `posLayout === null && posFlags?.phase2_pos_layouts` instead of just `posLayout === null`. When the flag isn't seeded, `posFlags.phase2_pos_layouts` is `undefined` → skeleton branch returns null → no perpetual loader. Search bar above remains functional. Also added `posFlags` to the destructure of `usePOS()` at line 21. Day-1 first impression for cafe AND restaurant tenants no longer shows a hung-component skeleton.
 **Severity:** 🟡 Issue (looks broken to merchants on day 1; not blocking — search bar still works above the skeleton)
 **Surfaces affected:** `/pos/restaurant` route — anyone landing on `RestaurantCheckView` while `posFlags.phase2_pos_layouts` evaluates falsy.
 **Found via:** Phase 8.12c cafe ops sweep 2026-05-08 — observed on `cafetestphase8`. Confirmed via source review affects restaurant tenants too.

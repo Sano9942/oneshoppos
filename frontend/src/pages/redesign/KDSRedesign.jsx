@@ -418,7 +418,7 @@ export default function KDSRedesign() {
             // orders by priority DESC, so expedited tickets render first.
             const isExpedited = Number(ticket.priority || 0) >= 100;
             return (
-              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-red-500" : timeBorder(mins)} rounded-lg bg-(--ui-bg) overflow-hidden`}>
+              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-red-500" : timeBorder(mins)} rounded-lg bg-(--ui-surface) text-(--ui-text) overflow-hidden`}>
                 {isExpedited && (
                   <div className="px-3 py-1 bg-red-500 text-white text-xs font-semibold uppercase tracking-wide">
                     Expedite
