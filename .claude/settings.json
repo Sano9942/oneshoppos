@@ -200,7 +200,14 @@
       "mcp__claude_ai_Vercel__deploy_to_vercel",
       "mcp__plugin_playwright_playwright__browser_network_request",
       "PowerShell($files = git log --since=\"30 days ago\" --name-only --pretty=format: | Sort-Object -Unique | Where-Object { $_ -ne \"\" }; $files | Out-File -Encoding utf8 d:\\\\newprojects\\\\oneshoppos\\\\ORPHAN_AUDIT.tmp.txt; \"Touched files in last 30d: $\\($files.Count\\)\")",
-      "PowerShell(cd d:\\\\newprojects\\\\oneshoppos; git log --since=\"30 days ago\" --diff-filter=A --name-only --pretty=format: | Sort-Object -Unique | Where-Object { $_ -ne \"\" })"
+      "PowerShell(cd d:\\\\newprojects\\\\oneshoppos; git log --since=\"30 days ago\" --diff-filter=A --name-only --pretty=format: | Sort-Object -Unique | Where-Object { $_ -ne \"\" })",
+      "PowerShell(supabase --version)",
+      "PowerShell(npx supabase --version)",
+      "PowerShell(wrangler --version)",
+      "PowerShell(npx wrangler --version)",
+      "mcp__claude_ai_Vercel__get_deployment",
+      "Bash(date +%s > d:/newprojects/oneshoppos/.claude/.last-service-check && cat d:/newprojects/oneshoppos/.claude/.last-service-check)",
+      "Bash(mkdir -p .claude/lighthouse-2026-05-08 2>&1 | head -1; ls .claude/ 2>&1 | head -5)"
     ],
     "additionalDirectories": [
       "\\tmp",

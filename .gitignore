@@ -26,6 +26,9 @@ Thumbs.db
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Lighthouse raw JSON reports — local only; commit summaries to docs/ instead
+.claude/lighthouse-*/
+
 # Codex / other AI tool local config (contains secrets — never commit)
 .codex/
 .agents/
