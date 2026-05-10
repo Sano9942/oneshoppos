@@ -9,7 +9,9 @@ const STORAGE_KEY = "onboarding_dismissed";
 function buildSteps(data, onNavigate, presetSteps, labelFn) {
   const hasShiftOpen = Array.isArray(data?.operationalReadiness)
     && data.operationalReadiness.some((o) => o.shift_open);
-  const hasSales = (data?.saleCount ?? 0) > 0 || (data?.totalRevenueToday ?? 0) > 0;
+  const hasSales = (data?.lifetimeSaleCount ?? 0) > 0
+    || (data?.saleCount ?? 0) > 0
+    || (data?.totalRevenueToday ?? 0) > 0;
   const hasProducts = (data?.inventory?.total_products ?? 0) > 0;
 
   const ALL_STEPS = {

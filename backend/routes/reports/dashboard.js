@@ -508,6 +508,7 @@ module.exports = function (app, deps) {
       let ticketCount = 0;
       let contractCount = 0;
       let roomCount = 0;
+      let lifetimeSaleCount = 0;
       let testReceiptPrinted = false;
       let countryCode = req.company?.country_code || null;
       let fbrBannerDismissed = false;
@@ -550,6 +551,12 @@ module.exports = function (app, deps) {
       } catch { /* table missing — leave 0 */ }
       try {
         const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM sales WHERE voided = false"
+        );
+        lifetimeSaleCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
           "SELECT test_receipt_printed_at, country_code, fbr_banner_dismissed FROM company_profile WHERE id = 1"
         );
         testReceiptPrinted = r?.test_receipt_printed_at != null;
@@ -574,6 +581,7 @@ module.exports = function (app, deps) {
         ticketCount,
         contractCount,
         roomCount,
+        lifetimeSaleCount,
         testReceiptPrinted,
         countryCode,
         fbrBannerDismissed,
