@@ -12,8 +12,8 @@ const BUSINESS_TYPE_CATEGORIES = [
     label: "Retail",
     types: [
       { value: "general_retail", label: "Retail Store", description: "Sell products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
-      { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600", comingSoon: true },
-      { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600", comingSoon: true },
+      { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600" },
+      { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600" },
     ],
   },
   {

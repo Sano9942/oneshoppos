@@ -266,7 +266,10 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         // 1f. Per-industry flag bundles. See services/retail-flag-preset.js
         // for the per-industry flag lists. Other industries (salon, clinic,
         // rentals, etc.) skip this entirely until their own bundles ship.
-        if (industry_type === "general_retail") {
+        // Grocery + wholesale share the retail bundle — same buy_sell /
+        // b2b_distribution flow, same feature surface (barcode, price lists,
+        // loyalty, gift cards, holds, COD, SMS) is appropriate.
+        if (industry_type === "general_retail" || industry_type === "grocery" || industry_type === "wholesale") {
           await seedRetailFlags(client);
         } else if (industry_type === "restaurant" || industry_type === "cafe") {
           await seedRestaurantFlags(client);
