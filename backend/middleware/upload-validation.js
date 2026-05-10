@@ -70,9 +70,36 @@ const rasterImageFileFilter = makeImageFileFilter(
   ALLOWED_RASTER_IMAGE_EXTS
 );
 
+// ── Clinical document allowlist (M72) ────────────────────────────────
+// Treatment-plans uploads accept lab reports, referrals, imaging etc.
+// — not strictly images. Allow raster images + PDF + plain text;
+// reject SVG (same-origin XSS), HTML, scripts, executables.
+const ALLOWED_CLINICAL_DOC_MIMES = new Set([
+  ...ALLOWED_RASTER_IMAGE_MIMES,
+  "application/pdf",
+  "text/plain",
+]);
+const ALLOWED_CLINICAL_DOC_EXTS = new Set([
+  ...ALLOWED_RASTER_IMAGE_EXTS,
+  ".pdf",
+  ".txt",
+]);
+
 /**
- * Sniff the first bytes of a buffer and return a canonical image MIME, or
- * null if the magic bytes don't match any known image format.
+ * Multer fileFilter for clinical documents. Mirrors imageFileFilter but
+ * with a different allowlist. Rejects SVG, HTML, JS, EXE — anything that
+ * could execute when fetched from a same-origin URL (P31) or hide as a
+ * faked image (P32).
+ */
+const clinicalDocFileFilter = makeImageFileFilter(
+  ALLOWED_CLINICAL_DOC_MIMES,
+  ALLOWED_CLINICAL_DOC_EXTS
+);
+
+/**
+ * Sniff the first bytes of a buffer and return a canonical MIME (for
+ * images + PDFs), or null if the magic bytes don't match any known
+ * format.
  *
  * P32 — multer's `file.mimetype` comes from the client multipart envelope
  * and can be lied about. detectImageType reads the actual bytes so a
@@ -123,19 +150,31 @@ function detectImageType(buffer) {
     return "image/tiff";
   }
 
+  // PDF: "%PDF-"
+  if (
+    b.length >= 5 &&
+    b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d
+  ) {
+    return "application/pdf";
+  }
+
   return null;
 }
 
 /**
  * True if the buffer's magic bytes match the claimed MIME type.
- * False on mismatch or unknown bytes. Note: SVG is text-based and has no
- * magic bytes; SVG callers should use the rasterImageFileFilter (which
- * already excludes SVG) rather than relying on byte-level checks here.
+ * False on mismatch or unknown bytes. Note: SVG and text/plain are
+ * text-based and have no magic bytes; SVG should be excluded at the
+ * fileFilter layer (rasterImageFileFilter / clinicalDocFileFilter) and
+ * text/plain skips this check (returns true).
  */
 function verifyImageMagicBytes(buffer, claimedMime) {
+  const claim = String(claimedMime || "").toLowerCase();
+  // text/plain has no magic bytes — rely on filter allowlist + extension check
+  if (claim === "text/plain") return true;
   const sniffed = detectImageType(buffer);
   if (!sniffed) return false;
-  return sniffed === String(claimedMime || "").toLowerCase();
+  return sniffed === claim;
 }
 
 /**
@@ -162,6 +201,7 @@ function safeExtension(originalname, mimetype) {
 module.exports = {
   imageFileFilter,
   rasterImageFileFilter,
+  clinicalDocFileFilter,
   safeExtension,
   detectImageType,
   verifyImageMagicBytes,
@@ -169,4 +209,6 @@ module.exports = {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_RASTER_IMAGE_MIMES,
   ALLOWED_RASTER_IMAGE_EXTS,
+  ALLOWED_CLINICAL_DOC_MIMES,
+  ALLOWED_CLINICAL_DOC_EXTS,
 };

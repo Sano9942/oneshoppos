@@ -230,12 +230,16 @@ module.exports = function createCompanyProfileRouter({
   });
 
   const { uploadToR2 } = require("../../utils/r2");
-  const { imageFileFilter, safeExtension } = require("../../middleware/upload-validation");
+  const {
+    rasterImageFileFilter,
+    safeExtension,
+    verifyImageMagicBytes,
+  } = require("../../middleware/upload-validation");
 
   const companyLogoUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: imageFileFilter,
+    fileFilter: rasterImageFileFilter,
   });
 
   router.post(
@@ -246,6 +250,9 @@ module.exports = function createCompanyProfileRouter({
     async (req, res) => {
       if (!req.file)
         return res.status(400).json({ error: "Logo file is required" });
+      if (!verifyImageMagicBytes(req.file.buffer, req.file.mimetype)) {
+        return res.status(400).json({ error: "File contents do not match the declared image type" });
+      }
       try {
         const ext = safeExtension(req.file.originalname, req.file.mimetype);
         const filename = `company_logo_${Date.now()}${ext}`;

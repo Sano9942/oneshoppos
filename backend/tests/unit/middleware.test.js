@@ -445,6 +445,7 @@ const UPLOAD_VALIDATION_PATH = path.resolve(
 const {
   imageFileFilter,
   rasterImageFileFilter,
+  clinicalDocFileFilter,
   safeExtension,
   detectImageType,
   verifyImageMagicBytes,
@@ -641,6 +642,114 @@ describe("verifyImageMagicBytes (P32)", () => {
   it("rejects when bytes do not match any known image format", () => {
     const buf = Buffer.from("ZIP_FILE_OR_RANDOM_GARBAGE_NOT_AN_IMAGE");
     expect(verifyImageMagicBytes(buf, "image/png")).toBe(false);
+  });
+});
+
+// ── M72 — clinical document upload hardening ────────────────────────────
+// treatment-plans.js had no fileFilter at all, so any binary including
+// SVG-with-script and EXE-as-PDF could land on R2. company-profile/logo
+// used the lax imageFileFilter (allowed SVG). Both now use stricter
+// filters + post-upload magic-byte verification.
+describe("clinicalDocFileFilter (M72 — clinical doc upload allowlist)", () => {
+  function makeFile(mimetype, originalname = "doc.pdf") {
+    return { mimetype, originalname };
+  }
+
+  it("accepts application/pdf", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("application/pdf", "lab.pdf"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts text/plain", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("text/plain", "notes.txt"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/jpeg (raster image — e.g. xray photo)", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("image/jpeg", "xray.jpg"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/png", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("image/png", "scan.png"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("REJECTS image/svg+xml (P31 same-origin XSS)", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("image/svg+xml", "evil.svg"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("REJECTS .svg extension even with image/png MIME", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("image/png", "evil.svg"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toContain(".svg");
+  });
+
+  it("REJECTS text/html (script execution if served same-origin)", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("text/html", "evil.html"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("REJECTS application/javascript", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("application/javascript", "x.js"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("REJECTS application/octet-stream (generic binary blob)", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("application/octet-stream", "x.bin"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("REJECTS .exe extension even when MIME claims pdf", () => {
+    const cb = vi.fn();
+    clinicalDocFileFilter({}, makeFile("application/pdf", "virus.exe"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toContain(".exe");
+  });
+});
+
+describe("detectImageType — PDF magic bytes (M72)", () => {
+  it("detects application/pdf from %PDF- header", () => {
+    const buf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+    expect(detectImageType(buf)).toBe("application/pdf");
+  });
+
+  it("rejects truncated PDF header (first 4 bytes only)", () => {
+    const buf = Buffer.from([0x25, 0x50, 0x44, 0x46]);
+    expect(detectImageType(buf)).toBeNull();
+  });
+});
+
+describe("verifyImageMagicBytes — clinical doc types (M72)", () => {
+  it("accepts PDF bytes claimed as application/pdf", () => {
+    const buf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+    expect(verifyImageMagicBytes(buf, "application/pdf")).toBe(true);
+  });
+
+  it("rejects EXE bytes claimed as application/pdf", () => {
+    const mz = Buffer.alloc(16);
+    mz.write("MZ", 0);
+    expect(verifyImageMagicBytes(mz, "application/pdf")).toBe(false);
+  });
+
+  it("rejects PNG bytes claimed as application/pdf", () => {
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(verifyImageMagicBytes(buf, "application/pdf")).toBe(false);
+  });
+
+  it("accepts text/plain without inspecting bytes (no magic for text)", () => {
+    expect(verifyImageMagicBytes(Buffer.from("hello world"), "text/plain")).toBe(true);
+    expect(verifyImageMagicBytes(Buffer.alloc(0), "text/plain")).toBe(true);
   });
 });
 

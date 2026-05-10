@@ -33,13 +33,22 @@ module.exports = function registerTreatmentPlanRoutes(app, deps) {
   const tp = require("../services/treatment-plan-service");
   const deposits = require("../services/treatment-plan-deposits");
   const { uploadToR2 } = require("../utils/r2");
+  const {
+    clinicalDocFileFilter,
+    verifyImageMagicBytes,
+  } = require("../middleware/upload-validation");
 
   const gate = [requireMode("treatment_plans"), requireFeature("phase4_treatment_plans"), requirePerm("manage_treatment_plans")];
 
-  // Multer for clinical document uploads — 50MB limit per the plan
+  // Multer for clinical document uploads — 50MB limit per the plan.
+  // M72: clinicalDocFileFilter restricts uploads to raster images, PDFs,
+  // and plain text. Rejects SVG (same-origin XSS — P31) and any other
+  // executable/scriptable type. Magic-byte verification post-upload (P32)
+  // runs in the route handler.
   const docUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: clinicalDocFileFilter,
   });
 
   // ── Patient subjects ───────────────────────────────────────────────
@@ -329,6 +338,9 @@ module.exports = function registerTreatmentPlanRoutes(app, deps) {
   app.post("/api/treatment-plans/:id/documents", ...gate, docUpload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "File required" });
+      if (!verifyImageMagicBytes(req.file.buffer, req.file.mimetype)) {
+        return res.status(400).json({ error: "File contents do not match the declared type" });
+      }
       const parsed = uploadClinicalDocumentSchema.safeParse({
         document_type: req.body.document_type,
         title: req.body.title,
