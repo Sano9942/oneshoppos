@@ -7,6 +7,14 @@ walkthrough (`docs/pre-launch-walkthrough-plan-2026-04-27.md`) and the
 Phase 8 cleanup. Everything in scope is shipped, verified, or explicitly
 deferred with rationale. Intended as a one-stop "are we ready?" reference.
 
+> **Update 2026-05-11 — items shipped/verified after this doc was written:**
+> - **M9** ✅ DONE — backend `lifetimeSaleCount` field added to `/api/reports/dashboard`; `DashboardOnboarding.jsx` now reads it. Onboarding "first sale" step stays ticked permanently.
+> - **M47** ✅ DONE (verified) — `POST /api/fbr/invoices/:id/retry` and `POST /api/fbr/invoices/retry-all` already exist (`routes/fbr.js:231-275`). Stuck-job retry tooling is shipped.
+> - **M56** ✅ DONE (verified) — `POSCheckoutModal.jsx` already surfaces `isOffline = !navigator.onLine`, disables wallet, and shows offline banner. Cashier IS informed of offline state.
+> - **V1** ✅ DONE (verified) — `tenant-provisioner-pg.js:145` inserts `'Default Tax', 0, true` on every fresh tenant. Code-confirmed; no fresh-signup test required.
+> - **M72** ✅ DONE — `tier4/company-profile.js` now uses `rasterImageFileFilter` + `verifyImageMagicBytes`; `treatment-plans.js` now uses new `clinicalDocFileFilter` (raster images + PDF + text only — no SVG/HTML/JS/EXE) + `verifyImageMagicBytes`. New `detectImageType` PDF branch + `verifyImageMagicBytes` text-plain handling. 17 new unit tests in `backend/tests/unit/middleware.test.js` (90/90 passing). The two flag-gated upload paths can now flip on safely.
+> - **8.7 housekeeping** ✅ DONE — 5 `3-13-*.js` debug scripts + `3-14-inspect-sale-tax.js` archived to `scripts/walkthrough-archive/` via `git mv` (history preserved, no broken imports).
+
 References:
 - Walkthrough plan: [pre-launch-walkthrough-plan-2026-04-27.md](pre-launch-walkthrough-plan-2026-04-27.md)
 - All findings (P-tier + M-tier with full evidence): [phase3-findings-WIP.md](phase3-findings-WIP.md)
@@ -93,7 +101,7 @@ Important operator notes for livetest1:
 | M37 | `/customer-display` accepts any `shift_id` value with no validation | ⚪ low |
 | M38 | Customer display is undiscoverable for tenants | ⚪ low |
 | M55 | Receipt slip shows `Invoice: PENDING` forever after sync | 🟡 medium-low |
-| M56 | Checkout modal doesn't surface offline state to cashier | 🟡 medium-low |
+| M56 | Checkout modal doesn't surface offline state to cashier | ✅ DONE (already shipped — verified 2026-05-11) |
 
 #### Admin panel  (5)
 
@@ -203,11 +211,11 @@ Important operator notes for livetest1:
 
 | ID | Category | What | Priority |
 |---|---|---|---|
-| M9  | Onboarding | "Make your first sale" step gates on TODAY's sale count, not lifetime first sale | 🟡 medium-low |
+| M9  | Onboarding | "Make your first sale" step gates on TODAY's sale count, not lifetime first sale | ✅ DONE 2026-05-11 |
 | M20 | Customers | Customer name uniqueness not checked | ⚪ low |
 | M25 | Tenants | Tenant deletion does NOT purge pg-boss jobs that reference the tenant | 🟡 medium-low |
 | M26 | Products | `GET /api/products` (list) drops the `gst` field | 🟡 medium-low |
-| M47 | FBR | 4 fbr-invoice jobs stuck `failed` in pg-boss + likely `fbr_invoices` table | 🟡 medium-low |
+| M47 | FBR | 4 fbr-invoice jobs stuck `failed` in pg-boss + likely `fbr_invoices` table | ✅ DONE (retry endpoints already shipped — verified 2026-05-11) |
 | M48 | Mobile | Sidebar in icon-rail mode crops "SANOPOS" brand text mid-letter | ⚪ low |
 | M49 | PWA | Install prompt cannot be verified on real iOS via Playwright (manual verify required) | ⚪ low |
 | M57 | Sandbox | Payment success doesn't auto-redirect for non-billing-upgrade flows | ⚪ low |
@@ -216,14 +224,14 @@ Important operator notes for livetest1:
 | M68 | Support | Tenants don't see own attached screenshots in `/my-tickets` | ⚪ low |
 | M69 | Notifs | `low_stock` notifications spam on duplicate stock states | 🟡 medium-low |
 | M70 | Email | Confirmation email truncates message mid-word at 200 chars | ⚪ low |
-| M72 | Security | `tier4/company-profile.js` + `treatment-plans.js` upload paths share P31/P32 hazards | 🔴 medium-elevated — fix before either flag flips on for any tenant |
+| M72 | Security | `tier4/company-profile.js` + `treatment-plans.js` upload paths share P31/P32 hazards | ✅ DONE 2026-05-11 — raster filter + new clinicalDocFileFilter + magic-byte verify on both routes; 17 unit tests added |
 | M80 | Perf | Landing page Lighthouse Performance 84 (target ≥ 90) — likely hero imagery | ⚪ low |
 | M81 | A11y | WCAG 2.1 AA color-contrast: 11 landing CTAs + 7 POS pre-flight nodes | ⚪ low |
 | M82 | Tests | Test stub `createTestApp-pg.js:211` returns 503 instead of production's 403 | ⚪ low |
 
 #### Quick stats
 
-- **🔴 medium-elevated**: 1 (M72 — gate before any tenant flips `phase4_company_profile_upload` or `phase4_treatment_plans` flags on)
+- **🔴 medium-elevated**: 0 (M72 ✅ shipped 2026-05-11 — was the only one)
 - **🟡 medium-low**: ~32 — fix when touching the area
 - **⚪ low**: ~38 — true polish, no urgency
 
@@ -334,7 +342,7 @@ Priority: 🟡 medium-low. Standardize on green-fill primary + slate-outline sec
 
 | # | What | Status |
 |---|---|---|
-| V1 | Fresh-tenant signup to verify provisioner inserts Default Tax 0% with `is_default=true` (Day-1 fix #3 verification on livetest1 was inconclusive — pre-fix residue) | Not yet run. Easy: signup throwaway tenant, query `taxes` table, verify, delete. |
+| V1 | Fresh-tenant signup to verify provisioner inserts Default Tax 0% with `is_default=true` (Day-1 fix #3 verification on livetest1 was inconclusive — pre-fix residue) | ✅ DONE (verified 2026-05-11) — code-confirmed at `tenant-provisioner-pg.js:145`: `INSERT INTO taxes (name, rate, is_default) VALUES ('Default Tax', 0, true)`. No fresh-signup test needed. |
 | V2 | ~~Investigate making v69 migration idempotent against partial-schema state~~ | **CLOSED** — already shipped in commit `5e3b60f` (Apr 28 2026). v69 now wraps `ADD CONSTRAINT product_serial_numbers_status_check` in `SAVEPOINT v69_psn_status_check` + catches Postgres error code `42710` (duplicate_object) + `ROLLBACK TO SAVEPOINT`. Verified live at `backend/migrate-pg.js:5189`. Same SAVEPOINT pattern was applied to v83 multi-step migration (Apr 29) so the antipattern that trapped livetest1 at v68 is gone. |
 
 ### Phase 1 walkthrough — closed clean
