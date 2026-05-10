@@ -6265,6 +6265,37 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 86,
+    description:
+      "Legal consent tracking — tos_version, privacy_version, consent_at, consent_ip on public.tenants",
+    up: async (client) => {
+      // Capture which version of the Terms / Privacy Policy a tenant agreed
+      // to at signup, plus when and from what IP. Required for defensible
+      // proof-of-consent if the documents are ever challenged. Lives on
+      // public.tenants only — tenant schemas don't carry this.
+      try {
+        await client.query("SAVEPOINT v86_consent_columns");
+        const { rows: t } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'tenants'
+        `);
+        if (t.length) {
+          await client.query(`
+            ALTER TABLE tenants
+              ADD COLUMN IF NOT EXISTS tos_version     TEXT,
+              ADD COLUMN IF NOT EXISTS privacy_version TEXT,
+              ADD COLUMN IF NOT EXISTS consent_at      TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS consent_ip      TEXT
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v86_consent_columns");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v86_consent_columns");
+        console.warn(`[migrate-pg v86] consent columns skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

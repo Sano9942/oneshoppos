@@ -87,9 +87,10 @@ export default function SignupPage() {
     if (!valid) return;
     setLoading(true);
     try {
+      const consent = { tos_accepted: true, tos_version: "1.0", privacy_version: "1.0" };
       const payload = captchaRequired
-        ? { ...form, turnstile_token: turnstileToken }
-        : form;
+        ? { ...form, ...consent, turnstile_token: turnstileToken }
+        : { ...form, ...consent };
       const data = await api.post("/api/auth/signup", payload);
       // PR 8 flow: backend no longer hands out setupToken until email is
       // verified. Show "Check your email" confirmation. Legacy fallback (if

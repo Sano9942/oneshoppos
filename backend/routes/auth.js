@@ -788,7 +788,11 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     }
 
-    const { store_name, owner_name, email, password } = req.body;
+    const { store_name, owner_name, email, password, tos_version, privacy_version } = req.body;
+    // Legal-doc versions default to "1.0" if the client didn't supply them.
+    // Schema validation already enforced tos_accepted === true at this point.
+    const tosVersion = tos_version || "1.0";
+    const privacyVersion = privacy_version || "1.0";
 
     // Slug = lowercase store name with all non-alphanumerics stripped.
     // "Live Test 1" → "livetest1", "Sano POS" → "sanopos". Underscores
@@ -826,9 +830,12 @@ module.exports = function registerAuthRoutes(app, deps) {
       await masterDb.query(
         `UPDATE tenants SET plan = 'free', max_outlets = $1, max_employees = $2, max_products = $3,
                             trial_ends_at = NULL, payment_status = 'active',
-                            email_verified_at = NULL, email_verification_token = $4
-         WHERE id = $5`,
-        [limits.max_outlets, limits.max_employees, limits.max_products, verificationToken, result.tenantId]
+                            email_verified_at = NULL, email_verification_token = $4,
+                            tos_version = $5, privacy_version = $6,
+                            consent_at = NOW(), consent_ip = $7
+         WHERE id = $8`,
+        [limits.max_outlets, limits.max_employees, limits.max_products, verificationToken,
+         tosVersion, privacyVersion, clientIp, result.tenantId]
       );
 
       // Update the admin employee with password and email
