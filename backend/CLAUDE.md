@@ -66,9 +66,10 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 ## Database
 
 ### `db-pg.js`
-Direct Postgres pool (size: 20). Exports: `query`, `transaction`, `getClient`, `end`, `pool`.
+Postgres pool (size: 20) connecting via Supabase **Transaction Pooler** (Supavisor, port 6543 in `DATABASE_URL`). Exports: `query`, `transaction`, `getClient`, `end`, `pool`.
 - Does NOT load dotenv — callers are responsible
 - SSL disabled in non-prod
+- Transaction-mode pooling does NOT preserve session-level features across queries: `LISTEN/NOTIFY`, prepared statements, `SET SESSION`, and cross-statement advisory locks won't work. Codebase doesn't use any today. Any future feature needing session-level Postgres must connect via direct port `5432`, not the pooler.
 - Results: `{ rows, rowCount }` — access via `rows[0]`, `rows`, `rowCount`
 
 **Postgres query conventions:**

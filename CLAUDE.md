@@ -428,15 +428,15 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 
 - Pool size: **20 connections** (hardcoded in `backend/db-pg.js`)
 - All tenants share this pool — no per-tenant pooling
-- Supabase Pro allows ~200 direct connections; current 20-conn pool is comfortably under cap
-- **Quick win:** Enable Transaction Pooler (Supabase dashboard → Settings → Database → Connection Pooling, mode=Transaction), then update Railway `DATABASE_URL` to port 6543. Frees direct-connection budget for workers + admin tools.
+- **Supabase Transaction Pooler is ENABLED** (verified 2026-05-11 via `pg_stat_activity`: `application_name='Supavisor'`). Railway `DATABASE_URL` connects on port `6543` (transaction-mode pooling), NOT direct port `5432`. Each app-side connection only holds a real Postgres connection for the duration of a query, not the full request lifecycle.
+- **Caveat**: transaction-mode pooling does NOT preserve session-level features across queries — `LISTEN/NOTIFY`, prepared statements, `SET SESSION`, advisory locks held across statements won't work. Codebase doesn't use any of these today (parameterized `$1/$2` queries only, pg-boss handles its own LISTEN via direct connection). If a future feature needs session-level Postgres, that connection must go via direct port `5432`, not the pooler.
 
 ### Realistic Pro Tenant Capacity
 
 | Scenario | Tenant Count |
 |----------|-------------|
-| Safe, no changes | 50–100 Pro tenants |
-| With Supabase Transaction Pooler enabled | 300+ tenants |
+| **Current (Transaction Pooler ON, port 6543)** | **300+ Pro tenants** |
+| Hypothetical: direct port 5432, no pooler | 50–100 Pro tenants (no longer applicable — pooler is live) |
 
 ### Backups (Supabase Pro)
 
