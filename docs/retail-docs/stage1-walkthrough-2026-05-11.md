@@ -42,13 +42,13 @@
 
 | Severity | Finding | Note |
 |---|---|---|
-| 🟡 ISSUE | **Onboarding card not rendering on fresh grocery dashboard** | `onboarding_dismissed=false` in DB but the "Get started with SanoPOS" card not in DOM. May be a grocery-preset-specific render bug, or might be that the card is below the fold and didn't appear in the snapshot. **Needs follow-up** — operator can verify visually. |
+| ❌ RETRACTED | ~~Onboarding card not rendering on fresh grocery dashboard~~ | **FALSE POSITIVE — retracted 2026-05-11.** Re-verified live via Playwright after logging back in and waiting 3s for dashboard hydration: card renders correctly. The original "missing" finding was a race-condition artifact — my verification script ran before the dashboard finished loading. The same false positive appeared briefly on wholesale for the same reason. Card works fine on both verticals. |
 | ⚪ POLISH | Sample products all have `sku: null` and `cost_price: "0.00"` | Acceptable for samples — merchant will set these. Not a launch blocker. |
 | ⚪ POLISH | Sample products seeded with `stock: 0` for every product | Same as general_retail — wizard doesn't ask for opening stock. Merchant has to add adjustments to ring up the first sale. Documented behavior. |
 | ⚪ NOTE | **Sale + reports flow not exercised in this walk** because no opening stock + Turnstile-gated re-login made it slow. The sale path itself is the same code as general_retail (which has been live-tested) — low risk of grocery-specific failure. |
 
 ### Verdict — Grocery
-**Stage 1 (grocery) shipped CLEAN with one minor unverified finding (onboarding card render).** All preset behaviors correct, all feature flags ON, sample data is grocery-appropriate. Safe for self-service signups today. The onboarding-card finding doesn't block — worst case is the merchant doesn't see the checklist (recoverable, low-impact).
+**Stage 1 (grocery) shipped CLEAN.** All preset behaviors correct, all feature flags ON, sample data is grocery-appropriate, onboarding card renders correctly. Safe for self-service signups today.
 
 ---
 
@@ -101,12 +101,13 @@ Same as grocery — all 19 retail-bundle flags ON, all phase4 vertical flags OFF
 
 ## Combined verdict — Stage 1
 
-**Both Grocery and Wholesale verticals are SAFE for self-service signup today.** Real merchants signing up via `/signup` and picking either tile will land in a functional, preset-correct environment. The two minor findings (grocery onboarding card render uncertainty, wholesale Sales-History label) are polish-tier items — easily fixed when operator has bandwidth, but not blocking real-user onboarding.
+**Both Grocery and Wholesale verticals are SAFE for self-service signup today.** Real merchants signing up via `/signup` and picking either tile will land in a functional, preset-correct environment. The only remaining open finding is the wholesale Sales-History label inconsistency — polish-tier, not blocking.
+
+**Important correction (2026-05-11)**: My earlier finding that the onboarding card was "not rendering" on grocery + wholesale was a **false positive** caused by my verification script running before the dashboard finished hydrating. Re-verified live by logging into both tenants and waiting 3s for data load — the card renders correctly on both. No bug exists.
 
 **Recommended follow-ups (operator's call, not blocking):**
 
-1. **Visually verify the grocery onboarding card** on `grocerywalktest1778451` to confirm whether the card renders below-the-fold or is genuinely missing. If genuinely missing, file as M-tier polish.
-2. **Manually ring up a sale on `wholesalewalktest1778451`** (add an adjustment to give stock, then POS sale) to verify the receipt header label says "Invoice" vs "Sale".
-3. **Consider adding "Invoice History" override** to the Sales History sidebar entry in `nav-config.js` to make wholesale's label remap consistent.
+1. **Manually ring up a sale on `wholesalewalktest1778451`** (add an adjustment to give stock, then POS sale) to verify the receipt header label says "Invoice" vs "Sale".
+2. **Consider adding "Invoice History" override** to the Sales History sidebar entry in `nav-config.js` to make wholesale's label remap consistent.
 
 **Both test tenants kept active per operator request** — re-login via `/login` with the credentials in the header table above.
