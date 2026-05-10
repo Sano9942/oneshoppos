@@ -207,7 +207,9 @@
       "PowerShell(npx wrangler --version)",
       "mcp__claude_ai_Vercel__get_deployment",
       "Bash(date +%s > d:/newprojects/oneshoppos/.claude/.last-service-check && cat d:/newprojects/oneshoppos/.claude/.last-service-check)",
-      "Bash(mkdir -p .claude/lighthouse-2026-05-08 2>&1 | head -1; ls .claude/ 2>&1 | head -5)"
+      "Bash(mkdir -p .claude/lighthouse-2026-05-08 2>&1 | head -1; ls .claude/ 2>&1 | head -5)",
+      "Bash(date +%s > d:/newprojects/oneshoppos/.claude/.last-service-check && echo \"timestamp updated: $\\(date\\)\")",
+      "mcp__claude_ai_Gmail__search_threads"
     ],
     "additionalDirectories": [
       "\\tmp",
