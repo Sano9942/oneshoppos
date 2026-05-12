@@ -1015,7 +1015,12 @@ CREATE TABLE IF NOT EXISTS company_profile (
   --   'inclusive' = sticker prices already include GST
   --   'exclusive' = GST added on top at checkout
   tax_mode TEXT NOT NULL DEFAULT 'none'
-    CHECK (tax_mode IN ('none', 'inclusive', 'exclusive'))
+    CHECK (tax_mode IN ('none', 'inclusive', 'exclusive')),
+  -- v87 (Tier 0 wholesale): configurable AR aging buckets.
+  -- Default [30,60,90] = convention buckets 0-30 / 31-60 / 61-90 / 90+.
+  -- PK distributors running weekly cycles can set [15,30,45] etc.
+  -- Consumed by GET /api/reports/ar-aging (0.3).
+  ar_aging_buckets JSONB NOT NULL DEFAULT '[30, 60, 90]'::jsonb
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (
@@ -2229,7 +2234,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_holds', false, '2-G.9 layaway/hold/special-order'),
   ('phase2g_risk_controls', false, '2-G.17 anti-theft: no-sale tracking, refund threshold, anomaly detection, shift variance'),
   ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer'),
-  ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)')
+  ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)'),
+  ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)

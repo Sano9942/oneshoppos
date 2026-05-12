@@ -231,7 +231,7 @@ const INDUSTRY_PRESETS = Object.freeze({
     industry_type: "wholesale",
     business_model: "b2b_distribution",
     display_name: "Wholesale / Distribution",
-    modes: [],
+    modes: ["wholesale"],
     labels: {
       product: "Product",
       products: "Products",

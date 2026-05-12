@@ -6296,6 +6296,72 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 87,
+    description:
+      "Tier 0 wholesale foundation — ar_aging_buckets column on company_profile + backfill wholesale mode/flag for existing wholesale tenants",
+    up: async (client) => {
+      // Per-tenant migration. company_profile lives in tenant schemas only;
+      // skip cleanly when running against the public schema (which does not
+      // have it).
+      const { rows: cp } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'company_profile'
+      `);
+      if (!cp.length) return;
+
+      // 1. ar_aging_buckets — configurable AR aging buckets, JSONB array.
+      //    Default [30,60,90] = convention 0-30 / 31-60 / 61-90 / 90+.
+      //    Consumed by GET /api/reports/ar-aging (Tier 0 item 0.3).
+      try {
+        await client.query("SAVEPOINT v87_ar_buckets");
+        await client.query(`
+          ALTER TABLE company_profile
+            ADD COLUMN IF NOT EXISTS ar_aging_buckets JSONB NOT NULL DEFAULT '[30, 60, 90]'::jsonb
+        `);
+        await client.query("RELEASE SAVEPOINT v87_ar_buckets");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v87_ar_buckets");
+        console.warn(`[migrate-pg v87] ar_aging_buckets skipped: ${err.message}`);
+      }
+
+      // 2. Backfill: if this tenant is industry_type='wholesale', seed the
+      //    wholesale mode row + wholesale_credit_controls flag. Mirrors the
+      //    v44 mode-gate backfill pattern. Idempotent.
+      try {
+        await client.query("SAVEPOINT v87_wholesale_backfill");
+        const { rows: profile } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        if (profile[0]?.industry_type === "wholesale") {
+          const { rows: tm } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'tenant_modes'
+          `);
+          if (tm.length) {
+            await client.query(
+              `INSERT INTO tenant_modes (mode, enabled) VALUES ('wholesale', true)
+               ON CONFLICT (mode) DO NOTHING`
+            );
+          }
+          const { rows: ff } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+          `);
+          if (ff.length) {
+            await client.query(
+              `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_credit_controls', true)
+               ON CONFLICT (key) DO UPDATE SET enabled = true`
+            );
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v87_wholesale_backfill");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v87_wholesale_backfill");
+        console.warn(`[migrate-pg v87] wholesale backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

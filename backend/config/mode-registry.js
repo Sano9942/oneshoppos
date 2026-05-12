@@ -68,6 +68,12 @@ const MODE_REGISTRY = Object.freeze({
       "phase4_treatment_plans",
     ],
   },
+  wholesale: {
+    description: "B2B distribution — credit limits, AR aging, customer statements, payment terms",
+    feature_flags_to_enable: [
+      "wholesale_credit_controls",
+    ],
+  },
 });
 
 const VALID_MODES = Object.keys(MODE_REGISTRY);

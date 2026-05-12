@@ -120,6 +120,11 @@ const DEFAULT_FEATURE_FLAGS = {
   receipt_designer_v2: true,
   shift_auto_close: false,
   offline_returns: false,
+  // Tier 0 wholesale (mode-gated: wholesale). Default false. Enabled when
+  // setup wizard runs with industry_type='wholesale' (preset.modes includes
+  // 'wholesale' → MODE_REGISTRY auto-enables) or via the v87 backfill for
+  // existing wholesale tenants.
+  wholesale_credit_controls: false,
 };
 
 // Per-tenant feature flag cache
