@@ -227,6 +227,10 @@ export function useCheckout({
     // Phase 2-G Wave 2 (2-G.2) — codes issued on this sale (empty
     // array for any sale that didn't include a gift-card SKU).
     issuedGiftCards: Array.isArray(data?.issuedGiftCards) ? data.issuedGiftCards : [],
+    // Tier 0.1 wholesale — A/R invoice details for on-account sales, null
+    // for cash/card sales. POSReceiptModal renders an "On-Account" line
+    // with invoice_number + due_date when present.
+    arInvoice: data?.arInvoice || null,
   }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote, buildTaxBreakdown]);
 
   const clearAfterSale = useCallback(() => {

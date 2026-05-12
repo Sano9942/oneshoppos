@@ -997,6 +997,9 @@ module.exports = function registerSalesRoutes(app, deps) {
     const creditTotal = creditPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
     let creditTender = null;
     let creditWarning = null;
+    // Tier 0.1 — captured after the AR invoice INSERT inside the transaction so
+    // the response can surface the AR invoice number + due date to the receipt.
+    let creditArInvoice = null;
     if (creditTotal > 0) {
       // Credit cannot overpay the sale. Other tenders (Cash, Card) tolerate
       // overpayment as "change due", but a Credit overpayment would inflate
@@ -1674,7 +1677,7 @@ module.exports = function registerSalesRoutes(app, deps) {
                      $5, $6, 0, $7, $7,
                      CURRENT_DATE + ($8::int) * INTERVAL '1 day',
                      $9)
-             RETURNING id`,
+             RETURNING id, invoice_number, due_date, total_amount`,
             [
               invoiceNumber,
               customer_id,
@@ -1691,6 +1694,15 @@ module.exports = function registerSalesRoutes(app, deps) {
             `UPDATE sales SET customer_invoice_id = $1 WHERE id = $2`,
             [arInvoice.id, newSaleId]
           );
+          // Surface to /api/sales response so the POS receipt can render
+          // the A/R invoice number + due date for credit sales.
+          creditArInvoice = {
+            id: arInvoice.id,
+            invoice_number: arInvoice.invoice_number,
+            due_date: arInvoice.due_date,
+            total_amount: Number(arInvoice.total_amount),
+            payment_terms_days: termsDays,
+          };
         }
 
         // M9 — if this is a charge-to-room sale, attach it to the open folio.
@@ -2072,6 +2084,10 @@ module.exports = function registerSalesRoutes(app, deps) {
           // Tier 0.1 wholesale — non-blocking notice when a Credit-tender sale
           // proceeded past credit_limit under credit_block_mode='warn'.
           creditWarning,
+          // Tier 0.1 wholesale — A/R invoice details for the on-account sale
+          // (null on cash/card sales). POS receipt renders these so the buyer
+          // sees their AR reference number and when the payment is due.
+          arInvoice: creditArInvoice,
         });
       } catch (invErr) {
         res.status(500).json({

@@ -190,6 +190,42 @@ export default function POSReceiptModal() {
               </p>
             </>
           )}
+          {/* Tier 0.1 wholesale — A/R details for on-account sales. Shows the
+              auto-generated customer_invoice number + due date so the buyer
+              knows their reference and when payment is due. */}
+          {slip.arInvoice && (
+            <>
+              <div className="border-t border-dashed border-slate-300" />
+              <div className="bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-2 space-y-1">
+                <p className="text-[10px] font-bold text-violet-700 uppercase tracking-wide">
+                  On Account
+                </p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-600">A/R Invoice</span>
+                  <span className="font-mono font-bold text-violet-900">
+                    {slip.arInvoice.invoice_number}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-600">Due Date</span>
+                  <span className="font-semibold text-slate-800">
+                    {slip.arInvoice.due_date
+                      ? new Date(slip.arInvoice.due_date).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "—"}
+                    {slip.arInvoice.payment_terms_days > 0 && (
+                      <span className="text-slate-500 ml-1">
+                        (Net {slip.arInvoice.payment_terms_days})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
           {slip.orderNote && (
             <>
               <div className="border-t border-dashed border-slate-300" />
