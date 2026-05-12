@@ -998,6 +998,24 @@ module.exports = function registerSalesRoutes(app, deps) {
     let creditTender = null;
     let creditWarning = null;
     if (creditTotal > 0) {
+      // Credit cannot overpay the sale. Other tenders (Cash, Card) tolerate
+      // overpayment as "change due", but a Credit overpayment would inflate
+      // the AR invoice and exaggerate the customer's exposure. Reject when
+      // sum(non-credit) + creditTotal > totalAmount by more than rounding noise.
+      const nonCreditTotal = (finalPayments || [])
+        .filter((p) => p.method !== "Credit")
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
+      if (nonCreditTotal + creditTotal > Number(totalAmount) + 0.01) {
+        return res.status(400).json({
+          error:
+            `Credit overpayment: tenders total ${(nonCreditTotal + creditTotal).toFixed(2)} ` +
+            `exceeds sale total ${Number(totalAmount).toFixed(2)}.`,
+          code: "CREDIT_OVERPAYMENT",
+          credit_amount: creditTotal,
+          non_credit_amount: nonCreditTotal,
+          sale_total: Number(totalAmount),
+        });
+      }
       if (!customer_id) {
         return res.status(400).json({
           error: "Credit tender requires a customer to be selected",
