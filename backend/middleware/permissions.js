@@ -63,6 +63,9 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_gift_cards",
     // Phase 2-G Wave 3 (2-G.5) — manager PIN authorization for POS price override.
     "override_price",
+    // Tier 0.1 wholesale — manager PIN authorization for pushing a Credit-tender
+    // sale past a customer's credit_limit when credit_block_mode='hard'.
+    "override_credit_limit",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };

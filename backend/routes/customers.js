@@ -79,6 +79,64 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  // GET customer credit status — Tier 0.1 wholesale.
+  // Returns { credit_limit, credit_block_mode, payment_terms_days, outstanding,
+  // available, utilization_pct }. outstanding = SUM(balance_due) across that
+  // customer's unpaid customer_invoices. Used by the customer detail page
+  // utilization bar and by POS Credit-tender flow to surface available room.
+  app.get(
+    "/api/customers/:id/credit-status",
+    requireAnyPerm(["view_reports", "manage_customers", "all_access"]),
+    async (req, res) => {
+      const { id } = req.params;
+      try {
+        const { rows: [cust] } = await db.query(
+          `SELECT id, name, credit_limit, credit_block_mode, payment_terms_days
+           FROM customers WHERE id = $1`,
+          [id]
+        );
+        if (!cust) return res.status(404).json({ error: "Customer not found" });
+
+        // Sum unpaid AR. status='paid' is the only terminal state today;
+        // cancelled invoices have status='cancelled' and are excluded by the
+        // != 'paid' AND != 'cancelled' guard.
+        let outstanding = 0;
+        try {
+          const { rows: [agg] } = await db.query(
+            `SELECT COALESCE(SUM(balance_due), 0)::numeric AS outstanding
+             FROM customer_invoices
+             WHERE customer_id = $1
+               AND status NOT IN ('paid', 'cancelled')`,
+            [id]
+          );
+          outstanding = Number(agg?.outstanding || 0);
+        } catch (err) {
+          // customer_invoices table may not exist on a brand-new tenant
+          // before migration v25-ish. Treat as zero AR.
+          if (!String(err.message || "").includes("does not exist")) throw err;
+        }
+
+        const limit = Number(cust.credit_limit || 0);
+        const available = limit > 0 ? Math.max(0, limit - outstanding) : null;
+        const utilization_pct = limit > 0
+          ? Math.round((outstanding / limit) * 10000) / 100
+          : null;
+
+        res.json({
+          customer_id: Number(id),
+          credit_limit: limit,
+          credit_block_mode: cust.credit_block_mode || "warn",
+          payment_terms_days: Number(cust.payment_terms_days || 0),
+          outstanding,
+          available,
+          utilization_pct,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
   // GET customer ledger — all financial transactions in one timeline
   app.get("/api/customers/:id/ledger", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
     const { id } = req.params;
@@ -374,15 +432,20 @@ module.exports = function registerCustomerRoutes(app, deps) {
             date_of_birth, gender, city, customer_group_id, notes, tags,
             preferred_payment_method, preferred_contact,
             blood_group, allergies, medical_notes, emergency_contact_name,
-            emergency_contact_phone, insurance_id } = req.body;
+            emergency_contact_phone, insurance_id,
+            credit_limit, credit_block_mode, payment_terms_days } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
+    if (credit_block_mode && !["off", "warn", "hard"].includes(credit_block_mode)) {
+      return res.status(400).json({ error: "credit_block_mode must be off, warn, or hard" });
+    }
     try {
       const { rows } = await db.query(
         `INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
          date_of_birth, gender, city, customer_group_id, notes, tags, preferred_payment_method, preferred_contact,
-         blood_group, allergies, medical_notes, emergency_contact_name, emergency_contact_phone, insurance_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING *`,
+         blood_group, allergies, medical_notes, emergency_contact_name, emergency_contact_phone, insurance_id,
+         credit_limit, credit_block_mode, payment_terms_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25) RETURNING *`,
         [
           name, mobile || null, email || null, address || null, cnic || null,
           occupation || null, balance || 0, ntn_cnic || null,
@@ -392,6 +455,9 @@ module.exports = function registerCustomerRoutes(app, deps) {
           preferred_payment_method || null, preferred_contact || null,
           blood_group || null, allergies || null, medical_notes || null,
           emergency_contact_name || null, emergency_contact_phone || null, insurance_id || null,
+          Number(credit_limit) || 0,
+          credit_block_mode || "warn",
+          Number.isFinite(Number(payment_terms_days)) ? Number(payment_terms_days) : 0,
         ],
       );
       res.json({ ...rows[0], order_count: 0, total_spent: 0 });
@@ -407,9 +473,13 @@ module.exports = function registerCustomerRoutes(app, deps) {
             date_of_birth, gender, city, customer_group_id, notes, tags,
             preferred_payment_method, preferred_contact,
             blood_group, allergies, medical_notes, emergency_contact_name,
-            emergency_contact_phone, insurance_id } = req.body;
+            emergency_contact_phone, insurance_id,
+            credit_limit, credit_block_mode, payment_terms_days } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
+    if (credit_block_mode && !["off", "warn", "hard"].includes(credit_block_mode)) {
+      return res.status(400).json({ error: "credit_block_mode must be off, warn, or hard" });
+    }
     try {
       const { rowCount } = await db.query(
         `UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5,
@@ -417,8 +487,11 @@ module.exports = function registerCustomerRoutes(app, deps) {
          date_of_birth = $9, gender = $10, city = $11, customer_group_id = $12,
          notes = $13, tags = $14, preferred_payment_method = $15, preferred_contact = $16,
          blood_group = $17, allergies = $18, medical_notes = $19,
-         emergency_contact_name = $20, emergency_contact_phone = $21, insurance_id = $22
-         WHERE id = $23`,
+         emergency_contact_name = $20, emergency_contact_phone = $21, insurance_id = $22,
+         credit_limit = COALESCE($23, credit_limit),
+         credit_block_mode = COALESCE($24, credit_block_mode),
+         payment_terms_days = COALESCE($25, payment_terms_days)
+         WHERE id = $26`,
         [
           name, mobile || null, email || null, address || null, cnic || null,
           occupation || null, balance !== undefined ? balance : null, ntn_cnic || null,
@@ -428,6 +501,9 @@ module.exports = function registerCustomerRoutes(app, deps) {
           preferred_payment_method || null, preferred_contact || null,
           blood_group || null, allergies || null, medical_notes || null,
           emergency_contact_name || null, emergency_contact_phone || null, insurance_id || null,
+          credit_limit !== undefined && credit_limit !== null ? Number(credit_limit) : null,
+          credit_block_mode || null,
+          payment_terms_days !== undefined && payment_terms_days !== null ? Number(payment_terms_days) : null,
           id,
         ],
       );

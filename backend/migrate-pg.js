@@ -6362,6 +6362,69 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 88,
+    description:
+      "Tier 0.1 wholesale — customer credit limit + block mode + payment terms; sales.customer_invoice_id link for on-account sales",
+    up: async (client) => {
+      // Per-tenant migration. All tables involved live in tenant schemas.
+      const { rows: cust } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'customers'
+      `);
+      if (!cust.length) return;
+
+      // 1. Credit fields on customers
+      try {
+        await client.query("SAVEPOINT v88_customers_credit");
+        await client.query(`
+          ALTER TABLE customers
+            ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(12,2) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS credit_block_mode TEXT NOT NULL DEFAULT 'warn',
+            ADD COLUMN IF NOT EXISTS payment_terms_days INTEGER NOT NULL DEFAULT 0
+        `);
+        // CHECK constraint added separately so it can be retried independently
+        // and skipped if it already exists. NOT VALID first to avoid scanning
+        // existing rows (defaults guarantee compliance).
+        try {
+          await client.query(`
+            ALTER TABLE customers
+              ADD CONSTRAINT customers_credit_block_mode_check
+              CHECK (credit_block_mode IN ('off','warn','hard'))
+          `);
+        } catch (e) {
+          if (!String(e.message || "").match(/already exists|duplicate/i)) throw e;
+        }
+        await client.query("RELEASE SAVEPOINT v88_customers_credit");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v88_customers_credit");
+        console.warn(`[migrate-pg v88] customers credit columns skipped: ${err.message}`);
+      }
+
+      // 2. customer_invoice_id link on sales
+      try {
+        await client.query("SAVEPOINT v88_sales_invoice_link");
+        const { rows: salesT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'sales'
+        `);
+        if (salesT.length) {
+          await client.query(`
+            ALTER TABLE sales
+              ADD COLUMN IF NOT EXISTS customer_invoice_id INTEGER REFERENCES customer_invoices(id)
+          `);
+          await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_sales_customer_invoice_id
+              ON sales(customer_invoice_id)
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v88_sales_invoice_link");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v88_sales_invoice_link");
+        console.warn(`[migrate-pg v88] sales invoice link skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

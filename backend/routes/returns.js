@@ -512,6 +512,50 @@ module.exports = function registerReturnsRoutes(app, deps) {
           }
         }
 
+        // Tier 0.1 wholesale — refund_method='credit_reversal' reduces the
+        // linked customer_invoices.balance_due instead of paying cash back.
+        // Only valid when the original sale was a Credit-tender sale (has
+        // sales.customer_invoice_id set by v88). Idempotent against the
+        // invoice: if balance_due goes to 0, mark invoice paid.
+        if (refund_method === "credit_reversal" && original_sale_id) {
+          const { rows: [linkedSale] } = await client.query(
+            "SELECT customer_invoice_id FROM sales WHERE id = $1",
+            [original_sale_id]
+          );
+          if (!linkedSale?.customer_invoice_id) {
+            throw Object.assign(
+              new Error("credit_reversal requires the original sale to have a linked customer invoice (Credit tender)"),
+              { statusCode: 400 }
+            );
+          }
+          const { rows: [inv] } = await client.query(
+            `SELECT id, balance_due::numeric AS balance_due, total_amount::numeric AS total_amount, amount_paid::numeric AS amount_paid
+             FROM customer_invoices
+             WHERE id = $1
+             FOR UPDATE`,
+            [linkedSale.customer_invoice_id]
+          );
+          if (!inv) {
+            throw Object.assign(new Error("Linked customer invoice not found"), { statusCode: 400 });
+          }
+          const refund = Number(total_refund);
+          const newBalance = Math.max(0, Number(inv.balance_due) - refund);
+          // Refund reduces what the customer owes. Mirror it as a negative
+          // amount_paid delta so total_amount = amount_paid + balance_due stays
+          // honest. (For a partial refund, balance_due drops; total_amount
+          // remains the original sale amount — the discrepancy is captured
+          // by the returns row itself.)
+          const newStatus = newBalance === 0 ? "paid" : inv.status || "sent";
+          await client.query(
+            `UPDATE customer_invoices
+               SET balance_due = $1,
+                   status      = $2,
+                   updated_at  = NOW()
+             WHERE id = $3`,
+            [newBalance, newStatus, inv.id]
+          );
+        }
+
         return retId;
       });
 

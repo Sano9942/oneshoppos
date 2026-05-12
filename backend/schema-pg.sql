@@ -376,7 +376,19 @@ CREATE TABLE IF NOT EXISTS customers (
   medical_notes TEXT,
   emergency_contact_name TEXT,
   emergency_contact_phone TEXT,
-  insurance_id TEXT
+  insurance_id TEXT,
+  -- v88 (Tier 0.1 wholesale): A/R credit controls.
+  --   credit_limit       — Rs cap on outstanding customer_invoices.balance_due.
+  --                        0 = no cap (unlimited).
+  --   credit_block_mode  — 'off' | 'warn' (default) | 'hard'. Controls
+  --                        what /api/sales does when a Credit tender would
+  --                        push the customer's outstanding past credit_limit.
+  --   payment_terms_days — default Net-X days; used to compute auto-invoice
+  --                        due_date on Credit-tender sales (0 = COD).
+  credit_limit NUMERIC(12,2) NOT NULL DEFAULT 0,
+  credit_block_mode TEXT NOT NULL DEFAULT 'warn'
+    CHECK (credit_block_mode IN ('off','warn','hard')),
+  payment_terms_days INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
@@ -466,6 +478,9 @@ CREATE TABLE IF NOT EXISTS sales (
   tax_total NUMERIC(12,2),
   tax_inclusive BOOLEAN
 );
+-- v88 (Tier 0.1 wholesale): added in a separate ALTER below the
+-- customer_invoices CREATE TABLE so the FK reference resolves on a
+-- fresh-schema bootstrap (DDL is top-to-bottom).
 
 CREATE TABLE IF NOT EXISTS sale_items (
   id SERIAL PRIMARY KEY,
@@ -2803,6 +2818,15 @@ CREATE TABLE IF NOT EXISTS customer_invoice_payment_links (
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v88 (Tier 0.1 wholesale): link from POS sale → customer A/R invoice. The
+-- ALTER lives down here (instead of inline on the sales CREATE TABLE at the
+-- top of this file) because customer_invoices is defined later — a fresh
+-- bootstrap script is top-to-bottom and would fail FK resolution otherwise.
+ALTER TABLE sales
+  ADD COLUMN IF NOT EXISTS customer_invoice_id INTEGER REFERENCES customer_invoices(id);
+CREATE INDEX IF NOT EXISTS idx_sales_customer_invoice_id
+  ON sales(customer_invoice_id);
 
 CREATE TABLE IF NOT EXISTS customer_invoice_reminders (
   id SERIAL PRIMARY KEY,

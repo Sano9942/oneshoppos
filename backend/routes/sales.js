@@ -2,6 +2,7 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
+const { verifyManagerPin } = require("../services/manager-pin");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -548,6 +549,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       // P8 (3.14): cart tax-inclusive toggle. Falls back to the tenant's
       // configured tax_mode below.
       tax_inclusive: tax_inclusive_in,
+      // Tier 0.1 wholesale — manager PIN to override a hard credit-limit
+      // block on a Credit tender. Ignored when no Credit tender is used.
+      manager_pin = null,
     } = req.body;
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
@@ -975,6 +979,127 @@ module.exports = function registerSalesRoutes(app, deps) {
         }
       } catch (walletErr) {
         return res.status(500).json({ error: walletErr.message });
+      }
+    }
+
+    // Tier 0.1 wholesale — Credit (on-account) tender pre-flight.
+    //   Requires customer_id. Reads customer.credit_limit + credit_block_mode +
+    //   payment_terms_days, sums unpaid customer_invoices.balance_due, and
+    //   compares (outstanding + credit_amount) to credit_limit.
+    //   mode='off'  → never block
+    //   mode='warn' → proceed; include credit_warning in success response
+    //   mode='hard' → 403 CREDIT_LIMIT_EXCEEDED unless caller has
+    //                 override_credit_limit perm OR a valid manager_pin is
+    //                 supplied (verifyManagerPin requires override_credit_limit).
+    // Result captured in creditTender (used inside the transaction to create
+    // the customer_invoices row and link it via sales.customer_invoice_id).
+    const creditPayments = (finalPayments || []).filter((p) => p.method === "Credit");
+    const creditTotal = creditPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    let creditTender = null;
+    let creditWarning = null;
+    if (creditTotal > 0) {
+      if (!customer_id) {
+        return res.status(400).json({
+          error: "Credit tender requires a customer to be selected",
+          code: "CREDIT_REQUIRES_CUSTOMER",
+        });
+      }
+      try {
+        const { rows: [cust] } = await db.query(
+          `SELECT id, credit_limit, credit_block_mode, payment_terms_days
+           FROM customers WHERE id = $1`,
+          [customer_id]
+        );
+        if (!cust) {
+          return res.status(400).json({ error: "Customer not found" });
+        }
+        const limit = Number(cust.credit_limit || 0);
+        const mode = cust.credit_block_mode || "warn";
+        const termsDays = Number(cust.payment_terms_days || 0);
+
+        // Sum unpaid AR. customer_invoices may not exist on very old tenants.
+        let outstanding = 0;
+        try {
+          const { rows: [agg] } = await db.query(
+            `SELECT COALESCE(SUM(balance_due), 0)::numeric AS outstanding
+             FROM customer_invoices
+             WHERE customer_id = $1
+               AND status NOT IN ('paid', 'cancelled')`,
+            [customer_id]
+          );
+          outstanding = Number(agg?.outstanding || 0);
+        } catch (e) {
+          if (!String(e.message || "").includes("does not exist")) throw e;
+        }
+
+        const newExposure = outstanding + creditTotal;
+        const overLimit = limit > 0 && newExposure > limit;
+
+        if (overLimit && mode !== "off") {
+          const hasPermOverride =
+            Array.isArray(req.employeePerms) &&
+            (req.employeePerms.includes("all_access") ||
+              req.employeePerms.includes("override_credit_limit"));
+
+          if (mode === "hard" && !hasPermOverride) {
+            // Try manager PIN. If absent or invalid → 403.
+            if (!manager_pin) {
+              return res.status(403).json({
+                error: "Credit limit exceeded — manager PIN required",
+                code: "CREDIT_LIMIT_EXCEEDED",
+                limit,
+                outstanding,
+                attempted: creditTotal,
+                deficit: newExposure - limit,
+              });
+            }
+            try {
+              await verifyManagerPin(db, String(manager_pin), {
+                requiredPerm: "override_credit_limit",
+                isImpersonating: req.isImpersonating === true,
+              });
+              // PIN verified — record approval event for the audit trail
+              await recordApprovalEvent(db, {
+                policyId: null,
+                actionType: "credit_limit_override",
+                referenceType: "sale_pending",
+                referenceId: null,
+                requestedBy: authenticatedEmployeeId,
+                approvedBy: null, // verifyManagerPin returned ok; identity not surfaced
+                status: "approved",
+                reason: `Credit-limit override: outstanding ${outstanding}, this sale ${creditTotal}, limit ${limit}`,
+                metadata: {
+                  customer_id,
+                  credit_limit: limit,
+                  outstanding,
+                  credit_amount: creditTotal,
+                },
+                outletId: outlet_id ?? null,
+              }).catch(() => { /* audit record is best-effort */ });
+            } catch (pinErr) {
+              return res.status(pinErr.statusCode || 403).json({
+                error: pinErr.message || "Manager PIN verification failed",
+                code: "CREDIT_LIMIT_EXCEEDED",
+                limit,
+                outstanding,
+                attempted: creditTotal,
+                deficit: newExposure - limit,
+              });
+            }
+          } else if (mode === "warn") {
+            // Soft warning — proceed but tell the caller.
+            creditWarning =
+              `Credit limit exceeded. Outstanding: ${outstanding.toFixed(2)}, ` +
+              `this sale: ${creditTotal.toFixed(2)}, limit: ${limit.toFixed(2)}.`;
+          }
+        }
+
+        creditTender = {
+          amount: creditTotal,
+          payment_terms_days: termsDays,
+        };
+      } catch (creditErr) {
+        return res.status(500).json({ error: creditErr.message });
       }
     }
 
@@ -1513,6 +1638,43 @@ module.exports = function registerSalesRoutes(app, deps) {
           );
         }
 
+        // Tier 0.1 wholesale — when the sale uses a Credit (on-account) tender,
+        // create a matching customer_invoices row in the same transaction so
+        // the AR balance reflects the new liability immediately. Linked via
+        // sales.customer_invoice_id (v88) so refunds can route to credit_reversal.
+        if (creditTender && customer_id) {
+          // Compute due_date from payment_terms_days. Use CURRENT_DATE so the
+          // date is in tenant timezone-naive form (DATE column).
+          const termsDays = Number(creditTender.payment_terms_days || 0);
+          const invoiceNumber = `INV-AR-${newSaleId}`;
+          const { rows: [arInvoice] } = await client.query(
+            `INSERT INTO customer_invoices
+               (invoice_number, customer_id, outlet_id, employee_id, status,
+                subtotal, tax_total, discount_amount, total_amount, balance_due,
+                due_date, notes)
+             VALUES ($1, $2, $3, $4, 'sent',
+                     $5, $6, 0, $7, $7,
+                     CURRENT_DATE + ($8::int) * INTERVAL '1 day',
+                     $9)
+             RETURNING id`,
+            [
+              invoiceNumber,
+              customer_id,
+              outlet_id || null,
+              authenticatedEmployeeId,
+              Number(creditTender.amount),  // subtotal — for on-account sales we
+              0,                            // record the full amount as subtotal
+              Number(creditTender.amount),  // and put tax_total at 0; the real
+              termsDays,                    // tax split lives on sale_items.
+              `Auto-generated from POS sale #${newSaleId} (Credit tender)`,
+            ]
+          );
+          await client.query(
+            `UPDATE sales SET customer_invoice_id = $1 WHERE id = $2`,
+            [arInvoice.id, newSaleId]
+          );
+        }
+
         // M9 — if this is a charge-to-room sale, attach it to the open folio.
         // Runs inside the sale transaction: if the folio write fails, the sale
         // rolls back too (cross-domain atomicity).
@@ -1889,6 +2051,9 @@ module.exports = function registerSalesRoutes(app, deps) {
           // POS can print them on the receipt + show them in the
           // confirmation modal.
           issuedGiftCards: issuedCards,
+          // Tier 0.1 wholesale — non-blocking notice when a Credit-tender sale
+          // proceeded past credit_limit under credit_block_mode='warn'.
+          creditWarning,
         });
       } catch (invErr) {
         res.status(500).json({
