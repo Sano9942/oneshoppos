@@ -200,6 +200,11 @@ export const POSProvider = ({ children }) => {
   // Insufficient-stock prompt: opened by checkout hook when the sale POST
   // returns { code: "insufficient_stock", available, product_id }.
   const [insufficientStockPrompt, setInsufficientStockPrompt] = useState(null); // { product_id, product_name, requested, available } | null
+  // Tier 0.1 wholesale — Credit-limit-exceeded prompt. Opened by checkout
+  // hook when /api/sales returns 403 CREDIT_LIMIT_EXCEEDED. Carries the
+  // limit/outstanding/attempted/deficit so the modal can show context, and
+  // the salePayload is parked inside useCheckout's pendingSaleRef.
+  const [creditLimitPrompt, setCreditLimitPrompt] = useState(null); // { limit, outstanding, attempted, deficit, message } | null
 
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
@@ -621,6 +626,11 @@ export const POSProvider = ({ children }) => {
       });
       logErrorState("pos_insufficient_stock", `Insufficient stock for product ${info.product_id}`, info);
     },
+    // Tier 0.1 wholesale — credit-limit modal trigger.
+    onCreditLimitExceeded: (info) => {
+      setCreditLimitPrompt(info);
+      logErrorState("pos_credit_limit_exceeded", info.message || "Credit limit exceeded", info);
+    },
   });
 
   // ── Reload parked on outlet change ──────────────────────────────────────
@@ -921,6 +931,12 @@ export const POSProvider = ({ children }) => {
     setBarcodeMissPrompt,
     insufficientStockPrompt,
     setInsufficientStockPrompt,
+    // Tier 0.1 wholesale — credit-limit override flow
+    creditLimitPrompt,
+    setCreditLimitPrompt,
+    retryWithManagerPin: checkout.retryWithManagerPin,
+    cancelCreditOverride: checkout.cancelCreditOverride,
+    creditWarning: checkout.creditWarning,
     refreshGateStatus: shift.refreshGateStatus,
     search: cartHook.search,
     setSearch: cartHook.setSearch,

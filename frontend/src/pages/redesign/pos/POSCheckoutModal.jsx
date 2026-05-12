@@ -15,6 +15,7 @@ import {
   ToggleRight,
   PenLine,
   Gift,
+  Receipt,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -90,6 +91,10 @@ export default function POSCheckoutModal() {
   const { labels = {}, hasMode } = usePreset();
   const restaurantOn = hasMode && hasMode("restaurant");
   const giftCardsOn = !!posFlags?.phase2g_gift_cards;
+  // Tier 0.1 wholesale — Credit (on-account) tender. Visible when the flag is
+  // on. Disabled (greyed) until a customer is selected since /api/sales rejects
+  // with CREDIT_REQUIRES_CUSTOMER otherwise.
+  const creditTenderOn = !!posFlags?.wholesale_credit_controls;
 
   // Phase 2-G Wave 2 (2-G.2) — gift-card tender state, local to the modal.
   const [giftCardCode, setGiftCardCode] = useState("");
@@ -741,36 +746,56 @@ export default function POSCheckoutModal() {
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
               Payment Method
             </label>
-            <div className={`grid ${giftCardsOn ? "grid-cols-4" : "grid-cols-3"} gap-2`}>
-              {[
+            {(() => {
+              const methods = [
                 { id: "Cash", icon: <Banknote size={16} /> },
                 { id: "Card", icon: <CreditCard size={16} /> },
                 { id: "Wallet", icon: <Wallet size={16} /> },
                 ...(giftCardsOn
                   ? [{ id: "gift_card", label: "Gift Card", icon: <Gift size={16} /> }]
                   : []),
-              ].map(({ id, label, icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => {
-                    setPaymentMethod(id);
-                    if (id !== "gift_card") {
-                      setGiftCardCode("");
-                      setGiftCardBalance(null);
-                      setGiftCardError("");
-                    }
-                  }}
-                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold text-sm transition border-2 ${
-                    paymentMethod === id
-                      ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                      : "border-slate-100 bg-white hover:border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {icon} {label || id}
-                </button>
-              ))}
-            </div>
+                ...(creditTenderOn
+                  ? [{ id: "Credit", label: "On Account", icon: <Receipt size={16} />, requiresCustomer: true }]
+                  : []),
+              ];
+              const colClass =
+                methods.length >= 5 ? "grid-cols-5"
+                  : methods.length === 4 ? "grid-cols-4"
+                  : "grid-cols-3";
+              return (
+                <div className={`grid ${colClass} gap-2`}>
+                  {methods.map(({ id, label, icon, requiresCustomer }) => {
+                    const disabled = requiresCustomer && !checkoutCustomerId;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        disabled={disabled}
+                        title={disabled ? "Select a customer to use On Account" : undefined}
+                        onClick={() => {
+                          if (disabled) return;
+                          setPaymentMethod(id);
+                          if (id !== "gift_card") {
+                            setGiftCardCode("");
+                            setGiftCardBalance(null);
+                            setGiftCardError("");
+                          }
+                        }}
+                        className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold text-sm transition border-2 ${
+                          disabled
+                            ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                            : paymentMethod === id
+                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
+                            : "border-slate-100 bg-white hover:border-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {icon} {label || id}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {paymentMethod === "gift_card" && (
               <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">

@@ -57,6 +57,10 @@ export function useCheckout({
   // 2-G.15 Day 4: when the backend rejects with insufficient_stock, we hand
   // the error payload up to POSContext so it can open POSInsufficientStockModal.
   onInsufficientStock,
+  // Tier 0.1 wholesale — when /api/sales rejects a Credit-tender sale with
+  // CREDIT_LIMIT_EXCEEDED (hard-mode + no override), open the manager-PIN
+  // modal upstream. Caller invokes retryWithManagerPin(pin) to re-submit.
+  onCreditLimitExceeded,
 }) {
   const { employee } = useAuth();
 
@@ -78,6 +82,15 @@ export function useCheckout({
   // Session expiry
   const [sessionExpired, setSessionExpired] = useState(false);
   const pendingSaleRef = useRef(null);
+
+  // Tier 0.1 wholesale — when /api/sales rejects a Credit sale with
+  // CREDIT_LIMIT_EXCEEDED, the salePayload is parked in pendingSaleRef and
+  // managerPinRef is filled by retryWithManagerPin(pin) which calls
+  // completeSale() again. On the retry, the payload now carries manager_pin.
+  // A non-null creditWarning surfaced from a successful sale (mode='warn'
+  // path) is exposed so POS can show a non-blocking notice.
+  const managerPinRef = useRef(null);
+  const [creditWarning, setCreditWarning] = useState(null);
 
   // Phase 2.1 C1 — tip + server capture for restaurant sales. Stored here so
   // any preset can use them; backend ignores tips when tip_amount = 0 and
@@ -300,7 +313,14 @@ export function useCheckout({
       // effective mode against company_profile.tax_mode and snapshots
       // per-line tax onto sale_items.
       tax_inclusive: !!taxInclusive,
+      // Tier 0.1 wholesale — manager PIN to override a hard credit-limit block
+      // on a Credit tender. Read once and cleared so retries don't reuse.
+      manager_pin: managerPinRef.current || undefined,
     };
+    // Clear the pin immediately after stamping the payload; if the retry
+    // itself fails the user is prompted to enter again rather than silently
+    // re-using a stale PIN. The salePayload above keeps the captured value.
+    managerPinRef.current = null;
 
     const queueSaleOffline = async () => {
       try {
@@ -368,7 +388,37 @@ export function useCheckout({
         setSubmitting(false);
         return;
       }
+      // Tier 0.1 wholesale — 403 CREDIT_LIMIT_EXCEEDED when a Credit-tender
+      // sale would push the customer past their limit in hard-block mode.
+      // Park the payload so retryWithManagerPin can re-submit with manager_pin.
+      if (!res.ok && data?.code === "CREDIT_LIMIT_EXCEEDED" && onCreditLimitExceeded) {
+        pendingSaleRef.current = salePayload;
+        onCreditLimitExceeded({
+          limit: Number(data.limit) || 0,
+          outstanding: Number(data.outstanding) || 0,
+          attempted: Number(data.attempted) || 0,
+          deficit: Number(data.deficit) || 0,
+          message: data.error,
+        });
+        setSubmitting(false);
+        return;
+      }
+      if (!res.ok && data?.code === "CREDIT_REQUIRES_CUSTOMER") {
+        setError?.("Credit tender requires a customer to be selected.");
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to complete sale");
+
+      // Tier 0.1 wholesale — non-blocking creditWarning surfaced as a notice
+      // when mode='warn' and the sale crossed the limit. (Backend always
+      // populates this field; null on non-credit sales.)
+      if (data?.creditWarning) {
+        setCreditWarning(data.creditWarning);
+        showNotice?.(data.creditWarning);
+      } else {
+        setCreditWarning(null);
+      }
 
       const custObj = checkoutCustomerId
         ? customers.find((c) => String(c.id) === String(checkoutCustomerId))
@@ -442,6 +492,64 @@ export function useCheckout({
     }
   }, [customers, setSlip, setSlipOpen, clearAfterSale, showNotice, setError, buildSuccessSlip, loadParked, selectedOutletId]);
 
+  // Tier 0.1 wholesale — re-submit a parked Credit-tender salePayload with a
+  // verified manager PIN. The salePayload was stashed in pendingSaleRef by
+  // the 403 CREDIT_LIMIT_EXCEEDED branch above. We stamp manager_pin onto a
+  // shallow clone (NOT mutate the parked payload) so a failed retry can be
+  // attempted again with a fresh PIN.
+  const retryWithManagerPin = useCallback(async (pin) => {
+    const parked = pendingSaleRef.current;
+    if (!parked || !pin) return { ok: false, error: "No pending sale or PIN missing" };
+    setSubmitting(true);
+    setError?.("");
+    try {
+      const payload = { ...parked, manager_pin: String(pin) };
+      const res = await api.raw(`/api/sales`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.status === 403 && data?.code === "CREDIT_LIMIT_EXCEEDED") {
+        // PIN wrong / employee lacks override. Keep payload parked so a
+        // fresh PIN can be tried.
+        return { ok: false, error: data.error || "Invalid manager PIN" };
+      }
+      if (!res.ok) {
+        pendingSaleRef.current = null;
+        return { ok: false, error: data?.error || "Failed to complete sale" };
+      }
+      // Success — clear parked payload, render success slip exactly like the
+      // primary completeSale path.
+      pendingSaleRef.current = null;
+      const custObj = parked.customer_id
+        ? customers.find((c) => String(c.id) === String(parked.customer_id))
+        : null;
+      setSlip(buildSuccessSlip(data, custObj, {
+        payments: parked.payments,
+        discountInput: parked.discount_amount,
+        discountType: parked.discount_type,
+        orderNote: parked.notes || null,
+      }));
+      setSlipOpen(true);
+      if (data?.creditWarning) {
+        setCreditWarning(data.creditWarning);
+        showNotice?.(data.creditWarning);
+      }
+      clearAfterSale();
+      showNotice?.(`Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`);
+      await loadParked?.(selectedOutletId);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message || "Failed to complete sale" };
+    } finally {
+      setSubmitting(false);
+    }
+  }, [customers, setSlip, setSlipOpen, clearAfterSale, showNotice, setError, buildSuccessSlip, loadParked, selectedOutletId]);
+
+  const cancelCreditOverride = useCallback(() => {
+    pendingSaleRef.current = null;
+  }, []);
+
   return {
     payments, setPayments,
     paymentMethod, setPaymentMethod,
@@ -464,6 +572,10 @@ export function useCheckout({
     completeSale,
     sessionExpired, setSessionExpired,
     retryPendingSale,
+    // Tier 0.1 wholesale — Credit-tender manager-PIN override
+    retryWithManagerPin,
+    cancelCreditOverride,
+    creditWarning, setCreditWarning,
     // Phase 2.1 C1 wiring
     tipAmount, setTipAmount,
     tipMethod, setTipMethod,

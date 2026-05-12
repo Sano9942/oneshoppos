@@ -46,6 +46,10 @@ const EMPTY = {
   emergency_contact_name: "",
   emergency_contact_phone: "",
   insurance_id: "",
+  // Tier 0.1 wholesale — A/R credit controls. credit_limit=0 means unlimited.
+  credit_limit: "",
+  credit_block_mode: "warn",
+  payment_terms_days: "",
 };
 
 // Clinical presets share the medical UI block on the customer page.
@@ -179,6 +183,8 @@ export default function CustomersRedesign() {
   // Customer groups + profile
   const [customerGroups, setCustomerGroups] = useState([]);
   const [profileData, setProfileData] = useState(null);
+  // Tier 0.1 wholesale — A/R credit status from GET /api/customers/:id/credit-status
+  const [creditStatus, setCreditStatus] = useState(null);
   const [allTags, setAllTags] = useState([]);
   const [tagInput, setTagInput] = useState("");
   const [tagSuggestions, setTagSuggestions] = useState([]);
@@ -222,22 +228,28 @@ export default function CustomersRedesign() {
     setOhPage(1);
     setOhTotal(0);
     setProfileData(null);
+    setCreditStatus(null);
     setClinicalSubjects([]);
     setClinicalPlans([]);
     try {
-      const [salesData, walletData, profileRes] = await Promise.all([
+      const [salesData, walletData, profileRes, creditRes] = await Promise.all([
         api.get(`/api/customers/${customer.id}/sales`),
         api.get(`/api/customers/${customer.id}/wallet`),
         api.get(`/api/customers/${customer.id}/profile`),
+        // credit-status is best-effort: fail-silent on older tenants without
+        // the endpoint (pre-v88 backend) or transient errors.
+        api.get(`/api/customers/${customer.id}/credit-status`).catch(() => null),
       ]);
       setCustomerSales(salesData.sales || []);
       setWalletBalance(walletData.balance || 0);
       setWalletLedger(walletData.ledger || []);
       setProfileData(profileRes);
+      setCreditStatus(creditRes || null);
     } catch {
       setCustomerSales([]);
       setWalletBalance(0);
       setWalletLedger([]);
+      setCreditStatus(null);
     }
     // Clinical presets: fetch subjects + treatment plans in parallel.
     // Endpoints are mode/flag-gated on the backend — a 403 (M29) means the
@@ -393,6 +405,9 @@ export default function CustomersRedesign() {
       emergency_contact_name: row.emergency_contact_name || "",
       emergency_contact_phone: row.emergency_contact_phone || "",
       insurance_id: row.insurance_id || "",
+      credit_limit: row.credit_limit != null ? String(row.credit_limit) : "",
+      credit_block_mode: row.credit_block_mode || "warn",
+      payment_terms_days: row.payment_terms_days != null ? String(row.payment_terms_days) : "",
     });
     setFormError("");
     setModalOpen(true);
@@ -927,6 +942,59 @@ export default function CustomersRedesign() {
                       </div>
                     </SectionCard>
                   )}
+
+                  {/* Credit & A/R — Tier 0.1 wholesale. Renders only when the
+                      credit_limit field is meaningfully set (limit > 0 OR
+                      outstanding > 0) so retail tenants don't see clutter. */}
+                  {creditStatus && (Number(creditStatus.credit_limit) > 0 || Number(creditStatus.outstanding) > 0) && (() => {
+                    const limit = Number(creditStatus.credit_limit) || 0;
+                    const outstanding = Number(creditStatus.outstanding) || 0;
+                    const pct = creditStatus.utilization_pct != null ? Number(creditStatus.utilization_pct) : 0;
+                    const overLimit = limit > 0 && outstanding > limit;
+                    const barColor = overLimit
+                      ? "bg-red-500"
+                      : pct >= 75
+                      ? "bg-amber-500"
+                      : "bg-emerald-500";
+                    const modeLabel = creditStatus.credit_block_mode === "hard"
+                      ? "Hard block"
+                      : creditStatus.credit_block_mode === "off"
+                      ? "Off"
+                      : "Warn";
+                    return (
+                      <SectionCard className="p-2">
+                        <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Credit & A/R</p>
+                        <div className="flex items-baseline justify-between text-xs mb-1.5">
+                          <span className="text-(--ui-text-muted)">Outstanding</span>
+                          <span className={`font-semibold ${overLimit ? "text-red-600" : "text-(--ui-text)"}`}>
+                            {money(outstanding)}{limit > 0 ? ` / ${money(limit)}` : " (no limit)"}
+                          </span>
+                        </div>
+                        {limit > 0 && (
+                          <div className="h-1.5 w-full rounded-full bg-(--ui-border) overflow-hidden mb-1.5">
+                            <div
+                              className={`h-full ${barColor} transition-all`}
+                              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                            />
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                          {limit > 0 && (
+                            <>
+                              <span className="text-(--ui-text-muted)">Available</span>
+                              <span className="text-(--ui-text)">{money(Math.max(0, Number(creditStatus.available) || 0))}</span>
+                            </>
+                          )}
+                          <span className="text-(--ui-text-muted)">Block mode</span>
+                          <span className="text-(--ui-text)">{modeLabel}</span>
+                          <span className="text-(--ui-text-muted)">Payment terms</span>
+                          <span className="text-(--ui-text)">
+                            {Number(creditStatus.payment_terms_days) > 0 ? `Net ${creditStatus.payment_terms_days}` : "COD"}
+                          </span>
+                        </div>
+                      </SectionCard>
+                    );
+                  })()}
 
                   {/* Consent & Quick Actions */}
                   <SectionCard className="p-2">
@@ -1512,6 +1580,51 @@ export default function CustomersRedesign() {
                 <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.preferred_contact} onChange={(e) => setForm((p) => ({ ...p, preferred_contact: e.target.value }))}>
                   {CONTACT_OPTIONS.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
                 </select>
+              </div>
+
+              {/* Credit & Payment Terms — Tier 0.1 wholesale */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Credit & Payment Terms</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Credit Limit</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0 = unlimited"
+                    value={form.credit_limit}
+                    onChange={(e) => setForm((p) => ({ ...p, credit_limit: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Block Mode</label>
+                  <select
+                    className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)"
+                    value={form.credit_block_mode}
+                    onChange={(e) => setForm((p) => ({ ...p, credit_block_mode: e.target.value }))}
+                  >
+                    <option value="off">Off — never block</option>
+                    <option value="warn">Warn — soft warning</option>
+                    <option value="hard">Hard — manager PIN required</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Payment Terms</label>
+                  <select
+                    className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)"
+                    value={form.payment_terms_days}
+                    onChange={(e) => setForm((p) => ({ ...p, payment_terms_days: e.target.value }))}
+                  >
+                    <option value="">— Default —</option>
+                    <option value="0">COD (Net 0)</option>
+                    <option value="7">Net 7</option>
+                    <option value="15">Net 15</option>
+                    <option value="30">Net 30</option>
+                    <option value="45">Net 45</option>
+                    <option value="60">Net 60</option>
+                    <option value="90">Net 90</option>
+                  </select>
+                </div>
               </div>
 
               {/* Communication Consent */}

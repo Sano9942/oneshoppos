@@ -30,6 +30,7 @@ import POSCartCollisionModal from "./pos/POSCartCollisionModal";
 import POSCartResumeModal from "./pos/POSCartResumeModal";
 import POSBarcodeMissModal from "./pos/POSBarcodeMissModal";
 import POSInsufficientStockModal from "./pos/POSInsufficientStockModal";
+import POSCreditLimitModal from "./pos/POSCreditLimitModal";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
@@ -309,8 +310,12 @@ function POSErrorStateModals() {
     cartResumePrompt, resumeCartFromCheckpoint, discardCartCheckpoint,
     barcodeMissPrompt, setBarcodeMissPrompt,
     insufficientStockPrompt, setInsufficientStockPrompt,
+    creditLimitPrompt, setCreditLimitPrompt,
+    retryWithManagerPin, cancelCreditOverride,
+    submitting,
     addToCart, setQty,
   } = usePOS();
+  const [creditPinError, setCreditPinError] = useState("");
 
   return (
     <>
@@ -376,6 +381,28 @@ function POSErrorStateModals() {
         canOverride={false}
         onAdjust={(productId, _variantId, available) => setQty?.(productId, available)}
         onClose={() => setInsufficientStockPrompt(null)}
+      />
+
+      <POSCreditLimitModal
+        open={!!creditLimitPrompt}
+        prompt={creditLimitPrompt}
+        currency={currencySymbol}
+        error={creditPinError}
+        loading={submitting}
+        onSubmit={async (pin) => {
+          setCreditPinError("");
+          const result = await retryWithManagerPin?.(pin);
+          if (result?.ok) {
+            setCreditLimitPrompt(null);
+          } else {
+            setCreditPinError(result?.error || "Manager PIN verification failed");
+          }
+        }}
+        onClose={() => {
+          cancelCreditOverride?.();
+          setCreditLimitPrompt(null);
+          setCreditPinError("");
+        }}
       />
     </>
   );
