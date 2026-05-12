@@ -97,16 +97,16 @@ export default function AppLayoutRedesign() {
       const product = labels.product || "Product";
       const products = labels.products || "Products";
       const sale = labels.sale || "Sale";
-      const sales = sale === "Sale" ? "Sales" : `${sale}s`;
-      // Order matters — replace plurals before singulars to avoid
-      // "Customer" inside "Customers" being substituted first.
+      // "Sales History" is "Invoice History" (singular modifier) in wholesale,
+      // "Order History" in cafe, etc. — handle explicitly. "Parked Sales" stays
+      // plural ("Parked Invoices").
       return label
         .replace(/Customers/g, customers)
         .replace(/Customer/g, customer)
         .replace(/Products/g, products)
         .replace(/Product/g, product)
-        .replace(/Sales/g, sales)
-        .replace(/Sale/g, sale);
+        .replace(/Sales History/g, `${sale} History`)
+        .replace(/Parked Sales/g, `Parked ${sale}s`);
     },
     [labels],
   );
