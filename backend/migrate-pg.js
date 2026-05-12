@@ -6425,6 +6425,37 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 89,
+    description:
+      "Tier 0.1 wholesale — backfill override_credit_limit perm onto Manager role for existing tenants (role_permissions only seeds at tenant creation, not on subsequent boots)",
+    up: async (client) => {
+      const { rows: rolesT } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'roles'
+      `);
+      if (!rolesT.length) return;
+
+      try {
+        await client.query("SAVEPOINT v89_override_credit_limit_perm");
+        const { rows: [manager] } = await client.query(
+          "SELECT id FROM roles WHERE name = 'Manager' LIMIT 1"
+        );
+        if (manager?.id) {
+          await client.query(
+            `INSERT INTO role_permissions (role_id, permission)
+             VALUES ($1, 'override_credit_limit')
+             ON CONFLICT DO NOTHING`,
+            [manager.id]
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v89_override_credit_limit_perm");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v89_override_credit_limit_perm");
+        console.warn(`[migrate-pg v89] override_credit_limit backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {
