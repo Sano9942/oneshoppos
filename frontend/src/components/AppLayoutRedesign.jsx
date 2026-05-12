@@ -96,13 +96,17 @@ export default function AppLayoutRedesign() {
       const customers = labels.customers || "Customers";
       const product = labels.product || "Product";
       const products = labels.products || "Products";
+      const sale = labels.sale || "Sale";
+      const sales = sale === "Sale" ? "Sales" : `${sale}s`;
       // Order matters — replace plurals before singulars to avoid
       // "Customer" inside "Customers" being substituted first.
       return label
         .replace(/Customers/g, customers)
         .replace(/Customer/g, customer)
         .replace(/Products/g, products)
-        .replace(/Product/g, product);
+        .replace(/Product/g, product)
+        .replace(/Sales/g, sales)
+        .replace(/Sale/g, sale);
     },
     [labels],
   );
