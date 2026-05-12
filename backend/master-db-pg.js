@@ -141,8 +141,13 @@ async function init(db) {
   _db = db;
   const client = await db.pool.connect();
   try {
-    await client.query("SET search_path TO public");
+    await client.query("BEGIN");
+    await client.query("SET LOCAL search_path TO public");
     await client.query(MASTER_SCHEMA);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
   } finally {
     client.release();
   }
@@ -156,8 +161,8 @@ async function createTenant({ slug, name, ownerEmail, timezone }) {
   const db = _getDb();
   const client = await db.pool.connect();
   try {
-    await client.query("SET search_path TO public");
     await client.query("BEGIN");
+    await client.query("SET LOCAL search_path TO public");
     const { rows } = await client.query(
       `INSERT INTO tenants (slug, name, owner_email, timezone)
        VALUES ($1, $2, $3, $4)
@@ -200,15 +205,23 @@ async function getTenantById(id) {
 
 /**
  * Direct query on the master (public schema) pool.
- * Explicitly sets search_path to public to avoid stale tenant schema
- * on reused pool connections.
+ * Wraps SET + query in a transaction so Supavisor transaction-mode pooling
+ * pins both statements to the same backend connection — otherwise the SET
+ * lands on one backend and the SELECT lands on another that still has a
+ * stale tenant search_path, causing phantom "not found" lookups.
  */
 async function query(sql, params) {
   const db = _getDb();
   const client = await db.pool.connect();
   try {
-    await client.query("SET search_path TO public");
-    return await client.query(sql, params);
+    await client.query("BEGIN");
+    await client.query("SET LOCAL search_path TO public");
+    const result = await client.query(sql, params);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
   } finally {
     client.release();
   }
