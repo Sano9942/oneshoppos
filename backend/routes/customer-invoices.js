@@ -31,6 +31,30 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
   const gate = [requireFeature("customer_invoicing"), requirePerm("manage_orders")];
 
+  // Tier 0.2 — when a caller omits due_date on invoice create, derive it from
+  // the customer's payment_terms_days (Net X). Returns either an ISO date
+  // string (YYYY-MM-DD) when terms are set, or null when terms are 0/missing
+  // (COD — caller intent matches). Pre-condition: customer_id exists on the
+  // tenant's customers table; bad ids return null without throwing so the
+  // upstream INSERT can still report its own foreign-key error.
+  async function resolveDueDate(db, customerId, providedDueDate) {
+    if (providedDueDate) return providedDueDate;
+    if (!customerId) return null;
+    try {
+      const { rows: [cust] } = await db.query(
+        "SELECT payment_terms_days FROM customers WHERE id = $1",
+        [customerId]
+      );
+      const days = Number(cust?.payment_terms_days || 0);
+      if (days <= 0) return null;
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  }
+
   // ── List invoices ─────────────────────────────────────────────────────
 
   app.get("/api/customer-invoices", ...gate, async (req, res) => {
@@ -95,6 +119,9 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
       const { customer_id, items, due_date, notes, outlet_id, discount_amount, reminders } = req.body;
       const totals = computeInvoiceTotals(items, discount_amount);
       const invoiceNumber = await generateInvoiceNumber(deps.db);
+      // Tier 0.2 — default due_date from customer.payment_terms_days when
+      // the caller omits it. Explicit dates win; 0/missing terms keep null.
+      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date);
 
       const { rows: [invoice] } = await deps.db.query(
         `INSERT INTO customer_invoices
@@ -102,7 +129,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
             subtotal, tax_total, discount_amount, total_amount, balance_due, due_date, notes)
          VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $8, $9, $10) RETURNING *`,
         [invoiceNumber, customer_id, outlet_id || null, req.employee.id,
-         totals.subtotal, totals.tax_total, discount_amount || 0, totals.total_amount, due_date || null, notes || null]
+         totals.subtotal, totals.tax_total, discount_amount || 0, totals.total_amount, effectiveDueDate, notes || null]
       );
 
       for (const item of totals.items) {
@@ -115,7 +142,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
       // Schedule reminders if provided and due_date set. tenantSlug is
       // required so each invoice-reminder job carries tenant routing.
-      if (reminders && reminders.length > 0 && due_date) {
+      if (reminders && reminders.length > 0 && effectiveDueDate) {
         const boss = await getBoss();
         await scheduleReminders(boss, deps.db, invoice.id, reminders, req.tenantSlug);
       }
@@ -139,6 +166,8 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
       const { customer_id, items, due_date, notes, outlet_id, discount_amount } = req.body;
       const totals = computeInvoiceTotals(items, discount_amount);
+      // Tier 0.2 — same default-from-payment_terms_days rule as POST.
+      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date);
 
       const { rows: [invoice] } = await deps.db.query(
         `UPDATE customer_invoices SET
@@ -147,7 +176,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
            due_date = $7, notes = $8, updated_at = NOW()
          WHERE id = $9 RETURNING *`,
         [customer_id, outlet_id || null, totals.subtotal, totals.tax_total,
-         discount_amount || 0, totals.total_amount, due_date || null, notes || null, id]
+         discount_amount || 0, totals.total_amount, effectiveDueDate, notes || null, id]
       );
 
       // Replace items

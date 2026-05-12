@@ -110,14 +110,32 @@ async function convertQuotationToInvoice(db, quotationId, employeeId) {
   const totals = computeInvoiceTotals(items, Number(quotation.discount_amount || 0));
   const invoiceNumber = await generateInvoiceNumber(db);
 
+  // Tier 0.2 — quotations don't carry payment terms; derive due_date from
+  // the customer's payment_terms_days at conversion time. Net 0 / missing
+  // leaves due_date null (COD).
+  let dueDate = null;
+  try {
+    const { rows: [cust] } = await db.query(
+      "SELECT payment_terms_days FROM customers WHERE id = $1",
+      [quotation.customer_id]
+    );
+    const days = Number(cust?.payment_terms_days || 0);
+    if (days > 0) {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + days);
+      dueDate = d.toISOString().slice(0, 10);
+    }
+  } catch { /* keep null on lookup error */ }
+
   const { rows: [invoice] } = await db.query(
     `INSERT INTO customer_invoices
        (invoice_number, customer_id, quotation_id, outlet_id, employee_id, status,
-        subtotal, tax_total, discount_amount, total_amount, balance_due)
-     VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $9) RETURNING *`,
+        subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
+     VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $9, $10) RETURNING *`,
     [
       invoiceNumber, quotation.customer_id, quotationId, quotation.outlet_id, employeeId,
       totals.subtotal, totals.tax_total, Number(quotation.discount_amount || 0), totals.total_amount,
+      dueDate,
     ]
   );
 
@@ -144,12 +162,31 @@ async function createBatchInvoices(db, { customerIds, items, dueDate, discountAm
   const created = [];
 
   for (const customerId of customerIds) {
+    // Tier 0.2 — when caller didn't supply a dueDate, derive per-customer
+    // from customers.payment_terms_days. Buyers on different Net terms get
+    // different due dates from the same batch — matches real billing intent.
+    let effectiveDueDate = dueDate || null;
+    if (!effectiveDueDate) {
+      try {
+        const { rows: [cust] } = await db.query(
+          "SELECT payment_terms_days FROM customers WHERE id = $1",
+          [customerId]
+        );
+        const days = Number(cust?.payment_terms_days || 0);
+        if (days > 0) {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() + days);
+          effectiveDueDate = d.toISOString().slice(0, 10);
+        }
+      } catch { /* keep null on lookup error — batch should continue */ }
+    }
+
     // Idempotency: skip if same customer+due_date+total exists in last 24h
     const { rows: [dup] } = await db.query(
       `SELECT id FROM customer_invoices
        WHERE customer_id = $1 AND due_date = $2 AND total_amount = $3
          AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
-      [customerId, dueDate || null, totals.total_amount]
+      [customerId, effectiveDueDate, totals.total_amount]
     );
     if (dup) {
       logger.info({ customerId, existingInvoiceId: dup.id }, "Batch invoice skipped — duplicate");
@@ -162,7 +199,7 @@ async function createBatchInvoices(db, { customerIds, items, dueDate, discountAm
          (invoice_number, customer_id, outlet_id, employee_id, status,
           subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
        VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $8, $9) RETURNING *`,
-      [invoiceNumber, customerId, outletId || null, employeeId, totals.subtotal, totals.tax_total, discountAmount || 0, totals.total_amount, dueDate || null]
+      [invoiceNumber, customerId, outletId || null, employeeId, totals.subtotal, totals.tax_total, discountAmount || 0, totals.total_amount, effectiveDueDate]
     );
 
     for (const item of totals.items) {
