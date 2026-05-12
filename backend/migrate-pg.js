@@ -6408,18 +6408,74 @@ async function migrate(db) {
 }
 
 /**
+ * Build a db-like wrapper that pins every query/transaction to `schema`.
+ * Wraps SET LOCAL search_path inside BEGIN/COMMIT so Supavisor transaction
+ * pooling can't split the SET and the query across different backends.
+ */
+function makeScopedDb(db, schema) {
+  return {
+    pool: db.pool,
+    query: async (sql, params) => {
+      const client = await db.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`SET LOCAL search_path TO ${schema}, public`);
+        const result = await client.query(sql, params);
+        await client.query("COMMIT");
+        return result;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+    transaction: async (fn) => {
+      const client = await db.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`SET LOCAL search_path TO ${schema}, public`);
+        const wrappedClient = {
+          query: (sql, params) => client.query(sql, params),
+        };
+        const result = await fn(wrappedClient);
+        await client.query("COMMIT");
+        return result;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+  };
+}
+
+/**
  * Run migrations against all active tenant schemas.
  * Each tenant schema has its own schema_version table.
  */
 async function migrateAllTenants(db) {
-  // Migrate public schema first
-  await migrate(db);
+  // Build a search_path-pinned wrapper for the public-schema migration run.
+  // Same Supavisor leak applies here: raw pool.query() can land on a backend
+  // whose search_path was left set to a tenant schema by an earlier request,
+  // so schema_version etc. could resolve to the wrong table.
+  // Each query/transaction wraps SET LOCAL search_path inside BEGIN/COMMIT.
+  const publicDb = makeScopedDb(db, "public");
 
-  // Check if multi-tenant mode — look for tenants table
+  // Migrate public schema first
+  await migrate(publicDb);
+
+  // Check if multi-tenant mode — look for tenants table.
+  // publicDb above is already pinned to public via SET LOCAL search_path,
+  // so an unqualified `FROM tenants` here cannot resolve to a tenant schema's
+  // own tenants table (livetest1 / livetestauto both carry one).
+  let tenants;
   try {
-    const { rows: tenants } = await db.query(
+    const result = await publicDb.query(
       "SELECT id, slug FROM tenants WHERE status = 'active'"
     );
+    tenants = result.rows;
     if (!tenants.length) {
       console.log("[migrate-pg] No active tenants to migrate.");
       return;
@@ -6427,44 +6483,20 @@ async function migrateAllTenants(db) {
     for (const tenant of tenants) {
       const schema = `tenant_${tenant.slug}`;
       console.log(`[migrate-pg] Migrating tenant: ${tenant.slug} (${schema})`);
-      // Create a scoped wrapper that sets search_path per query
-      const scopedDb = {
-        query: async (sql, params) => {
-          const client = await db.pool.connect();
-          try {
-            await client.query(`SET search_path TO ${schema}, public`);
-            return await client.query(sql, params);
-          } finally {
-            client.release();
-          }
-        },
-        transaction: async (fn) => {
-          const client = await db.pool.connect();
-          try {
-            await client.query(`SET search_path TO ${schema}, public`);
-            await client.query("BEGIN");
-            const wrappedClient = {
-              query: (sql, params) => client.query(sql, params),
-            };
-            await fn(wrappedClient);
-            await client.query("COMMIT");
-          } catch (err) {
-            await client.query("ROLLBACK");
-            throw err;
-          } finally {
-            client.release();
-          }
-        },
-      };
+      const scopedDb = makeScopedDb(db, schema);
       try {
         await migrate(scopedDb);
       } catch (err) {
         console.error(`[migrate-pg] tenant ${tenant.slug} FAILED:`, err.message);
       }
     }
-  } catch {
+  } catch (err) {
     // tenants table doesn't exist — single-tenant mode, skip
-    console.log("[migrate-pg] No tenants table found — single-tenant mode.");
+    if (String(err.message || "").includes("does not exist")) {
+      console.log("[migrate-pg] No tenants table found — single-tenant mode.");
+      return;
+    }
+    throw err;
   }
 }
 
