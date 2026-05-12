@@ -836,7 +836,17 @@ export default function POSReturnExchangeModal() {
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Refund method</p>
                   <div className="flex gap-2 flex-wrap">
-                    {["Cash", "Card", "Wallet", "Store Credit"].map((m) => (
+                    {[
+                      "Cash",
+                      "Card",
+                      "Wallet",
+                      "Store Credit",
+                      // Tier 0.1 wholesale — only valid when the original sale
+                      // was a Credit-tender sale (sales.customer_invoice_id
+                      // set by v88). Reduces the linked A/R invoice's
+                      // balance_due instead of paying the buyer back.
+                      ...(resolvedSale?.customer_invoice_id ? ["credit_reversal"] : []),
+                    ].map((m) => (
                       <button
                         key={m}
                         onClick={() => setSettleMethod(m)}
@@ -846,10 +856,17 @@ export default function POSReturnExchangeModal() {
                             : "border-slate-200 text-slate-500 hover:bg-slate-50"
                         }`}
                       >
-                        {m}
+                        {m === "credit_reversal" ? "Reduce A/R" : m}
                       </button>
                     ))}
                   </div>
+                  {settleMethod === "credit_reversal" && (
+                    <p className="mt-1.5 text-[11px] text-violet-600">
+                      Refund will reduce the buyer's outstanding A/R balance
+                      on the original on-account invoice — no cash leaves the
+                      drawer.
+                    </p>
+                  )}
                 </div>
               )}
 
