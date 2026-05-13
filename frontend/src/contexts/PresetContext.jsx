@@ -106,21 +106,31 @@ export function PresetProvider({ children }) {
 
     // W7 — first-call retry on transient 401. PresetContext intentionally
     // waits for !isBootstrapping before firing, but the auth fetch
-    // interceptor races: if AuthProvider's interceptor useEffect hasn't
-    // wired by the time api.get fires, the request goes through unpatched
-    // window.fetch and 401s. The same call retried 600ms later succeeds
-    // because the interceptor is now live. Without this retry the W1
-    // writeContext call also never fires (it's in the .then() that the
-    // 401 skips), leaving Floor/Checks/KDS pages bouncing on Free tenants.
-    const fetchWithRetry = () =>
-      api.get("/api/context/bootstrap").catch(async (err) => {
+    // interceptor races: AuthProvider's interceptor useEffect runs AFTER
+    // PresetProvider's (child effects fire before parent effects on the
+    // same commit), so PresetProvider's first fetch sees the previous
+    // closure of window.fetch (which captured a null employee) and 401s
+    // on the unauthenticated request.
+    //
+    // Yielding to a macrotask before the first call lets AuthProvider's
+    // effect commit the new interceptor closure (with the live employee)
+    // first. Retry stays as a safety net in case the wider event loop
+    // takes longer than the yield. Removes the console 401 noise that
+    // would otherwise fire on every login — important for field reps
+    // since their dashboard route loads PresetContext immediately.
+    const fetchWithRetry = async () => {
+      await new Promise((r) => setTimeout(r, 0));
+      try {
+        return await api.get("/api/context/bootstrap");
+      } catch (err) {
         if (cancelled) throw err;
         if (err?.status === 401) {
           await new Promise((r) => setTimeout(r, 600));
           return api.get("/api/context/bootstrap");
         }
         throw err;
-      });
+      }
+    };
 
     fetchWithRetry()
       .then((data) => {
