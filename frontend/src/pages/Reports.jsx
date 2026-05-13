@@ -106,6 +106,7 @@ import {
   GSTOutputTab,
   GSTTypeSummaryTab,
 } from "./reports/ReportsFinance";
+import ARAgingTab from "./reports/ARAgingTab";
 import {
   AttendanceTab,
   LaborPerformanceTab,
@@ -514,6 +515,7 @@ const GROUPS = [
     tabs: [
       { id: "settlement-overview", label: "Settlement Overview", icon: Wallet },
       { id: "payables-receivables", label: "Payables / Receivables", icon: Receipt },
+      { id: "ar-aging", label: "A/R Aging", icon: Receipt },
       { id: "supplier-payments-invoices", label: "Supplier Payments", icon: Truck },
       { id: "finance-payment-mix", label: "Finance Payment Mix", icon: Calculator },
       { id: "gst-output", label: "GST Output", icon: BadgePercent },
@@ -710,6 +712,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <SettlementOverviewTab filters={filters} />;
     case "payables-receivables":
       return <PayablesReceivablesTab filters={filters} />;
+    case "ar-aging":
+      return <ARAgingTab filters={filters} />;
     case "supplier-payments-invoices":
       return <SupplierPaymentsInvoicesTab filters={filters} />;
     case "finance-payment-mix":

@@ -535,6 +535,101 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
+  app.get("/api/reports/ar-aging", async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "UTC";
+
+      let buckets = [30, 60, 90];
+      const raw = req.company?.ar_aging_buckets;
+      if (Array.isArray(raw) && raw.length === 3) {
+        const nums = raw.map((v) => Number(v));
+        const allValid =
+          nums.every((n) => Number.isInteger(n) && n > 0) &&
+          nums[0] < nums[1] &&
+          nums[1] < nums[2];
+        if (allValid) buckets = nums;
+      }
+      const [b1, b2, b3] = buckets;
+
+      const asOf = req.query.as_of && /^\d{4}-\d{2}-\d{2}$/.test(req.query.as_of)
+        ? req.query.as_of
+        : new Date(
+            new Date().toLocaleString("en-US", { timeZone: isValidTz(tz) ? tz : "UTC" }),
+          )
+            .toISOString()
+            .slice(0, 10);
+
+      const outletIds =
+        req.query.outlet_id !== undefined && req.query.outlet_id !== ""
+          ? String(req.query.outlet_id).split(",").map(Number).filter(Boolean)
+          : [];
+
+      // "Unpaid" = balance_due > 0 AND status not in terminal/non-AR states.
+      // Drafts with balance_due=0 are excluded by the balance test; drafts with
+      // non-zero balance surface here intentionally (operator can spot them).
+      const where = [
+        "ci.balance_due > 0",
+        "ci.status NOT IN ('paid','cancelled','void')",
+      ];
+      const params = [asOf, b1, b1, b2, b2, b3, b3];
+      if (outletIds.length === 1) {
+        where.push(`ci.outlet_id = $${params.length + 1}`);
+        params.push(outletIds[0]);
+      } else if (outletIds.length > 1) {
+        const placeholders = outletIds.map((_, i) => `$${params.length + 1 + i}`).join(",");
+        where.push(`ci.outlet_id IN (${placeholders})`);
+        params.push(...outletIds);
+      }
+
+      const sql = `
+        WITH aged AS (
+          SELECT
+            ci.customer_id,
+            ci.balance_due,
+            GREATEST(0, ($1::date - COALESCE(ci.due_date, $1::date))::int) AS days_overdue
+          FROM customer_invoices ci
+          WHERE ${where.join(" AND ")}
+        )
+        SELECT
+          aged.customer_id,
+          c.name,
+          ROUND(SUM(CASE WHEN days_overdue <= $2 THEN balance_due ELSE 0 END), 2) AS b0,
+          ROUND(SUM(CASE WHEN days_overdue >  $3 AND days_overdue <= $4 THEN balance_due ELSE 0 END), 2) AS b1,
+          ROUND(SUM(CASE WHEN days_overdue >  $5 AND days_overdue <= $6 THEN balance_due ELSE 0 END), 2) AS b2,
+          ROUND(SUM(CASE WHEN days_overdue >  $7 THEN balance_due ELSE 0 END), 2) AS b3_plus,
+          ROUND(SUM(balance_due), 2) AS total
+        FROM aged
+        JOIN customers c ON c.id = aged.customer_id
+        GROUP BY aged.customer_id, c.name
+        HAVING SUM(balance_due) > 0
+        ORDER BY total DESC, c.name ASC
+      `;
+
+      const { rows } = await db.query(sql, params);
+
+      const totals = rows.reduce(
+        (acc, r) => {
+          acc.b0 += Number(r.b0 || 0);
+          acc.b1 += Number(r.b1 || 0);
+          acc.b2 += Number(r.b2 || 0);
+          acc.b3_plus += Number(r.b3_plus || 0);
+          acc.total += Number(r.total || 0);
+          return acc;
+        },
+        { b0: 0, b1: 0, b2: 0, b3_plus: 0, total: 0 },
+      );
+      totals.b0 = roundMoney(totals.b0);
+      totals.b1 = roundMoney(totals.b1);
+      totals.b2 = roundMoney(totals.b2);
+      totals.b3_plus = roundMoney(totals.b3_plus);
+      totals.total = roundMoney(totals.total);
+
+      res.json({ as_of: asOf, buckets, rows, totals });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/reports/supplier-payments-invoices", async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
