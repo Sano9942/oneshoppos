@@ -136,6 +136,14 @@ export const SHOPIFY_NAV_GROUPS = [
     ],
   },
   {
+    label: "Field Sales",
+    items: [
+      { name: "Routes", path: "/field/routes", icon: ClipboardList, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
+      { name: "Visits", path: "/field/visits", icon: History, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
+      { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
+    ],
+  },
+  {
     label: "Online Store",
     items: [
       { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },

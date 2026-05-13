@@ -339,6 +339,54 @@ module.exports = function registerFieldRoutes(app, deps) {
   );
 
   // ─────────────────────────────────────────────────────────────────────
+  // GET /api/admin/field-routes?employee_id=N — owner view: rep's full
+  // weekly beat across all 7 days, grouped by day_of_week. Powers the
+  // route-assignment admin UI.
+  // ─────────────────────────────────────────────────────────────────────
+  app.get(
+    "/api/admin/field-routes",
+    requireFeature("wholesale_field_sales"),
+    requirePerm("manage_field_sales"),
+    async (req, res) => {
+      try {
+        const employeeId = Number(req.query.employee_id);
+        if (!Number.isInteger(employeeId) || employeeId <= 0) {
+          return res.status(400).json({ error: "employee_id is required" });
+        }
+        const { rows } = await db.query(
+          `
+          SELECT
+            r.day_of_week,
+            r.visit_order,
+            r.customer_id,
+            c.name,
+            c.mobile,
+            c.address
+          FROM field_rep_routes r
+          JOIN customers c ON c.id = r.customer_id AND c.deleted_at IS NULL
+          WHERE r.employee_id = $1
+          ORDER BY r.day_of_week ASC, r.visit_order ASC
+          `,
+          [employeeId]
+        );
+        const days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+        for (const row of rows) {
+          days[row.day_of_week].push({
+            customer_id: row.customer_id,
+            name: row.name,
+            mobile: row.mobile,
+            address: row.address,
+            visit_order: row.visit_order,
+          });
+        }
+        res.json({ employee_id: employeeId, days });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
   // POST /api/admin/field-routes — owner seeds/updates a rep's weekly beat.
   // Replace-all semantics for (employee_id, day_of_week).
   // ─────────────────────────────────────────────────────────────────────

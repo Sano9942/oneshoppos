@@ -59,6 +59,7 @@ const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
 const FieldTodayRedesign = lazy(() => import("../pages/redesign/field/FieldTodayRedesign"));
 const FieldCheckInRedesign = lazy(() => import("../pages/redesign/field/FieldCheckInRedesign"));
 const FieldVisitsRedesign = lazy(() => import("../pages/redesign/field/FieldVisitsRedesign"));
+const FieldRoutesAdminRedesign = lazy(() => import("../pages/redesign/field/FieldRoutesAdminRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
@@ -293,5 +294,6 @@ export const appRoutes = [
     <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />
     <Route path="/field/check-in/:customer_id" element={perm("manage_field_sales", wrap(FieldCheckInRedesign))} />
     <Route path="/field/visits" element={perm("manage_field_sales", wrap(FieldVisitsRedesign))} />
+    <Route path="/field/routes" element={perm("manage_field_sales", wrap(FieldRoutesAdminRedesign))} />
   </Route>,
 ];
