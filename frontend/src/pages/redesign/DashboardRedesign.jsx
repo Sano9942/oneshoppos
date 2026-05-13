@@ -29,6 +29,7 @@ import FBRPromptBanner from "../../ui/FBRPromptBanner";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
+import DashboardWholesale from "../dashboard/DashboardWholesale";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { usePreset } from "../../contexts/PresetContext";
 
@@ -61,6 +62,9 @@ export default function DashboardRedesign() {
   // 2-G.16 Merchant home cards — only show when the tenant is in a retail
   // preset. Clinical / restaurant tenants keep the original dashboard.
   const showRetailCards = !isCashier && typeof hasMode === "function" && hasMode("retail");
+  // Tier 0.5 — wholesale dashboard cards. Render when the tenant has the
+  // `wholesale` mode set. Cashiers don't see A/R surfaces.
+  const showWholesaleCards = !isCashier && typeof hasMode === "function" && hasMode("wholesale");
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -187,6 +191,13 @@ export default function DashboardRedesign() {
       <div className="mb-4">
         <DashboardKPICards data={data} isCashier={isCashier} onNavigate={onNavigate} />
       </div>
+
+      {/* Tier 0.5 — wholesale A/R cards (mode-gated) */}
+      {showWholesaleCards && (
+        <div className="mb-4">
+          <DashboardWholesale refreshKey={refreshKey} />
+        </div>
+      )}
 
       {/* 2-G.16 Merchant home — staff-of-day + cash-position side-by-side (retail only) */}
       {showRetailCards && (

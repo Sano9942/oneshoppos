@@ -666,4 +666,71 @@ module.exports = function (app, deps) {
       res.status(500).json({ error: "Failed to load dashboard data" });
     }
   });
+
+  // Wholesale dashboard cards (Tier 0.5). Surfaced on the home dashboard
+  // when the tenant has the `wholesale` mode set. Returns: total
+  // outstanding A/R, overdue total (days_overdue > overdue_days, default
+  // 30), and top 5 buyers by balance. "Unpaid" matches the rest of the
+  // wholesale stack: balance_due > 0 AND status NOT IN ('paid','cancelled','void').
+  app.get("/api/reports/dashboard/wholesale", async (req, res) => {
+    try {
+      const overdueDays = Math.max(0, Math.min(365, parseInt(req.query.overdue_days, 10) || 30));
+
+      const { rows: [agg] } = await db.query(
+        `SELECT
+           COALESCE(SUM(balance_due), 0)::numeric AS total_outstanding,
+           COALESCE(SUM(
+             CASE WHEN due_date IS NOT NULL
+                   AND (CURRENT_DATE - due_date) > $1
+                  THEN balance_due ELSE 0 END
+           ), 0)::numeric AS overdue_amount,
+           COUNT(*) FILTER (
+             WHERE due_date IS NOT NULL AND (CURRENT_DATE - due_date) > $1
+           )::int AS overdue_invoice_count,
+           COUNT(*)::int AS open_invoice_count
+         FROM customer_invoices
+         WHERE balance_due > 0
+           AND status NOT IN ('paid','cancelled','void')`,
+        [overdueDays]
+      );
+
+      const { rows: topBuyers } = await db.query(
+        `SELECT
+           c.id AS customer_id,
+           c.name,
+           ROUND(SUM(ci.balance_due), 2) AS balance,
+           COUNT(ci.id)::int AS open_invoice_count,
+           ROUND(SUM(
+             CASE WHEN ci.due_date IS NOT NULL
+                   AND (CURRENT_DATE - ci.due_date) > $1
+                  THEN ci.balance_due ELSE 0 END
+           ), 2) AS overdue_amount
+         FROM customer_invoices ci
+         JOIN customers c ON c.id = ci.customer_id
+         WHERE ci.balance_due > 0
+           AND ci.status NOT IN ('paid','cancelled','void')
+         GROUP BY c.id, c.name
+         ORDER BY SUM(ci.balance_due) DESC
+         LIMIT 5`,
+        [overdueDays]
+      );
+
+      res.json({
+        total_outstanding: Number(agg.total_outstanding),
+        overdue_amount: Number(agg.overdue_amount),
+        overdue_invoice_count: agg.overdue_invoice_count,
+        open_invoice_count: agg.open_invoice_count,
+        overdue_days: overdueDays,
+        top_buyers: topBuyers.map((r) => ({
+          customer_id: r.customer_id,
+          name: r.name,
+          balance: Number(r.balance),
+          open_invoice_count: r.open_invoice_count,
+          overdue_amount: Number(r.overdue_amount),
+        })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 };
