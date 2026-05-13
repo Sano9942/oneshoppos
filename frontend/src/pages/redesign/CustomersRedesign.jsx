@@ -153,6 +153,14 @@ export default function CustomersRedesign() {
   const [pointsAdjust, setPointsAdjust] = useState("");
   const [walletTopup, setWalletTopup] = useState("");
   const [walletNote, setWalletNote] = useState("");
+  // Tier 0.4 wholesale — customer statement modal state
+  const [statementOpen, setStatementOpen] = useState(false);
+  const [statementFrom, setStatementFrom] = useState("");
+  const [statementTo, setStatementTo] = useState("");
+  const [statementEmail, setStatementEmail] = useState("");
+  const [statementSending, setStatementSending] = useState(false);
+  const [statementPreview, setStatementPreview] = useState(null);
+  const [statementPreviewLoading, setStatementPreviewLoading] = useState(false);
   const [blacklistModal, setBlacklistModal] = useState(false);
   const [blacklistReason, setBlacklistReason] = useState("");
   const [detailTab, setDetailTab] = useState("profile");
@@ -593,6 +601,61 @@ export default function CustomersRedesign() {
     }
   };
 
+  // Tier 0.4 — customer statement: opens modal with defaults preloaded
+  // from the backend (first of current month → today, customer email).
+  const openStatementModal = () => {
+    if (!detail) return;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    setStatementFrom(`${yyyy}-${mm}-01`);
+    setStatementTo(`${yyyy}-${mm}-${dd}`);
+    setStatementEmail(detail.email || "");
+    setStatementPreview(null);
+    setStatementOpen(true);
+  };
+
+  const loadStatementPreview = async () => {
+    if (!detail || !statementFrom || !statementTo) return;
+    setStatementPreviewLoading(true);
+    try {
+      const data = await api.get(`/api/customers/${detail.id}/statement`, {
+        from: statementFrom,
+        to: statementTo,
+      });
+      setStatementPreview(data);
+    } catch (e) {
+      toast.error(e.body?.error || e.message || "Failed to load preview");
+      setStatementPreview(null);
+    } finally {
+      setStatementPreviewLoading(false);
+    }
+  };
+
+  const sendStatement = async () => {
+    if (!detail) return;
+    const to = (statementEmail || "").trim();
+    if (!to) {
+      toast.error("Enter a recipient email");
+      return;
+    }
+    setStatementSending(true);
+    try {
+      const res = await api.post(`/api/customers/${detail.id}/send-statement`, {
+        from: statementFrom,
+        to: statementTo,
+        email: to,
+      });
+      toast.success(`Statement sent to ${res.sent_to}`);
+      setStatementOpen(false);
+    } catch (e) {
+      toast.error(e.body?.error || e.message || "Failed to send statement");
+    } finally {
+      setStatementSending(false);
+    }
+  };
+
   const blacklistCustomer = async () => {
     if (!detail || !blacklistReason.trim()) return;
     setBusy(true);
@@ -991,6 +1054,9 @@ export default function CustomersRedesign() {
                           <span className="text-(--ui-text)">
                             {Number(creditStatus.payment_terms_days) > 0 ? `Net ${creditStatus.payment_terms_days}` : "COD"}
                           </span>
+                        </div>
+                        <div className="mt-2 flex justify-end">
+                          <Button size="sm" onClick={openStatementModal}>Send Statement</Button>
                         </div>
                       </SectionCard>
                     );
@@ -1941,6 +2007,96 @@ export default function CustomersRedesign() {
                 onClick={submitTransfer}
               >
                 Transfer {transferPoints && Number(transferPoints) > 0 ? `${transferPoints} Points` : ""}
+              </Button>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
+
+      {/* Tier 0.4 wholesale — Customer Statement modal */}
+      <Modal
+        open={statementOpen && !!detail}
+        onClose={statementSending ? undefined : () => setStatementOpen(false)}
+        title="Send Customer Statement"
+        size="lg"
+      >
+        {detail ? (
+          <>
+            <p className="text-xs text-(--ui-text-muted)">
+              Bank-style statement for <strong>{detail.name}</strong>: opening balance, invoices, payments, credit reversals, and closing balance.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-(--ui-text-muted)">From</label>
+                <Input type="date" value={statementFrom} onChange={(e) => { setStatementFrom(e.target.value); setStatementPreview(null); }} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-(--ui-text-muted)">To</label>
+                <Input type="date" value={statementTo} onChange={(e) => { setStatementTo(e.target.value); setStatementPreview(null); }} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-(--ui-text-muted)">Recipient Email</label>
+                <Input type="email" value={statementEmail} onChange={(e) => setStatementEmail(e.target.value)} placeholder="buyer@example.com" />
+                {!detail.email && (
+                  <p className="mt-1 text-xs text-amber-600">This customer has no email on file — enter one above to send.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <Button size="sm" onClick={loadStatementPreview} disabled={statementPreviewLoading || !statementFrom || !statementTo}>
+                {statementPreviewLoading ? "Loading…" : "Preview Statement"}
+              </Button>
+            </div>
+
+            {statementPreview && (
+              <div className="mt-3 rounded border border-(--ui-border) p-3 text-xs">
+                <div className="mb-2 flex justify-between">
+                  <span className="text-(--ui-text-muted)">Opening balance</span>
+                  <span className="font-semibold text-(--ui-text)">{money(statementPreview.opening_balance)}</span>
+                </div>
+                <div className="max-h-64 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-(--ui-border) text-(--ui-text-muted)">
+                        <th className="py-1 text-left">Date</th>
+                        <th className="py-1 text-left">Description</th>
+                        <th className="py-1 text-right">Debit</th>
+                        <th className="py-1 text-right">Credit</th>
+                        <th className="py-1 text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statementPreview.entries.length === 0 ? (
+                        <tr><td colSpan={5} className="py-3 text-center text-(--ui-text-muted)">No activity in this period</td></tr>
+                      ) : statementPreview.entries.map((e, idx) => (
+                        <tr key={idx} className="border-b border-(--ui-border)">
+                          <td className="py-1">{e.date_label}</td>
+                          <td className="py-1">{e.label}</td>
+                          <td className="py-1 text-right">{Number(e.debit) > 0 ? money(e.debit) : ""}</td>
+                          <td className="py-1 text-right text-emerald-600">{Number(e.credit) > 0 ? money(e.credit) : ""}</td>
+                          <td className="py-1 text-right font-medium">{money(e.running_balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex justify-between border-t border-(--ui-border) pt-2">
+                  <span className="font-semibold text-(--ui-text)">Closing balance</span>
+                  <span className="font-bold text-(--ui-text)">{money(statementPreview.closing_balance)}</span>
+                </div>
+                {Math.abs(Number(statementPreview.closing_balance) - Number(statementPreview.current_balance_due)) > 0.01 && (
+                  <p className="mt-2 text-xs text-(--ui-text-muted)">
+                    Note: closing balance reflects activity through {statementPreview.to}. Current outstanding is {money(statementPreview.current_balance_due)}.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <ModalFooter>
+              <Button type="button" onClick={() => setStatementOpen(false)} disabled={statementSending}>Cancel</Button>
+              <Button tone="primary" onClick={sendStatement} disabled={statementSending || !statementEmail.trim() || !statementFrom || !statementTo}>
+                {statementSending ? "Sending…" : "Send by Email"}
               </Button>
             </ModalFooter>
           </>

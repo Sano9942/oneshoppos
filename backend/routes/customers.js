@@ -239,6 +239,224 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  // ── Customer Statement (Tier 0.4 wholesale, bank-style A/R) ──────────────
+  //
+  // Builds opening balance + chronological activity + closing balance from
+  // customer_invoices and customer_invoice_payments. Excludes cash/card POS
+  // sales (never were A/R) and the customer_wallet_ledger (prepaid, not
+  // credit). Returns structured JSON + ready-to-render data for email.
+  async function buildStatementData(customerId, fromArg, toArg, req) {
+    const tz = req.company?.timezone || "UTC";
+
+    // Default range: 1st of current month → today (in tenant tz).
+    const today = new Date(
+      new Date().toLocaleString("en-US", { timeZone: tz === "UTC" ? "UTC" : tz })
+    );
+    const defaultTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const defaultFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+
+    const from = fromArg && /^\d{4}-\d{2}-\d{2}$/.test(fromArg) ? fromArg : defaultFrom;
+    const to = toArg && /^\d{4}-\d{2}-\d{2}$/.test(toArg) ? toArg : defaultTo;
+    const fromUtc = toUtcStart(from, tz);
+    const toUtc = toUtcEnd(to, tz);
+
+    const { rows: [customer] } = await db.query(
+      "SELECT id, name, email, mobile, credit_limit, payment_terms_days FROM customers WHERE id = $1",
+      [customerId]
+    );
+    if (!customer) {
+      const err = new Error("Customer not found");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // Opening balance = SUM(invoices issued before `from`) - SUM(payments before `from`).
+    // Invoices: all non-cancelled count (status='void' is also excluded since voided invoices reversed the AR).
+    const { rows: [openInv] } = await db.query(
+      `SELECT COALESCE(SUM(total_amount), 0)::numeric AS amt
+       FROM customer_invoices
+       WHERE customer_id = $1 AND status NOT IN ('cancelled','void') AND created_at < $2`,
+      [customerId, fromUtc]
+    );
+    const { rows: [openPay] } = await db.query(
+      `SELECT COALESCE(SUM(p.amount), 0)::numeric AS amt
+       FROM customer_invoice_payments p
+       JOIN customer_invoices i ON i.id = p.invoice_id
+       WHERE i.customer_id = $1 AND p.created_at < $2`,
+      [customerId, fromUtc]
+    );
+    const opening_balance = Number(openInv.amt) - Number(openPay.amt);
+
+    // In-period activity: invoices and payments, chronological.
+    const { rows: invRows } = await db.query(
+      `SELECT id, invoice_number, total_amount, created_at, status
+       FROM customer_invoices
+       WHERE customer_id = $1
+         AND status NOT IN ('cancelled','void')
+         AND created_at >= $2 AND created_at < $3`,
+      [customerId, fromUtc, toUtc]
+    );
+    const { rows: payRows } = await db.query(
+      `SELECT p.id, p.invoice_id, i.invoice_number, p.amount, p.payment_method,
+              p.payment_type, p.reference, p.created_at
+       FROM customer_invoice_payments p
+       JOIN customer_invoices i ON i.id = p.invoice_id
+       WHERE i.customer_id = $1
+         AND p.created_at >= $2 AND p.created_at < $3`,
+      [customerId, fromUtc, toUtc]
+    );
+
+    const entries = [];
+    invRows.forEach((r) => {
+      entries.push({
+        date: r.created_at,
+        kind: "invoice",
+        label: `Invoice ${r.invoice_number || `#${r.id}`}`,
+        debit: Number(r.total_amount),
+        credit: 0,
+        reference_id: r.id,
+      });
+    });
+    payRows.forEach((r) => {
+      const isReversal = r.payment_type === "credit_reversal";
+      entries.push({
+        date: r.created_at,
+        kind: isReversal ? "credit_reversal" : "payment",
+        label: isReversal
+          ? `Credit Reversal (${r.reference || `Pay-${r.id}`}) on ${r.invoice_number || `Inv-${r.invoice_id}`}`
+          : `Payment ${r.payment_method ? `(${r.payment_method})` : ""} on ${r.invoice_number || `Inv-${r.invoice_id}`}`.trim(),
+        debit: 0,
+        credit: Number(r.amount),
+        reference_id: r.id,
+      });
+    });
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Compute running balance per row.
+    let running = opening_balance;
+    let period_debits = 0;
+    let period_credits = 0;
+    const dateFmt = (d) => {
+      const dt = new Date(d);
+      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+    };
+    const renderedEntries = entries.map((e) => {
+      running = running + e.debit - e.credit;
+      period_debits += e.debit;
+      period_credits += e.credit;
+      return {
+        ...e,
+        date_label: dateFmt(e.date),
+        running_balance: Math.round(running * 100) / 100,
+      };
+    });
+    const closing_balance = Math.round(running * 100) / 100;
+
+    // Sanity check: closing balance should equal current SUM(balance_due) iff
+    // the period extends to "now". If `to` is in the past, this won't match.
+    const { rows: [curBal] } = await db.query(
+      `SELECT COALESCE(SUM(balance_due), 0)::numeric AS amt
+       FROM customer_invoices
+       WHERE customer_id = $1 AND status NOT IN ('cancelled','void')`,
+      [customerId]
+    );
+    const current_balance_due = Number(curBal.amt);
+
+    return {
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        mobile: customer.mobile,
+        credit_limit: Number(customer.credit_limit || 0),
+        payment_terms_days: Number(customer.payment_terms_days || 0),
+      },
+      company: {
+        name: req.company?.company_name || req.company?.name || "",
+        currency_symbol: req.company?.currency_symbol || "",
+      },
+      from,
+      to,
+      opening_balance: Math.round(opening_balance * 100) / 100,
+      entries: renderedEntries,
+      period_debits: Math.round(period_debits * 100) / 100,
+      period_credits: Math.round(period_credits * 100) / 100,
+      closing_balance,
+      current_balance_due,
+    };
+  }
+
+  app.get(
+    "/api/customers/:id/statement",
+    requireAnyPerm(["view_reports", "manage_customers", "all_access"]),
+    async (req, res) => {
+      try {
+        const data = await buildStatementData(
+          Number(req.params.id),
+          req.query.from,
+          req.query.to,
+          req
+        );
+        res.json(data);
+      } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    }
+  );
+
+  app.post(
+    "/api/customers/:id/send-statement",
+    requireAnyPerm(["manage_customers", "all_access"]),
+    async (req, res) => {
+      try {
+        const customerId = Number(req.params.id);
+        const data = await buildStatementData(
+          customerId,
+          req.body?.from,
+          req.body?.to,
+          req
+        );
+        const to = (req.body?.email || data.customer.email || "").trim();
+        if (!to) {
+          return res.status(400).json({ error: "No recipient email — set customer.email or pass email in body" });
+        }
+
+        const { sendEmail } = require("../services/email");
+        await sendEmail({
+          type: "customer_statement",
+          to,
+          tenant: { slug: req.tenantSlug, name: data.company.name || req.tenantSlug },
+          data: {
+            customer_name: data.customer.name,
+            company_name: data.company.name,
+            from: data.from,
+            to: data.to,
+            opening_balance: data.opening_balance,
+            entries: data.entries,
+            period_debits: data.period_debits,
+            period_credits: data.period_credits,
+            closing_balance: data.closing_balance,
+          },
+        });
+
+        try {
+          await db.query(
+            "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+            [
+              req.employee?.id || null,
+              "customer_statement_sent",
+              JSON.stringify({ customer_id: customerId, to, from: data.from, to_date: data.to, closing_balance: data.closing_balance }),
+            ]
+          );
+        } catch {}
+
+        res.json({ ok: true, sent_to: to, from: data.from, to: data.to, closing_balance: data.closing_balance });
+      } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    }
+  );
+
   /**
    * @swagger
    * /api/customers:
