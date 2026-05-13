@@ -554,6 +554,15 @@ module.exports = function registerReturnsRoutes(app, deps) {
              WHERE id = $3`,
             [newBalance, newStatus, inv.id]
           );
+          // Mirror the credit reversal as a payment row so the customer
+          // statement ledger (Tier 0.4) reconciles. Without this, the
+          // invoice balance silently drops with no corresponding entry.
+          await client.query(
+            `INSERT INTO customer_invoice_payments
+               (invoice_id, amount, payment_method, payment_type, reference, recorded_by)
+             VALUES ($1, $2, 'credit_reversal', 'credit_reversal', $3, $4)`,
+            [inv.id, refund, `RET-${retId}`, employee_id || null]
+          );
         }
 
         return retId;
