@@ -6653,6 +6653,82 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 91,
+    description:
+      "Tier 1.1 wholesale hotfix — re-run Field Rep role + manage_field_sales backfill for tenants where v90 sub-step 6 rolled back due to roles_id sequence collision",
+    up: async (client) => {
+      const { rows: rolesT } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'roles'
+      `);
+      if (!rolesT.length) return;
+
+      // Reset the roles_id_seq to MAX(id) before inserting. Sequence collision
+      // is the v90 failure mode — earlier rolled-back inserts had advanced
+      // nextval() past existing ids, causing roles_pkey conflicts.
+      try {
+        await client.query("SAVEPOINT v91_seq_reset");
+        await client.query(`
+          SELECT setval(
+            pg_get_serial_sequence('roles', 'id'),
+            COALESCE((SELECT MAX(id) FROM roles), 0) + 1,
+            false
+          )
+        `);
+        await client.query("RELEASE SAVEPOINT v91_seq_reset");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v91_seq_reset");
+        console.warn(`[migrate-pg v91] sequence reset skipped: ${err.message}`);
+      }
+
+      // Insert Field Rep role (its own savepoint — failure here must not block
+      // the Manager perm backfill that follows).
+      try {
+        await client.query("SAVEPOINT v91_field_rep_role");
+        await client.query(
+          `INSERT INTO roles (name) VALUES ('Field Rep') ON CONFLICT (name) DO NOTHING`
+        );
+        const { rows: [fieldRep] } = await client.query(
+          "SELECT id FROM roles WHERE name = 'Field Rep' LIMIT 1"
+        );
+        if (fieldRep?.id) {
+          await client.query(
+            `INSERT INTO role_permissions (role_id, permission)
+             VALUES ($1, 'manage_field_sales')
+             ON CONFLICT DO NOTHING`,
+            [fieldRep.id]
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v91_field_rep_role");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v91_field_rep_role");
+        console.warn(`[migrate-pg v91] Field Rep role skipped: ${err.message}`);
+      }
+
+      // Backfill Manager.manage_field_sales independently — this is the part
+      // that v90 silently dropped, so it must succeed even if the role insert
+      // above failed for some other reason.
+      try {
+        await client.query("SAVEPOINT v91_manager_perm");
+        const { rows: [manager] } = await client.query(
+          "SELECT id FROM roles WHERE name = 'Manager' LIMIT 1"
+        );
+        if (manager?.id) {
+          await client.query(
+            `INSERT INTO role_permissions (role_id, permission)
+             VALUES ($1, 'manage_field_sales')
+             ON CONFLICT DO NOTHING`,
+            [manager.id]
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v91_manager_perm");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v91_manager_perm");
+        console.warn(`[migrate-pg v91] Manager perm backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {
