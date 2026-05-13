@@ -55,6 +55,10 @@ const ReorderAlertsRedesign = lazy(() => import("../pages/redesign/ReorderAlerts
 const InventoryIntelligenceRoute = lazy(() => import("../pages/InventoryIntelligenceRoute"));
 const NotificationsRedesign = lazy(() => import("../pages/redesign/NotificationsRedesign"));
 const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
+// Tier 1.1 wholesale: field-rep mobile pages + owner-side visits report
+const FieldTodayRedesign = lazy(() => import("../pages/redesign/field/FieldTodayRedesign"));
+const FieldCheckInRedesign = lazy(() => import("../pages/redesign/field/FieldCheckInRedesign"));
+const FieldVisitsRedesign = lazy(() => import("../pages/redesign/field/FieldVisitsRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
@@ -284,5 +288,10 @@ export const appRoutes = [
     <Route path="/treatment-plans/templates" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/chart/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+
+    {/* Tier 1.1 wholesale field sales — feature flag check is inline inside each page. */}
+    <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />
+    <Route path="/field/check-in/:customer_id" element={perm("manage_field_sales", wrap(FieldCheckInRedesign))} />
+    <Route path="/field/visits" element={perm("manage_field_sales", wrap(FieldVisitsRedesign))} />
   </Route>,
 ];

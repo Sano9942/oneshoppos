@@ -12,6 +12,10 @@ export interface AuthEmployee {
   permissions: string[];
   token: string;
   refreshToken?: string;
+  // 2-G.16: per-employee login landing preference.
+  home_page?: "dashboard" | "retail_home" | null;
+  // Tier 1.1 wholesale: routes 'field_rep' employees to /field/today on login.
+  employee_type?: "in_store" | "field_rep";
 }
 
 /**

@@ -85,9 +85,16 @@ export default function ContextSelect() {
   }
 
   // Redirect conditions (after hooks)
-  // 2-G.16 Merchant home: honor the employee's `home_page` preference
+  // Tier 1.1 wholesale field sales: field reps go straight to /field/today
+  // regardless of home_page preference — the mobile screen IS their home.
+  // Otherwise (2-G.16 Merchant home) honour the employee's home_page preference
   // (`retail_home` → `/retail/home`) if set, else land on /dashboard.
-  const preferredHome = employee?.home_page === "retail_home" ? "/retail/home" : "/dashboard";
+  const preferredHome =
+    employee?.employee_type === "field_rep"
+      ? "/field/today"
+      : employee?.home_page === "retail_home"
+        ? "/retail/home"
+        : "/dashboard";
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (hasExistingContext) return <Navigate to={preferredHome} replace />;
   if (flagOff) return <Navigate to={preferredHome} replace />;

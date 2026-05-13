@@ -665,6 +665,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./treatment-plans")(app, deps);
   require("./treatment-plan-templates")(app, deps);
 
+  // --- Tier 1.1 wholesale: field rep mobile app ---
+  require("./field")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"

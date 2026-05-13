@@ -125,6 +125,10 @@ const DEFAULT_FEATURE_FLAGS = {
   // 'wholesale' → MODE_REGISTRY auto-enables) or via the v87 backfill for
   // existing wholesale tenants.
   wholesale_credit_controls: false,
+  // Tier 1.1 (wholesale field sales): mobile order-booker app — daily route,
+  // GPS+selfie check-in with mandatory outcome, owner-side visit report.
+  // Default false; opt-in per tenant via admin feature-flags UI.
+  wholesale_field_sales: false,
 };
 
 // Per-tenant feature flag cache

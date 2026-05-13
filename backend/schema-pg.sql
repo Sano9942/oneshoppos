@@ -97,7 +97,12 @@ CREATE TABLE IF NOT EXISTS employees (
   email TEXT,
   password_hash TEXT,
   -- 2-G.16: per-employee login landing preference ('dashboard', 'retail_home', NULL=default)
-  home_page TEXT
+  home_page TEXT,
+  -- v90 (Tier 1.1 wholesale): classifies employees into 'in_store' (default —
+  -- cashiers, managers, admins on a laptop) vs 'field_rep' (mobile order
+  -- bookers / DSRs). Field reps auto-redirect to /field/today on login.
+  employee_type TEXT NOT NULL DEFAULT 'in_store'
+    CHECK (employee_type IN ('in_store','field_rep'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique ON employees (email) WHERE email IS NOT NULL;
@@ -388,7 +393,11 @@ CREATE TABLE IF NOT EXISTS customers (
   credit_limit NUMERIC(12,2) NOT NULL DEFAULT 0,
   credit_block_mode TEXT NOT NULL DEFAULT 'warn'
     CHECK (credit_block_mode IN ('off','warn','hard')),
-  payment_terms_days INTEGER NOT NULL DEFAULT 0
+  payment_terms_days INTEGER NOT NULL DEFAULT 0,
+  -- v90 (Tier 1.1 wholesale): customer shop coordinates for field-sales
+  -- geofence verification. NULL until rep geo-tags the shop on first visit.
+  lat NUMERIC(9,6),
+  lng NUMERIC(9,6)
 );
 
 CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
@@ -401,6 +410,49 @@ CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
   note TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v90 (Tier 1.1 wholesale field sales): weekly beat plan per field rep.
+-- One row per (rep, day_of_week, customer) — the owner pre-plans which shops
+-- the rep visits each day of the week. day_of_week 0=Sunday..6=Saturday.
+CREATE TABLE IF NOT EXISTS field_rep_routes (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  visit_order SMALLINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (employee_id, day_of_week, visit_order)
+);
+CREATE INDEX IF NOT EXISTS idx_field_rep_routes_employee_dow
+  ON field_rep_routes (employee_id, day_of_week, visit_order);
+
+-- v90 (Tier 1.1 wholesale field sales): visit log with GPS verification + selfie.
+-- One row per check-in. client_uuid is the offline-queue idempotency key —
+-- retries on reconnect post the same UUID and the unique constraint dedupes.
+-- gps_distance_m is computed at check-in time against customers.lat/lng;
+-- gps_flagged = (distance > company_profile.field_geofence_meters).
+CREATE TABLE IF NOT EXISTS field_visits (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  planned_at TIMESTAMPTZ,
+  checked_in_at TIMESTAMPTZ,
+  gps_lat NUMERIC(9,6),
+  gps_lng NUMERIC(9,6),
+  gps_accuracy_m INTEGER,
+  gps_distance_m INTEGER,
+  gps_flagged BOOLEAN DEFAULT false,
+  selfie_url TEXT,
+  status TEXT NOT NULL DEFAULT 'planned'
+    CHECK (status IN ('planned','checked_in','ordered','no_stock_needed','shop_closed','owner_away')),
+  client_uuid TEXT UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_field_visits_employee_date
+  ON field_visits (employee_id, checked_in_at DESC);
+CREATE INDEX IF NOT EXISTS idx_field_visits_customer
+  ON field_visits (customer_id, checked_in_at DESC);
 
 -- Phase 2-G Wave 1: loyalty ledger (mirrors customer_wallet_ledger shape,
 -- widened enum for loyalty lifecycle — earn/redeem/adjust/expire).
@@ -1035,7 +1087,11 @@ CREATE TABLE IF NOT EXISTS company_profile (
   -- Default [30,60,90] = convention buckets 0-30 / 31-60 / 61-90 / 90+.
   -- PK distributors running weekly cycles can set [15,30,45] etc.
   -- Consumed by GET /api/reports/ar-aging (0.3).
-  ar_aging_buckets JSONB NOT NULL DEFAULT '[30, 60, 90]'::jsonb
+  ar_aging_buckets JSONB NOT NULL DEFAULT '[30, 60, 90]'::jsonb,
+  -- v90 (Tier 1.1 wholesale): field-rep geofence radius. Check-ins outside
+  -- this distance from customers.lat/lng are flagged (not blocked) for owner
+  -- review. 500m = "same block" tolerance for dense PK bazaars.
+  field_geofence_meters INTEGER NOT NULL DEFAULT 500
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (
@@ -2250,7 +2306,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_risk_controls', false, '2-G.17 anti-theft: no-sale tracking, refund threshold, anomaly detection, shift variance'),
   ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer'),
   ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)'),
-  ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements')
+  ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements'),
+  ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)

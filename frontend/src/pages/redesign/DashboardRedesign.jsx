@@ -29,6 +29,7 @@ import FBRPromptBanner from "../../ui/FBRPromptBanner";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
+import { FieldSummaryCards } from "../dashboard/FieldSummaryCards";
 import DashboardWholesale from "../dashboard/DashboardWholesale";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { usePreset } from "../../contexts/PresetContext";
@@ -166,6 +167,10 @@ export default function DashboardRedesign() {
 
       {/* AI Insight cards — pre-built analytics */}
       {!isCashier && <InsightCards />}
+
+      {/* Tier 1.1 wholesale: per-rep field sales summary. Renders nothing
+          unless wholesale_field_sales flag is on AND tenant has field reps. */}
+      {!isCashier && <FieldSummaryCards />}
 
       {/* Quick actions — role-aware horizontal button bar */}
       <div className="mb-4">

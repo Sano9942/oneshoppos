@@ -71,7 +71,11 @@ async function enqueueTyped(employeeId, payload, type) {
     throw new Error(`Offline queue full (${MAX_QUEUED} items). Please sync before adding more.`);
   }
   const key = payload?.idempotency_key;
-  if (!key) throw new Error(`${type === "return" ? "Return" : "Sale"} payload missing idempotency_key`);
+  if (!key) {
+    const label =
+      type === "return" ? "Return" : type === "check_in" ? "Check-in" : "Sale";
+    throw new Error(`${label} payload missing idempotency_key`);
+  }
   const row = {
     idempotency_key: key,
     employee_id: employeeId,
@@ -100,6 +104,24 @@ export async function enqueueSale(employeeId, salePayload) {
 
 export async function enqueueReturn(employeeId, returnPayload) {
   return enqueueTyped(employeeId, returnPayload, "return");
+}
+
+// Tier 1.1 wholesale: field-rep check-ins share the same IndexedDB store but
+// use type="check_in". Reuses MAX_QUEUED cap (50 — a rep does 8-15 visits/day,
+// so this is plenty). On reconnect, the drain loop sees these alongside sales
+// and POSTs them to /api/field/check-in. Payload contract:
+//   {
+//     idempotency_key: <uuid>,    // becomes field_visits.client_uuid
+//     customer_id, outcome, lat, lng, gps_accuracy_m, selfie_base64,
+//     tag_shop_location?
+//   }
+export async function enqueueCheckIn(employeeId, checkInPayload) {
+  return enqueueTyped(employeeId, checkInPayload, "check_in");
+}
+
+export async function getCheckInsQueue(employeeId) {
+  const rows = await getQueue(employeeId);
+  return rows.filter((r) => r.type === "check_in");
 }
 
 export async function markSyncing(idempotencyKey) {

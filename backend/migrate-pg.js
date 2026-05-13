@@ -6456,6 +6456,203 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 90,
+    description:
+      "Tier 1.1 wholesale field sales — employee_type classification, customer geocoding (lat/lng), company_profile.field_geofence_meters, field_rep_routes + field_visits tables, Field Rep role, wholesale_field_sales flag, manage_field_sales perm backfill",
+    up: async (client) => {
+      // Per-tenant migration. All tables live in tenant schemas.
+      const { rows: emp } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'employees'
+      `);
+      if (!emp.length) return;
+
+      // 1. employees.employee_type classification
+      try {
+        await client.query("SAVEPOINT v90_employee_type");
+        await client.query(`
+          ALTER TABLE employees
+            ADD COLUMN IF NOT EXISTS employee_type TEXT NOT NULL DEFAULT 'in_store'
+        `);
+        try {
+          await client.query(`
+            ALTER TABLE employees
+              ADD CONSTRAINT employees_employee_type_check
+              CHECK (employee_type IN ('in_store','field_rep'))
+          `);
+        } catch (e) {
+          if (!String(e.message || "").match(/already exists|duplicate/i)) throw e;
+        }
+        await client.query("RELEASE SAVEPOINT v90_employee_type");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_employee_type");
+        console.warn(`[migrate-pg v90] employee_type column skipped: ${err.message}`);
+      }
+
+      // 2. company_profile.field_geofence_meters (tenant-tunable radius)
+      try {
+        await client.query("SAVEPOINT v90_field_geofence");
+        const { rows: cp } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'company_profile'
+        `);
+        if (cp.length) {
+          await client.query(`
+            ALTER TABLE company_profile
+              ADD COLUMN IF NOT EXISTS field_geofence_meters INTEGER NOT NULL DEFAULT 500
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v90_field_geofence");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_field_geofence");
+        console.warn(`[migrate-pg v90] field_geofence_meters skipped: ${err.message}`);
+      }
+
+      // 3. customers.lat / customers.lng (NULL until rep geo-tags on first visit)
+      try {
+        await client.query("SAVEPOINT v90_customers_geo");
+        const { rows: cust } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'customers'
+        `);
+        if (cust.length) {
+          await client.query(`
+            ALTER TABLE customers
+              ADD COLUMN IF NOT EXISTS lat NUMERIC(9,6),
+              ADD COLUMN IF NOT EXISTS lng NUMERIC(9,6)
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v90_customers_geo");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_customers_geo");
+        console.warn(`[migrate-pg v90] customers lat/lng skipped: ${err.message}`);
+      }
+
+      // 4. field_rep_routes — weekly beat plan
+      try {
+        await client.query("SAVEPOINT v90_field_rep_routes");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS field_rep_routes (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+            customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            visit_order SMALLINT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (employee_id, day_of_week, visit_order)
+          )
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_field_rep_routes_employee_dow
+            ON field_rep_routes (employee_id, day_of_week, visit_order)
+        `);
+        await client.query("RELEASE SAVEPOINT v90_field_rep_routes");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_field_rep_routes");
+        console.warn(`[migrate-pg v90] field_rep_routes skipped: ${err.message}`);
+      }
+
+      // 5. field_visits — actual visit log with GPS + selfie + outcome
+      try {
+        await client.query("SAVEPOINT v90_field_visits");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS field_visits (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL REFERENCES employees(id),
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            outlet_id INTEGER REFERENCES outlets(id),
+            planned_at TIMESTAMPTZ,
+            checked_in_at TIMESTAMPTZ,
+            gps_lat NUMERIC(9,6),
+            gps_lng NUMERIC(9,6),
+            gps_accuracy_m INTEGER,
+            gps_distance_m INTEGER,
+            gps_flagged BOOLEAN DEFAULT false,
+            selfie_url TEXT,
+            status TEXT NOT NULL DEFAULT 'planned'
+              CHECK (status IN ('planned','checked_in','ordered','no_stock_needed','shop_closed','owner_away')),
+            client_uuid TEXT UNIQUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_field_visits_employee_date
+            ON field_visits (employee_id, checked_in_at DESC)
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_field_visits_customer
+            ON field_visits (customer_id, checked_in_at DESC)
+        `);
+        await client.query("RELEASE SAVEPOINT v90_field_visits");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_field_visits");
+        console.warn(`[migrate-pg v90] field_visits skipped: ${err.message}`);
+      }
+
+      // 6. Field Rep role + manage_field_sales perm backfill
+      try {
+        await client.query("SAVEPOINT v90_field_role");
+        const { rows: rolesT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'roles'
+        `);
+        if (rolesT.length) {
+          await client.query(
+            `INSERT INTO roles (name) VALUES ('Field Rep') ON CONFLICT (name) DO NOTHING`
+          );
+          const { rows: [fieldRep] } = await client.query(
+            "SELECT id FROM roles WHERE name = 'Field Rep' LIMIT 1"
+          );
+          if (fieldRep?.id) {
+            await client.query(
+              `INSERT INTO role_permissions (role_id, permission)
+               VALUES ($1, 'manage_field_sales')
+               ON CONFLICT DO NOTHING`,
+              [fieldRep.id]
+            );
+          }
+          // Backfill Manager so existing tenants gain field-sales access
+          const { rows: [manager] } = await client.query(
+            "SELECT id FROM roles WHERE name = 'Manager' LIMIT 1"
+          );
+          if (manager?.id) {
+            await client.query(
+              `INSERT INTO role_permissions (role_id, permission)
+               VALUES ($1, 'manage_field_sales')
+               ON CONFLICT DO NOTHING`,
+              [manager.id]
+            );
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v90_field_role");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_field_role");
+        console.warn(`[migrate-pg v90] Field Rep role / perm backfill skipped: ${err.message}`);
+      }
+
+      // 7. wholesale_field_sales feature flag — default OFF
+      try {
+        await client.query("SAVEPOINT v90_field_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('wholesale_field_sales', false,
+               'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v90_field_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v90_field_flag");
+        console.warn(`[migrate-pg v90] wholesale_field_sales flag skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

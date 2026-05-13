@@ -59,7 +59,9 @@ module.exports = function registerAuthRoutes(app, deps) {
 
     try {
       const { rows: [employee] } = await db.query(
-        `SELECT e.id, e.name, e.role_id, e.pin_code, e.pin_hash, e.password_hash, r.name as role, NULL as outlet_id
+        `SELECT e.id, e.name, e.role_id, e.pin_code, e.pin_hash, e.password_hash,
+                e.home_page, e.employee_type,
+                r.name as role, NULL as outlet_id
          FROM employees e
          LEFT JOIN roles r ON e.role_id = r.id
          WHERE LOWER(e.name) = LOWER($1) AND e.deleted_at IS NULL`,
@@ -103,6 +105,8 @@ module.exports = function registerAuthRoutes(app, deps) {
           name: employee.name,
           role_id: employee.role_id,
           outlet_id: employee.outlet_id || null,
+          home_page: employee.home_page || null,
+          employee_type: employee.employee_type || "in_store",
         },
         permissions,
       });
@@ -365,7 +369,8 @@ module.exports = function registerAuthRoutes(app, deps) {
         // 2. Find employee in tenant DB by username (manual resolution — no ALS context yet)
         const tenantDb = await tenantDbMgr.getDb(tenant.id);
         const { rows: [employee] } = await tenantDb.query(
-          `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, e.password_hash
+          `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, e.password_hash,
+                  e.home_page, e.employee_type
            FROM employees e
            WHERE LOWER(e.name) = LOWER($1) AND e.deleted_at IS NULL`,
           [String(username).trim()]
@@ -444,7 +449,13 @@ module.exports = function registerAuthRoutes(app, deps) {
 
         return res.json({
           token: accessToken,
-          employee: { id: employee.id, name: employee.name, role_id: employee.role_id },
+          employee: {
+            id: employee.id,
+            name: employee.name,
+            role_id: employee.role_id,
+            home_page: employee.home_page || null,
+            employee_type: employee.employee_type || "in_store",
+          },
           permissions,
           tenant: { slug: tenant.slug, name: tenant.name },
         });
@@ -1075,7 +1086,7 @@ module.exports = function registerAuthRoutes(app, deps) {
 
     try {
       const { rows: [employee] } = await db.query(
-        `SELECT e.id, e.name, e.role_id, e.home_page, r.name as role, NULL as outlet_id
+        `SELECT e.id, e.name, e.role_id, e.home_page, e.employee_type, r.name as role, NULL as outlet_id
          FROM employees e
          LEFT JOIN roles r ON e.role_id = r.id
          WHERE e.id = $1`,
@@ -1113,6 +1124,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           outlet_id: employee.outlet_id || null,
           // 2-G.16 Merchant home: landing preference, null=default (/dashboard)
           home_page: employee.home_page || null,
+          // Tier 1.1 wholesale: classifies in-store staff vs field reps.
+          // ContextSelect routes 'field_rep' to /field/today on login.
+          employee_type: employee.employee_type || "in_store",
         },
         permissions: (rows || []).map((r) => r.permission),
         company: {

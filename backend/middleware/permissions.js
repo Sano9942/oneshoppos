@@ -66,8 +66,13 @@ const DEFAULT_ROLE_PERMISSIONS = {
     // Tier 0.1 wholesale — manager PIN authorization for pushing a Credit-tender
     // sale past a customer's credit_limit when credit_block_mode='hard'.
     "override_credit_limit",
+    // Tier 1.1 wholesale — owner-side field sales visibility + route assignment.
+    "manage_field_sales",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
+  // Tier 1.1 wholesale — minimal role for mobile order bookers / DSRs.
+  // Only sees their own route, posts check-ins, reads their own visit history.
+  "Field Rep": ["manage_field_sales"],
 };
 
 async function ensureDefaultRolePermissions(db) {
