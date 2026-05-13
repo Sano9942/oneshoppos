@@ -46,6 +46,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       const { rows } = await db.query(
         `SELECT e.id, e.name, e.pin_code, e.email, e.password_hash IS NOT NULL as has_password,
                 e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day,
+                e.employee_type,
                 r.name as role, e.role_id
          FROM employees e LEFT JOIN roles r ON e.role_id = r.id
          WHERE e.deleted_at IS NULL ORDER BY e.name ASC`,
