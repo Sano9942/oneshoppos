@@ -1,4 +1,4 @@
-# SanoPOS Wholesale Master Reference — 2026-05-14 (updated end-of-day)
+# SanoPOS Wholesale Master Reference — 2026-05-14 (updated late-evening: Tier 1.1 shipped)
 
 **This is the single day-to-day wholesale/distribution reference for the repo.**
 
@@ -12,11 +12,13 @@ Companion file: [research-competitive-landscape.md](research-competitive-landsca
 
 ## Headline (read this first)
 
-**Tier 0 is complete (2026-05-14).** Wholesale now has its own mode, credit controls, A/R aging, customer statements, and dashboard cards. A wholesale tenant that signs up today gets: credit limit enforcement at POS with manager-PIN override, "On Account" tender, per-customer payment terms with auto-defaulted due dates, A/R aging by configurable buckets, bank-style customer statements emailed from the tenant's branded address, and home-dashboard cards for outstanding/overdue/top-buyers.
+**Tier 0 is complete (2026-05-14 morning). Tier 1.1 (field rep app foundation) is also shipped (2026-05-14 evening).** Wholesale now has its own mode, credit controls, A/R aging, customer statements, dashboard cards, AND the first piece of the Pakistan field-sales wedge: a mobile-first PWA where field reps log in, see their daily route, check in at each customer shop with GPS + selfie + outcome, and have those visits surface back to the owner on the dashboard.
 
-**That's the v1 floor.** It is no longer "general_retail with renamed labels." But a real wholesale distributor will still hit walls on UOM, field-rep workflow, schemes, and secondary sales — that's Tier 1.
+**Why the field-rep piece matters now:** Pakistan FMCG distributors run on order bookers / DSRs who visit 8-15 shops a day. The proof-of-visit problem (GPS + selfie + outcome) is the foundational primitive — schemes and secondary sales (Tier 1.2, 1.3) both depend on the rep being in the system first. With 1.1 live, those can layer on top.
 
-**The strategic position:** Pakistan-built distribution software (SAMS, SalesFlo) has van-sales DNA but weak portals and bolt-on FBR. Global platforms (Shopify B2B, Cin7, NetSuite) have portals and pricing engines but zero PJP/beat-plan/order-booker capability. **SanoPOS sits exactly between them** — we already have FBR queue infrastructure that local DMS struggle with, plus a global-grade core (multi-tenant, multi-outlet, RBAC, portal). The wedge is to add the PK-native field-rep layer that no global player will copy.
+**That's the v1 floor for both wholesale operations AND field sales.** It is no longer "general_retail with renamed labels." But a real wholesale distributor will still hit walls on UOM, schemes, secondary sales, and beat-plan admin UI — that's the rest of Tier 1 + Tier 2.
+
+**The strategic position:** Pakistan-built distribution software (SAMS, SalesFlo) has van-sales DNA but weak portals and bolt-on FBR. Global platforms (Shopify B2B, Cin7, NetSuite) have portals and pricing engines but zero PJP/beat-plan/order-booker capability. **SanoPOS sits exactly between them** — we already have FBR queue infrastructure that local DMS struggle with, plus a global-grade core (multi-tenant, multi-outlet, RBAC, portal), AND now the mobile order-booker layer that no global player has copied. The wedge widens with every Tier 1 step.
 
 ---
 
@@ -47,15 +49,39 @@ Companion file: [research-competitive-landscape.md](research-competitive-landsca
 | `ddee997` | Backend + Frontend | **Tier 0.4 — Customer Statements (bank-style A/R).** `GET /api/customers/:id/statement?from=&to=` returns opening balance + chronological entries + closing balance. Default range: 1st-of-month → today (tenant tz). `POST /api/customers/:id/send-statement` emails via `services/email.js` using new `customer_statement` template (added to `TENANT_TYPES` so it sends from `slug@sanopos.com`). Frontend: "Send Statement" button on the Credit & A/R section card opens a modal with date pickers, recipient email, Preview button, and Send action. |
 | `b2e0d5b` | Backend + Frontend | **Tier 0.5 — Wholesale dashboard cards.** `GET /api/reports/dashboard/wholesale` returns total_outstanding, overdue_amount (configurable via `?overdue_days=`, default 30), top 5 buyers by balance. New `DashboardWholesale` widget mounts on the home dashboard when `hasMode('wholesale')` AND `!isCashier`. Summary cards link to A/R aging report; buyer rows link to customer detail. |
 
-### Live state on `tenant_wholesalewalktest1778451` (prod, verified 2026-05-14)
+### 2026-05-14 (evening) commits — Tier 1.1 + bootstrap race fix
 
-- `schema_version = 89`
+| Commit | Layer | Summary |
+|---|---|---|
+| `e9d16f4` | Backend v90 + Frontend | **Tier 1.1 — Field rep mobile app foundation.** Migration v90: `employees.employee_type` (`in_store`/`field_rep`), `customers.lat`/`lng` (NULL until geo-tagged on first visit), `company_profile.field_geofence_meters` (default 500), `field_rep_routes` (weekly beat plan), `field_visits` (GPS + selfie + outcome log, `client_uuid` UNIQUE for offline idempotency), Field Rep role, `wholesale_field_sales` flag (default OFF), `manage_field_sales` perm backfilled onto Manager. New backend routes: `GET /api/field/route/today`, `POST /api/field/check-in` (R2 selfie upload + haversine distance + auto-tag-on-first-visit + idempotent on `client_uuid`), `GET /api/field/visits` (owner-facing filtered visit history), `GET /api/field/summary` (dashboard cards data), `POST /api/admin/field-routes` (route assignment endpoint — owner UI deferred to 1.1.5, seeded via SQL/CLI for now). New frontend pages: `/field/today` (mobile-first daily route list), `/field/check-in/:customer_id` (GPS auto-capture + front-camera selfie via `<input capture="user">` + client-side compression via new `imageCompress.js` + 4-button outcome flow + IndexedDB queue for offline retry via new `enqueueCheckIn`), `/field/visits` (owner drill-down table with selfie thumbnails). Login redirect: `ContextSelect` routes `employee_type='field_rep'` to `/field/today`. Dashboard: new `FieldSummaryCards` widget mounts when flag on + reps exist. New `services/geo.js` haversine helper. New `schemas/field.js` Zod schemas. New `scripts/seed-field-routes.js` CLI. |
+| `e105e20` | Backend v91 | **v91 hotfix — Field Rep role + Manager perm backfill.** v90 sub-step 6 rolled back on prod tenants because the `roles_id` sequence had advanced past existing ids (likely from earlier rolled-back attempts on the same migration run), so the role INSERT hit `roles_pkey` before `ON CONFLICT (name)` could match. Whole savepoint rolled back, dropping the Manager perm backfill too. v91 splits the failure-prone block into three independent savepoints: reset `roles_id_seq` to `MAX(id)+1` first, insert Field Rep role in its own savepoint, backfill Manager perm in its own savepoint (must succeed even if role insert hits some unrelated problem). |
+| `c031a6c` | Frontend | **Bootstrap race fix.** `PresetContext`'s `useEffect` fires on `(employee?.id, isBootstrapping)` change. On the login commit, child effects run before parent effects, so `PresetProvider`'s fetch fires before `AuthProvider`'s effect swaps in the new `window.fetch` interceptor (whose closure captured the new employee). The first `/api/context/bootstrap` went through the previous closure (employee=null) and 401'd — every login flashed a console error. The existing 600ms retry masked it functionally but was noisy. Fix: yield to a macrotask (`setTimeout 0`) before the first call. Pending React effects flush in microtasks, so the next macrotask sees the new interceptor live. Retry stays as safety net. |
+
+### Tier 1.1 walkthrough verification (Playwright + Supabase MCP)
+
+End-to-end verified 2026-05-14 evening, mobile viewport (390×844):
+
+1. **Owner dashboard** — Logged in as Wholesale Test Owner. `FieldSummaryCards` widget rendered: "Field Sales Today" header, Field Rep One card showing "Last seen never · 0 / 5 visited · 0 orders · 0 no stock · 0 closed · 0 away · 0 flagged".
+2. **Field rep login** — Logged in as Field Rep One. **Auto-redirected to `/field/today`** (employee_type routing works). Header "Wednesday's route" derived from `Asia/Karachi` timezone. "0 / 5 visited" pill. All 5 customer cards in `visit_order`. Cards for shops with NULL lat/lng show the "Shop not geo-tagged yet" hint.
+3. **Check-in #1 (geofence-pass path)** — Tapped Shaheen General Store (saved coords 24.85970, 67.02180). Faked GPS to 24.85993, 67.02201 (~30m away). Took a canvas-rendered selfie. Tapped "Took Order". Backend wrote `field_visits` row #1 with `customer_id=2, status='ordered', gps_distance_m=33, gps_flagged=false, gps_accuracy_m=18, selfie_url=R2 URL, client_uuid=<uuid>`. UI redirected back to `/field/today` showing "1 / 5 visited" + "Took Order" badge on Shaheen.
+4. **Check-in #2 (geo-tag-on-first-visit path)** — Tapped Test Distributor (saved coords NULL). The check-in page auto-flipped `tag_shop_location = true` because of NULL coords. Faked GPS to 24.915, 67.085. Took selfie. Tapped "Took Order". Backend wrote `field_visits` row #2 with `gps_distance_m=0` (matched the coords it just wrote) AND **also wrote `customers.lat=24.915000, lng=67.085000`** — first visit canonicalised the shop location.
+5. **Owner-side verification** — Logged back in as Wholesale Test Owner. Dashboard card refreshed showing "Last seen just now · 2 / 5 visited · 2 orders · 0 no stock · 0 closed · 0 away". Navigated to `/field/visits`. Table showed both visits with selfie thumbnails (clickable to R2 full-size), distance, accuracy, outcome. CSV export button works.
+6. **Console errors during walkthrough** — Initially 2 (one per login: bootstrap race 401). After `c031a6c` deployed, **0 errors** across full walkthrough.
+
+### Live state on `tenant_wholesalewalktest1778451` (prod, verified 2026-05-14 evening)
+
+- `schema_version = 91`
 - `tenant_modes`: `wholesale = true`
-- `feature_flags`: `wholesale_credit_controls = true`
-- `company_profile.ar_aging_buckets = [30, 60, 90]`
-- `customers` has the 3 credit columns
+- `feature_flags`: `wholesale_credit_controls = true`, `wholesale_field_sales = true`
+- `company_profile.ar_aging_buckets = [30, 60, 90]`, `field_geofence_meters = 500`
+- `customers` has the 3 credit columns + `lat`/`lng`
 - `sales.customer_invoice_id` FK exists
-- `role_permissions`: Manager has `override_credit_limit`
+- `role_permissions`: Manager has `override_credit_limit` + `manage_field_sales`; Field Rep has `manage_field_sales`
+- Roles: 1=Administrator, 2=Manager, 3=Cashier, **4=Field Rep**
+- Employees: id=1 Wholesale Test Owner, id=2 Test Cashier, **id=3 Field Rep One** (`employee_type='field_rep'`, password `TestField234!`, PIN `7777`)
+- Customers (5): 1=Test Distributor (now geo-tagged), 2=Shaheen General Store, 3=New City Mart, 4=Khalid Kiryana Store, 5=Ahmed Brothers
+- `field_rep_routes`: employee 3 has all 7 days seeded with 5 customers each (Sun-Sat)
+- `field_visits`: 2 rows from the walkthrough (Shaheen + Test Distributor, both `ordered`)
 - Test Distributor outstanding: Rs 183,000 across 4 open invoices (math reconciled via aging endpoint + statement endpoint)
 
 ### Tier 0 progress (final)
@@ -69,14 +95,17 @@ Companion file: [research-competitive-landscape.md](research-competitive-landsca
 | 0.5 — Wholesale dashboard cards | **SHIPPED** | Total Outstanding A/R, Overdue >30 days, Top 5 buyers by balance. Mode-gated, cashier-hidden. |
 | 0.6 — Wholesale mode + flag | **SHIPPED** | v87 — wholesale in MODE_REGISTRY, `wholesale_credit_controls` in DEFAULT_FEATURE_FLAGS, ar_aging_buckets in company_profile. |
 
-### Outstanding follow-ups (NOT blockers for Tier 0)
+### Outstanding follow-ups (NOT blockers — keep tracking)
 
 - **Integration tests**: `backend/tests/integration/pg-wholesale-credit-limit.test.js` lands with 9 `it.skip()` cases. The test-fixture clock-in path (direct insert into `attendance_sessions`) doesn't satisfy `/api/sales`' `getEmployeeCheckoutStatus` guard inside an isolated test schema. Likely a tz / session_type / today-date interaction. Debug separately and unskip.
 - **Browser walkthrough of 0.3–0.5 surfaces**: endpoints verified via authenticated curl + Supabase MCP. Visual confirmation of the new Reports tab, statement modal, and dashboard cards on `https://sanopos.com` deferred. UI logic mirrors existing patterns (reports tab matches FBRExportTab; statement modal matches the existing customer modals; dashboard widget matches the retail card pattern).
+- **Tier 1.1.5 — owner-facing route-assignment UI**: `/admin/field-routes` page with rep + day-of-week + drag-drop customer ordering. v90 backend endpoint `POST /api/admin/field-routes` already accepts the body; CLI script `seed-field-routes.js` already drives it. Build this only when (a) 3+ wholesale tenants use the field app, or (b) the first owner asks to self-serve route edits. Until then, support seeds via SQL / `railway run node backend/scripts/seed-field-routes.js`.
+- **Tier 1.1 integration tests**: no automated coverage yet for `field.js` routes. The Playwright walkthrough proves end-to-end behavior; consider adding `backend/tests/integration/pg-field-sales.test.js` with the same isolated-schema pattern when revisiting test debt.
+- **Field rep `outlets` assignment**: Field Rep One has no `employee_outlets` row, so `/api/context/bootstrap` returns empty `outlets`/`companies`. Harmless for the current flow (field check-ins don't gate on outlet context — outlet_id is best-effort on `field_visits.outlet_id`). If a future field-sales flow needs outlet scoping (e.g. "Manager X only sees field reps in their outlet"), wire up `employee_outlets` either in the seed flow or via the 1.1.5 admin UI.
 
 ---
 
-## Where we are (live state — verified 2026-05-13)
+## Where we are (live state — verified 2026-05-14 evening)
 
 ### The wholesale preset
 
@@ -120,6 +149,7 @@ Real capability — not vaporware, not bolt-on. Every item here is wired up and 
 | **A/R aging report** | `GET /api/reports/ar-aging`, Reports > Finance > A/R Aging tab | Tier 0.3 — buckets configurable via `company_profile.ar_aging_buckets` JSONB. CSV export. |
 | **Bank-style customer statements** | `GET /api/customers/:id/statement`, `POST .../send-statement`, "Send Statement" button on Customer detail | Tier 0.4 — opening balance + chronological invoices + payments (incl. credit_reversal) + closing balance. Emails from tenant `slug@sanopos.com`. |
 | **Wholesale home dashboard cards** | `GET /api/reports/dashboard/wholesale`, `DashboardWholesale` widget | Tier 0.5 — Total Outstanding A/R, Overdue >N days, Top 5 buyers. Mode-gated, cashier-hidden. |
+| **Field rep mobile app (proof-of-visit)** | [routes/field.js](../../backend/routes/field.js), `/field/today` + `/field/check-in/:id` + `/field/visits`, `wholesale_field_sales` flag, `FieldSummaryCards` dashboard widget | Tier 1.1 — `employee_type='field_rep'` employees auto-redirect to `/field/today` on login; daily route from `field_rep_routes`; GPS + selfie + outcome check-in with R2 selfie storage, haversine geofence (default 500m, tunable via `company_profile.field_geofence_meters`), auto-tag-on-first-visit for customers with NULL coords, IndexedDB offline queue with `client_uuid` idempotency; owner dashboard card + drill-down `/field/visits` report with selfie thumbnails. |
 
 ### What a wholesale tenant CANNOT do today
 
@@ -131,7 +161,8 @@ The "show me the wall." These are real day-1 blockers from the research, sequenc
 | ~~**A/R aging report**~~ | ~~"Show me every buyer's outstanding bucketed 0-30/31-60/61-90/90+." Standard everywhere.~~ | **SHIPPED 2026-05-14** (commit `d8fa0fe`) — `GET /api/reports/ar-aging`, buckets from `company_profile.ar_aging_buckets`, Reports > Finance > A/R Aging tab with CSV export. |
 | ~~**Customer statements**~~ | ~~"Email Buyer X a PDF of every unpaid invoice this month."~~ | **SHIPPED 2026-05-14** (commit `ddee997`) — bank-style ledger, `GET /api/customers/:id/statement`, `POST .../send-statement` emails from tenant `slug@sanopos.com`, "Send Statement" button on customer detail. |
 | ~~**Per-buyer payment terms field**~~ | ~~Net-30/45/COD on the customer record, surfaced at sale + invoice.~~ | **SHIPPED 2026-05-13** — `customers.payment_terms_days` (v88), auto-defaults `customer_invoices.due_date` on POST/PUT/batch/quotation-conversion (commit `ee4fdfd`). |
-| **PJP / beat plan / order booker app** | Field rep visits 8 retailers/day, takes orders on phone, syncs back. Offline-first, GPS check-in, selfie attendance. | Nothing. **No PK wholesale tenant will be serious about us until this exists.** |
+| ~~**PJP / beat plan foundation (proof-of-visit)**~~ | ~~Field rep visits 8 retailers/day. Offline-first, GPS check-in, selfie attendance, outcome capture.~~ | **SHIPPED 2026-05-14** (Tier 1.1, commit `e9d16f4`) — full check-in flow live, see entry in the "CAN do today" table above. **Order capture from field is still in 1.2** — rep can record visits + outcomes but can't yet take orders on the phone. |
+| **Order capture from field rep app** | Rep picks products in mobile UI, applies schemes, pushes order through credit check, syncs offline orders back. | Tier 1.2 — depends on schemes for full value. Rep app screens + offline queue infrastructure ready; need product picker + order POST. |
 | **Schemes engine** | "Buy 10 cases Tapal, get 1 free." "≥50 cases this quarter → 3% rebate." Slab, free-goods, retrospective. | Generic promotions, not B2B schemes. |
 | **Secondary sales tracking** | Manufacturer wants real-time view of distributor's onward sales to retailers. | Nothing. |
 | **Unit-of-measure conversion** | Stock in cartons of 24, sell by carton or by unit. Reorder threshold in cartons. | Zero schema hits for `uom`, `case_pack`, `carton`. |
@@ -179,18 +210,19 @@ Four tiers, opinionated about sequence. Pick from one tier at a time. Do **not**
 
 **Goal:** Ship the thing no global player will copy. This is the differentiator — PJP/beat-plan + schemes + secondary sales — combined with our existing FBR queue.
 
-| # | Item | Notes | Estimate |
-|---|---|---|---|
-| 1.1 | **Field rep mobile app foundation** | Add `employee_type` column to `employees` (`'in_store'` / `'field_rep'`). Add `field_rep_routes` table (rep_id, day_of_week, outlet_visit_order, customer_id). New routes `POST /api/field/check-in` (lat/lng + selfie), `GET /api/field/route/today`. | 1 week |
-| 1.2 | **PJP / beat plan** | `field_visits` table (rep_id, customer_id, planned_at, checked_in_at, gps_lat, gps_lng, selfie_url, status). Daily route builder UI. Order capture form (offline-first via IndexedDB, sync on reconnect). | 1.5 weeks |
-| 1.3 | **Schemes engine** | New tables: `schemes` (name, brand_id, sku_filter, start/end, type='slab'/'free_goods'/'rebate'), `scheme_rules` (qty_from, qty_to, action_type, action_value), `scheme_applications` (sale_id, scheme_id, calculated_value). Apply at sale create + at scheme period end (retrospective). | 1.5 weeks |
-| 1.4 | **Secondary sales tracking** | A "manufacturer view" — wholesale tenants can mark certain customers as "manufacturer" partners and a manufacturer's portal shows real-time onward sales of their brand SKUs through this distributor. This is the killer feature for FMCG. **Complex — may need its own scoping.** | 1.5-2 weeks |
-| 1.5 | **Wholesale tenant mode flag bundle** | New flags: `wholesale_field_sales`, `wholesale_schemes`, `wholesale_secondary_sales`. Default OFF, opt-in per tenant (avoids forcing complexity on small wholesale signups). | 0.5 day |
+| # | Item | Status | Notes | Estimate |
+|---|---|---|---|---|
+| 1.1 | **Field rep mobile app foundation** | **SHIPPED 2026-05-14** | v90 + v91 + frontend pages. `employee_type` column, `field_rep_routes` + `field_visits` tables, `wholesale_field_sales` flag, Field Rep role + `manage_field_sales` perm. 5 backend routes. 3 frontend pages (today / check-in / visits) + dashboard summary cards. Auto-redirect for `employee_type='field_rep'`. GPS + selfie + outcome check-in flow with R2 upload, haversine geofence, auto-tag-on-first-visit, IndexedDB offline queue. Verified end-to-end via Playwright. | Done |
+| 1.1.5 | **Owner route-assignment UI** | Deferred | `/admin/field-routes` admin page with drag-drop customer ordering per (rep, day-of-week). Backend endpoint `POST /api/admin/field-routes` already exists. Build when 3+ wholesale tenants use the field app OR first owner self-serve request. Until then, seed via `scripts/seed-field-routes.js`. | 2-3 days |
+| 1.2 | **PJP / beat plan + order capture from field** | Next | Extend the 1.1 check-in flow with **order entry on the rep app**. New screens: product picker (mobile-friendly), apply scheme preview, credit-limit check, push to `/api/sales` (or new `/api/field/orders`). Offline order capture extending the existing `enqueueCheckIn` pattern — drains to `/api/sales` on reconnect. | 1.5 weeks |
+| 1.3 | **Schemes engine** | Next | New tables: `schemes` (name, brand_id, sku_filter, start/end, type='slab'/'free_goods'/'rebate'), `scheme_rules` (qty_from, qty_to, action_type, action_value), `scheme_applications` (sale_id, scheme_id, calculated_value). Apply at sale create + at scheme period end (retrospective). | 1.5 weeks |
+| 1.4 | **Secondary sales tracking** | Later | A "manufacturer view" — wholesale tenants can mark certain customers as "manufacturer" partners and a manufacturer's portal shows real-time onward sales of their brand SKUs through this distributor. This is the killer feature for FMCG. **Complex — may need its own scoping.** | 1.5-2 weeks |
+| 1.5 | **Wholesale tenant mode flag bundle** | Partial | `wholesale_field_sales` (1.1) shipped. `wholesale_schemes` (1.3) + `wholesale_secondary_sales` (1.4) still to add. All default OFF, opt-in per tenant (avoids forcing complexity on small wholesale signups). | 0.5 day at the end |
 
 **Tier 1 exit criteria:**
-- A field rep can log in to a mobile-optimized view, see their route for today, drive to retailer A, check in (GPS + selfie), take an order, sync it back.
-- A scheme like "Buy 10 cartons, get 1 free" can be defined and auto-applies at order entry.
-- A manufacturer-tenant or manufacturer-partner can see secondary sales reports.
+- A field rep can log in to a mobile-optimized view, see their route for today, drive to retailer A, check in (GPS + selfie), **take an order**, sync it back. *(1.1 done; order entry pending in 1.2.)*
+- A scheme like "Buy 10 cartons, get 1 free" can be defined and auto-applies at order entry. *(1.3 pending.)*
+- A manufacturer-tenant or manufacturer-partner can see secondary sales reports. *(1.4 pending.)*
 
 ### Tier 2 — Parity with Shopify B2B / Cin7 (target: 8-12 weeks)
 
