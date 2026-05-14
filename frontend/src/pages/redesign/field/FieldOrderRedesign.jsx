@@ -45,35 +45,44 @@ export default function FieldOrderRedesign() {
     if (flagsLoading || !flags.wholesale_field_sales) return;
     let cancelled = false;
     async function load() {
-      try {
-        const [route, outletsResp, productsResp] = await Promise.all([
-          api.get("/api/field/route/today"),
-          api.get("/api/outlets"),
-          api.get("/api/products", { status: "active" }),
-        ]);
-        if (cancelled) return;
-        const found = route.customers.find(
+      // Use allSettled so a 403 / transient failure on /api/products or
+      // /api/outlets doesn't blank the customer lookup. The route load is
+      // the only critical fetch — if that fails the page is unusable.
+      const [routeR, outletsR, productsR, creditR] = await Promise.allSettled([
+        api.get("/api/field/route/today"),
+        api.get("/api/outlets"),
+        api.get("/api/products", { status: "active" }),
+        api.get(`/api/customers/${customer_id}/credit-status`),
+      ]);
+      if (cancelled) return;
+
+      if (routeR.status === "fulfilled") {
+        const found = routeR.value.customers.find(
           (c) => String(c.customer_id) === String(customer_id)
         );
         setCustomer(found || null);
-
-        // Credit status — only matters when payment_method is credit. Best-
-        // effort: failures fall back to "no credit info" rather than blocking.
-        try {
-          const credResp = await api.get(`/api/customers/${customer_id}/credit-status`);
-          if (!cancelled) setCredit(credResp || null);
-        } catch { /* ignore — owner may have credit disabled */ }
-
-        const outlets = Array.isArray(outletsResp)
-          ? outletsResp
-          : outletsResp?.outlets || [];
-        setOutlet(outlets[0] || null);
-        setProducts(productsResp?.products || []);
-      } catch (e) {
-        if (!cancelled) toastErr(e.message || "Failed to load order screen");
-      } finally {
-        if (!cancelled) setLoading(false);
+      } else {
+        toastErr(routeR.reason?.message || "Failed to load today's route");
       }
+
+      if (outletsR.status === "fulfilled") {
+        const outlets = Array.isArray(outletsR.value)
+          ? outletsR.value
+          : outletsR.value?.outlets || [];
+        setOutlet(outlets[0] || null);
+      }
+
+      if (productsR.status === "fulfilled") {
+        setProducts(productsR.value?.products || []);
+      } else {
+        toastErr("Could not load products list");
+      }
+
+      if (creditR.status === "fulfilled") {
+        setCredit(creditR.value || null);
+      } // else: owner may have credit disabled — ignore silently
+
+      setLoading(false);
     }
     load();
     return () => {
