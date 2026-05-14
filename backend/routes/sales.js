@@ -560,6 +560,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       // here (works even when the rep app never saw the visit's numeric id).
       field_visit_id: field_visit_id_in = null,
       field_visit_uuid = null,
+      // Tier 1.3 wholesale schemes — POS / rep-app sends the applied promotions
+      // from /api/promotions/quote. Persisted to sale_promotion_applications
+      // as an audit trail (snapshot — doesn't affect totals; the discount is
+      // already folded into discount_amount client-side).
+      applied_promotions = [],
     } = req.body;
 
     // Resolve field_visit_uuid → field_visits.id when only the uuid is given.
@@ -1484,6 +1489,41 @@ module.exports = function registerSalesRoutes(app, deps) {
           ]
         );
         const newSaleId = saleRow.id;
+
+        // Tier 1.3 wholesale schemes — persist applied promotions as audit
+        // rows. Best-effort: schema may not have the table yet on tenants
+        // that haven't run v93 (graceful skip via SAVEPOINT).
+        if (Array.isArray(applied_promotions) && applied_promotions.length) {
+          try {
+            await client.query("SAVEPOINT sale_promo_audit");
+            for (const ap of applied_promotions) {
+              const promoId = Number(ap?.promotion_id);
+              const discount = Number(ap?.discount);
+              if (!Number.isFinite(promoId) || !Number.isFinite(discount) || discount <= 0) continue;
+              await client.query(
+                `INSERT INTO sale_promotion_applications
+                   (sale_id, promotion_id, promotion_name_snapshot, promotion_type_snapshot,
+                    qty_qualifying, discount_value, tier_snapshot)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [
+                  newSaleId,
+                  promoId,
+                  String(ap?.name || "").slice(0, 200),
+                  String(ap?.type || "").slice(0, 50),
+                  ap?.qty_qualifying != null ? Number(ap.qty_qualifying) : null,
+                  discount,
+                  ap?.tier ? JSON.stringify(ap.tier) : null,
+                ],
+              );
+            }
+            await client.query("RELEASE SAVEPOINT sale_promo_audit");
+          } catch (err) {
+            await client.query("ROLLBACK TO SAVEPOINT sale_promo_audit");
+            // Don't fail the sale on audit failure — log and continue.
+            // eslint-disable-next-line no-console
+            console.warn(`[sales] sale_promotion_applications skipped: ${err.message}`);
+          }
+        }
 
         // 3. Loop through cart to insert Line Items AND deduct stock
         for (let cartIdx = 0; cartIdx < cartItems.length; cartIdx++) {

@@ -129,6 +129,9 @@ const DEFAULT_FEATURE_FLAGS = {
   // GPS+selfie check-in with mandatory outcome, owner-side visit report.
   // Default false; opt-in per tenant via admin feature-flags UI.
   wholesale_field_sales: false,
+  // Tier 1.3 (wholesale schemes): slab-tier volume discounts + brand-scoped
+  // schemes on top of the existing promotions engine. Default false.
+  wholesale_schemes: false,
 };
 
 // Per-tenant feature flag cache

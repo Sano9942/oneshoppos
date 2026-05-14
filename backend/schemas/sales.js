@@ -43,6 +43,19 @@ const CreateSaleSchema = z.object({
   // id at insert time. Pass either, not both.
   field_visit_id: z.coerce.number().int().positive().optional().nullable(),
   field_visit_uuid: z.string().min(8).max(200).optional().nullable(),
+  // Tier 1.3 wholesale schemes — applied promotions audit snapshot from
+  // /api/promotions/quote. Passthrough on each entry preserves extra fields
+  // the evaluator may add later (priority, tier, etc.).
+  applied_promotions: z
+    .array(
+      z.object({
+        promotion_id: z.coerce.number().int().positive(),
+        name: z.string().max(200).optional(),
+        type: z.string().max(50).optional(),
+        discount: z.coerce.number().nonnegative(),
+      }).passthrough(),
+    )
+    .optional(),
 }).passthrough(); // preserve employee_id, customer_id, shift_id, discount_amount, staff_id, room_id, plan_id, etc.
 
 // PUT /api/sales/:id/void

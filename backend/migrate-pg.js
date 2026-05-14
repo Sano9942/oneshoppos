@@ -6760,6 +6760,110 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 93,
+    description:
+      "Tier 1.3 wholesale schemes — extend promotions with slab_percent type + tier_rules JSONB; add sale_promotion_applications audit table; wholesale_schemes flag",
+    up: async (client) => {
+      // 1. Extend the promotions.type CHECK to allow 'slab_percent' (volume
+      //    slabs: qty_from-qty_to → discount %). Existing types unchanged.
+      try {
+        await client.query("SAVEPOINT v93_promo_type_check");
+        const { rows: pT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'promotions'
+        `);
+        if (pT.length) {
+          await client.query(
+            `ALTER TABLE promotions DROP CONSTRAINT IF EXISTS promotions_type_check`
+          );
+          await client.query(
+            `ALTER TABLE promotions ADD CONSTRAINT promotions_type_check
+               CHECK(type IN ('percent','fixed','threshold_percent','threshold_fixed','bxgy','slab_percent'))`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v93_promo_type_check");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v93_promo_type_check");
+        console.warn(`[migrate-pg v93] promotions type check skipped: ${err.message}`);
+      }
+
+      // 2. Add promotions.tier_rules JSONB. Shape (for slab_percent):
+      //    [{"qty_from": 10, "qty_to": 49, "value": 3},
+      //     {"qty_from": 50, "qty_to": 99, "value": 5},
+      //     {"qty_from": 100, "qty_to": null, "value": 8}]
+      //    NULL for non-slab types.
+      try {
+        await client.query("SAVEPOINT v93_promo_tier_rules");
+        await client.query(
+          `ALTER TABLE promotions ADD COLUMN IF NOT EXISTS tier_rules JSONB`
+        );
+        await client.query(
+          `ALTER TABLE promotions ADD COLUMN IF NOT EXISTS brand_id INTEGER REFERENCES brands(id)`
+        );
+        await client.query(
+          `ALTER TABLE promotions ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0`
+        );
+        await client.query("RELEASE SAVEPOINT v93_promo_tier_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v93_promo_tier_rules");
+        console.warn(`[migrate-pg v93] promotions columns skipped: ${err.message}`);
+      }
+
+      // 3. sale_promotion_applications — audit trail. Each row = one applied
+      //    promotion on one sale. Frozen snapshot of promo name + tier value
+      //    at apply time so promo edits/deletes don't rewrite history.
+      try {
+        await client.query("SAVEPOINT v93_promo_applications");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS sale_promotion_applications (
+            id SERIAL PRIMARY KEY,
+            sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+            promotion_id INTEGER REFERENCES promotions(id) ON DELETE SET NULL,
+            promotion_name_snapshot TEXT NOT NULL,
+            promotion_type_snapshot TEXT NOT NULL,
+            qty_qualifying NUMERIC(10,3),
+            discount_value NUMERIC(12,2) NOT NULL,
+            tier_snapshot JSONB,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_sale_promo_apps_sale ON sale_promotion_applications(sale_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_sale_promo_apps_promo ON sale_promotion_applications(promotion_id) WHERE promotion_id IS NOT NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v93_promo_applications");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v93_promo_applications");
+        console.warn(`[migrate-pg v93] sale_promotion_applications skipped: ${err.message}`);
+      }
+
+      // 4. wholesale_schemes feature flag — default OFF. When ON the
+      //    PromotionsRedesign UI exposes the slab-tier editor + brand
+      //    scope. When OFF, owners see the existing promotions UI only.
+      try {
+        await client.query("SAVEPOINT v93_schemes_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('wholesale_schemes', false,
+               'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v93_schemes_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v93_schemes_flag");
+        console.warn(`[migrate-pg v93] wholesale_schemes flag skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

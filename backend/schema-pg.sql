@@ -761,7 +761,7 @@ CREATE TABLE IF NOT EXISTS supplier_return_items (
 CREATE TABLE IF NOT EXISTS promotions (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('percent','fixed','threshold_percent','threshold_fixed','bxgy')),
+  type TEXT NOT NULL CHECK(type IN ('percent','fixed','threshold_percent','threshold_fixed','bxgy','slab_percent')),
   value NUMERIC(12,2) NOT NULL DEFAULT 0,
   min_order_amount NUMERIC(12,2) DEFAULT 0,
   buy_qty INTEGER DEFAULT 0,
@@ -772,8 +772,29 @@ CREATE TABLE IF NOT EXISTS promotions (
   active BOOLEAN NOT NULL DEFAULT TRUE,
   starts_at TEXT,
   ends_at TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  -- v93 (Tier 1.3 wholesale schemes): slab-tier rules + brand scope + priority
+  -- (multiple matching promos resolve by descending priority, no stacking v1)
+  tier_rules JSONB,
+  brand_id INTEGER REFERENCES brands(id),
+  priority INTEGER NOT NULL DEFAULT 0
+);
+
+-- v93 (Tier 1.3 wholesale schemes): audit trail for applied promotions on a
+-- sale. Snapshot promo name/type/tier so future edits don't rewrite history.
+CREATE TABLE IF NOT EXISTS sale_promotion_applications (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  promotion_id INTEGER REFERENCES promotions(id) ON DELETE SET NULL,
+  promotion_name_snapshot TEXT NOT NULL,
+  promotion_type_snapshot TEXT NOT NULL,
+  qty_qualifying NUMERIC(10,3),
+  discount_value NUMERIC(12,2) NOT NULL,
+  tier_snapshot JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_sale_promo_apps_sale ON sale_promotion_applications(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_promo_apps_promo ON sale_promotion_applications(promotion_id) WHERE promotion_id IS NOT NULL;
 
 -- ── Attendance ────────────────────────────────────────────────────────
 
