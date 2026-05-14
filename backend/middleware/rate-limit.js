@@ -175,6 +175,42 @@ const customerPortalDataLimiter = rateLimit({
   },
 });
 
+// ── Tier 1.4 Manufacturer Portal ──────────────────────────────────────
+// Same shape as the customer portal limiters above. Manufacturer portal
+// mounts BEFORE tenant middleware (same as customer portal), so we key on
+// the slug from query/header rather than req.tenantSlug (unset at this
+// point in the chain). Auth limit is stricter (5 instead of 10) — these
+// accounts are higher-value and credential stuffing should be slower.
+
+const manufacturerPortalAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const slug = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `mfg-portal-auth:${slug}:${req.ip}`;
+  },
+});
+
+// Manufacturer portal data reads: 60 / min (half of customer portal — these
+// endpoints run heavier brand-scoped aggregate queries against sale_items).
+const manufacturerPortalDataLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    if (req.manufacturerId) return `mfg-portal-data:${req.manufacturerId}`;
+    const slug = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `mfg-portal-data:${slug}:${req.ip}`;
+  },
+});
+
 module.exports = {
   globalLimiter,
   authLimiter,
@@ -185,4 +221,6 @@ module.exports = {
   customerPortalAuthLimiter,
   customerPortalOtpLimiter,
   customerPortalDataLimiter,
+  manufacturerPortalAuthLimiter,
+  manufacturerPortalDataLimiter,
 };
