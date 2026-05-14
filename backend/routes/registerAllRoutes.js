@@ -193,8 +193,8 @@ module.exports = function registerAllRoutes(app, deps) {
   // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
   // BEFORE tenant middleware; each route resolves tenant via
   // resolvePublicTenantDb() and verifies portal JWT (scope="manufacturer").
-  // Data routes will be added in a follow-up (Days 4-5).
   require("./manufacturer-portal/auth")(app, deps);
+  require("./manufacturer-portal/data")(app, deps);
 
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
