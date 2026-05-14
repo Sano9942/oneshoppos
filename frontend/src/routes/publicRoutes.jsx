@@ -62,6 +62,22 @@ const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
 const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
 const PortalProfile = lazy(() => import("../pages/portal/PortalProfile"));
 
+// Tier 1.4 — Manufacturer portal (lazy, isolated chunk). Parallel to the
+// customer portal: own AuthProvider, own session store, own API client,
+// own route tree at /manufacturer-portal/:tenantSlug.
+const ManufacturerPortalLayout = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalLayout")
+);
+const ManufacturerPortalLogin = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalLogin")
+);
+const ManufacturerPortalSetup = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalSetup")
+);
+const ManufacturerPortalDashboard = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalDashboard")
+);
+
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const navigate = useNavigate();
@@ -206,5 +222,20 @@ export const publicRoutes = [
     <Route path="loyalty" element={<Suspense fallback={<RouteLoading />}><PortalLoyalty /></Suspense>} />
     <Route path="wallet" element={<Suspense fallback={<RouteLoading />}><PortalWallet /></Suspense>} />
     <Route path="profile" element={<Suspense fallback={<RouteLoading />}><PortalProfile /></Suspense>} />
+  </Route>,
+  <Route
+    key="manufacturer-portal"
+    path="/manufacturer-portal/:tenantSlug"
+    element={
+      <ErrorBoundary level="page">
+        <Suspense fallback={<RouteLoading />}>
+          <ManufacturerPortalLayout />
+        </Suspense>
+      </ErrorBoundary>
+    }
+  >
+    <Route index element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalDashboard /></Suspense>} />
+    <Route path="login" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalLogin /></Suspense>} />
+    <Route path="setup" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSetup /></Suspense>} />
   </Route>,
 ];
