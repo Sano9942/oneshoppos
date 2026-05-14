@@ -240,6 +240,10 @@ module.exports = function registerAllRoutes(app, deps) {
     if (!employeeId) return next();
     const perms = req.employeePerms || [];
     if (perms.includes("all_access")) return next();
+    // Tier 1.2 wholesale: field reps are tenant-scoped, not outlet-scoped.
+    // They never have employee_outlets rows, so this enforcement would
+    // block every API call carrying an outlet_id. Skip for them.
+    if (perms.includes("manage_field_sales")) return next();
 
     const headerOutletId = Number(req.headers["x-outlet-id"] || 0);
     const contextOutletId = Number(req.context?.outletId || 0);
