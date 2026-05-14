@@ -22,13 +22,22 @@ function fmtQty(n) {
   });
 }
 
+// Default window: last 30 days in the browser's LOCAL tz. See Sales page
+// comment — using toISOString().slice(0,10) returned the UTC date, which
+// for tz-east-of-UTC users dropped current-day sales from the default view.
+function localYmd(date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function defaultDateRange() {
   const today = new Date();
-  const to = today.toISOString().slice(0, 10);
   const past = new Date(today);
   past.setDate(past.getDate() - 29);
-  const from = past.toISOString().slice(0, 10);
-  return { from, to };
+  return { from: localYmd(past), to: localYmd(today) };
 }
 
 const SCHEME_TYPE_LABELS = {
