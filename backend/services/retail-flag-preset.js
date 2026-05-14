@@ -88,6 +88,33 @@ const RESTAURANT_SEED_FLAGS = [
   "phase2_draft_orders",
 ];
 
+// Wholesale-only flags that ship ON for any tenant signing up with
+// `industry_type === 'wholesale'`. These layer ON TOP of seedRetailFlags
+// (wholesale tenants still use the retail POS + price lists + COD pieces),
+// so setup.js calls seedRetailFlags first and then seedWholesaleFlags.
+//
+// All four feature surfaces are inert until the tenant configures them:
+//   - wholesale_credit_controls: shows the "Credit & A/R" SectionCard on
+//     Customer detail. No customer has a credit limit by default, so the
+//     POS "On Account" tender stays disabled until the admin sets one.
+//   - wholesale_field_sales: surfaces /field/* routes and the Field Summary
+//     dashboard widget IFF the tenant has an employee with
+//     employee_type='field_rep'. New signups have none, so the surface is
+//     latent until they add a rep — which is itself an explicit action.
+//   - wholesale_schemes: extends the existing /promotions admin page with
+//     the slab-tier editor + brand picker + priority field. Owners who
+//     don't need schemes just don't open that surface — no POS impact
+//     until a slab_percent promotion is actually defined.
+//   - wholesale_secondary_sales: enables the /settings/manufacturer-partners
+//     admin page. The manufacturer portal is unreachable until an admin
+//     invites the first partner. No tenant-side or POS impact until then.
+const WHOLESALE_SEED_FLAGS = [
+  "wholesale_credit_controls",
+  "wholesale_field_sales",
+  "wholesale_schemes",
+  "wholesale_secondary_sales",
+];
+
 const MULTI_OUTLET_SEED_FLAGS = [
   "context_selection_required",
   "context_header_enforced",
@@ -118,6 +145,17 @@ async function seedRestaurantFlags(client) {
   }
 }
 
+async function seedWholesaleFlags(client) {
+  for (const key of WHOLESALE_SEED_FLAGS) {
+    await client.query(
+      `INSERT INTO feature_flags (key, enabled)
+       VALUES ($1, true)
+       ON CONFLICT (key) DO UPDATE SET enabled = true`,
+      [key]
+    );
+  }
+}
+
 async function seedMultiOutletFlags(client) {
   for (const key of MULTI_OUTLET_SEED_FLAGS) {
     await client.query(
@@ -132,8 +170,10 @@ async function seedMultiOutletFlags(client) {
 module.exports = {
   RETAIL_SEED_FLAGS,
   RESTAURANT_SEED_FLAGS,
+  WHOLESALE_SEED_FLAGS,
   MULTI_OUTLET_SEED_FLAGS,
   seedRetailFlags,
   seedRestaurantFlags,
+  seedWholesaleFlags,
   seedMultiOutletFlags,
 };

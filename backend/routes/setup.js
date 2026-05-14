@@ -16,7 +16,11 @@ const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config")
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
-const { seedRetailFlags, seedRestaurantFlags } = require("../services/retail-flag-preset");
+const {
+  seedRetailFlags,
+  seedRestaurantFlags,
+  seedWholesaleFlags,
+} = require("../services/retail-flag-preset");
 const { signAccessToken, signRefreshToken } = require("../jwt-auth");
 // Single source of truth for role -> permissions mapping. Previously hardcoded
 // here with a stale 8-perm Manager list, which left non-admin restaurant
@@ -273,6 +277,14 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           await seedRetailFlags(client);
         } else if (industry_type === "restaurant" || industry_type === "cafe") {
           await seedRestaurantFlags(client);
+        }
+
+        // 1g. Wholesale-only flags on top of the retail bundle. All four
+        // surfaces (credit controls, field sales, schemes, secondary sales)
+        // are inert until the tenant configures them, so safe to ship ON
+        // by default. See WHOLESALE_SEED_FLAGS comments in retail-flag-preset.js.
+        if (industry_type === "wholesale") {
+          await seedWholesaleFlags(client);
         }
 
         // 2. Create/update outlet
