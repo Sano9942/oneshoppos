@@ -1,4 +1,4 @@
-# SanoPOS Wholesale Master Reference — 2026-05-14 (updated late-evening: Tier 1.1 shipped)
+# SanoPOS Wholesale Master Reference — 2026-05-14 (updated: Tier 1.2 order capture shipped)
 
 **This is the single day-to-day wholesale/distribution reference for the repo.**
 
@@ -12,7 +12,7 @@ Companion file: [research-competitive-landscape.md](research-competitive-landsca
 
 ## Headline (read this first)
 
-**Tier 0 is complete (2026-05-14 morning). Tier 1.1 (field rep app foundation) is also shipped (2026-05-14 evening).** Wholesale now has its own mode, credit controls, A/R aging, customer statements, dashboard cards, AND the first piece of the Pakistan field-sales wedge: a mobile-first PWA where field reps log in, see their daily route, check in at each customer shop with GPS + selfie + outcome, and have those visits surface back to the owner on the dashboard.
+**Tier 0 is complete (2026-05-14 morning). Tier 1.1 (field rep app foundation) shipped (2026-05-14 evening). Tier 1.1.5 (owner route-assignment UI) and Tier 1.2 (order capture from the field rep app) shipped (2026-05-14 night).** Wholesale now has its own mode, credit controls, A/R aging, customer statements, dashboard cards, AND a substantial piece of the Pakistan field-sales wedge: a mobile-first PWA where field reps see their daily route, check in with GPS + selfie + outcome, AND if the outcome is "Took Order" the app auto-advances to a product-picker → cart → Credit/Cash confirm flow that POSTs to `/api/sales` with the visit linked back via `field_visit_id`. Owner's visit log surfaces the linked invoice + total. Current migration: **v92**.
 
 **Why the field-rep piece matters now:** Pakistan FMCG distributors run on order bookers / DSRs who visit 8-15 shops a day. The proof-of-visit problem (GPS + selfie + outcome) is the foundational primitive — schemes and secondary sales (Tier 1.2, 1.3) both depend on the rep being in the system first. With 1.1 live, those can layer on top.
 
@@ -70,12 +70,12 @@ End-to-end verified 2026-05-14 evening, mobile viewport (390×844):
 
 ### Live state on `tenant_wholesalewalktest1778451` (prod, verified 2026-05-14 evening)
 
-- `schema_version = 91`
+- `schema_version = 92`
 - `tenant_modes`: `wholesale = true`
 - `feature_flags`: `wholesale_credit_controls = true`, `wholesale_field_sales = true`
 - `company_profile.ar_aging_buckets = [30, 60, 90]`, `field_geofence_meters = 500`
 - `customers` has the 3 credit columns + `lat`/`lng`
-- `sales.customer_invoice_id` FK exists
+- `sales.customer_invoice_id` FK exists, **`sales.field_visit_id` FK exists (v92)**
 - `role_permissions`: Manager has `override_credit_limit` + `manage_field_sales`; Field Rep has `manage_field_sales`
 - Roles: 1=Administrator, 2=Manager, 3=Cashier, **4=Field Rep**
 - Employees: id=1 Wholesale Test Owner, id=2 Test Cashier, **id=3 Field Rep One** (`employee_type='field_rep'`, password `TestField234!`, PIN `7777`)
@@ -213,8 +213,8 @@ Four tiers, opinionated about sequence. Pick from one tier at a time. Do **not**
 | # | Item | Status | Notes | Estimate |
 |---|---|---|---|---|
 | 1.1 | **Field rep mobile app foundation** | **SHIPPED 2026-05-14** | v90 + v91 + frontend pages. `employee_type` column, `field_rep_routes` + `field_visits` tables, `wholesale_field_sales` flag, Field Rep role + `manage_field_sales` perm. 5 backend routes. 3 frontend pages (today / check-in / visits) + dashboard summary cards. Auto-redirect for `employee_type='field_rep'`. GPS + selfie + outcome check-in flow with R2 upload, haversine geofence, auto-tag-on-first-visit, IndexedDB offline queue. Verified end-to-end via Playwright. | Done |
-| 1.1.5 | **Owner route-assignment UI** | Deferred | `/admin/field-routes` admin page with drag-drop customer ordering per (rep, day-of-week). Backend endpoint `POST /api/admin/field-routes` already exists. Build when 3+ wholesale tenants use the field app OR first owner self-serve request. Until then, seed via `scripts/seed-field-routes.js`. | 2-3 days |
-| 1.2 | **PJP / beat plan + order capture from field** | Next | Extend the 1.1 check-in flow with **order entry on the rep app**. New screens: product picker (mobile-friendly), apply scheme preview, credit-limit check, push to `/api/sales` (or new `/api/field/orders`). Offline order capture extending the existing `enqueueCheckIn` pattern — drains to `/api/sales` on reconnect. | 1.5 weeks |
+| 1.1.5 | **Owner route-assignment UI** | **SHIPPED 2026-05-14** | `/field/routes` admin page with reorder + add/remove per (rep, day-of-week). Backend endpoint `POST /api/admin/field-routes` powered by replace-all semantics. Verified end-to-end on production. Commits `afa2e6f` + `22dd35f` (employee_type hotfix). | Done |
+| 1.2 | **Order capture from field rep app** | **SHIPPED 2026-05-14** | Migration v92 added `sales.field_visit_id` FK. POST `/api/sales` accepts `field_visit_uuid` and resolves uuid → id via `field_visits.client_uuid` lookup (offline-friendly — order can sync before visit row exists). New page `/field/order/:customer_id?visit_uuid=` with product picker + cart + Credit/Cash; soft credit-availability warning, backend still enforces hard credit limit. Check-in's "Took Order" outcome auto-advances to order screen. Offline queue extended with `type='field_order'`. Owner visit log shows linked invoice + total. **Schemes preview deferred to 1.3** (no placeholder added — keeps order UI clean). Commit `8b8dd42`. | Done |
 | 1.3 | **Schemes engine** | Next | New tables: `schemes` (name, brand_id, sku_filter, start/end, type='slab'/'free_goods'/'rebate'), `scheme_rules` (qty_from, qty_to, action_type, action_value), `scheme_applications` (sale_id, scheme_id, calculated_value). Apply at sale create + at scheme period end (retrospective). | 1.5 weeks |
 | 1.4 | **Secondary sales tracking** | Later | A "manufacturer view" — wholesale tenants can mark certain customers as "manufacturer" partners and a manufacturer's portal shows real-time onward sales of their brand SKUs through this distributor. This is the killer feature for FMCG. **Complex — may need its own scoping.** | 1.5-2 weeks |
 | 1.5 | **Wholesale tenant mode flag bundle** | Partial | `wholesale_field_sales` (1.1) shipped. `wholesale_schemes` (1.3) + `wholesale_secondary_sales` (1.4) still to add. All default OFF, opt-in per tenant (avoids forcing complexity on small wholesale signups). | 0.5 day at the end |
