@@ -251,16 +251,23 @@ module.exports = function registerFieldRoutes(app, deps) {
           where.push(`v.gps_flagged = true`);
         }
 
+        // Tier 1.2: surface the linked sale (if any) so the owner-side visit
+        // log can show "this visit took an order of Rs X". LEFT JOIN is safe —
+        // visits without an order get NULL for sale_* columns.
         const sql = `
           SELECT
             v.id, v.employee_id, v.customer_id, v.checked_in_at,
             v.gps_lat, v.gps_lng, v.gps_accuracy_m, v.gps_distance_m, v.gps_flagged,
             v.selfie_url, v.status, v.client_uuid,
             e.name AS employee_name,
-            c.name AS customer_name, c.mobile AS customer_mobile
+            c.name AS customer_name, c.mobile AS customer_mobile,
+            s.id AS sale_id,
+            s.total_amount AS sale_total,
+            s.invoice_number AS sale_invoice_number
           FROM field_visits v
           JOIN employees e ON e.id = v.employee_id
           JOIN customers c ON c.id = v.customer_id
+          LEFT JOIN sales s ON s.field_visit_id = v.id AND s.voided = false
           ${where.length ? "WHERE " + where.join(" AND ") : ""}
           ORDER BY v.checked_in_at DESC NULLS LAST, v.id DESC
           LIMIT 500

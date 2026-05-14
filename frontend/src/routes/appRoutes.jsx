@@ -60,6 +60,8 @@ const FieldTodayRedesign = lazy(() => import("../pages/redesign/field/FieldToday
 const FieldCheckInRedesign = lazy(() => import("../pages/redesign/field/FieldCheckInRedesign"));
 const FieldVisitsRedesign = lazy(() => import("../pages/redesign/field/FieldVisitsRedesign"));
 const FieldRoutesAdminRedesign = lazy(() => import("../pages/redesign/field/FieldRoutesAdminRedesign"));
+// Tier 1.2 wholesale: order capture from the field rep app
+const FieldOrderRedesign = lazy(() => import("../pages/redesign/field/FieldOrderRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
@@ -293,6 +295,7 @@ export const appRoutes = [
     {/* Tier 1.1 wholesale field sales — feature flag check is inline inside each page. */}
     <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />
     <Route path="/field/check-in/:customer_id" element={perm("manage_field_sales", wrap(FieldCheckInRedesign))} />
+    <Route path="/field/order/:customer_id" element={perm("manage_field_sales", wrap(FieldOrderRedesign))} />
     <Route path="/field/visits" element={perm("manage_field_sales", wrap(FieldVisitsRedesign))} />
     <Route path="/field/routes" element={perm("manage_field_sales", wrap(FieldRoutesAdminRedesign))} />
   </Route>,

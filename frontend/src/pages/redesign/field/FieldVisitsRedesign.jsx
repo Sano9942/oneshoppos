@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { AlertCircle, MapPin, Download } from "lucide-react";
 import { api } from "../../../api";
 import { useAuth } from "../../../auth/AuthProvider";
+import { useCurrency } from "../../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Input, Select } from "../../../ui/primitives";
 import useFeatureFlags from "../../../hooks/useFeatureFlags";
 import { fmtUtcDateTime } from "../../../utils/dates";
@@ -23,6 +24,7 @@ const OUTCOME_LABELS = {
  */
 export default function FieldVisitsRedesign() {
   const { authHeaders, hasPerm } = useAuth();
+  const { fmt } = useCurrency();
   const authHeadersMemo = useMemo(() => authHeaders, [authHeaders]);
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeadersMemo);
 
@@ -82,12 +84,24 @@ export default function FieldVisitsRedesign() {
 
   const exportCsv = () => {
     downloadCsv(
-      ["Date", "Rep", "Customer", "Outcome", "GPS Distance (m)", "Flagged", "Accuracy (m)"],
+      [
+        "Date",
+        "Rep",
+        "Customer",
+        "Outcome",
+        "Invoice",
+        "Order Total",
+        "GPS Distance (m)",
+        "Flagged",
+        "Accuracy (m)",
+      ],
       visits.map((v) => [
         fmtUtcDateTime(v.checked_in_at),
         v.employee_name,
         v.customer_name,
         OUTCOME_LABELS[v.status] || v.status,
+        v.sale_invoice_number || "",
+        v.sale_total == null ? "" : Number(v.sale_total).toFixed(2),
         v.gps_distance_m == null ? "—" : v.gps_distance_m,
         v.gps_flagged ? "YES" : "no",
         v.gps_accuracy_m == null ? "—" : v.gps_accuracy_m,
@@ -154,6 +168,7 @@ export default function FieldVisitsRedesign() {
                 <th className="py-2 pr-3 font-medium">Rep</th>
                 <th className="py-2 pr-3 font-medium">Customer</th>
                 <th className="py-2 pr-3 font-medium">Outcome</th>
+                <th className="py-2 pr-3 font-medium">Order</th>
                 <th className="py-2 pr-3 font-medium text-right">Distance</th>
                 <th className="py-2 pr-3 font-medium text-right">Accuracy</th>
               </tr>
@@ -161,14 +176,14 @@ export default function FieldVisitsRedesign() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-(--ui-text-muted)">
+                  <td colSpan={8} className="py-6 text-center text-(--ui-text-muted)">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && visits.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-(--ui-text-muted)">
+                  <td colSpan={8} className="py-6 text-center text-(--ui-text-muted)">
                     No visits in range.
                   </td>
                 </tr>
@@ -200,6 +215,22 @@ export default function FieldVisitsRedesign() {
                         </span>
                       )}
                     </span>
+                  </td>
+                  <td className="py-2 pr-3">
+                    {v.sale_id ? (
+                      <span className="inline-flex flex-col">
+                        <span className="text-(--ui-text) font-medium tabular-nums">
+                          {fmt(Number(v.sale_total || 0))}
+                        </span>
+                        {v.sale_invoice_number && (
+                          <span className="text-xs text-(--ui-text-muted)">
+                            {v.sale_invoice_number}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-(--ui-text-muted) text-xs">—</span>
+                    )}
                   </td>
                   <td className="py-2 pr-3 text-right text-(--ui-text)">
                     {v.gps_distance_m == null ? (

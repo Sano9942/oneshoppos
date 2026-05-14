@@ -166,7 +166,20 @@ export default function FieldCheckInRedesign() {
       toastOk("Saved offline — will sync when connection returns");
     } finally {
       setSubmitting(false);
-      navigate("/field/today");
+      // Tier 1.2 wholesale: "Took Order" auto-advances to the order screen so
+      // the rep can capture the order without an extra tap. The visit's
+      // idempotency_key is passed as visit_uuid — the sales POST resolves it
+      // to field_visits.id even if the visit row is still in the offline
+      // queue (the order will sync after the visit).
+      if (outcome === "ordered") {
+        navigate(
+          `/field/order/${customer_id}?visit_uuid=${encodeURIComponent(
+            payload.idempotency_key
+          )}`
+        );
+      } else {
+        navigate("/field/today");
+      }
     }
   };
 

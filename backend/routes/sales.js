@@ -555,8 +555,27 @@ module.exports = function registerSalesRoutes(app, deps) {
       // Tier 1.2 wholesale field sales — when set, links the sale back to the
       // field_visit it came from. Validated as a positive int by Zod; existence
       // is enforced at INSERT via the FK constraint on sales.field_visit_id.
-      field_visit_id = null,
+      // field_visit_uuid is the offline-friendly alternative: rep app passes the
+      // same uuid the visit was checked in with, and we resolve it to the id
+      // here (works even when the rep app never saw the visit's numeric id).
+      field_visit_id: field_visit_id_in = null,
+      field_visit_uuid = null,
     } = req.body;
+
+    // Resolve field_visit_uuid → field_visits.id when only the uuid is given.
+    // Same-tenant lookup via deps.db proxy. Missing/unknown uuid is treated as
+    // "no linkage" (NULL) rather than a hard error — the rep app may post the
+    // order before the offline visit has finished syncing.
+    let field_visit_id = field_visit_id_in;
+    if (!field_visit_id && field_visit_uuid) {
+      try {
+        const { rows: [v] } = await db.query(
+          "SELECT id FROM field_visits WHERE client_uuid = $1 LIMIT 1",
+          [field_visit_uuid]
+        );
+        if (v?.id) field_visit_id = v.id;
+      } catch { /* swallow — keep NULL */ }
+    }
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
     if (folio_id && treatment_folio_id) {

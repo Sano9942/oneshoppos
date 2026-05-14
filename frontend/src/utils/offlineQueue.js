@@ -73,7 +73,13 @@ async function enqueueTyped(employeeId, payload, type) {
   const key = payload?.idempotency_key;
   if (!key) {
     const label =
-      type === "return" ? "Return" : type === "check_in" ? "Check-in" : "Sale";
+      type === "return"
+        ? "Return"
+        : type === "check_in"
+        ? "Check-in"
+        : type === "field_order"
+        ? "Order"
+        : "Sale";
     throw new Error(`${label} payload missing idempotency_key`);
   }
   const row = {
@@ -122,6 +128,26 @@ export async function enqueueCheckIn(employeeId, checkInPayload) {
 export async function getCheckInsQueue(employeeId) {
   const rows = await getQueue(employeeId);
   return rows.filter((r) => r.type === "check_in");
+}
+
+// Tier 1.2 wholesale field sales: field-rep orders share the same queue and
+// drain to POST /api/sales (with field_visit_uuid linking back to the visit).
+// Payload contract mirrors the POS sale body — see useCheckout.completeSale —
+// plus field_visit_uuid set to the check-in's idempotency_key.
+//   {
+//     idempotency_key: <uuid>,
+//     cartItems, payments, paymentMethod,
+//     outlet_id, employee_id, customer_id,
+//     field_visit_uuid: <checkin idempotency_key>,
+//     // optional: notes, discount_amount/type
+//   }
+export async function enqueueFieldOrder(employeeId, orderPayload) {
+  return enqueueTyped(employeeId, orderPayload, "field_order");
+}
+
+export async function getFieldOrdersQueue(employeeId) {
+  const rows = await getQueue(employeeId);
+  return rows.filter((r) => r.type === "field_order");
 }
 
 export async function markSyncing(idempotencyKey) {
