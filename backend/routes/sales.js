@@ -847,7 +847,13 @@ module.exports = function registerSalesRoutes(app, deps) {
         }
       }
 
-      if (!idempotency_key || activeShift.status === "open") {
+      // Tier 1.2 wholesale: field-rep orders skip the outlet-clock-in check.
+      // Field reps don't clock in at a kiosk — they're on the road. Presence
+      // of field_visit_id (resolved above) or field_visit_uuid in the body is
+      // the signal that this sale came from the rep app, not the counter.
+      const isFieldRepSale = !!(field_visit_id || field_visit_uuid);
+
+      if (!isFieldRepSale && (!idempotency_key || activeShift.status === "open")) {
         // Only check attendance for real-time sales (not offline replays)
         const attendanceStatus = await getEmployeeCheckoutStatus(
           authenticatedEmployeeId,
