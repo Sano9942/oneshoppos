@@ -55,22 +55,41 @@ async function getPartnerBrandIds(req) {
   return rows.map((r) => Number(r.brand_id));
 }
 
-// Parse optional ?from=&to= YYYY-MM-DD pair. Defaults to last 30 days.
-// Returns { fromUtc, toUtc, fromStr, toStr } where toUtc is EXCLUSIVE (next day midnight).
+// Compute the local YYYY-MM-DD for "now" in the given IANA tz.
+// Bug fix (Day 5): we previously used new Date().getUTCDate(), which returns
+// the UTC date — for Asia/Karachi (UTC+5) after 19:00 UTC, that's the
+// PREVIOUS local day, which excluded same-day sales from the default window.
+function todayInTz(tz) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const get = (t) => parts.find((p) => p.type === t)?.value;
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  } catch {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+}
+
+function shiftDate(yyyymmdd, days) {
+  const [y, m, d] = yyyymmdd.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d) + days * 24 * 3600 * 1000;
+  const dt = new Date(t);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
+// Parse optional ?from=&to= YYYY-MM-DD pair. Defaults to last `defaultDays` days
+// counted in the TENANT timezone (not UTC), so the window always includes
+// "today" as the tenant sees it.
+// Returns { fromUtc, toUtc, fromStr, toStr } where toUtc is EXCLUSIVE.
 function parseDateRange(query, tz, defaultDays = 30) {
-  const today = new Date();
-  const yyyy = today.getUTCFullYear();
-  const mm = String(today.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(today.getUTCDate()).padStart(2, "0");
-  const toStr = sanitiseDateStr(query.to) || `${yyyy}-${mm}-${dd}`;
-
-  const past = new Date(today);
-  past.setUTCDate(past.getUTCDate() - (defaultDays - 1));
-  const pyyyy = past.getUTCFullYear();
-  const pmm = String(past.getUTCMonth() + 1).padStart(2, "0");
-  const pdd = String(past.getUTCDate()).padStart(2, "0");
-  const fromStr = sanitiseDateStr(query.from) || `${pyyyy}-${pmm}-${pdd}`;
-
+  const todayLocal = todayInTz(tz);
+  const toStr = sanitiseDateStr(query.to) || todayLocal;
+  const fromStr = sanitiseDateStr(query.from) || shiftDate(todayLocal, -(defaultDays - 1));
   return {
     fromStr,
     toStr,
@@ -273,33 +292,49 @@ module.exports = function registerManufacturerPortalData(app, deps) {
 
       // Build SELECT list + GROUP BY by axis. All axes always include brand
       // for context — the manufacturer might watch multiple brands.
+      //
+      // Bug fix (Day 5): use TO_CHAR for the date label so it comes back as
+      // a 'YYYY-MM-DD' string already in the tenant tz, instead of a JS Date
+      // that the pg driver constructs in server TZ (= Asia/Karachi on prod)
+      // and then formatDay() reads UTC parts from — that path returned the
+      // previous UTC date for any sale in the first 5h of a Karachi day.
+      //
+      // Params used per axis: only `day` references $4 (tz). The others
+      // bind only $1..$3 (fromUtc, toUtc, brand_ids) — including a $4
+      // param without a placeholder throws "supplies 4 parameters but
+      // prepared statement requires 3" on the pg side.
       const axisSql = {
         day: {
-          select: `DATE(s.timestamp AT TIME ZONE $4) AS day,
+          select: `TO_CHAR(s.timestamp AT TIME ZONE $4, 'YYYY-MM-DD') AS day,
                    p.brand_id, b.name AS brand_name`,
           group: `day, p.brand_id, b.name`,
           order: `day DESC, brand_name`,
+          usesTz: true,
         },
         sku: {
           select: `p.id AS product_id, p.name AS product_name,
                    p.brand_id, b.name AS brand_name`,
           group: `p.id, p.name, p.brand_id, b.name`,
           order: `gross_revenue DESC`,
+          usesTz: false,
         },
         region: {
           select: `COALESCE(NULLIF(c.city, ''), 'Unspecified') AS region,
                    p.brand_id, b.name AS brand_name`,
           group: `region, p.brand_id, b.name`,
           order: `gross_revenue DESC`,
+          usesTz: false,
         },
         brand: {
           select: `p.brand_id, b.name AS brand_name`,
           group: `p.brand_id, b.name`,
           order: `gross_revenue DESC`,
+          usesTz: false,
         },
       }[groupBy];
 
-      const params = [range.fromUtc, range.toUtc, scopedBrandIds, tz];
+      const params = [range.fromUtc, range.toUtc, scopedBrandIds];
+      if (axisSql.usesTz) params.push(tz);
       let whereRegion = "";
       if (region) {
         params.push(region);
@@ -363,7 +398,7 @@ module.exports = function registerManufacturerPortalData(app, deps) {
       const { rows } = await req.db.query(
         `
         SELECT
-          DATE(s.timestamp AT TIME ZONE $4) AS day,
+          TO_CHAR(s.timestamp AT TIME ZONE $4, 'YYYY-MM-DD') AS day,
           COALESCE(NULLIF(c.city, ''), 'Unspecified') AS region,
           b.name AS brand_name,
           p.name AS product_name,
@@ -390,7 +425,7 @@ module.exports = function registerManufacturerPortalData(app, deps) {
       for (const r of rows) {
         lines.push(
           [
-            csvEscape(formatDay(r.day)),
+            csvEscape(r.day || ""),
             csvEscape(r.region || ""),
             csvEscape(r.brand_name || ""),
             csvEscape(r.product_name || ""),
@@ -473,7 +508,8 @@ function normaliseSalesRow(r, groupBy) {
     gross_revenue: Number(r.gross_revenue || 0),
   };
   if (groupBy === "day") {
-    return { day: formatDay(r.day), brand_id: r.brand_id, brand_name: r.brand_name, ...base };
+    // SQL returns r.day as a YYYY-MM-DD string via TO_CHAR.
+    return { day: r.day, brand_id: r.brand_id, brand_name: r.brand_name, ...base };
   }
   if (groupBy === "sku") {
     return {
@@ -488,17 +524,6 @@ function normaliseSalesRow(r, groupBy) {
     return { region: r.region, brand_id: r.brand_id, brand_name: r.brand_name, ...base };
   }
   return { brand_id: r.brand_id, brand_name: r.brand_name, ...base };
-}
-
-function formatDay(d) {
-  if (!d) return "";
-  if (d instanceof Date) {
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const dd = String(d.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
-  return String(d).slice(0, 10);
 }
 
 function csvEscape(s) {
