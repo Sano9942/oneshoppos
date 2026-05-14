@@ -1,4 +1,4 @@
-# SanoPOS Wholesale Master Reference — 2026-05-14 (updated: Tier 1.2 order capture shipped)
+# SanoPOS Wholesale Master Reference — 2026-05-15 (updated: Tier 1.3 schemes engine shipped)
 
 **This is the single day-to-day wholesale/distribution reference for the repo.**
 
@@ -70,12 +70,13 @@ End-to-end verified 2026-05-14 evening, mobile viewport (390×844):
 
 ### Live state on `tenant_wholesalewalktest1778451` (prod, verified 2026-05-14 evening)
 
-- `schema_version = 92`
+- `schema_version = 93`
 - `tenant_modes`: `wholesale = true`
-- `feature_flags`: `wholesale_credit_controls = true`, `wholesale_field_sales = true`
+- `feature_flags`: `wholesale_credit_controls = true`, `wholesale_field_sales = true`, **`wholesale_schemes = true`**
 - `company_profile.ar_aging_buckets = [30, 60, 90]`, `field_geofence_meters = 500`
 - `customers` has the 3 credit columns + `lat`/`lng`
 - `sales.customer_invoice_id` FK exists, **`sales.field_visit_id` FK exists (v92)**
+- **`promotions.tier_rules` JSONB, `brand_id`, `priority` exist (v93); `sale_promotion_applications` audit table exists**
 - `role_permissions`: Manager has `override_credit_limit` + `manage_field_sales`; Field Rep has `manage_field_sales`
 - Roles: 1=Administrator, 2=Manager, 3=Cashier, **4=Field Rep**
 - Employees: id=1 Wholesale Test Owner, id=2 Test Cashier, **id=3 Field Rep One** (`employee_type='field_rep'`, password `TestField234!`, PIN `7777`)
@@ -215,7 +216,7 @@ Four tiers, opinionated about sequence. Pick from one tier at a time. Do **not**
 | 1.1 | **Field rep mobile app foundation** | **SHIPPED 2026-05-14** | v90 + v91 + frontend pages. `employee_type` column, `field_rep_routes` + `field_visits` tables, `wholesale_field_sales` flag, Field Rep role + `manage_field_sales` perm. 5 backend routes. 3 frontend pages (today / check-in / visits) + dashboard summary cards. Auto-redirect for `employee_type='field_rep'`. GPS + selfie + outcome check-in flow with R2 upload, haversine geofence, auto-tag-on-first-visit, IndexedDB offline queue. Verified end-to-end via Playwright. | Done |
 | 1.1.5 | **Owner route-assignment UI** | **SHIPPED 2026-05-14** | `/field/routes` admin page with reorder + add/remove per (rep, day-of-week). Backend endpoint `POST /api/admin/field-routes` powered by replace-all semantics. Verified end-to-end on production. Commits `afa2e6f` + `22dd35f` (employee_type hotfix). | Done |
 | 1.2 | **Order capture from field rep app** | **SHIPPED 2026-05-14 + verified live 2026-05-15** | Migration v92 added `sales.field_visit_id` FK. POST `/api/sales` accepts `field_visit_uuid` and resolves uuid → id via `field_visits.client_uuid` lookup (offline-friendly — order can sync before visit row exists). New page `/field/order/:customer_id?visit_uuid=` with product picker + cart + Credit/Cash; soft credit-availability warning, backend still enforces hard credit limit. Check-in's "Took Order" outcome auto-advances to order screen. Offline queue extended with `type='field_order'`. Owner visit log shows linked invoice + total. **Schemes preview deferred to 1.3** (no placeholder added — keeps order UI clean). Initial commit `8b8dd42`, then 4 hotfixes during live walkthrough: `7f55188` (field rep allow-list on `/api/products` + `/api/customers/:id/credit-status`, resilient `allSettled` load), `36ce7a1` (field rep bypass on `GET /api/outlets`), `d78cadd` (field rep bypass on outlet-assignment enforcement in `registerAllRoutes.js`), `33378d6` (skip outlet clock-in check on `POST /api/sales` when `field_visit_id`/`field_visit_uuid` present). End-to-end verified: visit id=3 → sale id=4 → invoice `INV-2026-00004` Rs 22,000. | Done |
-| 1.3 | **Schemes engine** | Next | New tables: `schemes` (name, brand_id, sku_filter, start/end, type='slab'/'free_goods'/'rebate'), `scheme_rules` (qty_from, qty_to, action_type, action_value), `scheme_applications` (sale_id, scheme_id, calculated_value). Apply at sale create + at scheme period end (retrospective). | 1.5 weeks |
+| 1.3 | **Schemes engine** | **SHIPPED 2026-05-15 + verified live** | Built as an extension of the existing `promotions` engine (not a parallel `schemes` stack — reuses the production `/api/promotions/quote` evaluator that POS already calls). Migration v93: `promotions.type` CHECK gains `slab_percent`; new columns `tier_rules` JSONB + `brand_id` FK + `priority` INT; new `sale_promotion_applications` audit table with frozen snapshots (`promotion_name_snapshot`, `promotion_type_snapshot`, `qty_qualifying`, `discount_value`, `tier_snapshot`); `wholesale_schemes` flag default OFF. Evaluator handles slab_percent (matched qty → first matching tier wins, no stacking across tiers) + `applies_to='brand'` (auto-hydrates brand_id from products). `PromotionsRedesign` admin page conditionally surfaces the slab editor + brand picker + priority field when the flag is on. Rep app order screen does debounced quote calls (400ms) and shows applied schemes + scheme discount + net total. Verified end-to-end: tiered evaluator returns correct discounts at all 3 boundaries (qty=4 → 0, qty=7 → tier1 5%, qty=12 → tier2 10%); sale id=5 written with audit row capturing snapshot. Retrospective period-end rebates explicitly deferred to 1.3.5 if a real tenant asks. Commit `8a44bfc` (backend) + `ba9cfe4` (frontend). | Done |
 | 1.4 | **Secondary sales tracking** | Later | A "manufacturer view" — wholesale tenants can mark certain customers as "manufacturer" partners and a manufacturer's portal shows real-time onward sales of their brand SKUs through this distributor. This is the killer feature for FMCG. **Complex — may need its own scoping.** | 1.5-2 weeks |
 | 1.5 | **Wholesale tenant mode flag bundle** | Partial | `wholesale_field_sales` (1.1) shipped. `wholesale_schemes` (1.3) + `wholesale_secondary_sales` (1.4) still to add. All default OFF, opt-in per tenant (avoids forcing complexity on small wholesale signups). | 0.5 day at the end |
 
