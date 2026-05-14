@@ -77,6 +77,12 @@ const ManufacturerPortalSetup = lazy(() =>
 const ManufacturerPortalDashboard = lazy(() =>
   import("../pages/manufacturer-portal/ManufacturerPortalDashboard")
 );
+const ManufacturerPortalSales = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalSales")
+);
+const ManufacturerPortalSchemes = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalSchemes")
+);
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -237,5 +243,7 @@ export const publicRoutes = [
     <Route index element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalDashboard /></Suspense>} />
     <Route path="login" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalLogin /></Suspense>} />
     <Route path="setup" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSetup /></Suspense>} />
+    <Route path="sales" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSales /></Suspense>} />
+    <Route path="promotions" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSchemes /></Suspense>} />
   </Route>,
 ];
