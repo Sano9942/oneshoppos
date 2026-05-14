@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Percent, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import {
   Badge,
   Button,
@@ -17,18 +19,27 @@ import {
 import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
 import { downloadCsv } from "../../utils/csvExport";
 
-const TYPE_LABELS = {
+// v93 (Tier 1.3 wholesale schemes): slab_percent + brand scope conditionally
+// surfaced when wholesale_schemes flag is on. Base promotion types stay
+// available to all tenants.
+const BASE_TYPE_LABELS = {
   percent: "% Off (matched items)",
   fixed: "Fixed Amount Off",
   threshold_percent: "% Off if order >= minimum",
   threshold_fixed: "Fixed Off if order >= minimum",
   bxgy: "Buy X Get Y Free",
 };
+const WHOLESALE_TYPE_LABELS = {
+  slab_percent: "Volume Slab (qty tiers → %)",
+};
 
-const APPLIES_LABELS = {
+const BASE_APPLIES_LABELS = {
   all: "All products",
   product: "Specific product",
   category: "Category",
+};
+const WHOLESALE_APPLIES_LABELS = {
+  brand: "Brand",
 };
 
 const EMPTY = {
@@ -41,12 +52,24 @@ const EMPTY = {
   applies_to: "all",
   product_id: "",
   category_id: "",
+  brand_id: "",
   starts_at: "",
   ends_at: "",
+  priority: "0",
+  tier_rules: [], // [{ qty_from, qty_to|null, value }]
 };
 
 function normalizePromoPayload(src, override = {}) {
   const next = { ...src, ...override };
+  const tiers = Array.isArray(next.tier_rules)
+    ? next.tier_rules
+        .map((t) => ({
+          qty_from: Number(t.qty_from || 0),
+          qty_to: t.qty_to === "" || t.qty_to == null ? null : Number(t.qty_to),
+          value: Number(t.value || 0),
+        }))
+        .filter((t) => !Number.isNaN(t.qty_from) && !Number.isNaN(t.value))
+    : null;
   return {
     name: next.name || "",
     type: next.type || "percent",
@@ -57,24 +80,55 @@ function normalizePromoPayload(src, override = {}) {
     applies_to: next.applies_to || "all",
     product_id: next.product_id ? Number(next.product_id) : null,
     category_id: next.category_id ? Number(next.category_id) : null,
+    brand_id: next.brand_id ? Number(next.brand_id) : null,
     starts_at: next.starts_at || null,
     ends_at: next.ends_at || null,
     active: next.active !== undefined ? Number(next.active) : 1,
+    priority: Number(next.priority || 0),
+    tier_rules: next.type === "slab_percent" && tiers && tiers.length ? tiers : null,
   };
 }
 
 function describeValue(row, fmt) {
   const value = Number(row.value || 0);
   if (row.type === "bxgy") return `Buy ${row.buy_qty || 0} / Get ${row.get_qty || 0}`;
+  if (row.type === "slab_percent") {
+    const tiers = Array.isArray(row.tier_rules) ? row.tier_rules : [];
+    if (!tiers.length) return "Slab (no tiers)";
+    return tiers
+      .map((t) => {
+        const to = t.qty_to == null ? "+" : `-${t.qty_to}`;
+        return `${t.qty_from}${to}: ${t.value}%`;
+      })
+      .join(", ");
+  }
   if (String(row.type || "").includes("percent")) return `${value}%`;
   return fmt(value);
 }
 
 export default function PromotionsRedesign() {
   const { fmt } = useCurrency();
+  const { authHeaders } = useAuth();
+  const authHeadersMemo = useMemo(() => authHeaders, [authHeaders]);
+  const { flags } = useFeatureFlags(authHeadersMemo);
+  const schemesEnabled = Boolean(flags?.wholesale_schemes);
+
+  const TYPE_LABELS = useMemo(
+    () => (schemesEnabled ? { ...BASE_TYPE_LABELS, ...WHOLESALE_TYPE_LABELS } : BASE_TYPE_LABELS),
+    [schemesEnabled],
+  );
+  const APPLIES_LABELS = useMemo(
+    () =>
+      schemesEnabled
+        ? { ...BASE_APPLIES_LABELS, ...WHOLESALE_APPLIES_LABELS }
+        : BASE_APPLIES_LABELS,
+    [schemesEnabled],
+  );
+
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -107,15 +161,22 @@ export default function PromotionsRedesign() {
   }, []);
 
   const loadDependencies = useCallback(async () => {
-    try {
-      const [productsRes, categoriesRes] = await Promise.all([
-        api.get("/api/products"),
-        api.get("/api/categories"),
-      ]);
-      setProducts(productsRes.products || []);
-      setCategories(sortCategories(categoriesRes.categories || []));
-    } catch {
-      // Non-blocking for list load.
+    // allSettled so a 403 on /api/brands (or any other fetch) doesn't blank
+    // products + categories. /api/brands is harmless when wholesale_schemes
+    // is off — just an unused list.
+    const [productsRes, categoriesRes, brandsRes] = await Promise.allSettled([
+      api.get("/api/products"),
+      api.get("/api/categories"),
+      api.get("/api/brands"),
+    ]);
+    if (productsRes.status === "fulfilled") {
+      setProducts(productsRes.value?.products || []);
+    }
+    if (categoriesRes.status === "fulfilled") {
+      setCategories(sortCategories(categoriesRes.value?.categories || []));
+    }
+    if (brandsRes.status === "fulfilled") {
+      setBrands(brandsRes.value?.brands || brandsRes.value || []);
     }
   }, []);
 
@@ -169,8 +230,17 @@ export default function PromotionsRedesign() {
       applies_to: row.applies_to || "all",
       product_id: row.product_id ? String(row.product_id) : "",
       category_id: row.category_id ? String(row.category_id) : "",
+      brand_id: row.brand_id ? String(row.brand_id) : "",
       starts_at: row.starts_at || "",
       ends_at: row.ends_at || "",
+      priority: String(row.priority ?? "0"),
+      tier_rules: Array.isArray(row.tier_rules)
+        ? row.tier_rules.map((t) => ({
+            qty_from: String(t.qty_from ?? ""),
+            qty_to: t.qty_to == null ? "" : String(t.qty_to),
+            value: String(t.value ?? ""),
+          }))
+        : [],
     });
     setFormError("");
     setModalOpen(true);
@@ -199,6 +269,40 @@ export default function PromotionsRedesign() {
     if (form.applies_to === "category" && !form.category_id) {
       setFormError("Select a category for category-scoped promotions.");
       return;
+    }
+    if (form.applies_to === "brand" && !form.brand_id) {
+      setFormError("Select a brand for brand-scoped promotions.");
+      return;
+    }
+    if (form.type === "slab_percent") {
+      if (!form.tier_rules.length) {
+        setFormError("Add at least one slab tier (qty_from + value).");
+        return;
+      }
+      let prevTo = -Infinity;
+      for (let i = 0; i < form.tier_rules.length; i++) {
+        const t = form.tier_rules[i];
+        const from = Number(t.qty_from);
+        const to = t.qty_to === "" ? Infinity : Number(t.qty_to);
+        const value = Number(t.value);
+        if (!Number.isFinite(from) || from < 0) {
+          setFormError(`Tier ${i + 1}: qty_from must be non-negative.`);
+          return;
+        }
+        if (t.qty_to !== "" && to < from) {
+          setFormError(`Tier ${i + 1}: qty_to must be >= qty_from.`);
+          return;
+        }
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+          setFormError(`Tier ${i + 1}: value must be 0-100 (percent).`);
+          return;
+        }
+        if (from <= prevTo) {
+          setFormError(`Tier ${i + 1}: bands must be non-overlapping and ascending.`);
+          return;
+        }
+        prevTo = to;
+      }
     }
     setSaving(true);
     try {
@@ -639,6 +743,104 @@ export default function PromotionsRedesign() {
                 </div>
               ) : null}
 
+              {form.type === "slab_percent" ? (
+                <div className="rounded border border-(--ui-border) p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-semibold text-(--ui-text-muted) uppercase">
+                      Slab Tiers (qty → discount %)
+                    </label>
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          tier_rules: [
+                            ...prev.tier_rules,
+                            { qty_from: "", qty_to: "", value: "" },
+                          ],
+                        }))
+                      }
+                    >
+                      <Plus size={12} className="mr-1 inline" /> Add Tier
+                    </Button>
+                  </div>
+                  <p className="mb-2 text-xs text-(--ui-text-muted)">
+                    Quantity bands must be ascending and non-overlapping. Leave the last tier's
+                    "Qty To" blank for "and above". Percent value 0-100.
+                  </p>
+                  {!form.tier_rules.length ? (
+                    <p className="py-2 text-center text-xs text-(--ui-text-muted)">
+                      No tiers yet. Add at least one.
+                    </p>
+                  ) : null}
+                  {form.tier_rules.map((t, idx) => (
+                    <div key={idx} className="mb-2 grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                      <div>
+                        <label className="text-xs text-(--ui-text-muted)">Qty From</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={t.qty_from}
+                          onChange={(e) =>
+                            setForm((prev) => {
+                              const next = [...prev.tier_rules];
+                              next[idx] = { ...next[idx], qty_from: e.target.value };
+                              return { ...prev, tier_rules: next };
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-(--ui-text-muted)">Qty To (blank = ∞)</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={t.qty_to}
+                          onChange={(e) =>
+                            setForm((prev) => {
+                              const next = [...prev.tier_rules];
+                              next[idx] = { ...next[idx], qty_to: e.target.value };
+                              return { ...prev, tier_rules: next };
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-(--ui-text-muted)">Discount %</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={t.value}
+                          onChange={(e) =>
+                            setForm((prev) => {
+                              const next = [...prev.tier_rules];
+                              next[idx] = { ...next[idx], value: e.target.value };
+                              return { ...prev, tier_rules: next };
+                            })
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        tone="danger"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            tier_rules: prev.tier_rules.filter((_, i) => i !== idx),
+                          }))
+                        }
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
               {form.type === "threshold_percent" || form.type === "threshold_fixed" ? (
                 <div>
                   <label className="mb-1 block text-xs text-(--ui-text-muted)">
@@ -711,7 +913,24 @@ export default function PromotionsRedesign() {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {form.applies_to === "brand" ? (
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Brand</label>
+                  <Select
+                    value={form.brand_id}
+                    onChange={(e) => setForm((prev) => ({ ...prev, brand_id: e.target.value }))}
+                  >
+                    <option value="">Select brand</option>
+                    {brands.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-xs text-(--ui-text-muted)">Start Date</label>
                   <Input
@@ -728,6 +947,22 @@ export default function PromotionsRedesign() {
                     onChange={(e) => setForm((prev) => ({ ...prev, ends_at: e.target.value }))}
                   />
                 </div>
+                {schemesEnabled ? (
+                  <div>
+                    <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                      Priority
+                      <span className="ml-1 text-(--ui-text-muted)">(higher wins)</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.priority}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, priority: e.target.value }))
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <ModalFooter>

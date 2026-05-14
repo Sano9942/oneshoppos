@@ -40,6 +40,11 @@ export default function FieldOrderRedesign() {
   const [submitting, setSubmitting] = useState(false);
   const submittedRef = useRef(false);
 
+  // Tier 1.3 wholesale schemes — debounced quote against the cart. Mirrors
+  // POS's useCart auto-promotions behavior but inlined for the rep app.
+  const [appliedPromotions, setAppliedPromotions] = useState([]);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+
   // Load customer, credit status, outlet, products in parallel.
   useEffect(() => {
     if (flagsLoading || !flags.wholesale_field_sales) return;
@@ -99,6 +104,47 @@ export default function FieldOrderRedesign() {
     () => cartItems.reduce((sum, it) => sum + Number(it.quantity), 0),
     [cartItems]
   );
+
+  // Tier 1.3: debounce 400ms after cart changes, then quote /api/promotions.
+  // Pass category_id + brand_id hydrated from the products map so brand-scoped
+  // and slab schemes evaluate correctly.
+  useEffect(() => {
+    if (!cartItems.length) {
+      setAppliedPromotions([]);
+      setPromoDiscount(0);
+      return undefined;
+    }
+    const productMap = new Map(products.map((p) => [Number(p.id), p]));
+    const quoteItems = cartItems.map((it) => {
+      const p = productMap.get(Number(it.id)) || {};
+      return {
+        product_id: Number(it.id),
+        category_id: p.category_id || null,
+        brand_id: p.brand_id || null,
+        quantity: Number(it.quantity || 0),
+        price: Number(it.price || 0),
+      };
+    });
+    const orderTotal = quoteItems.reduce((s, i) => s + i.price * i.quantity, 0);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api.post("/api/promotions/quote", {
+          items: quoteItems,
+          order_total: orderTotal,
+        });
+        setAppliedPromotions(data?.applied_promotions || []);
+        setPromoDiscount(Number(data?.total_promotion_discount || 0));
+      } catch {
+        // Soft fail — schemes are best-effort, sale still goes through.
+        setAppliedPromotions([]);
+        setPromoDiscount(0);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // Re-quote when cart contents change OR products list arrives (so hydrated
+    // brand_id/category_id flow through). map().join() stringifies the cart so
+    // the dep is value-equal across renders.
+  }, [cartItems.map((c) => `${c.id}:${c.quantity}:${c.price}`).join(","), products.length]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -174,6 +220,12 @@ export default function FieldOrderRedesign() {
     setSubmitting(true);
 
     const idempotency_key = newUuid();
+    // Apply scheme discount upfront so the payment amount matches the post-
+    // discount total. POS folds promo discount into discount_amount the same
+    // way (see useCheckout.completeSale). Backend persists applied_promotions
+    // into sale_promotion_applications for audit.
+    const promoDiscountSafe = Math.max(0, Math.min(promoDiscount, cartTotal));
+    const netTotal = Math.max(0, cartTotal - promoDiscountSafe);
     const payload = {
       idempotency_key,
       outlet_id: Number(outlet.id),
@@ -184,11 +236,12 @@ export default function FieldOrderRedesign() {
         price: it.price,
         quantity: it.quantity,
       })),
-      payments: [{ method: paymentMethod, amount: cartTotal }],
+      payments: [{ method: paymentMethod, amount: netTotal }],
       paymentMethod,
-      discount_amount: 0,
+      discount_amount: promoDiscountSafe,
       discount_type: "fixed",
       field_visit_uuid: visitUuid,
+      applied_promotions: appliedPromotions,
     };
 
     // Optimistic flow: enqueue locally first, then try to sync.
@@ -400,6 +453,20 @@ export default function FieldOrderRedesign() {
           </button>
         </div>
 
+        {appliedPromotions.length > 0 && (
+          <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
+            <div className="flex items-center justify-between font-medium text-emerald-800">
+              <span>Scheme discount</span>
+              <span className="tabular-nums">-{fmt(promoDiscount)}</span>
+            </div>
+            <div className="text-emerald-700">
+              {appliedPromotions
+                .map((ap) => ap.name + (ap.qty_qualifying ? ` (${ap.qty_qualifying} qty)` : ""))
+                .join(", ")}
+            </div>
+          </div>
+        )}
+
         {creditWarning && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             {creditWarning}
@@ -413,7 +480,7 @@ export default function FieldOrderRedesign() {
           className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
         >
           <Check className="h-4 w-4" />
-          Confirm order · {fmt(cartTotal)}
+          Confirm order · {fmt(Math.max(0, cartTotal - promoDiscount))}
         </button>
       </div>
     </div>
