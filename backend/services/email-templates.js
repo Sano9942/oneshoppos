@@ -906,6 +906,27 @@ function retailWeeklyDigest({ companyName, dateStr, data }) {
   };
 }
 
+// -- Tier 1.4 Manufacturer Portal -----------------------------------------
+// Sent when a distributor invites a manufacturer-partner to monitor secondary
+// sales of their brand. Contains a one-shot signup link that lands on the
+// /manufacturer-portal/setup page where they set a password.
+function manufacturerPartnerInvite({ storeName, contactName, brandList, setupUrl, expiresInDays }) {
+  const brands = Array.isArray(brandList) && brandList.length
+    ? brandList.join(", ")
+    : "your brand";
+  return {
+    subject: `${storeName || "Your distributor"} has invited you to monitor ${brands} sales`,
+    html: wrapEmailHtml("Manufacturer Portal Access", `
+      <p>Hi ${contactName || "there"},</p>
+      <p><strong>${storeName || "Your distributor"}</strong> has invited you to their manufacturer portal where you can monitor real-time onward sales of <strong>${brands}</strong> through their distribution network.</p>
+      <p>You'll see daily sales volumes, SKU-level performance, regional breakdown, and scheme impact — all aggregated, with retailer identities never exposed.</p>
+      ${setupUrl ? btn("Set up your account", setupUrl) : ""}
+      <p style="color:#64748b">This invite link expires in ${expiresInDays || 7} days. Click it to set your password and access the portal.</p>
+      ${footer("You're receiving this because a SanoPOS distributor added you as a manufacturer-partner. If you weren't expecting this, you can safely ignore the email.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -957,6 +978,8 @@ const TEMPLATES = {
   gift_card_issued: giftCardIssued,
   // Phase 2-G Wave 6 (2-G.16)
   retail_weekly_digest: retailWeeklyDigest,
+  // Tier 1.4 Manufacturer Portal
+  manufacturer_partner_invite: manufacturerPartnerInvite,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

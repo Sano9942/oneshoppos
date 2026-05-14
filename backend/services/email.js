@@ -26,7 +26,7 @@ function getResend() {
  * Platform->Tenant emails: "SanoPOS <noreply@sanopos.com>"
  */
 function resolveFrom(type, tenant) {
-  const TENANT_TYPES = ["receipt", "digest", "customer_statement"];
+  const TENANT_TYPES = ["receipt", "digest", "customer_statement", "manufacturer_partner_invite"];
   if (TENANT_TYPES.includes(type) && tenant?.slug && tenant?.name) {
     return `${tenant.name} <${tenant.slug}@sanopos.com>`;
   }

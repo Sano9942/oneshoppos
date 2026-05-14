@@ -190,6 +190,12 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/stays")(app, deps);
   require("./customer-portal/treatments")(app, deps);
 
+  // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
+  // BEFORE tenant middleware; each route resolves tenant via
+  // resolvePublicTenantDb() and verifies portal JWT (scope="manufacturer").
+  // Data routes will be added in a follow-up (Days 4-5).
+  require("./manufacturer-portal/auth")(app, deps);
+
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
@@ -671,6 +677,11 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- Tier 1.1 wholesale: field rep mobile app ---
   require("./field")(app, deps);
+
+  // --- Tier 1.4 wholesale: manufacturer-partner admin CRUD ---
+  // Tenant-scoped (mounted after tenant middleware). The manufacturer
+  // portal's own endpoints mount above, BEFORE tenant middleware.
+  require("./manufacturer-partners")(app, deps);
 
   return {
     processPendingShopifyInventoryEvents:
