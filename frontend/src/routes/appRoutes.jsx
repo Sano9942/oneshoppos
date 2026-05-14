@@ -24,6 +24,7 @@ const InventoryRoute = lazy(() => import("../pages/InventoryRoute"));
 const ProductFormPage = lazy(() => import("../pages/redesign/ProductFormPage"));
 const OutletsRoute = lazy(() => import("../pages/OutletsRoute"));
 const PromotionsRoute = lazy(() => import("../pages/PromotionsRoute"));
+const ManufacturerPartnersRoute = lazy(() => import("../pages/ManufacturerPartnersRoute"));
 const PurchaseOrdersRoute = lazy(() => import("../pages/PurchaseOrdersRoute"));
 const ReceiptTemplatesRedesign = lazy(() => import("../pages/redesign/ReceiptTemplatesRedesign"));
 const ReturnedStockRoute = lazy(() => import("../pages/ReturnedStockRoute"));
@@ -162,6 +163,7 @@ export const appRoutes = [
     <Route path="/adjustments" element={perm("manage_inventory", <StockAdjustmentsRoute />)} />
     <Route path="/transfers" element={perm("manage_inventory", <TransfersRoute />)} />
     <Route path="/promotions" element={perm("manage_inventory", <PromotionsRoute />)} />
+    <Route path="/settings/manufacturer-partners" element={perm("manage_inventory", <ManufacturerPartnersRoute />)} />
     <Route path="/expenses" element={perm("manage_inventory", <ExpensesRoute />)} />
     <Route path="/accounting" element={perm("view_reports", <AccountingRoute />)} />
     <Route path="/categories" element={perm("manage_inventory", <CategoriesRoute />)} />
