@@ -552,6 +552,10 @@ module.exports = function registerSalesRoutes(app, deps) {
       // Tier 0.1 wholesale — manager PIN to override a hard credit-limit
       // block on a Credit tender. Ignored when no Credit tender is used.
       manager_pin = null,
+      // Tier 1.2 wholesale field sales — when set, links the sale back to the
+      // field_visit it came from. Validated as a positive int by Zod; existence
+      // is enforced at INSERT via the FK constraint on sales.field_visit_id.
+      field_visit_id = null,
     } = req.body;
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
@@ -1432,7 +1436,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -1451,6 +1455,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             subtotalSnapshot,
             taxTotalSnapshot,
             taxInclusiveResolved,
+            field_visit_id || null,
           ]
         );
         const newSaleId = saleRow.id;

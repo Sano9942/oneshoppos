@@ -2885,6 +2885,16 @@ ALTER TABLE sales
 CREATE INDEX IF NOT EXISTS idx_sales_customer_invoice_id
   ON sales(customer_invoice_id);
 
+-- v92 (Tier 1.2 wholesale field sales): link a POS sale back to the
+-- field_visit that produced it, so the rep app and visit log can show
+-- "this visit took an order of Rs X" and reports can split field vs
+-- in-store sales.
+ALTER TABLE sales
+  ADD COLUMN IF NOT EXISTS field_visit_id INTEGER REFERENCES field_visits(id);
+CREATE INDEX IF NOT EXISTS idx_sales_field_visit
+  ON sales(field_visit_id)
+  WHERE field_visit_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS customer_invoice_reminders (
   id SERIAL PRIMARY KEY,
   invoice_id INTEGER NOT NULL REFERENCES customer_invoices(id) ON DELETE CASCADE,

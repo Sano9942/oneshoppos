@@ -6729,6 +6729,37 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 92,
+    description:
+      "Tier 1.2 wholesale field sales — sales.field_visit_id FK linking a sale back to the field_visit that produced it",
+    up: async (client) => {
+      // Only run inside tenant schemas that have both tables. Skips public.
+      const { rows: tables } = await client.query(`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name IN ('sales', 'field_visits')
+      `);
+      if (tables.length < 2) return;
+
+      try {
+        await client.query("SAVEPOINT v92_field_visit_fk");
+        await client.query(
+          `ALTER TABLE sales
+             ADD COLUMN IF NOT EXISTS field_visit_id INTEGER REFERENCES field_visits(id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_sales_field_visit
+             ON sales (field_visit_id)
+             WHERE field_visit_id IS NOT NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v92_field_visit_fk");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v92_field_visit_fk");
+        console.warn(`[migrate-pg v92] sales.field_visit_id skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

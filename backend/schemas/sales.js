@@ -35,6 +35,10 @@ const CreateSaleSchema = z.object({
   outlet_id: z.coerce.number().int().positive("Outlet ID is required for checkout"),
   payments: z.array(PaymentLineSchema).optional(),
   paymentMethod: z.string().max(100).optional(),
+  // Tier 1.2 wholesale field sales: when a sale originates from the field rep
+  // app's check-in → order flow, the rep app passes the visit id so the sale
+  // links back to the visit it came from.
+  field_visit_id: z.coerce.number().int().positive().optional().nullable(),
 }).passthrough(); // preserve employee_id, customer_id, shift_id, discount_amount, staff_id, room_id, plan_id, etc.
 
 // PUT /api/sales/:id/void
