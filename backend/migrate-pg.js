@@ -6864,6 +6864,127 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 94,
+    description:
+      "Tier 1.4 wholesale secondary sales — manufacturer_partners + brand mapping + refresh tokens + wholesale_secondary_sales flag",
+    up: async (client) => {
+      // 1. manufacturer_partners — directory of manufacturer accounts that
+      //    monitor secondary sales of their brand SKUs through this distributor.
+      //    NOT the same as customers: manufacturers don't buy from us, they
+      //    monitor onward sales of their brand. Separate auth scope = "manufacturer".
+      try {
+        await client.query("SAVEPOINT v94_partners_table");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS manufacturer_partners (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            contact_name TEXT,
+            email TEXT NOT NULL,
+            password_hash TEXT,
+            status TEXT NOT NULL DEFAULT 'invited'
+              CHECK (status IN ('invited','active','suspended')),
+            signup_token TEXT,
+            signup_token_expires_at TIMESTAMPTZ,
+            portal_tokens_revoked_before TIMESTAMPTZ,
+            last_login_at TIMESTAMPTZ,
+            email_verified_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS manufacturer_partners_email_unique
+             ON manufacturer_partners (LOWER(email))`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_manufacturer_partners_status
+             ON manufacturer_partners (status)`
+        );
+        await client.query("RELEASE SAVEPOINT v94_partners_table");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v94_partners_table");
+        console.warn(`[migrate-pg v94] manufacturer_partners skipped: ${err.message}`);
+      }
+
+      // 2. manufacturer_partner_brands — N:N join. One partner can monitor
+      //    multiple brands; one brand can be monitored by multiple partners
+      //    (rare but allowed — e.g. parent + subsidiary access).
+      try {
+        await client.query("SAVEPOINT v94_partner_brands");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS manufacturer_partner_brands (
+            manufacturer_partner_id INTEGER NOT NULL
+              REFERENCES manufacturer_partners(id) ON DELETE CASCADE,
+            brand_id INTEGER NOT NULL
+              REFERENCES brands(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (manufacturer_partner_id, brand_id)
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_mfg_partner_brands_brand
+             ON manufacturer_partner_brands (brand_id)`
+        );
+        await client.query("RELEASE SAVEPOINT v94_partner_brands");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v94_partner_brands");
+        console.warn(`[migrate-pg v94] manufacturer_partner_brands skipped: ${err.message}`);
+      }
+
+      // 3. manufacturer_portal_refresh_tokens — mirrors customer_portal_refresh_tokens
+      //    shape. Refresh tokens stored as SHA-256 hash; raw token only in httpOnly cookie.
+      try {
+        await client.query("SAVEPOINT v94_refresh_tokens");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS manufacturer_portal_refresh_tokens (
+            id SERIAL PRIMARY KEY,
+            manufacturer_partner_id INTEGER NOT NULL
+              REFERENCES manufacturer_partners(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            revoked_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            last_used_at TIMESTAMPTZ,
+            user_agent TEXT,
+            ip TEXT
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_mfg_portal_refresh_partner
+             ON manufacturer_portal_refresh_tokens (manufacturer_partner_id)
+             WHERE revoked_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v94_refresh_tokens");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v94_refresh_tokens");
+        console.warn(`[migrate-pg v94] manufacturer_portal_refresh_tokens skipped: ${err.message}`);
+      }
+
+      // 4. wholesale_secondary_sales feature flag — default OFF.
+      //    When ON, distributor sees /settings/manufacturer-partners admin UI
+      //    and manufacturer portal becomes reachable for invited partners.
+      try {
+        await client.query("SAVEPOINT v94_secondary_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('wholesale_secondary_sales', false,
+               'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v94_secondary_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v94_secondary_flag");
+        console.warn(`[migrate-pg v94] wholesale_secondary_sales flag skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

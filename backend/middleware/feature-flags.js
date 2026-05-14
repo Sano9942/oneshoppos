@@ -132,6 +132,10 @@ const DEFAULT_FEATURE_FLAGS = {
   // Tier 1.3 (wholesale schemes): slab-tier volume discounts + brand-scoped
   // schemes on top of the existing promotions engine. Default false.
   wholesale_schemes: false,
+  // Tier 1.4 (wholesale secondary sales): manufacturer-partner portal —
+  // distributor invites brand owners (Tapal, Coca-Cola, etc.) to see real-time
+  // aggregate onward sales of their brand SKUs. Separate JWT scope. Default false.
+  wholesale_secondary_sales: false,
 };
 
 // Per-tenant feature flag cache

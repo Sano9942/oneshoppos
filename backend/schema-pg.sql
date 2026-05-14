@@ -2328,7 +2328,9 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer'),
   ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)'),
   ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements'),
-  ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log')
+  ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log'),
+  ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
+  ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -4192,6 +4194,59 @@ CREATE TABLE IF NOT EXISTS customer_portal_refresh_tokens (
 );
 CREATE INDEX IF NOT EXISTS customer_portal_refresh_tokens_customer
   ON customer_portal_refresh_tokens (customer_id) WHERE revoked_at IS NULL;
+
+-- ── Tier 1.4 Manufacturer Portal (migration v94) ───────────────────
+-- Wholesale tenants invite their manufacturer-partners (Tapal, Coca-Cola, etc.)
+-- to monitor onward sales of their brand SKUs through this distributor.
+-- Separate auth scope from customer portal (scope="manufacturer").
+
+CREATE TABLE IF NOT EXISTS manufacturer_partners (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  contact_name TEXT,
+  email TEXT NOT NULL,
+  password_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'invited'
+    CHECK (status IN ('invited','active','suspended')),
+  signup_token TEXT,
+  signup_token_expires_at TIMESTAMPTZ,
+  portal_tokens_revoked_before TIMESTAMPTZ,
+  last_login_at TIMESTAMPTZ,
+  email_verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS manufacturer_partners_email_unique
+  ON manufacturer_partners (LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_manufacturer_partners_status
+  ON manufacturer_partners (status);
+
+CREATE TABLE IF NOT EXISTS manufacturer_partner_brands (
+  manufacturer_partner_id INTEGER NOT NULL
+    REFERENCES manufacturer_partners(id) ON DELETE CASCADE,
+  brand_id INTEGER NOT NULL
+    REFERENCES brands(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (manufacturer_partner_id, brand_id)
+);
+CREATE INDEX IF NOT EXISTS idx_mfg_partner_brands_brand
+  ON manufacturer_partner_brands (brand_id);
+
+CREATE TABLE IF NOT EXISTS manufacturer_portal_refresh_tokens (
+  id SERIAL PRIMARY KEY,
+  manufacturer_partner_id INTEGER NOT NULL
+    REFERENCES manufacturer_partners(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  user_agent TEXT,
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mfg_portal_refresh_partner
+  ON manufacturer_portal_refresh_tokens (manufacturer_partner_id)
+  WHERE revoked_at IS NULL;
 
 -- ── M9 Room Management (migration v38) ─────────────────────────────
 

@@ -1,8 +1,20 @@
 # Tier 1.4 — Secondary Sales Tracking (manufacturer portal)
 
-**Status:** Scoping complete 2026-05-16. Awaiting user sign-off → build.
+**Status:** Scoping complete 2026-05-16. Verified against live schema 2026-05-16. Day 1 in progress.
 **Budget:** 1.5-2 weeks per master reference.
 **Migration target:** v94.
+
+## Verified facts (live tenant `wholesalewalktest1778451`, 2026-05-16)
+
+- `schema_version = 93` ✓
+- `promotions` has `tier_rules` (jsonb), `brand_id` (int), `priority` (int) ✓
+- `sale_promotion_applications` columns: `id, sale_id, promotion_id, promotion_name_snapshot, promotion_type_snapshot, qty_qualifying, discount_value, tier_snapshot, created_at` — **NO `product_id` column.** Discount is sale-level only. **Fallback engaged: `/promotions` route surfaces scheme-level totals; `/sales` route omits the per-line `scheme_discount` column** (or shows it only at the sale-aggregate level, not per-product).
+- `feature_flags` shape: `(key TEXT PK, enabled BOOLEAN, description TEXT, updated_by, updated_at)` — **NOT** `(key, value)` as the original draft stated. Insert syntax: `INSERT INTO feature_flags (key, enabled, description) VALUES (..., false, '...')`.
+- `brands` table: `(id SERIAL PK, name UNIQUE, description)` ✓
+- `customers.city` populated for 4/5 test customers ("Karachi"); Test Distributor is NULL → "Unspecified" bucket.
+- **All 3 test products have `brand_id = NULL`** — walkthrough setup must create a brand "Bulk Brand Co" and assign Bulk A + Bulk B to it before manufacturer-partner reports will show data.
+- `customer_portal_refresh_tokens` shape includes `last_used_at`, `user_agent`, `ip` — mirror these on `manufacturer_portal_refresh_tokens`.
+- `customers` portal columns use prefix `portal_` (e.g. `portal_password_hash`, `portal_enabled_at`). Since manufacturer_partners is a new table, columns can be unprefixed.
 
 ---
 
@@ -72,15 +84,20 @@ CREATE TABLE IF NOT EXISTS manufacturer_partner_brands (
   PRIMARY KEY (manufacturer_partner_id, brand_id)
 );
 
--- Refresh tokens (mirrors customer_portal_refresh_tokens shape)
+-- Refresh tokens (mirrors customer_portal_refresh_tokens exactly)
 CREATE TABLE IF NOT EXISTS manufacturer_portal_refresh_tokens (
   id SERIAL PRIMARY KEY,
   manufacturer_partner_id INTEGER NOT NULL REFERENCES manufacturer_partners(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  revoked_at TIMESTAMPTZ
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  user_agent TEXT,
+  ip TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_mfg_portal_refresh_partner
+  ON manufacturer_portal_refresh_tokens (manufacturer_partner_id) WHERE revoked_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_manufacturer_partners_email ON manufacturer_partners(email);
 CREATE INDEX IF NOT EXISTS idx_manufacturer_partner_brands_brand ON manufacturer_partner_brands(brand_id);
@@ -89,8 +106,10 @@ CREATE INDEX IF NOT EXISTS idx_manufacturer_partner_brands_brand ON manufacturer
 CREATE INDEX IF NOT EXISTS idx_sale_items_product_sale ON sale_items(product_id, sale_id);
 -- (sales already has timestamp index; sale_items.product_id likely indexed — verify before shipping)
 
--- Feature flag seed
-INSERT INTO feature_flags (key, value) VALUES ('wholesale_secondary_sales', false)
+-- Feature flag seed (note: column is `enabled`, not `value`)
+INSERT INTO feature_flags (key, enabled, description) VALUES
+  ('wholesale_secondary_sales', false,
+   'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility')
 ON CONFLICT (key) DO NOTHING;
 ```
 
@@ -154,7 +173,7 @@ Admin-side: new page under `/settings/manufacturer-partners` in the existing ten
 
 ## Hot query shape
 
-The core query for `/sales?group_by=day&from=2026-04-01&to=2026-04-30`:
+The core query for `/sales?group_by=day&from=2026-04-01&to=2026-04-30` — **gross only, no scheme discount per-line** (decision below):
 
 ```sql
 SELECT
@@ -164,15 +183,11 @@ SELECT
   p.id AS product_id,
   p.name AS product_name,
   SUM(si.quantity) AS qty,
-  SUM(si.subtotal) AS gross_revenue,
-  SUM(COALESCE(spa.discount_value, 0)) AS scheme_discount,
-  SUM(si.subtotal - COALESCE(spa.discount_value, 0)) AS net_revenue
+  SUM(si.price * si.quantity) AS gross_revenue
 FROM sale_items si
 JOIN sales s ON s.id = si.sale_id
 JOIN products p ON p.id = si.product_id
 LEFT JOIN customers c ON c.id = s.customer_id
-LEFT JOIN sale_promotion_applications spa
-  ON spa.sale_id = si.sale_id AND spa.product_id = si.product_id
 WHERE p.brand_id = ANY($2)
   AND s.timestamp >= $3 AND s.timestamp < $4
   AND s.status NOT IN ('voided','cancelled')
@@ -180,11 +195,19 @@ GROUP BY day, region, p.brand_id, p.id, p.name
 ORDER BY day DESC, region, p.name
 ```
 
-(`$1` = tenant timezone, `$2` = array of brand_ids, `$3/$4` = UTC bounds via `toUtcStart/toUtcEnd`.)
+(`$1` = tenant timezone, `$2` = array of brand_ids, `$3/$4` = UTC bounds via `toUtcStart/toUtcEnd`. Verify `sale_items` actual column for line revenue — likely `price` × `quantity` or a precomputed `subtotal` column. Day-1 task before writing the route.)
 
 **Index coverage to verify before shipping:** `sale_items(product_id, sale_id)`, `sales(timestamp)`, `products(brand_id)`. The first one is the new index in the migration; latter two should exist. EXPLAIN ANALYZE on the test tenant before claiming the work is live.
 
-**Promotion attribution note:** `sale_promotion_applications` rows track scheme application at the sale level. The current schema (verified in Tier 1.3 work) does not have a `product_id` column on `sale_promotion_applications` — it links to a sale + promotion, with `qty_qualifying` as the audit field. Verify the actual column layout in v93 before finalizing the join. **If the join can't be cleanly product-scoped, the v1 design falls back to scheme-level totals on `/promotions` (not blended into `/sales`).** This is a known unknown — call out during the verify step.
+**Promotion attribution — fallback engaged (verified 2026-05-16):**
+
+`sale_promotion_applications` is sale-level only (no `product_id`). This means we **cannot** blend per-line scheme discount into the `/sales` response. The design adapts as follows:
+
+- `/sales` returns gross revenue + qty per (brand × SKU × day × region). No `scheme_discount` or `net_revenue` columns at the line level.
+- `/promotions` returns **scheme-level totals** scoped to schemes that touched the manufacturer's brands: `SELECT spa.promotion_name_snapshot, spa.promotion_type_snapshot, SUM(spa.discount_value) AS total_discount, COUNT(*) AS sales_count FROM sale_promotion_applications spa JOIN sales s ON s.id = spa.sale_id JOIN sale_items si ON si.sale_id = s.id JOIN products p ON p.id = si.product_id WHERE p.brand_id = ANY($brand_ids) AND s.timestamp BETWEEN $from AND $to GROUP BY spa.promotion_name_snapshot, spa.promotion_type_snapshot`. This still answers "what schemes drove discount on my brand and how much" — just at the scheme level, not the per-SKU level.
+- `/summary` dashboard cards: total qty, total gross revenue, total scheme discount on brand (via the same join), top 5 SKUs.
+
+Net effect: manufacturer still sees scheme impact, but as "Scheme X earned retailers Rs 47K in discounts on sales that included your brand" rather than "Scheme X cut Rs 12K off your SKU specifically." Acceptable for v1. Document in user-facing copy.
 
 ---
 
@@ -192,7 +215,7 @@ ORDER BY day DESC, region, p.name
 
 | Day | Work |
 |---|---|
-| 1 | Migration v94 (DDL + flag seed + index). Run on test tenant via Supabase MCP. Verify `wholesale_secondary_sales` is OFF on prod, ON on test tenant. Verify `sale_promotion_applications` column layout for the product-scoped join (or fall back to scheme-level if it doesn't fit). |
+| 1 | **Schema verified (2026-05-16):** spa is sale-level only (fallback engaged), feature_flags is `(key, enabled, description)`, test tenant products have brand_id=NULL (walkthrough setup step). Now: write migration v94 (DDL + flag seed + index). Apply to test tenant via Supabase MCP. Verify `wholesale_secondary_sales` is OFF on prod, ON on test tenant after migration runs. Verify `sale_items` line-revenue column name (`price` × `quantity` vs `subtotal`). |
 | 2 | `manufacturer-auth.js` middleware + rate limiters + Zod schemas. Unit test the middleware. |
 | 3 | Auth routes (`setup`, `login`, `refresh`, `logout`). Email template + send. |
 | 4-5 | Data routes (`me`, `summary`, `sales`, `promotions`, `sales.csv`). EXPLAIN ANALYZE the hot query on test tenant data. |
