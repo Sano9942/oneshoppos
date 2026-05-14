@@ -8,8 +8,12 @@ module.exports = function registerOutletRoutes(app, deps) {
       const employeeId = Number(req.headers["x-employee-id"] || 0);
       const perms = req.employeePerms || [];
       const isAdmin = perms.includes("all_access");
+      // Tier 1.2 wholesale: field reps don't have employee_outlets rows
+      // (they're tenant-scoped, not outlet-scoped). Let them see all outlets
+      // so the rep app can pick a default outlet for /api/sales.
+      const isFieldRep = perms.includes("manage_field_sales");
 
-      if (employeeId && !isAdmin) {
+      if (employeeId && !isAdmin && !isFieldRep) {
         const { rows } = await db.query(
           `SELECT o.*
            FROM outlets o
