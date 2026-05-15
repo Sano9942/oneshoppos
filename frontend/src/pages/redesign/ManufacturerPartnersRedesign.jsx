@@ -183,13 +183,17 @@ export default function ManufacturerPartnersRedesign() {
   }
 
   async function resendInvite(row) {
-    if (!confirm(`Resend the setup invite to ${row.email}?`)) return;
+    const isReset = row.status === "active";
+    const promptMsg = isReset
+      ? `Send a password-reset link to ${row.email}?`
+      : `Resend the setup invite to ${row.email}?`;
+    if (!confirm(promptMsg)) return;
     try {
       await api.post(`/api/manufacturer-partners/${row.id}/resend`, {});
-      success("Invite resent");
+      success(isReset ? "Reset link sent" : "Invite resent");
       loadPartners();
     } catch (e) {
-      toastError(e.message || "Failed to resend invite");
+      toastError(e.message || (isReset ? "Failed to send reset" : "Failed to resend invite"));
     }
   }
 
@@ -294,6 +298,15 @@ export default function ManufacturerPartnersRedesign() {
                             onClick={() => resendInvite(p)}
                           >
                             Resend
+                          </Button>
+                        )}
+                        {p.status === "active" && (
+                          <Button
+                            size="sm"
+                            tone="plain"
+                            onClick={() => resendInvite(p)}
+                          >
+                            Send reset
                           </Button>
                         )}
                         {p.status !== "suspended" && (

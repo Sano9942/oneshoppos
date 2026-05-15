@@ -326,9 +326,12 @@ module.exports = function registerManufacturerPartnerRoutes(app, deps) {
   });
 
   // ── POST /api/manufacturer-partners/:id/resend ────────────────────
-  // Regenerate signup_token + resend invite. Allowed when status='invited'.
-  // For 'active' partners, password reset is the right path (not yet built —
-  // 1.4.5 / on-demand if asked).
+  // For 'invited' partners: regenerates signup_token + resends the invite
+  // email (7-day TTL).
+  // For 'active' partners: regenerates signup_token + sends a password-reset
+  // email (1-hour TTL) and does NOT revoke active sessions yet (revocation
+  // happens at /auth/setup when the partner actually claims the token).
+  // For 'suspended' partners: rejected — caller must reactivate first.
   app.post(
     "/api/manufacturer-partners/:id/resend",
     ...gate,
@@ -344,16 +347,19 @@ module.exports = function registerManufacturerPartnerRoutes(app, deps) {
           [id]
         );
         if (!partner) return res.status(404).json({ error: "Partner not found" });
-        if (partner.status !== "invited") {
+        if (partner.status === "suspended") {
           return res
             .status(400)
-            .json({ error: "Partner already activated. Use password reset instead." });
+            .json({ error: "Partner is suspended. Reactivate before resending." });
         }
 
+        const isReset = partner.status === "active";
         const token = newSignupToken();
-        const expiresAt = new Date(
-          Date.now() + SIGNUP_TOKEN_TTL_DAYS * 24 * 3600 * 1000
-        );
+        const ttlMs = isReset
+          ? 1 * 3600 * 1000 // 1 hour for password reset
+          : SIGNUP_TOKEN_TTL_DAYS * 24 * 3600 * 1000;
+        const expiresAt = new Date(Date.now() + ttlMs);
+
         await db.query(
           `UPDATE manufacturer_partners
               SET signup_token = $2,
@@ -362,6 +368,43 @@ module.exports = function registerManufacturerPartnerRoutes(app, deps) {
             WHERE id = $1`,
           [id, token, expiresAt]
         );
+
+        const tenant = {
+          id: req.tenantId,
+          slug: req.tenantSlug,
+          name: req.company?.name,
+        };
+
+        if (isReset) {
+          try {
+            const { enqueueEmail } = require("../services/email");
+            const frontendBase = (
+              process.env.FRONTEND_URL || "https://sanopos.com"
+            ).replace(/\/$/, "");
+            const resetUrl = `${frontendBase}/manufacturer-portal/${encodeURIComponent(
+              tenant.slug
+            )}/setup?token=${encodeURIComponent(token)}`;
+            await enqueueEmail(db, {
+              tenantId: tenant.id,
+              type: "manufacturer_partner_password_reset",
+              to: partner.email,
+              tenant: { slug: tenant.slug, name: tenant.name || tenant.slug },
+              data: {
+                storeName: tenant.name || tenant.slug,
+                contactName: partner.contact_name || partner.name,
+                resetUrl,
+                expiresInHours: 1,
+              },
+            });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[manufacturer-partners] enqueue reset failed for ${partner.email}:`,
+              err.message
+            );
+          }
+          return res.json({ status: "reset_sent" });
+        }
 
         const { rows: brandRows } = await db.query(
           `SELECT b.name FROM manufacturer_partner_brands mpb
@@ -373,7 +416,7 @@ module.exports = function registerManufacturerPartnerRoutes(app, deps) {
 
         await enqueueInviteEmail(
           db,
-          { id: req.tenantId, slug: req.tenantSlug, name: req.company?.name },
+          tenant,
           partner,
           brandRows.map((b) => b.name),
           token

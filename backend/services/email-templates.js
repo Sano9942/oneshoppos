@@ -910,6 +910,19 @@ function retailWeeklyDigest({ companyName, dateStr, data }) {
 // Sent when a distributor invites a manufacturer-partner to monitor secondary
 // sales of their brand. Contains a one-shot signup link that lands on the
 // /manufacturer-portal/setup page where they set a password.
+function manufacturerPartnerPasswordReset({ storeName, contactName, resetUrl, expiresInHours }) {
+  return {
+    subject: `Reset your ${storeName || "manufacturer portal"} password`,
+    html: wrapEmailHtml("Password Reset", `
+      <p>Hi ${contactName || "there"},</p>
+      <p>We received a request to reset your password for the <strong>${storeName || "manufacturer"}</strong> portal. Click the button below to choose a new password.</p>
+      ${resetUrl ? btn("Reset password", resetUrl) : ""}
+      <p style="color:#64748b">This link expires in ${expiresInHours || 1} hour. If you didn't request a reset, you can safely ignore this email — your current password will still work.</p>
+      ${footer("You're receiving this because a password reset was requested for your SanoPOS manufacturer-portal account.")}
+    `),
+  };
+}
+
 function manufacturerPartnerInvite({ storeName, contactName, brandList, setupUrl, expiresInDays }) {
   const brands = Array.isArray(brandList) && brandList.length
     ? brandList.join(", ")
@@ -980,6 +993,7 @@ const TEMPLATES = {
   retail_weekly_digest: retailWeeklyDigest,
   // Tier 1.4 Manufacturer Portal
   manufacturer_partner_invite: manufacturerPartnerInvite,
+  manufacturer_partner_password_reset: manufacturerPartnerPasswordReset,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

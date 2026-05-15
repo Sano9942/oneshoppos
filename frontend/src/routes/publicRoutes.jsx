@@ -74,6 +74,9 @@ const ManufacturerPortalLogin = lazy(() =>
 const ManufacturerPortalSetup = lazy(() =>
   import("../pages/manufacturer-portal/ManufacturerPortalSetup")
 );
+const ManufacturerPortalForgotPassword = lazy(() =>
+  import("../pages/manufacturer-portal/ManufacturerPortalForgotPassword")
+);
 const ManufacturerPortalDashboard = lazy(() =>
   import("../pages/manufacturer-portal/ManufacturerPortalDashboard")
 );
@@ -243,6 +246,7 @@ export const publicRoutes = [
     <Route index element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalDashboard /></Suspense>} />
     <Route path="login" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalLogin /></Suspense>} />
     <Route path="setup" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSetup /></Suspense>} />
+    <Route path="forgot-password" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalForgotPassword /></Suspense>} />
     <Route path="sales" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSales /></Suspense>} />
     <Route path="promotions" element={<Suspense fallback={<RouteLoading />}><ManufacturerPortalSchemes /></Suspense>} />
   </Route>,

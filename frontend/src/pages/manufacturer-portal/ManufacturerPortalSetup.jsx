@@ -3,9 +3,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMfgPortalAuth } from "./ManufacturerPortalAuthProvider";
 import { manufacturerPortalApi } from "../../api/manufacturerPortalApi";
 
-// First-time account claim. Lands here via the magic link in the invite email:
+// First-time account claim AND password reset. Lands here via the magic link
+// in either the invite email or the forgot-password email:
 //   /manufacturer-portal/:slug/setup?token=<signup_token>
 // Form sets the password, calls /auth/setup, and lands the user on dashboard.
+// The backend treats both flows identically (invite ⇄ reset is just a
+// difference in token TTL and which email template was sent).
 export default function ManufacturerPortalSetup() {
   const { tenantSlug } = useParams();
   const navigate = useNavigate();
@@ -53,7 +56,7 @@ export default function ManufacturerPortalSetup() {
     <div className="max-w-sm mx-auto bg-white border border-slate-200 rounded-lg p-6 mt-4">
       <h1 className="text-xl font-semibold mb-1">Set your password</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Welcome — finish setting up your manufacturer portal account.
+        Choose a new password to access your manufacturer portal account.
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
         {!tokenFromUrl && (

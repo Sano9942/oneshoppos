@@ -33,6 +33,10 @@ const loginSchema = z.object({
   password: passwordSchema,
 });
 
+const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
 // ── Distributor-admin CRUD on manufacturer_partners ──────────────────
 
 const brandIdListSchema = z
@@ -60,6 +64,7 @@ const updatePartnerSchema = z
 module.exports = {
   setupSchema,
   loginSchema,
+  forgotPasswordSchema,
   createPartnerSchema,
   updatePartnerSchema,
 };

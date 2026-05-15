@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMfgPortalAuth } from "./ManufacturerPortalAuthProvider";
 import { manufacturerPortalApi } from "../../api/manufacturerPortalApi";
 
@@ -73,7 +73,15 @@ export default function ManufacturerPortalLogin() {
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <p className="text-xs text-slate-500 mt-6">
+      <div className="text-sm text-slate-500 mt-6 flex items-center justify-between">
+        <Link
+          to={`/manufacturer-portal/${tenantSlug}/forgot-password`}
+          className="text-indigo-600 hover:text-indigo-700"
+        >
+          Forgot password?
+        </Link>
+      </div>
+      <p className="text-xs text-slate-500 mt-4">
         First time here? Use the setup link from your invite email instead.
       </p>
     </div>

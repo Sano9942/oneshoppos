@@ -36,10 +36,26 @@ const {
 const {
   setupSchema,
   loginSchema,
+  forgotPasswordSchema,
 } = require("../../schemas/manufacturer-portal");
 
 const BCRYPT_ROUNDS = 10;
 const REFRESH_COOKIE_NAME = "sanopos_mfg_portal_refresh";
+const RESET_TOKEN_TTL_HOURS = 1;
+
+function newResetToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function frontendBase() {
+  return (process.env.FRONTEND_URL || "https://sanopos.com").replace(/\/$/, "");
+}
+
+function resetUrlFor(tenantSlug, token) {
+  return `${frontendBase()}/manufacturer-portal/${encodeURIComponent(
+    tenantSlug
+  )}/setup?token=${encodeURIComponent(token)}`;
+}
 
 function setRefreshCookie(res, rawToken, expiresAt) {
   res.cookie(REFRESH_COOKIE_NAME, rawToken, {
@@ -145,10 +161,21 @@ module.exports = function registerManufacturerPortalAuth(app, deps) {
                   email_verified_at = COALESCE(email_verified_at, NOW()),
                   signup_token = NULL,
                   signup_token_expires_at = NULL,
+                  portal_tokens_revoked_before = NOW(),
                   updated_at = NOW()
             WHERE id = $1
             RETURNING id, name, email, contact_name`,
           [partner.id, passwordHash]
+        );
+
+        // If this was a password reset (existing active partner), revoke
+        // every outstanding refresh token so old sessions can't survive.
+        // For first-time setup this is a no-op.
+        await db.query(
+          `UPDATE manufacturer_portal_refresh_tokens
+              SET revoked_at = NOW()
+            WHERE manufacturer_partner_id = $1 AND revoked_at IS NULL`,
+          [partner.id]
         );
 
         const session = await issueSession(db, updated, tenant, req, res);
@@ -261,6 +288,87 @@ module.exports = function registerManufacturerPortalAuth(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // ── POST /forgot-password ──────────────────────────────────────────
+  // Issues a fresh signup_token with a 1-hour TTL and emails the reset link.
+  // The link points at the same /setup page the invite flow uses — that
+  // endpoint already accepts a valid token regardless of partner status.
+  //
+  // Always returns 200 with the same "we'll send an email if there's a
+  // match" message to prevent address enumeration.
+  router.post(
+    "/forgot-password",
+    manufacturerPortalAuthLimiter,
+    validate(forgotPasswordSchema),
+    async (req, res) => {
+      const okMsg = {
+        message:
+          "If an account with that email exists, a reset link has been sent.",
+      };
+      try {
+        const resolved = await resolveOrFail(req, res);
+        if (!resolved) return;
+        const { db, tenant } = resolved;
+        const { email } = req.body;
+
+        const { rows: [partner] } = await db.query(
+          `SELECT id, name, email, contact_name, status
+             FROM manufacturer_partners
+            WHERE LOWER(email) = LOWER($1)
+            LIMIT 1`,
+          [email]
+        );
+
+        // Silently no-op on missing/suspended partners so a probe can't
+        // distinguish them from a real address that simply didn't trigger
+        // a send.
+        if (!partner || partner.status === "suspended") {
+          return res.json(okMsg);
+        }
+
+        const token = newResetToken();
+        const expiresAt = new Date(
+          Date.now() + RESET_TOKEN_TTL_HOURS * 3600 * 1000
+        );
+        await db.query(
+          `UPDATE manufacturer_partners
+              SET signup_token = $2,
+                  signup_token_expires_at = $3,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [partner.id, token, expiresAt]
+        );
+
+        try {
+          const { enqueueEmail } = require("../../services/email");
+          await enqueueEmail(db, {
+            tenantId: tenant.id,
+            type: "manufacturer_partner_password_reset",
+            to: partner.email,
+            tenant: { slug: tenant.slug, name: tenant.name || tenant.slug },
+            data: {
+              storeName: tenant.name || tenant.slug,
+              contactName: partner.contact_name || partner.name,
+              resetUrl: resetUrlFor(tenant.slug, token),
+              expiresInHours: RESET_TOKEN_TTL_HOURS,
+            },
+          });
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[mfg-portal] enqueue password reset email failed for ${partner.email}:`,
+            err.message
+          );
+        }
+
+        return res.json(okMsg);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[mfg-portal forgot-password]", err.message);
+        return res.json(okMsg);
+      }
+    }
+  );
 
   // ── POST /logout ───────────────────────────────────────────────────
   router.post("/logout", async (req, res) => {
