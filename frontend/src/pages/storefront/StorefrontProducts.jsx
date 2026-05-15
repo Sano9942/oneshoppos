@@ -48,6 +48,11 @@ export default function StorefrontProducts() {
     if (categoryId) params.set("category", categoryId);
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (sort) params.set("sort", sort);
+    // Tier 2.11 — pass cart_token so backend can resolve the buyer's
+    // customer_id (set when a portal user reordered) and apply visibility.
+    // Anonymous visitors have no token → C2 default (sees only visibility='all').
+    const cartTokenForVisibility = localStorage.getItem(`sf_cart_${tenantSlug}`);
+    if (cartTokenForVisibility) params.set("cart_token", cartTokenForVisibility);
 
     fetch(`${API_BASE}/api/storefront/products?${params}`)
       .then((r) => (r.ok ? r.json() : { products: [], totalPages: 1 }))

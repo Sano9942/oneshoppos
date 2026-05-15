@@ -3,6 +3,25 @@ const { getOrCreateCart, addItem, updateItem, removeItem, getCartWithItems } = r
 const { calculateQuote } = require("../services/quote");
 const { allocateOrder } = require("../services/allocation");
 const { resolvePublicTenantDb } = require("../services/public-tenant-context");
+const { withVisibilityWhere } = require("../services/product-visibility");
+
+// Tier 2.11 — resolve the storefront visitor's customer_id from the
+// optional ?cart_token=. Anonymous (no token, no matching cart, no
+// customer_id) returns null, which the visibility helper treats as
+// "C2 default" — only products with visibility='all' are returned.
+async function resolveStorefrontCustomerId(db, cartToken) {
+  if (!cartToken) return null;
+  try {
+    const { rows } = await db.query(
+      "SELECT customer_id FROM storefront_carts WHERE cart_token = $1",
+      [cartToken]
+    );
+    return rows[0]?.customer_id || null;
+  } catch {
+    // visibility column / table may be missing on a not-yet-migrated tenant
+    return null;
+  }
+}
 
 module.exports = function mountStorefrontRoutes(app, deps) {
 
@@ -97,6 +116,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         conditions.push(`(p.name ILIKE $${paramIdx} OR p.sku ILIKE $${paramIdx} OR p.barcode ILIKE $${paramIdx})`);
         params.push(searchParam);
       }
+
+      // Tier 2.11 — visibility gate. The buyer is identified by the cart's
+      // customer_id (set on the cart when a portal user reorders, or when
+      // checkout fills it in). Anonymous = ungrouped = sees only 'all'.
+      const sfCustomerId = await resolveStorefrontCustomerId(db, req.query.cart_token);
+      await withVisibilityWhere(db, conditions, params, sfCustomerId);
+      paramIdx = params.length;
 
       const whereClause = conditions.join(" AND ");
 
@@ -195,6 +221,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       // Verify product is published on storefront channel
       // Tier 2.2 — pull MOQ columns so the detail page can show hints and
       // pre-block invalid quantities.
+      // Tier 2.11 — apply visibility gate. If the visitor's cart links to a
+      // customer who can't see this SKU, return 404 (same shape as a
+      // missing product — don't leak that a SKU exists but is restricted).
+      const sfCustomerId = await resolveStorefrontCustomerId(db, req.query.cart_token);
+      const conditions = ["p.id = $1", "cp.is_published = true"];
+      const params = [productId];
+      await withVisibilityWhere(db, conditions, params, sfCustomerId);
       const { rows: productRows } = await db.query(`
         SELECT
           p.id, p.name, p.description_html AS description, p.sku, p.barcode,
@@ -208,9 +241,9 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         JOIN sales_channels sc ON sc.id = cp.channel_id AND sc.code = 'storefront'
         LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN brands b ON b.id = p.brand_id
-        WHERE p.id = $1 AND cp.is_published = true
+        WHERE ${conditions.join(" AND ")}
         LIMIT 1
-      `, [productId]);
+      `, params);
 
       if (!productRows.length) {
         return res.status(404).json({ error: "Product not found" });
@@ -452,6 +485,11 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       console.error("Storefront add item error:", err);
       if (err.message === "Product not found") {
         return res.status(404).json({ error: err.message });
+      }
+      if (err.code === "PRODUCT_NOT_VISIBLE") {
+        // Same shape as "Product not found" — don't leak that the SKU
+        // exists but is restricted to other accounts.
+        return res.status(404).json({ error: "Product not found" });
       }
       if (err.code === "MOQ_VIOLATION") {
         return res.status(400).json({

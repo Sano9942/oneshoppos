@@ -56,7 +56,10 @@ export default function FieldOrderRedesign() {
       const [routeR, outletsR, productsR, creditR] = await Promise.allSettled([
         api.get("/api/field/route/today"),
         api.get("/api/outlets"),
-        api.get("/api/products", { status: "active" }),
+        // Tier 2.11 — pass customer_id so backend filters the catalog to
+        // what this customer is allowed to see (visibility='all' + any
+        // restricted SKUs whose customer_group_products row matches).
+        api.get("/api/products", { status: "active", customer_id }),
         api.get(`/api/customers/${customer_id}/credit-status`),
       ]);
       if (cancelled) return;

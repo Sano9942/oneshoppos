@@ -61,6 +61,11 @@ const BLANK_FORM = {
   // 0/empty for min = no minimum; 1/empty for increment = no case-pack rule.
   min_order_qty: "",
   order_increment: "",
+  // Tier 2.11 wholesale visibility — 'all' (everyone, default) or 'restricted'
+  // (only customers in listed groups can see this SKU). customer_group_ids
+  // is the whitelist; only used when visibility === 'restricted'.
+  visibility: "all",
+  customer_group_ids: [],
 };
 
 export default function ProductFormPage() {
@@ -98,6 +103,9 @@ export default function ProductFormPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [channels, setChannels] = useState([]);
   const [channelsSaving, setChannelsSaving] = useState(false);
+  // Tier 2.11 — populated from GET /api/customer-groups (admins only). Used
+  // by the visibility section when 'restricted' is selected.
+  const [customerGroups, setCustomerGroups] = useState([]);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const updVariant = (key, field, value) =>
@@ -189,6 +197,14 @@ export default function ProductFormPage() {
           form.min_order_qty !== "" ? Number(form.min_order_qty) : null,
         order_increment:
           form.order_increment !== "" ? Number(form.order_increment) : null,
+        // Tier 2.11 — only include the whitelist when visibility is restricted.
+        // Sending an empty array still replaces the existing mapping (correct
+        // for the case where user just removed every group).
+        visibility: form.visibility === "restricted" ? "restricted" : "all",
+        customer_group_ids:
+          form.visibility === "restricted"
+            ? (form.customer_group_ids || []).map(Number).filter(Boolean)
+            : [],
       };
 
       if (form.is_bundle && bundleComponents.length > 0) {
@@ -275,6 +291,8 @@ export default function ProductFormPage() {
       api.get("/api/attribute-sets"),
       api.get("/api/suppliers"),
       api.get("/api/taxes"),
+      // Tier 2.11 — best-effort. Falls back to [] on 403 (non-admin tenants).
+      api.get("/api/customer-groups").catch(() => ({ groups: [] })),
     ];
     const all = isEdit
       ? [...base,
@@ -285,12 +303,13 @@ export default function ProductFormPage() {
         ]
       : base;
 
-    Promise.all(all).then(([catD, brandD, attrD, suppD, taxD, ...editParts]) => {
+    Promise.all(all).then(([catD, brandD, attrD, suppD, taxD, cgD, ...editParts]) => {
       setCategories(sortCategories(catD.categories || []));
       setBrands(brandD.brands || []);
       setAttributeSets(attrD.attributeSets || []);
       setSuppliers(suppD.suppliers || []);
       setTaxes(taxD?.taxes || []);
+      setCustomerGroups(Array.isArray(cgD?.groups) ? cgD.groups : []);
       if (isEdit) {
         const [prodD, varD, stockD, reviewsD] = editParts;
         if (Array.isArray(reviewsD)) setReviews(reviewsD);
@@ -331,6 +350,10 @@ export default function ProductFormPage() {
               p.order_increment != null && Number(p.order_increment) > 1
                 ? p.order_increment
                 : "",
+            visibility: p.visibility === "restricted" ? "restricted" : "all",
+            customer_group_ids: Array.isArray(p.customer_group_ids)
+              ? p.customer_group_ids.map(Number)
+              : [],
           });
           if (p.is_bundle && Array.isArray(p.bundle_components)) {
             setBundleComponents(p.bundle_components.map((c) => ({
@@ -1002,6 +1025,93 @@ export default function ProductFormPage() {
                 bypasses these rules. A min of 12 with an increment of 6 means
                 valid quantities are 12, 18, 24…
               </p>
+            </div>
+          </SectionCard>
+
+          {/* Tier 2.11 — Catalog visibility. Controls who can see this SKU on
+              the storefront, customer portal, and field-rep app. Admin
+              listings, reports, POS, and manufacturer portal always show all. */}
+          <SectionCard>
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                Catalog visibility
+              </p>
+              <div className="flex flex-col gap-2">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="all"
+                    checked={form.visibility === "all"}
+                    onChange={() => upd("visibility", "all")}
+                  />
+                  <span>Visible to all customers (default)</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="restricted"
+                    checked={form.visibility === "restricted"}
+                    onChange={() => upd("visibility", "restricted")}
+                  />
+                  <span>Restricted — only specific customer groups</span>
+                </label>
+              </div>
+              {form.visibility === "restricted" && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-(--ui-text-muted)">
+                    Allowed customer groups
+                  </label>
+                  {customerGroups.length === 0 ? (
+                    <p className="text-[11px] text-(--ui-text-muted)">
+                      No customer groups defined yet. Create one in{" "}
+                      <a href="/customer-groups" className="text-(--ui-primary) underline">
+                        Customer Groups
+                      </a>{" "}
+                      first. With zero groups selected this SKU is hidden from
+                      every buyer.
+                    </p>
+                  ) : (
+                    <div className="border border-(--ui-border) rounded-md max-h-40 overflow-y-auto">
+                      {customerGroups.map((g) => {
+                        const checked = (form.customer_group_ids || []).includes(g.id);
+                        return (
+                          <label
+                            key={g.id}
+                            className="flex items-center gap-2 px-2 py-1.5 hover:bg-(--ui-muted-surface) text-sm border-b border-(--ui-border) last:border-0"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const cur = Array.isArray(form.customer_group_ids)
+                                  ? form.customer_group_ids
+                                  : [];
+                                upd(
+                                  "customer_group_ids",
+                                  e.target.checked
+                                    ? [...cur, g.id]
+                                    : cur.filter((id) => id !== g.id)
+                                );
+                              }}
+                            />
+                            <span className="flex-1">{g.name}</span>
+                            <span className="text-xs text-(--ui-text-muted)">
+                              {g.member_count || 0} member(s)
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-(--ui-text-muted) mt-1">
+                    Customers outside these groups (and anonymous storefront
+                    visitors) will not see this SKU. Reports and POS still
+                    include it.
+                  </p>
+                </div>
+              )}
             </div>
           </SectionCard>
 

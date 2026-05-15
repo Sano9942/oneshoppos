@@ -7037,6 +7037,63 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 96,
+    description:
+      "Tier 2.11 wholesale catalog visibility — products.visibility + customer_group_products join table (Option C/C2)",
+    up: async (client) => {
+      // products.visibility: 'all' (default; pre-v96 behavior) or 'restricted'
+      // (visible only to customers whose group is mapped in
+      // customer_group_products). Ungrouped customers see only 'all'.
+      try {
+        await client.query("SAVEPOINT v96_visibility_col");
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'all'`
+        );
+        await client.query(
+          `ALTER TABLE products
+             DROP CONSTRAINT IF EXISTS products_visibility_enum`
+        );
+        await client.query(
+          `ALTER TABLE products
+             ADD CONSTRAINT products_visibility_enum
+               CHECK (visibility IN ('all','restricted'))`
+        );
+        await client.query("RELEASE SAVEPOINT v96_visibility_col");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v96_visibility_col");
+        console.warn(`[migrate-pg v96] visibility column skipped: ${err.message}`);
+      }
+
+      // customer_group_products: which groups can see a restricted product.
+      // A product with visibility='restricted' and zero rows here is visible
+      // to no one (admin can still configure it). PK is the natural pair.
+      try {
+        await client.query("SAVEPOINT v96_join_table");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS customer_group_products (
+            customer_group_id INTEGER NOT NULL
+              REFERENCES customer_groups(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL
+              REFERENCES products(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (customer_group_id, product_id)
+          )
+        `);
+        // Reverse-lookup index for the visibility WHERE clause (filter by
+        // product_id when checking a single SKU).
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_cgp_product
+            ON customer_group_products(product_id)
+        `);
+        await client.query("RELEASE SAVEPOINT v96_join_table");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v96_join_table");
+        console.warn(`[migrate-pg v96] customer_group_products skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

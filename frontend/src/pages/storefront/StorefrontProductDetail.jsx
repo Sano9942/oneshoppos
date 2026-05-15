@@ -52,7 +52,12 @@ export default function StorefrontProductDetail() {
     setLoading(true);
     setError(null);
 
-    fetch(`${API_BASE}/api/storefront/products/${productId}?tenant=${tenantSlug}`)
+    // Tier 2.11 — pass cart_token so backend can apply visibility filtering.
+    const tokenForVisibility = localStorage.getItem(`sf_cart_${tenantSlug}`);
+    const visParam = tokenForVisibility
+      ? `&cart_token=${encodeURIComponent(tokenForVisibility)}`
+      : "";
+    fetch(`${API_BASE}/api/storefront/products/${productId}?tenant=${tenantSlug}${visParam}`)
       .then((r) => {
         if (!r.ok) throw new Error("Product not found");
         return r.json();

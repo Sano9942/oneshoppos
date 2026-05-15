@@ -157,6 +157,20 @@ module.exports = function registerProductRoutes(app, deps) {
     try {
       const { search, sort, order, status, category_id, outlet_id } = req.query;
 
+      // Tier 2.11 — field-rep visibility scope. When the caller is acting
+      // for a specific customer (rep app passes ?customer_id=) AND is NOT
+      // an admin/manager (no all_access/manage_inventory perm), filter the
+      // catalog to what *that customer* is allowed to see. Admins/managers
+      // always see everything regardless of ?customer_id — that's the
+      // bypass we agreed on so they can configure visibility.
+      const callerPerms = req.employeePerms || [];
+      const isAdminScope =
+        callerPerms.includes("all_access") || callerPerms.includes("manage_inventory");
+      const fieldRepCustomerId =
+        !isAdminScope && req.query.customer_id
+          ? Number(req.query.customer_id)
+          : null;
+
       // Allowed sort columns (whitelist to prevent SQL injection)
       const sortMap = {
         name: "p.name",
@@ -199,6 +213,23 @@ module.exports = function registerProductRoutes(app, deps) {
       if (outlet_id) {
         params.push(Number(outlet_id));
         conditions.push(`os_loc.outlet_id = $${++paramIdx}`);
+      }
+
+      // Tier 2.11 — visibility filter (field-rep scope only, see above).
+      if (fieldRepCustomerId) {
+        try {
+          const { visibleProductSqlFragment } = require("../services/product-visibility");
+          const frag = await visibleProductSqlFragment(db, fieldRepCustomerId);
+          if (frag.params.length === 0) {
+            conditions.push(frag.sql);
+          } else {
+            paramIdx++;
+            conditions.push(frag.sql.replace("$PLACEHOLDER", `$${paramIdx}`));
+            params.push(...frag.params);
+          }
+        } catch {
+          // visibility column missing on pre-v96 tenant — fail open
+        }
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -399,6 +430,20 @@ module.exports = function registerProductRoutes(app, deps) {
       );
       if (!row) return res.status(404).json({ error: "Not found" });
 
+      // Tier 2.11 — include the customer-group whitelist for restricted
+      // products so the admin form can render the multi-select. Always
+      // included (not gated on visibility='restricted') so toggling the
+      // radio doesn't blank a previously-saved mapping.
+      try {
+        const { rows: cgpRows } = await db.query(
+          "SELECT customer_group_id FROM customer_group_products WHERE product_id = $1",
+          [id]
+        );
+        row.customer_group_ids = cgpRows.map((r) => Number(r.customer_group_id));
+      } catch {
+        row.customer_group_ids = [];
+      }
+
       // Attach bundle components if this is a bundle product
       if (row.is_bundle) {
         const { rows: components } = await db.query(
@@ -594,6 +639,8 @@ module.exports = function registerProductRoutes(app, deps) {
       safety_stock_days,       // 2-G.8
       min_order_qty,           // Tier 2.2 wholesale MOQ
       order_increment,         // Tier 2.2 wholesale MOQ
+      visibility,              // Tier 2.11 wholesale visibility
+      customer_group_ids,      // Tier 2.11 — groups that can see this restricted product
     } = req.body;
     // Fall back through: explicit body field → header → session context → first outlet.
     // Without this, the Add Product form's Opening Stock value silently dropped
@@ -629,8 +676,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment, visibility)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
            RETURNING id`,
           [
             barcode || null,
@@ -668,9 +715,34 @@ module.exports = function registerProductRoutes(app, deps) {
             order_increment != null && order_increment !== ""
               ? Math.max(1, Math.floor(Number(order_increment)))
               : 1,
+            // Tier 2.11 — visibility column. Unknown/missing → 'all' default.
+            visibility === "restricted" ? "restricted" : "all",
           ]
         );
         const newProductId = inserted.id;
+
+        // Tier 2.11 — write the group whitelist for restricted products.
+        // Skipped silently if the join table doesn't exist yet (pre-v96).
+        if (
+          visibility === "restricted" &&
+          Array.isArray(customer_group_ids) &&
+          customer_group_ids.length > 0
+        ) {
+          try {
+            for (const gid of customer_group_ids) {
+              const n = Number(gid);
+              if (!Number.isInteger(n) || n <= 0) continue;
+              await client.query(
+                `INSERT INTO customer_group_products (customer_group_id, product_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING`,
+                [n, newProductId]
+              );
+            }
+          } catch (cgpErr) {
+            console.warn("[products POST] customer_group_products skipped:", cgpErr.message);
+          }
+        }
 
         // 1a. If it's a bundle, insert component rows
         if (is_bundle && Array.isArray(bundle_components) && bundle_components.length > 0) {
@@ -902,6 +974,8 @@ module.exports = function registerProductRoutes(app, deps) {
       safety_stock_days,       // 2-G.8: per-product safety stock
       min_order_qty,           // Tier 2.2 wholesale MOQ
       order_increment,         // Tier 2.2 wholesale MOQ
+      visibility,              // Tier 2.11 wholesale visibility
+      customer_group_ids,      // Tier 2.11 — groups whitelist for restricted products
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -1017,6 +1091,13 @@ module.exports = function registerProductRoutes(app, deps) {
           );
           nextParam++;
         }
+        // Tier 2.11 — visibility patch. Empty/missing → keep current value
+        // by skipping. Explicit value → coerce to enum.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "visibility")) {
+          updateFields.push(`visibility = $${nextParam}`);
+          updateParams.push(visibility === "restricted" ? "restricted" : "all");
+          nextParam++;
+        }
         updateParams.push(id);
         const idParam = `$${nextParam}`;
 
@@ -1030,6 +1111,32 @@ module.exports = function registerProductRoutes(app, deps) {
           const err = new Error("Product not found");
           err.statusCode = 404;
           throw err;
+        }
+
+        // Tier 2.11 — replace customer_group_products mapping when the
+        // caller explicitly sends customer_group_ids. Skipping the key
+        // leaves the existing mapping untouched (partial-update safe).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "customer_group_ids")) {
+          try {
+            await client.query(
+              "DELETE FROM customer_group_products WHERE product_id = $1",
+              [id]
+            );
+            if (Array.isArray(customer_group_ids) && customer_group_ids.length > 0) {
+              for (const gid of customer_group_ids) {
+                const n = Number(gid);
+                if (!Number.isInteger(n) || n <= 0) continue;
+                await client.query(
+                  `INSERT INTO customer_group_products (customer_group_id, product_id)
+                   VALUES ($1, $2)
+                   ON CONFLICT DO NOTHING`,
+                  [n, id]
+                );
+              }
+            }
+          } catch (cgpErr) {
+            console.warn("[products PUT] customer_group_products skipped:", cgpErr.message);
+          }
         }
 
         // 2. Update variants if provided

@@ -8,12 +8,20 @@
  */
 
 const { validateMoqSingle } = require('./moq');
+const { isProductVisibleToCustomer } = require('./product-visibility');
 
 function moqError(violation) {
   const err = new Error('MOQ violation');
   err.code = 'MOQ_VIOLATION';
   err.statusCode = 400;
   err.violations = [violation];
+  return err;
+}
+
+function visibilityError() {
+  const err = new Error('Product not available for this account');
+  err.code = 'PRODUCT_NOT_VISIBLE';
+  err.statusCode = 404;
   return err;
 }
 
@@ -50,6 +58,25 @@ async function getOrCreateCart(db, cartToken) {
 async function addItem(db, cartId, productId, variantId, qty) {
   if (!cartId || !productId) throw new Error('cart_id and product_id are required');
   if (!qty || qty < 1) throw new Error('quantity must be >= 1');
+
+  // Tier 2.11 — visibility check. The buyer is identified by the cart's
+  // customer_id. Anonymous cart with a restricted product = 404 (don't
+  // leak existence). Defense in depth: storefront product list already
+  // filters, but URL tampering could still POST /cart/.../items with a
+  // restricted product_id, and we catch that here.
+  try {
+    const { rows: cartRows } = await db.query(
+      'SELECT customer_id FROM storefront_carts WHERE id = $1',
+      [cartId]
+    );
+    const cartCustomerId = cartRows[0]?.customer_id || null;
+    const visible = await isProductVisibleToCustomer(db, cartCustomerId, productId);
+    if (!visible) throw visibilityError();
+  } catch (visErr) {
+    if (visErr.code === 'PRODUCT_NOT_VISIBLE') throw visErr;
+    // visibility column / table missing on a not-yet-migrated tenant —
+    // fail open so cart still works during the v96 rollout window.
+  }
 
   // Tier 2.2 — MOQ check uses the *cumulative* line qty after this add, not
   // just the incoming qty. Otherwise a customer can defeat a min of 12 by

@@ -187,6 +187,17 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- v96 (Tier 2.11 wholesale catalog visibility): per-product visibility flag
+-- and customer-group whitelist join. Enforced on storefront + portal +
+-- field-rep; admin/reports/POS/manufacturer-portal bypass. Default 'all'
+-- preserves pre-v96 behavior.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'all';
+DO $$ BEGIN
+  ALTER TABLE products ADD CONSTRAINT products_visibility_enum
+    CHECK (visibility IN ('all','restricted'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS product_variants (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -327,6 +338,18 @@ CREATE TABLE IF NOT EXISTS customer_groups (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v96 (Tier 2.11): which groups can see each restricted product. A product
+-- with visibility='restricted' and zero rows here is visible to no one
+-- (admin can still configure it). Cascade deletes keep the table tidy when
+-- a group or product is removed.
+CREATE TABLE IF NOT EXISTS customer_group_products (
+  customer_group_id INTEGER NOT NULL REFERENCES customer_groups(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (customer_group_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cgp_product ON customer_group_products(product_id);
 
 -- Phase 2-G Wave 2 (2-G.4): attach the FK after both tables exist so
 -- schema apply works in a single pass (price_lists is defined earlier).

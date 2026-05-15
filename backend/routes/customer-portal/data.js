@@ -404,6 +404,26 @@ module.exports = function registerCustomerPortalData(app, deps) {
           });
           continue;
         }
+        // Tier 2.11 — visibility gate. A SKU set to restricted after the
+        // original order was placed lands here and gets skipped.
+        try {
+          const { isProductVisibleToCustomer } = require("../../services/product-visibility");
+          const visible = await isProductVisibleToCustomer(
+            req.db,
+            req.customerId,
+            productId
+          );
+          if (!visible) {
+            itemsSkipped.push({
+              title: it.title || pRows[0].name,
+              reason: "not_available",
+            });
+            continue;
+          }
+        } catch {
+          // visibility table/columns may not exist yet on this tenant —
+          // fail open, let the item through. Backend addItem still gates.
+        }
         if (variantId != null) {
           const { rows: vRows } = await req.db.query(
             "SELECT id FROM product_variants WHERE id = $1 AND product_id = $2",
