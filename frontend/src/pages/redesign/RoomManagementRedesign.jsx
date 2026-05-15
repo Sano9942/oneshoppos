@@ -7,6 +7,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
 import { Plus, X, Calendar as CalendarIcon, BedDouble, FileSignature, ChevronLeft, ChevronRight, Receipt, CalendarDays } from "lucide-react";
 import { api } from "../../api";
+import { localDateStr, todayLocalStr } from "../../utils/dates";
 
 // ── Shared constants ──────────────────────────────────────────────
 
@@ -979,14 +980,14 @@ function CalendarTab() {
   const toast = useToast();
   const [data, setData] = useState({ rooms: [], bookings: [] });
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => todayLocalStr());
   const DAYS = 14;
 
   const load = useCallback(async () => {
     setLoading(true);
     const to = new Date(startDate);
     to.setDate(to.getDate() + DAYS);
-    const toStr = to.toISOString().slice(0, 10);
+    const toStr = localDateStr(to);
     try {
       const d = await api.get(`/api/room-bookings/timeline?from=${startDate}&to=${toStr}`);
       setData(d);
@@ -1000,7 +1001,7 @@ function CalendarTab() {
     const list = [];
     const d = new Date(startDate);
     for (let i = 0; i < DAYS; i++) {
-      list.push(new Date(d).toISOString().slice(0, 10));
+      list.push(localDateStr(d));
       d.setDate(d.getDate() + 1);
     }
     return list;
@@ -1009,7 +1010,7 @@ function CalendarTab() {
   const shiftDays = (days) => {
     const d = new Date(startDate);
     d.setDate(d.getDate() + days);
-    setStartDate(d.toISOString().slice(0, 10));
+    setStartDate(localDateStr(d));
   };
 
   return (
@@ -1089,8 +1090,8 @@ function ArrivalsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const today = todayLocalStr();
+      const tomorrow = localDateStr(new Date(Date.now() + 24 * 60 * 60 * 1000));
       const data = await api.get(`/api/room-bookings?from=${today}&to=${tomorrow}`);
       setBookings(data?.bookings || []);
     } catch (err) { toast.error(err.message); }
@@ -1099,7 +1100,7 @@ function ArrivalsTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
   const arriving = bookings.filter((b) => b.check_in_date === today && ["reserved", "confirmed"].includes(b.status));
   const inHouse = bookings.filter((b) => b.status === "checked_in");
   const departing = bookings.filter((b) => b.check_out_date === today && b.status === "checked_in");

@@ -1,3 +1,5 @@
+import { todayLocalStr } from "./dates";
+
 /**
  * Shared CSV export utility.
  * @param {string[]} headers - Column header names
@@ -14,7 +16,7 @@ export function downloadCsv(headers, rows, filename) {
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `${filename}_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

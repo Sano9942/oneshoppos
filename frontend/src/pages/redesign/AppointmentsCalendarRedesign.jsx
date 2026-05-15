@@ -6,6 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input } from "../../ui/primitives";
 import { ChevronLeft, ChevronRight, Calendar, Plus, X } from "lucide-react";
 import { api } from "../../api";
+import { localDateStr } from "../../utils/dates";
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8); // 8 AM to 9 PM
 const EMPLOYEE_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
@@ -15,7 +16,7 @@ function fmtTime(iso) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function fmtDate(d) { return d.toISOString().slice(0, 10); }
+function fmtDate(d) { return localDateStr(d); }
 
 function addDays(d, n) {
   const r = new Date(d);

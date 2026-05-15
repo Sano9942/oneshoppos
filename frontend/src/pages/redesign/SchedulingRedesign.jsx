@@ -7,6 +7,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
 import { Calendar, Plus, Send, AlertTriangle, Clock } from "lucide-react";
 import { api } from "../../api";
+import { localDateStr, todayLocalStr } from "../../utils/dates";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -19,7 +20,7 @@ function getWeekDates(baseDate) {
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + i);
-    return date.toISOString().slice(0, 10);
+    return localDateStr(date);
   });
 }
 
@@ -37,7 +38,7 @@ export default function SchedulingRedesign() {
   const [employees, setEmployees] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [selectedOutlet, setSelectedOutlet] = useState("");
-  const [weekBase, setWeekBase] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weekBase, setWeekBase] = useState(() => todayLocalStr());
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editShift, setEditShift] = useState(null);
@@ -256,7 +257,7 @@ function ShiftModal({ shift, employees, outlets, selectedOutlet, onSave, onCance
   const [form, setForm] = useState({
     employee_id: shift?.employee_id || "",
     outlet_id: shift?.outlet_id || selectedOutlet || "",
-    shift_date: shift?.shift_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+    shift_date: shift?.shift_date?.slice(0, 10) || todayLocalStr(),
     start_time: shift?.start_time?.slice(0, 5) || "09:00",
     end_time: shift?.end_time?.slice(0, 5) || "17:00",
     break_minutes: shift?.break_minutes || 0,

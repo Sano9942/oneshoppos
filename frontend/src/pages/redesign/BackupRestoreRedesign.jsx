@@ -10,7 +10,7 @@ import {
   SectionCard,
 } from "../../ui/primitives";
 
-import { fmtLocalDateTime } from "../../utils/dates";
+import { fmtLocalDateTime, todayLocalStr } from "../../utils/dates";
 const fmt = fmtLocalDateTime;
 const fmtBytes = (b) => {
   if (!b) return "—";
@@ -59,7 +59,7 @@ export default function BackupRestoreRedesign() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `backup-${new Date().toISOString().slice(0, 10)}.pgdump`;
+      a.download = `backup-${todayLocalStr()}.pgdump`;
       a.click();
       URL.revokeObjectURL(url);
       showMsg("success", "Backup downloaded successfully.");

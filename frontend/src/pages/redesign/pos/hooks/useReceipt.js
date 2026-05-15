@@ -3,6 +3,7 @@ import { api } from "../../../../api";
 import { useCurrency } from "../../../../contexts/CurrencyContext";
 import { usePreset } from "../../../../contexts/PresetContext";
 import { buildReceiptHtml, printToHardware } from "../../../../utils/receipt";
+import { todayLocalStr } from "../../../../utils/dates";
 
 export function useReceipt({ selectedOutletId }) {
   const { symbol: currencySymbol } = useCurrency();
@@ -28,7 +29,7 @@ export function useReceipt({ selectedOutletId }) {
     if (!selectedOutletId) return;
     setRecentSalesLoading(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalStr();
       const data = await api.get("/api/sales", { date_from: today, outlet_id: selectedOutletId, limit: 50 });
       setRecentSales(data.sales || []);
     } catch {

@@ -14,6 +14,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
+import { todayLocalStr } from "../../utils/dates";
 
 const EMPTY_FORM = {
   category_id: "",
@@ -26,7 +27,7 @@ const EMPTY_FORM = {
 };
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalStr();
 }
 
 function firstOfMonth() {

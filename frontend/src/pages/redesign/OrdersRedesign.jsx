@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Send, Truck } from "lucide-react";
-import { fmtUtcDateTime } from "../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
@@ -91,7 +91,7 @@ function exportCsv(rows) {
   });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `orders_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

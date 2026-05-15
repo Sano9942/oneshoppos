@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { Button, Skeleton } from "../../../ui/primitives";
+import { localDateStr } from "../../../utils/dates";
 
 const CARDS = [
   { key: "reorder_count", label: "Needs reorder", tab: "reorder" },
@@ -15,7 +16,7 @@ function formatDate(v) {
   // Server returns DATE; pg driver can return string or Date. Render as
   // YYYY-MM-DD to stay timezone-stable (the value is a raw DATE, not a
   // timestamp).
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return localDateStr(v);
   if (typeof v === "string") return v.slice(0, 10);
   return String(v);
 }

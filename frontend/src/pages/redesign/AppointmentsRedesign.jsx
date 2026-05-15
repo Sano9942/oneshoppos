@@ -6,6 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
 import { Search, Filter, X } from "lucide-react";
 import { api } from "../../api";
+import { localDateStr } from "../../utils/dates";
 
 const STATUS_TONES = { pending: "warning", confirmed: "default", in_progress: "warning", completed: "success", no_show: "danger", cancelled: "danger" };
 const STATUSES = ["pending", "confirmed", "in_progress", "completed", "no_show", "cancelled"];
@@ -16,8 +17,8 @@ function fmtDateTime(iso) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function addDaysStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function todayStr() { return localDateStr(); }
+function addDaysStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return localDateStr(d); }
 
 export default function AppointmentsRedesign() {
   const { authHeaders } = useAuth();

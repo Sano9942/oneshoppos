@@ -15,7 +15,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
-import { fmtUtcDateTime, fmtUtcDate } from "../../utils/dates";
+import { fmtUtcDateTime, fmtUtcDate, todayLocalStr, daysAgoLocalStr } from "../../utils/dates";
 import { Shield, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const TABS = [
@@ -35,8 +35,8 @@ export default function RetailRiskRedesign() {
   const [noSaleEvents, setNoSaleEvents] = useState([]);
   const [noSaleLoading, setNoSaleLoading] = useState(false);
   const [noSaleDate, setNoSaleDate] = useState({
-    from: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
-    to: new Date().toISOString().slice(0, 10),
+    from: daysAgoLocalStr(7),
+    to: todayLocalStr(),
   });
 
   const [anomalyFlags, setAnomalyFlags] = useState([]);

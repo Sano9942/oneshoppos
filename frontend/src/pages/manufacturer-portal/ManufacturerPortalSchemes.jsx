@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { manufacturerPortalApi } from "../../api/manufacturerPortalApi";
+import { daysAgoLocalStr, todayLocalStr } from "../../utils/dates";
 
 // Tier 1.4 Day 7 — Schemes / Promotions impact page.
 // Surfaces scheme-level totals scoped to schemes that touched the partner's
@@ -22,22 +23,9 @@ function fmtQty(n) {
   });
 }
 
-// Default window: last 30 days in the browser's LOCAL tz. See Sales page
-// comment — using toISOString().slice(0,10) returned the UTC date, which
-// for tz-east-of-UTC users dropped current-day sales from the default view.
-function localYmd(date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
+// Default window: last 30 days in the browser's LOCAL tz. See utils/dates.js.
 function defaultDateRange() {
-  const today = new Date();
-  const past = new Date(today);
-  past.setDate(past.getDate() - 29);
-  return { from: localYmd(past), to: localYmd(today) };
+  return { from: daysAgoLocalStr(29), to: todayLocalStr() };
 }
 
 const SCHEME_TYPE_LABELS = {

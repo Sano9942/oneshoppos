@@ -19,7 +19,7 @@ import {
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { fmtDate, fmtDateTime } from "../../utils/dates";
+import { fmtDate, fmtDateTime, todayLocalStr } from "../../utils/dates";
 import {
   Badge,
   Button,
@@ -55,7 +55,7 @@ function exportCSV(rows) {
   const blob = new Blob([[headers.join(","), ...body].join("\n")], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `purchase_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `purchase_orders_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

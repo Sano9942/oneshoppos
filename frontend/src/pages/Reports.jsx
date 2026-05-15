@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../api";
+import { todayLocalStr } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
 import { readContext } from "../auth/authStore";
 import { useToast } from "../contexts/ToastContext";
@@ -876,7 +877,7 @@ export default function Reports() {
       setFilters((f) => ({ ...f, outletIds: [Number(outletId)] }));
     }
     if (date === "today") {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalStr();
       setFilters((f) => ({ ...f, dateFrom: today, dateTo: today }));
     }
     didApplyParams.current = true;

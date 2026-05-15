@@ -14,7 +14,7 @@ import {
   TabBar,
 } from "../../ui/primitives";
 import { Plus, Lock, Banknote, RotateCcw } from "lucide-react";
-import { fmtUtcDateTime } from "../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
 import { api } from "../../api";
 
@@ -49,7 +49,7 @@ export default function TipPoolsRedesign() {
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [openForm, setOpenForm] = useState({
     outlet_id: 1,
-    business_date: new Date().toISOString().slice(0, 10),
+    business_date: todayLocalStr(),
   });
 
   // Distribute modal

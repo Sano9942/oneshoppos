@@ -6,6 +6,7 @@ import { useAuth } from "../../../auth/AuthProvider";
 import useFeatureFlags from "../../../hooks/useFeatureFlags";
 import { useToast } from "../../../contexts/ToastContext";
 import { api } from "../../../api";
+import { localDateStr } from "../../../utils/dates";
 
 // Phase 2-R.4 — Reservations admin.
 // List by day, create / update / cancel, send templated SMS. Tables on
@@ -23,7 +24,7 @@ const STATUS_STYLES = {
 };
 
 function formatDateIso(d) {
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function formatTime(iso) {

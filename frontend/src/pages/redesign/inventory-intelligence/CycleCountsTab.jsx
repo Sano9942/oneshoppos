@@ -13,12 +13,12 @@ import {
   Select,
   TableToolbar,
 } from "../../../ui/primitives";
-import { fmtUtcDateTime } from "../../../utils/dates";
+import { fmtUtcDateTime, localDateStr, todayLocalStr } from "../../../utils/dates";
 import FilterCriteriaBuilder from "./FilterCriteriaBuilder";
 
 function formatDate(v) {
   if (!v) return "—";
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return localDateStr(v);
   if (typeof v === "string") return v.slice(0, 10);
   return String(v);
 }
@@ -27,7 +27,7 @@ function emptyForm() {
   return {
     name: "",
     recurrence: "weekly",
-    next_due_date: new Date().toISOString().slice(0, 10),
+    next_due_date: todayLocalStr(),
     filter_criteria: {},
     is_active: true,
   };

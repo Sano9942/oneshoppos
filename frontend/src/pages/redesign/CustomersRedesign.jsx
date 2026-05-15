@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Clock, Download, Package, Pencil, Plus, Search, ShieldCheck, Tag, Trash2, UserRound, Wallet, X } from "lucide-react";
 import { api } from "../../api";
 import { readTenantSlug } from "../../auth/authStore";
-import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
+import { fmtDate, fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -123,7 +123,7 @@ function exportCsv(rows) {
   });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `customers_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

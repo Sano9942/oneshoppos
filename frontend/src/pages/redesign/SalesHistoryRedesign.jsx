@@ -13,7 +13,7 @@ import {
 import { api } from "../../api";
 import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Gift, Mail, MessageCircle, Printer, RefreshCw, Search, Share2 } from "lucide-react";
-import { fmtUtcDateTime } from "../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../auth/AuthProvider";
@@ -58,7 +58,7 @@ function exportCsv(rows) {
   });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `sales_history_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `sales_history_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

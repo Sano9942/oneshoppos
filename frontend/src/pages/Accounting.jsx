@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { fmtUtcDate } from "../utils/dates";
+import { fmtUtcDate, todayLocalStr, monthStartLocalStr } from "../utils/dates";
 import { useCurrency } from "../contexts/CurrencyContext";
 
 function exportCSV(rows, filename) {
@@ -29,8 +29,8 @@ const TABS = [
 export default function Accounting() {
   const { fmt } = useCurrency();
   const [tab, setTab] = useState("pnl");
-  const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [from, setFrom] = useState(monthStartLocalStr());
+  const [to, setTo] = useState(todayLocalStr());
   const [outletId, setOutletId] = useState("");
   const [outlets, setOutlets] = useState([]);
 

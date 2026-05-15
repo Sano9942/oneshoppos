@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { RefreshCw, CheckCircle2, ShieldAlert, Download } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
+import { todayLocalStr } from "../../utils/dates";
 
 export default function ShopifyReconciliation() {
   const { apiFetch, setError, setSuccess } = useShopify();
@@ -194,7 +195,7 @@ export default function ShopifyReconciliation() {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `recon_${new Date().toISOString().slice(0, 10)}.csv`,
+      `recon_${todayLocalStr()}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);

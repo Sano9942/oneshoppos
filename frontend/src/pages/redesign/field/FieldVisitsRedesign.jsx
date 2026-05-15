@@ -6,7 +6,7 @@ import { useAuth } from "../../../auth/AuthProvider";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Input, Select } from "../../../ui/primitives";
 import useFeatureFlags from "../../../hooks/useFeatureFlags";
-import { fmtUtcDateTime } from "../../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr, daysAgoLocalStr } from "../../../utils/dates";
 import { downloadCsv } from "../../../utils/csvExport";
 
 const OUTCOME_LABELS = {
@@ -28,8 +28,8 @@ export default function FieldVisitsRedesign() {
   const authHeadersMemo = useMemo(() => authHeaders, [authHeaders]);
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeadersMemo);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+  const today = todayLocalStr();
+  const sevenDaysAgo = daysAgoLocalStr(7);
 
   const [from, setFrom] = useState(sevenDaysAgo);
   const [to, setTo] = useState(today);

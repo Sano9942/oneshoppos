@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMfgPortalAuth } from "./ManufacturerPortalAuthProvider";
 import { manufacturerPortalApi } from "../../api/manufacturerPortalApi";
+import { localDateStr, daysAgoLocalStr, todayLocalStr } from "../../utils/dates";
 
 // Tier 1.4 Day 7 — Sales report page.
 // Brand x SKU x day x region rollup with filters + CSV export.
@@ -20,31 +21,11 @@ function fmtQty(n) {
   });
 }
 
-// Default window: last 30 days. Computed in the browser's LOCAL tz, not UTC.
-//
-// Bug fix (Day 9 walkthrough): previously used new Date().toISOString().slice(0,10)
-// which returns the UTC date. For users east of UTC during the first part of
-// their local day (e.g. Karachi UTC+5 between 00:00 and 05:00 local), that's
-// the PREVIOUS local day, so today's sales were silently excluded from the
-// default rollup.
-//
-// Using Intl.DateTimeFormat with 'en-CA' (which always renders as YYYY-MM-DD)
-// in the browser's local tz gets us the right calendar date. This matches
-// the tenant's tz in practice because manufacturers logging in are almost
-// always in the same region as the distributor.
-function localYmd(date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
+// Default window: last 30 days in the browser's LOCAL tz, not UTC.
+// See utils/dates.js — toISOString().slice(0,10) returns UTC, which drops
+// current-day sales for tz-east-of-UTC users during their early local hours.
 function defaultDateRange() {
-  const today = new Date();
-  const past = new Date(today);
-  past.setDate(past.getDate() - 29);
-  return { from: localYmd(past), to: localYmd(today) };
+  return { from: daysAgoLocalStr(29), to: todayLocalStr() };
 }
 
 function buildColumns(groupBy) {

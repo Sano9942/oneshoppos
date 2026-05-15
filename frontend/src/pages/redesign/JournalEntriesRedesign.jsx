@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { fmtLocalDate } from "../../utils/dates";
+import { fmtLocalDate, todayLocalStr } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
 import {
   Badge,
@@ -138,7 +138,7 @@ export default function JournalEntriesRedesign() {
 
   // ── Open create/edit modal ─────────────────────────────────────────
   function openCreate() {
-    setForm({ entry_date: new Date().toISOString().slice(0, 10), description: "" });
+    setForm({ entry_date: todayLocalStr(), description: "" });
     setLines([emptyLine(), emptyLine()]);
     setEditId(null);
     setModal("create");

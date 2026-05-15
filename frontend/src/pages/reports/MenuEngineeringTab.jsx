@@ -7,6 +7,7 @@ import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { CardShell, TableShell, ExportButton } from "./ReportShared";
 import { downloadCsv } from "../../utils/csvExport";
+import { todayLocalStr, daysAgoLocalStr } from "../../utils/dates";
 
 /**
  * Menu engineering (Boston matrix) tab — Phase 2-R Wave C / 2-R.10.
@@ -25,8 +26,8 @@ const CLASS_META = {
 
 export default function MenuEngineeringTab() {
   const { fmt } = useCurrency();
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const today = todayLocalStr();
+  const monthAgo = daysAgoLocalStr(30);
 
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);

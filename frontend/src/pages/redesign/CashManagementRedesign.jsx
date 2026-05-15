@@ -14,7 +14,7 @@ import {
 import { api } from "../../api";
 import { Calculator, Download, RefreshCw, Unlock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
-import { fmtUtcDateTime } from "../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
@@ -55,7 +55,7 @@ function exportCsv(rows) {
   });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `cash_shifts_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `cash_shifts_${todayLocalStr()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

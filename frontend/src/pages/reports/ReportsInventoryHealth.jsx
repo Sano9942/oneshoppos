@@ -9,6 +9,7 @@ import {
   CardShell,
 } from "./ReportShared";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { todayLocalStr, daysAgoLocalStr } from "../../utils/dates";
 
 function InventoryHealthStat({ label, value, hint }) {
   return (
@@ -527,12 +528,8 @@ export function ShrinkageTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      // Default to last 30 days if no date range set
-      const today = new Date();
-      const thirtyAgo = new Date(today);
-      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-      p.set("date_from", filters.dateFrom || thirtyAgo.toISOString().slice(0, 10));
-      p.set("date_to", filters.dateTo || today.toISOString().slice(0, 10));
+      p.set("date_from", filters.dateFrom || daysAgoLocalStr(30));
+      p.set("date_to", filters.dateTo || todayLocalStr());
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       if (filters.categoryId) p.set("category_id", filters.categoryId);
       if (filters.search) p.set("search", filters.search);

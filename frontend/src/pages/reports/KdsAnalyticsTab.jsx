@@ -14,6 +14,7 @@ import {
 import { api } from "../../api";
 import { CardShell, TableShell, ExportButton } from "./ReportShared";
 import { downloadCsv } from "../../utils/csvExport";
+import { todayLocalStr, daysAgoLocalStr } from "../../utils/dates";
 
 /**
  * KDS analytics tab (Phase 2-R Wave C / 2-R.5).
@@ -22,8 +23,8 @@ import { downloadCsv } from "../../utils/csvExport";
  * + by-category breakdown. Wired to GET /api/reports/kds/prep-times.
  */
 export default function KdsAnalyticsTab() {
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const today = todayLocalStr();
+  const monthAgo = daysAgoLocalStr(30);
 
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);

@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, Download, RefreshCw, BookOpen, Ban } from "luci
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { fmtLocalDate as fmtDate } from "../../utils/dates";
+import { fmtLocalDate as fmtDate, todayLocalStr, monthStartLocalStr } from "../../utils/dates";
 import {
   Badge,
   Button,
@@ -62,8 +62,8 @@ export default function SupplierPayablesRedesign() {
   // Ledger state
   const [suppliers, setSuppliers] = useState([]);
   const [ledgerSupplierId, setLedgerSupplierId] = useState("");
-  const [ledgerFrom, setLedgerFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
-  const [ledgerTo, setLedgerTo] = useState(new Date().toISOString().slice(0, 10));
+  const [ledgerFrom, setLedgerFrom] = useState(monthStartLocalStr());
+  const [ledgerTo, setLedgerTo] = useState(todayLocalStr());
   const [ledger, setLedger] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 

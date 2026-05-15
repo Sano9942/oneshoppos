@@ -74,3 +74,33 @@ export function fmtLocalTime(str, opts) {
 export const fmtDateTime = fmtUtcDateTime;
 export const fmtDate = fmtUtcDate;
 export const fmtTime = fmtUtcTime;
+
+// ── Local YYYY-MM-DD helpers (use for date filters, default ranges, filename suffixes) ──
+// toISOString().slice(0, 10) returns UTC date, not local — after 19:00 PKT
+// it flips to "tomorrow" and breaks default date filters. Always use these helpers.
+
+/** Format a Date (or now) as a local YYYY-MM-DD string. */
+export function localDateStr(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  if (isNaN(dt.getTime())) return "";
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Today as local YYYY-MM-DD. */
+export function todayLocalStr() {
+  return localDateStr(new Date());
+}
+
+/** N days ago (local) as YYYY-MM-DD. */
+export function daysAgoLocalStr(n) {
+  return localDateStr(new Date(Date.now() - n * 86400000));
+}
+
+/** First day of current local month as YYYY-MM-DD. */
+export function monthStartLocalStr() {
+  const d = new Date();
+  return localDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
+}
