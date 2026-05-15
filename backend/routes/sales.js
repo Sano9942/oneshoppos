@@ -582,6 +582,38 @@ module.exports = function registerSalesRoutes(app, deps) {
       } catch { /* swallow — keep NULL */ }
     }
 
+    // Tier 2.2 — MOQ / case-pack enforcement for field-rep orders only. POS
+    // (and any other in-store/internal flow) bypasses by design — physical
+    // cashiers handle overrides naturally. Gated on field_visit_uuid OR a
+    // resolved field_visit_id so offline replays from the rep app still
+    // enforce. Cart-item shape here is { id, quantity, ... } — id is the
+    // product_id (POS contract), so we remap before calling validateMoq.
+    if ((field_visit_id || field_visit_uuid) && Array.isArray(cartItems) && cartItems.length) {
+      try {
+        const { validateMoq } = require("../services/moq");
+        const moqItems = cartItems.map((it) => ({
+          product_id: Number(it.id),
+          quantity: Number(it.quantity || 0),
+        }));
+        const moqResult = await validateMoq(db, moqItems);
+        if (!moqResult.ok) {
+          return res.status(400).json({
+            error: "Order violates minimum order quantity rules",
+            code: "MOQ_VIOLATION",
+            violations: moqResult.violations,
+            hint: "Ask the manager to ring this through POS if you need to bypass MOQ.",
+          });
+        }
+      } catch (moqErr) {
+        // MOQ columns missing on a not-yet-migrated tenant → treat as no-op.
+        // Migration v95 ships the columns; a fresh tenant on v95+ never lands
+        // here. Logging only — never block the sale on the guard's own bug.
+        if (!String(moqErr.message || "").includes("min_order_qty")) {
+          console.warn("[sales] MOQ guard skipped:", moqErr.message);
+        }
+      }
+    }
+
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
     if (folio_id && treatment_folio_id) {
       return res.status(400).json({ error: "Sale cannot be attached to both a room folio and a treatment folio" });

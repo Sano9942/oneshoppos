@@ -57,6 +57,10 @@ const BLANK_FORM = {
   // to supplier default → tenant default → hardcoded 7/3).
   lead_time_days_override: "",
   safety_stock_days: "",
+  // Tier 2.2 wholesale MOQ — enforced on portal + field-rep flows, NOT POS.
+  // 0/empty for min = no minimum; 1/empty for increment = no case-pack rule.
+  min_order_qty: "",
+  order_increment: "",
 };
 
 export default function ProductFormPage() {
@@ -180,6 +184,11 @@ export default function ProductFormPage() {
           form.lead_time_days_override !== "" ? Number(form.lead_time_days_override) : null,
         safety_stock_days:
           form.safety_stock_days !== "" ? Number(form.safety_stock_days) : null,
+        // Tier 2.2 — empty stays empty (null) so backend keeps the 0/1 default.
+        min_order_qty:
+          form.min_order_qty !== "" ? Number(form.min_order_qty) : null,
+        order_increment:
+          form.order_increment !== "" ? Number(form.order_increment) : null,
       };
 
       if (form.is_bundle && bundleComponents.length > 0) {
@@ -314,6 +323,14 @@ export default function ProductFormPage() {
             review_count: p.review_count || 0,
             lead_time_days_override: p.lead_time_days_override ?? "",
             safety_stock_days: p.safety_stock_days ?? "",
+            min_order_qty:
+              p.min_order_qty != null && Number(p.min_order_qty) > 0
+                ? p.min_order_qty
+                : "",
+            order_increment:
+              p.order_increment != null && Number(p.order_increment) > 1
+                ? p.order_increment
+                : "",
           });
           if (p.is_bundle && Array.isArray(p.bundle_components)) {
             setBundleComponents(p.bundle_components.map((c) => ({
@@ -943,6 +960,47 @@ export default function ProductFormPage() {
               <p className="text-[11px] text-(--ui-text-muted)">
                 Drives reorder suggestions. Leave blank to inherit the supplier default
                 (if set) or the tenant-wide default from Company Settings.
+              </p>
+            </div>
+          </SectionCard>
+
+          {/* Tier 2.2 wholesale MOQ — enforced on customer portal and field-rep
+              order capture only. POS bypasses (in-person cashier discretion). */}
+          <SectionCard>
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                Wholesale order rules
+              </p>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-(--ui-text-muted)">
+                  Minimum order quantity
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.min_order_qty}
+                  onChange={(e) => upd("min_order_qty", e.target.value)}
+                  placeholder="Blank or 0 = no minimum"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-(--ui-text-muted)">
+                  Case-pack increment
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={form.order_increment}
+                  onChange={(e) => upd("order_increment", e.target.value)}
+                  placeholder="Blank or 1 = no case-pack rule"
+                />
+              </div>
+              <p className="text-[11px] text-(--ui-text-muted)">
+                Enforced on the customer portal and field-rep order app. POS
+                bypasses these rules. A min of 12 with an increment of 6 means
+                valid quantities are 12, 18, 24…
               </p>
             </div>
           </SectionCard>

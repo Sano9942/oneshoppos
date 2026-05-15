@@ -155,8 +155,21 @@ function CartItem({ item, currencySymbol, onUpdate, onRemove, loading }) {
   const lineTotal = unitPrice * (item.quantity || 1);
   const imageUrl = item.image_url || null;
 
+  // Tier 2.2 MOQ — pre-block client-side so we don't have to wait for a
+  // server 400. Server still rejects independently (defense in depth).
+  const minQty = Number(item.min_order_qty || 0);
+  const increment = Math.max(1, Number(item.order_increment || 1));
+  const moqHint = (() => {
+    const parts = [];
+    if (minQty > 1) parts.push(`Min ${minQty}`);
+    if (increment > 1) parts.push(`Case of ${increment}`);
+    return parts.length ? parts.join(" · ") : null;
+  })();
+
   async function handleQtyChange(newQty) {
     if (newQty < 1 || updating) return;
+    if (minQty > 0 && newQty < minQty) return;
+    if (newQty % increment !== 0) return;
     setUpdating(true);
     await onUpdate(item.id, newQty);
     setUpdating(false);
@@ -193,14 +206,17 @@ function CartItem({ item, currencySymbol, onUpdate, onRemove, loading }) {
         )}
         <p className="text-sm font-medium text-gray-700 mt-1">
           {currencySymbol} {unitPrice.toLocaleString()}
+          {moqHint && (
+            <span className="ml-2 text-xs text-amber-700 font-normal">({moqHint})</span>
+          )}
         </p>
 
         {/* Quantity controls */}
         <div className="flex items-center gap-3 mt-2">
           <div className="flex items-center border border-gray-300 rounded-lg">
             <button
-              onClick={() => handleQtyChange(item.quantity - 1)}
-              disabled={updating || item.quantity <= 1}
+              onClick={() => handleQtyChange(item.quantity - increment)}
+              disabled={updating || item.quantity - increment < Math.max(1, minQty)}
               className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 rounded-l-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               -
@@ -209,7 +225,7 @@ function CartItem({ item, currencySymbol, onUpdate, onRemove, loading }) {
               {item.quantity}
             </span>
             <button
-              onClick={() => handleQtyChange(item.quantity + 1)}
+              onClick={() => handleQtyChange(item.quantity + increment)}
               disabled={updating}
               className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 rounded-r-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >

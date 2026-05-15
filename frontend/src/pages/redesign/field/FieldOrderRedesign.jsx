@@ -159,10 +159,17 @@ export default function FieldOrderRedesign() {
       .slice(0, 50);
   }, [products, search]);
 
+  // Tier 2.2 — every product carries min_order_qty + order_increment. The
+  // rep app pre-blocks bad qtys so a /api/sales 400 only happens on a stale
+  // catalog. Each tap on +/- moves by `increment`, and `min_order_qty` is the
+  // first-add seed value.
   const addToCart = (p) => {
     setCart((c) => {
       const existing = c[p.id];
-      const nextQty = existing ? Number(existing.quantity) + 1 : 1;
+      const minQty = Number(p.min_order_qty || 0);
+      const increment = Math.max(1, Number(p.order_increment || 1));
+      const seed = Math.max(minQty, increment, 1);
+      const nextQty = existing ? Number(existing.quantity) + increment : seed;
       return {
         ...c,
         [p.id]: {
@@ -170,6 +177,8 @@ export default function FieldOrderRedesign() {
           name: p.name,
           price: Number(p.price || 0),
           quantity: nextQty,
+          min_order_qty: minQty,
+          order_increment: increment,
         },
       };
     });
@@ -178,8 +187,12 @@ export default function FieldOrderRedesign() {
     setCart((c) => {
       const existing = c[id];
       if (!existing) return c;
-      const nextQty = Number(existing.quantity) - 1;
-      if (nextQty <= 0) {
+      const increment = Math.max(1, Number(existing.order_increment || 1));
+      const minQty = Number(existing.min_order_qty || 0);
+      const nextQty = Number(existing.quantity) - increment;
+      // Drop the line when going below the min (or below 1 if no min) — that
+      // matches how the +/- buttons behave on the storefront cart.
+      if (nextQty <= 0 || (minQty > 0 && nextQty < minQty)) {
         const { [id]: _drop, ...rest } = c;
         return rest;
       }
@@ -271,6 +284,21 @@ export default function FieldOrderRedesign() {
         submittedRef.current = false;
         return;
       }
+      // Tier 2.2 MOQ — frontend pre-block normally catches these, but a
+      // stale catalog (rep app cached pre-rule, owner just set MOQ) can
+      // still produce a server 400. Don't queue for retry; let the rep
+      // adjust the cart and resubmit.
+      if (code === "MOQ_VIOLATION") {
+        await markSynced(idempotency_key);
+        const violations = e?.body?.violations || [];
+        const detail = violations
+          .map((v) => `${v.name} (qty ${v.quantity}; min ${v.min_order_qty}, case ${v.order_increment})`)
+          .join("; ");
+        toastErr(detail ? `MOQ violation: ${detail}` : e.message || "Order violates MOQ");
+        setSubmitting(false);
+        submittedRef.current = false;
+        return;
+      }
       await markFailed(idempotency_key, e.message);
       toastOk("Saved offline — will sync when connection returns");
     } finally {
@@ -357,6 +385,12 @@ export default function FieldOrderRedesign() {
         )}
         {filteredProducts.map((p) => {
           const inCart = cart[p.id];
+          const minQty = Number(p.min_order_qty || 0);
+          const increment = Math.max(1, Number(p.order_increment || 1));
+          const moqHintParts = [];
+          if (minQty > 1) moqHintParts.push(`Min ${minQty}`);
+          if (increment > 1) moqHintParts.push(`Case ${increment}`);
+          const moqHint = moqHintParts.length ? moqHintParts.join(" · ") : null;
           return (
             <div
               key={p.id}
@@ -366,7 +400,12 @@ export default function FieldOrderRedesign() {
                 <div className="text-sm font-medium text-(--ui-text) truncate">
                   {p.name}
                 </div>
-                <div className="text-xs text-(--ui-text-muted)">{fmt(Number(p.price || 0))}</div>
+                <div className="text-xs text-(--ui-text-muted)">
+                  {fmt(Number(p.price || 0))}
+                  {moqHint && (
+                    <span className="ml-2 text-amber-700 font-medium">({moqHint})</span>
+                  )}
+                </div>
               </div>
               {inCart ? (
                 <div className="flex items-center gap-2">

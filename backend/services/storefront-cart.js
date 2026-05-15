@@ -7,6 +7,16 @@
  * All functions accept a `db` handle (the tenant-scoped Proxy) as first arg.
  */
 
+const { validateMoqSingle } = require('./moq');
+
+function moqError(violation) {
+  const err = new Error('MOQ violation');
+  err.code = 'MOQ_VIOLATION';
+  err.statusCode = 400;
+  err.violations = [violation];
+  return err;
+}
+
 // ---------------------------------------------------------------------------
 // getOrCreateCart
 // ---------------------------------------------------------------------------
@@ -40,6 +50,19 @@ async function getOrCreateCart(db, cartToken) {
 async function addItem(db, cartId, productId, variantId, qty) {
   if (!cartId || !productId) throw new Error('cart_id and product_id are required');
   if (!qty || qty < 1) throw new Error('quantity must be >= 1');
+
+  // Tier 2.2 — MOQ check uses the *cumulative* line qty after this add, not
+  // just the incoming qty. Otherwise a customer can defeat a min of 12 by
+  // adding 1 twelve times.
+  const dupForMoq = await db.query(
+    `SELECT quantity FROM storefront_cart_items
+     WHERE cart_id = $1 AND product_id = $2
+       AND (variant_id = $3 OR ($3::int IS NULL AND variant_id IS NULL))`,
+    [cartId, productId, variantId || null]
+  );
+  const existingQty = dupForMoq.rows.length ? Number(dupForMoq.rows[0].quantity) : 0;
+  const moqViolation = await validateMoqSingle(db, productId, existingQty + Number(qty));
+  if (moqViolation) throw moqError(moqViolation);
 
   // Fetch current price
   let unitPrice;
@@ -102,6 +125,20 @@ async function updateItem(db, cartId, itemId, qty) {
     return removeItem(db, cartId, itemId);
   }
 
+  // Tier 2.2 — re-validate MOQ against the *new* qty. Look up product_id
+  // from the cart line first so we can hit the products table directly.
+  const lineLookup = await db.query(
+    'SELECT product_id FROM storefront_cart_items WHERE id = $1 AND cart_id = $2',
+    [itemId, cartId]
+  );
+  if (!lineLookup.rows.length) throw new Error('Cart item not found');
+  const moqViolation = await validateMoqSingle(
+    db,
+    lineLookup.rows[0].product_id,
+    Number(qty)
+  );
+  if (moqViolation) throw moqError(moqViolation);
+
   const upd = await db.query(
     `UPDATE storefront_cart_items
      SET quantity = $1
@@ -147,6 +184,8 @@ async function getCartWithItems(db, cartId) {
   const itemsRes = await db.query(
     `SELECT sci.id, sci.product_id, sci.variant_id, sci.quantity, sci.unit_price,
             p.name AS product_name, p.image_url, p.sku,
+            COALESCE(p.min_order_qty, 0) AS min_order_qty,
+            COALESCE(p.order_increment, 1) AS order_increment,
             pv.sku AS variant_name, pv.sku AS variant_sku
      FROM storefront_cart_items sci
      JOIN products p ON p.id = sci.product_id

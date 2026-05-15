@@ -592,6 +592,8 @@ module.exports = function registerProductRoutes(app, deps) {
       supplier_id,
       lead_time_days_override, // 2-G.8
       safety_stock_days,       // 2-G.8
+      min_order_qty,           // Tier 2.2 wholesale MOQ
+      order_increment,         // Tier 2.2 wholesale MOQ
     } = req.body;
     // Fall back through: explicit body field → header → session context → first outlet.
     // Without this, the Add Product form's Opening Stock value silently dropped
@@ -627,8 +629,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
            RETURNING id`,
           [
             barcode || null,
@@ -659,6 +661,13 @@ module.exports = function registerProductRoutes(app, deps) {
             safety_stock_days != null && safety_stock_days !== ""
               ? Number(safety_stock_days)
               : null,
+            // Tier 2.2 — null/empty → DB default (0 = no min, 1 = no rule).
+            min_order_qty != null && min_order_qty !== ""
+              ? Math.max(0, Math.floor(Number(min_order_qty)))
+              : 0,
+            order_increment != null && order_increment !== ""
+              ? Math.max(1, Math.floor(Number(order_increment)))
+              : 1,
           ]
         );
         const newProductId = inserted.id;
@@ -891,6 +900,8 @@ module.exports = function registerProductRoutes(app, deps) {
       bundle_components, // Optional array of { product_id, variant_id?, quantity } for bundles
       lead_time_days_override, // 2-G.8: product-level lead time override
       safety_stock_days,       // 2-G.8: per-product safety stock
+      min_order_qty,           // Tier 2.2 wholesale MOQ
+      order_increment,         // Tier 2.2 wholesale MOQ
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -982,6 +993,27 @@ module.exports = function registerProductRoutes(app, deps) {
             safety_stock_days === "" || safety_stock_days == null
               ? null
               : Number(safety_stock_days)
+          );
+          nextParam++;
+        }
+        // Tier 2.2 — MOQ patches. Empty/null → reset to DB default (0 = no
+        // minimum, 1 = no case-pack). NOT NULL constraint means we never
+        // write NULL — we coerce to the default int.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "min_order_qty")) {
+          updateFields.push(`min_order_qty = $${nextParam}`);
+          updateParams.push(
+            min_order_qty === "" || min_order_qty == null
+              ? 0
+              : Math.max(0, Math.floor(Number(min_order_qty)))
+          );
+          nextParam++;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "order_increment")) {
+          updateFields.push(`order_increment = $${nextParam}`);
+          updateParams.push(
+            order_increment === "" || order_increment == null
+              ? 1
+              : Math.max(1, Math.floor(Number(order_increment)))
           );
           nextParam++;
         }

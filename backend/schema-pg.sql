@@ -173,6 +173,20 @@ CREATE TABLE IF NOT EXISTS products (
   default_warranty_months INTEGER
 );
 
+-- v95 (Tier 2.2 wholesale MOQ): minimum line qty + case-pack multiple.
+-- Enforced on portal + field-rep flows; POS bypasses (in-person cashier
+-- override is intentional). 0/1 defaults preserve pre-v95 behavior.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS min_order_qty INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS order_increment INTEGER NOT NULL DEFAULT 1;
+DO $$ BEGIN
+  ALTER TABLE products ADD CONSTRAINT products_min_order_qty_nonneg CHECK (min_order_qty >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE products ADD CONSTRAINT products_order_increment_positive CHECK (order_increment >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS product_variants (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,

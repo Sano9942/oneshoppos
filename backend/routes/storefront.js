@@ -129,10 +129,15 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const total = parseInt(countRows[0].total, 10);
 
       // Fetch products
+      // Tier 2.2 — min_order_qty / order_increment exposed so storefront cards
+      // can show "Min 12 · Case of 6" hints and pre-block bad add-to-cart
+      // qtys before the server round-trip. Defaults 0/1 produce no hint.
       const dataQuery = `
         SELECT
           p.id, p.name, p.sku, p.price, p.compare_at_price,
           p.image_url, p.category_id, c.name AS category_name,
+          COALESCE(p.min_order_qty, 0) AS min_order_qty,
+          COALESCE(p.order_increment, 1) AS order_increment,
           COALESCE((SELECT SUM(os.quantity) FROM outlet_stock os WHERE os.product_id = p.id), 0) > 0 AS in_stock
         FROM products p
         JOIN channel_publications cp ON cp.product_id = p.id
@@ -140,7 +145,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         LEFT JOIN categories c ON c.id = p.category_id
         WHERE ${whereClause}
         GROUP BY p.id, p.name, p.sku, p.price, p.compare_at_price,
-                 p.image_url, p.category_id, c.name
+                 p.image_url, p.category_id, c.name,
+                 p.min_order_qty, p.order_increment
         ORDER BY ${orderBy}
         LIMIT $${paramIdx + 1} OFFSET $${paramIdx + 2}
       `;
@@ -158,6 +164,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           category_id: p.category_id,
           category_name: p.category_name,
           in_stock: p.in_stock,
+          min_order_qty: Number(p.min_order_qty || 0),
+          order_increment: Number(p.order_increment || 1),
         })),
         pagination: {
           page,
@@ -185,12 +193,16 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (isNaN(productId)) return res.status(400).json({ error: "Invalid product ID" });
 
       // Verify product is published on storefront channel
+      // Tier 2.2 — pull MOQ columns so the detail page can show hints and
+      // pre-block invalid quantities.
       const { rows: productRows } = await db.query(`
         SELECT
           p.id, p.name, p.description_html AS description, p.sku, p.barcode,
           p.price, p.compare_at_price, p.image_url,
           p.category_id, c.name AS category_name,
-          p.brand_id, b.name AS brand_name
+          p.brand_id, b.name AS brand_name,
+          COALESCE(p.min_order_qty, 0) AS min_order_qty,
+          COALESCE(p.order_increment, 1) AS order_increment
         FROM products p
         JOIN channel_publications cp ON cp.product_id = p.id
         JOIN sales_channels sc ON sc.id = cp.channel_id AND sc.code = 'storefront'
@@ -263,6 +275,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         category_name: product.category_name,
         brand_id: product.brand_id,
         brand_name: product.brand_name,
+        min_order_qty: Number(product.min_order_qty || 0),
+        order_increment: Number(product.order_increment || 1),
         variants: variantsRes.rows.map((v) => ({
           id: v.id,
           name: v.sku || `Variant ${v.id}`,
@@ -439,6 +453,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (err.message === "Product not found") {
         return res.status(404).json({ error: err.message });
       }
+      if (err.code === "MOQ_VIOLATION") {
+        return res.status(400).json({
+          error: err.message,
+          code: "MOQ_VIOLATION",
+          violations: err.violations,
+        });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -469,6 +490,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       console.error("Storefront update item error:", err);
       if (err.message === "Cart item not found") {
         return res.status(404).json({ error: err.message });
+      }
+      if (err.code === "MOQ_VIOLATION") {
+        return res.status(400).json({
+          error: err.message,
+          code: "MOQ_VIOLATION",
+          violations: err.violations,
+        });
       }
       res.status(500).json({ error: "Internal server error" });
     }

@@ -21,15 +21,31 @@ export default function StorefrontProductDetail() {
     if (!product || adding) return;
     setAdding(true);
     setAddedMessage("");
-    const ok = await cart.addItem(product.id, selectedVariant?.id || null, 1);
+    // Tier 2.2 — default the add-to-cart qty to the larger of min_order_qty
+    // and order_increment. Avoids an instant 400 on products with a min > 1
+    // when the user clicks the default Add button.
+    const minQty = Number(product.min_order_qty || 0);
+    const increment = Math.max(1, Number(product.order_increment || 1));
+    const startQty = Math.max(minQty, increment, 1);
+    const ok = await cart.addItem(product.id, selectedVariant?.id || null, startQty);
     setAdding(false);
     if (ok) {
-      setAddedMessage("Added to cart");
+      setAddedMessage(`Added ${startQty} to cart`);
       setTimeout(() => setAddedMessage(""), 2000);
     } else {
       setAddedMessage(cart.error || "Could not add to cart");
     }
   };
+
+  const moqHint = (() => {
+    if (!product) return null;
+    const min = Number(product.min_order_qty || 0);
+    const inc = Number(product.order_increment || 1);
+    const parts = [];
+    if (min > 1) parts.push(`Minimum order ${min}`);
+    if (inc > 1) parts.push(`Sold in cases of ${inc}`);
+    return parts.length ? parts.join(" · ") : null;
+  })();
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +172,7 @@ export default function StorefrontProductDetail() {
           </h1>
 
           {/* Price */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-2">
             <span className="text-3xl font-bold text-gray-900">
               {currencySymbol} {Number(activePrice).toLocaleString()}
             </span>
@@ -166,6 +182,10 @@ export default function StorefrontProductDetail() {
               </span>
             )}
           </div>
+          {moqHint && (
+            <p className="text-sm text-amber-700 mb-6">{moqHint}</p>
+          )}
+          {!moqHint && <div className="mb-6" />}
 
           {/* Variant Selector */}
           {product.variants && product.variants.length > 0 && (

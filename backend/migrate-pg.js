@@ -6985,6 +6985,58 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 95,
+    description:
+      "Tier 2.2 wholesale MOQ — products.min_order_qty + products.order_increment for portal + field-rep enforcement",
+    up: async (client) => {
+      // min_order_qty: smallest qty acceptable on a single line. 0 = no minimum
+      // (current behavior; safe default for the entire installed base).
+      try {
+        await client.query("SAVEPOINT v95_min_order_qty");
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS min_order_qty INTEGER NOT NULL DEFAULT 0`
+        );
+        await client.query(
+          `ALTER TABLE products
+             DROP CONSTRAINT IF EXISTS products_min_order_qty_nonneg`
+        );
+        await client.query(
+          `ALTER TABLE products
+             ADD CONSTRAINT products_min_order_qty_nonneg CHECK (min_order_qty >= 0)`
+        );
+        await client.query("RELEASE SAVEPOINT v95_min_order_qty");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v95_min_order_qty");
+        console.warn(`[migrate-pg v95] min_order_qty skipped: ${err.message}`);
+      }
+
+      // order_increment: case-pack multiple. 1 = no rule (current behavior).
+      // Values > 1 mean cart qty must be a multiple of this. min_order_qty
+      // and order_increment are independent — you can have a min of 6 and an
+      // increment of 12 (then valid qtys are 12, 24, 36...).
+      try {
+        await client.query("SAVEPOINT v95_order_increment");
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS order_increment INTEGER NOT NULL DEFAULT 1`
+        );
+        await client.query(
+          `ALTER TABLE products
+             DROP CONSTRAINT IF EXISTS products_order_increment_positive`
+        );
+        await client.query(
+          `ALTER TABLE products
+             ADD CONSTRAINT products_order_increment_positive CHECK (order_increment >= 1)`
+        );
+        await client.query("RELEASE SAVEPOINT v95_order_increment");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v95_order_increment");
+        console.warn(`[migrate-pg v95] order_increment skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {
