@@ -5,6 +5,29 @@ import { useStorefrontCart } from "./useStorefrontCart";
 
 export default function StorefrontCart() {
   const { tenantSlug, config, setCartItemCount } = useStorefront();
+
+  // Tier 2.10 reorder adoption — when arriving from /portal/.../orders with
+  // ?adopt=<token>, persist that token to localStorage BEFORE useStorefrontCart
+  // runs its useState initializer, then strip the param so back/forward and
+  // future visits don't re-adopt. useState initializer runs once per mount,
+  // synchronously, which is exactly the ordering we need vs. the child hook.
+  useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const adopt = params.get("adopt");
+    if (adopt) {
+      localStorage.setItem(`sf_cart_${tenantSlug}`, adopt);
+      params.delete("adopt");
+      const newSearch = params.toString();
+      const newUrl =
+        window.location.pathname +
+        (newSearch ? `?${newSearch}` : "") +
+        window.location.hash;
+      window.history.replaceState({}, "", newUrl);
+    }
+    return null;
+  });
+
   const { items, loading, error, fetchCart, updateItem, removeItem, cartToken } =
     useStorefrontCart(tenantSlug);
   const currencySymbol = config?.currency_symbol || "Rs";

@@ -270,6 +270,204 @@ module.exports = function registerCustomerPortalData(app, deps) {
     }
   });
 
+  // ── GET /me/order-history ─────────────────────────────────────────
+  // Tier 2.10 — unified web+in-store order history for the Reorder feature.
+  // Each row carries `source` so the frontend (and the reorder endpoint) can
+  // route back to the right items table. `id` is the source-table primary key;
+  // the (source, id) pair is the stable identity.
+  router.get("/me/order-history", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const { rows } = await req.db.query(
+        `SELECT * FROM (
+           SELECT 'web'::text AS source,
+                  wo.id,
+                  COALESCE(wo.external_order_number, wo.external_order_id) AS order_number,
+                  wo.grand_total AS total,
+                  wo.currency,
+                  COALESCE(wo.ordered_at, wo.created_at) AS ordered_at,
+                  wo.payment_status,
+                  wo.fulfillment_status,
+                  (SELECT COUNT(*) FROM web_order_items WHERE web_order_id = wo.id) AS item_count
+             FROM web_orders wo
+            WHERE wo.customer_id = $1
+              AND COALESCE(wo.order_status, 'open') <> 'cancelled'
+           UNION ALL
+           SELECT 'in_store'::text AS source,
+                  s.id,
+                  s.invoice_number AS order_number,
+                  s.total_amount AS total,
+                  NULL::text AS currency,
+                  s.timestamp AS ordered_at,
+                  'paid'::text AS payment_status,
+                  'fulfilled'::text AS fulfillment_status,
+                  (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) AS item_count
+             FROM sales s
+            WHERE s.customer_id = $1
+              AND s.voided = false
+         ) combined
+         ORDER BY ordered_at DESC NULLS LAST
+         LIMIT $2`,
+        [req.customerId, limit]
+      );
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /me/reorder ──────────────────────────────────────────────
+  // Tier 2.10 — clone an old order into a fresh storefront cart at current
+  // prices, then redirect the customer to /store/:slug/cart?adopt=<token>.
+  // The storefront page reads the `adopt` param on mount, persists the token
+  // to its localStorage key, and strips the param from history.
+  //
+  // Items skipped (deleted product, missing variant, hard-removed) come back
+  // in `items_skipped` so the frontend can show a notice.
+  router.post("/me/reorder", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const source = req.body?.source;
+      const orderId = Number(req.body?.order_id);
+      if (!["web", "in_store"].includes(source)) {
+        return res.status(400).json({ error: "source must be 'web' or 'in_store'" });
+      }
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        return res.status(400).json({ error: "order_id must be a positive integer" });
+      }
+
+      // Verify ownership + fetch items in one go. Both shapes are normalized
+      // to { product_id, variant_id, quantity } so the cart-insert loop below
+      // doesn't have to branch on source.
+      let rawItems = [];
+      if (source === "web") {
+        const { rows: ownerRows } = await req.db.query(
+          "SELECT id FROM web_orders WHERE id = $1 AND customer_id = $2",
+          [orderId, req.customerId]
+        );
+        if (!ownerRows.length) {
+          return res.status(404).json({ error: "Order not found" });
+        }
+        const { rows } = await req.db.query(
+          `SELECT product_id, variant_id, qty AS quantity, title
+             FROM web_order_items
+            WHERE web_order_id = $1
+            ORDER BY id`,
+          [orderId]
+        );
+        rawItems = rows;
+      } else {
+        const { rows: ownerRows } = await req.db.query(
+          "SELECT id FROM sales WHERE id = $1 AND customer_id = $2 AND voided = false",
+          [orderId, req.customerId]
+        );
+        if (!ownerRows.length) {
+          return res.status(404).json({ error: "Order not found" });
+        }
+        const { rows } = await req.db.query(
+          `SELECT si.product_id, si.variant_id, si.quantity, p.name AS title
+             FROM sale_items si
+             LEFT JOIN products p ON p.id = si.product_id
+            WHERE si.sale_id = $1
+            ORDER BY si.id`,
+          [orderId]
+        );
+        rawItems = rows;
+      }
+
+      if (rawItems.length === 0) {
+        return res.status(400).json({ error: "Original order has no reorderable items" });
+      }
+
+      // Resolve each item against the CURRENT product/variant catalog. Items
+      // whose product is deleted, status != 'active', or whose variant no
+      // longer exists are reported in items_skipped instead of failing the
+      // whole reorder. Quantities below 1 are rounded up to 1 (sales rows can
+      // hold fractional qty for weighed items; cart quantities are integer).
+      const itemsAdded = [];
+      const itemsSkipped = [];
+      for (const it of rawItems) {
+        const productId = Number(it.product_id);
+        const variantId = it.variant_id != null ? Number(it.variant_id) : null;
+        const qty = Math.max(1, Math.ceil(Number(it.quantity) || 0));
+        if (!Number.isInteger(productId) || productId <= 0) {
+          itemsSkipped.push({ title: it.title || "Unknown", reason: "missing_product" });
+          continue;
+        }
+        const { rows: pRows } = await req.db.query(
+          "SELECT id, name, status, deleted_at FROM products WHERE id = $1",
+          [productId]
+        );
+        if (!pRows.length || pRows[0].deleted_at || pRows[0].status !== "active") {
+          itemsSkipped.push({
+            title: it.title || pRows[0]?.name || `Product #${productId}`,
+            reason: "not_available",
+          });
+          continue;
+        }
+        if (variantId != null) {
+          const { rows: vRows } = await req.db.query(
+            "SELECT id FROM product_variants WHERE id = $1 AND product_id = $2",
+            [variantId, productId]
+          );
+          if (!vRows.length) {
+            itemsSkipped.push({
+              title: it.title || pRows[0].name,
+              reason: "variant_removed",
+            });
+            continue;
+          }
+        }
+        itemsAdded.push({ productId, variantId, qty });
+      }
+
+      if (itemsAdded.length === 0) {
+        return res.status(409).json({
+          error: "None of the items from this order are currently available",
+          items_skipped: itemsSkipped,
+        });
+      }
+
+      // Mint a fresh cart for the reorder. We do NOT try to merge into an
+      // existing cart — the customer may have items in a guest cart on a
+      // different device; clobbering them silently would be a UX bug. A fresh
+      // token wins on adoption; the customer can manually keep the old cart
+      // by not following the redirect.
+      const crypto = require("crypto");
+      const cartToken = crypto.randomUUID();
+      const { getOrCreateCart, addItem } = require("../../services/storefront-cart");
+      const cart = await getOrCreateCart(req.db, cartToken);
+
+      // Persist customer_id on the cart so the storefront checkout can
+      // pre-fill name/phone/email later. addItem() uses live product prices.
+      await req.db.query(
+        "UPDATE storefront_carts SET customer_id = $1 WHERE id = $2",
+        [req.customerId, cart.id]
+      );
+
+      for (const ai of itemsAdded) {
+        try {
+          await addItem(req.db, cart.id, ai.productId, ai.variantId, ai.qty);
+        } catch (e) {
+          // Don't abort the whole reorder for one bad row; record it.
+          itemsSkipped.push({
+            title: `Product #${ai.productId}`,
+            reason: "add_failed",
+          });
+        }
+      }
+
+      const redirectUrl = `/store/${req.tenant.slug}/cart?adopt=${encodeURIComponent(cartToken)}`;
+      res.json({
+        cart_token: cartToken,
+        redirect_url: redirectUrl,
+        items_added: itemsAdded.length,
+        items_skipped: itemsSkipped,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /me/subscriptions ─────────────────────────────────────────
   router.get("/me/subscriptions", authMw, customerPortalDataLimiter, async (req, res) => {
     try {
