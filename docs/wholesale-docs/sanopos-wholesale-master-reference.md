@@ -1,4 +1,4 @@
-# SanoPOS Wholesale Master Reference — 2026-05-15 (updated: Tier 1.4 secondary sales shipped)
+# SanoPOS Wholesale Master Reference — 2026-05-16 (updated: Tier 1 polish day — UTC audit + mfg portal password reset)
 
 **This is the single day-to-day wholesale/distribution reference for the repo.**
 
@@ -17,6 +17,10 @@ Companion file: [research-competitive-landscape.md](research-competitive-landsca
 Wholesale tenants now have, out of the box: their own mode, credit controls, A/R aging, customer statements, wholesale dashboard cards, a mobile-first field-rep PWA (GPS + selfie + outcome + order capture), slab-tier brand-scoped schemes engine, AND a manufacturer-partner portal where brand owners log in to see real-time aggregate sales of their SKUs through this distributor. All four wholesale feature flags auto-enable for new wholesale signups via `seedWholesaleFlags()`.
 
 **What's left for Tier 1.5/onward (deferred):** Retrospective rebates (Tier 1.3.5 — wait for a real tenant to ask), transaction-level visibility for premium manufacturer relationships (Tier 1.4.5 — wait for ask), nightly rollup table for /summary perf if a tenant hits 100K+ sale_items.
+
+**Tier 1 polish shipped 2026-05-16:**
+- `toISOString().slice(0, 10)` UTC trap audit (commit `3cf96d2`) — 41 call sites across 29 frontend files replaced with local-tz helpers in `utils/dates.js` (`todayLocalStr`, `localDateStr`, `daysAgoLocalStr`, `monthStartLocalStr`). Day 9 Bug #5 was the canary; this audit closes the rest.
+- Manufacturer-portal password reset (commit `899d6dc`) — new `POST /api/manufacturer-portal/auth/forgot-password` (public, enumeration-safe), admin Resend endpoint extended to active partners with 1h reset TTL, refresh-token revocation on password change, new `manufacturer_partner_password_reset` email template, frontend `/manufacturer-portal/:slug/forgot-password` page + login link. Reuses existing `signup_token` column — no schema change.
 
 **Strategic position:** Pakistan-built distribution software (SAMS, SalesFlo) has van-sales DNA but weak portals and bolt-on FBR. Global platforms (Shopify B2B, Cin7, NetSuite) have portals and pricing engines but zero PJP/beat-plan/order-booker/manufacturer-portal capability. **SanoPOS now sits cleanly between them with the full Pakistan wedge:** FBR queue + multi-tenant/multi-outlet/RBAC core + field-rep order booker + slab schemes + manufacturer secondary-sales portal. No global player has copied this stack, and Pakistan incumbents lag on the portal/cloud side.
 
