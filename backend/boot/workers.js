@@ -369,6 +369,17 @@ function startAll(deps) {
           });
         }
 
+        // Daily 9 AM UTC sweep that force-closes day-level attendance rows
+        // where employee never tapped "End of Day" (check_out NULL,
+        // check_in older than yesterday). Stamps check_out from last
+        // completed session (or check_in if none) and appends "(auto-closed)".
+        if (String(process.env.ATTENDANCE_AUTO_CLOSE_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("attendance-auto-close", async () => {
+            const { registerAttendanceAutoCloseWorker } = require("../workers/attendance-auto-close-worker-boss");
+            await registerAttendanceAutoCloseWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
           await tryRegister("course-release", async () => {
             const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");

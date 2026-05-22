@@ -41,6 +41,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     retail_digest: "retail-weekly-digest",
     shift_auto_close: "shift-auto-close",
     subscription_grace: "subscription-grace-check",
+    attendance_auto_close: "attendance-auto-close",
     catalog_scheduler: null, // setInterval
   };
 
@@ -74,6 +75,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const shiftAutoCloseStatus = global.__shiftAutoCloseWorkerStatus || null;
       // Customer subscription grace transitions (hourly).
       const subscriptionGraceStatus = global.__subscriptionGraceWorkerStatus || null;
+      // Daily 9 AM UTC sweep that auto-closes stale day-level attendance rows.
+      const attendanceAutoCloseStatus = global.__attendanceAutoCloseWorkerStatus || null;
       // Scheduled catalog changes — 60s setInterval poll.
       const catalogSchedulerStatus = global.__catalogSchedulerStatus || null;
 
@@ -137,6 +140,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         retail_digest: workerInfo("retail_digest", retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
         shift_auto_close: workerInfo("shift_auto_close", shiftAutoCloseStatus, 60 * 60 * 1000),
         subscription_grace: workerInfo("subscription_grace", subscriptionGraceStatus, 60 * 60 * 1000),
+        attendance_auto_close: workerInfo("attendance_auto_close", attendanceAutoCloseStatus, 24 * 60 * 60 * 1000),
         catalog_scheduler: workerInfo("catalog_scheduler", catalogSchedulerStatus, 60_000),
       });
     } catch (err) {

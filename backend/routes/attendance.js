@@ -6,6 +6,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     PinStatusSchema,
     PinCheckinSchema,
     PinCheckoutSchema,
+    AttendanceCreateSchema,
   } = require("../schemas/attendance");
 
   // Resolve an employee from a kiosk PIN.
@@ -169,7 +170,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/attendance/sessions", async (req, res) => {
     try {
-      const { date_from, date_to, employee_id, session_type } = req.query;
+      const { date_from, date_to, employee_id, session_type, active } = req.query;
       const where = [];
       const params = [];
       let idx = 0;
@@ -188,6 +189,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       if (session_type) {
         where.push(`s.session_type = $${++idx}`);
         params.push(session_type);
+      }
+      if (active === "1" || active === "true") {
+        where.push("s.session_end IS NULL");
       }
       const sql = `
         SELECT s.*, e.name AS employee_name, o.name AS outlet_name
@@ -605,6 +609,49 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         if (rowCount === 0)
           return res.status(404).json({ error: "Employee not found" });
         res.json({ message: "Attendance config updated" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/attendance — manager creates a manual day-level record
+  // Used when an employee forgot to clock in entirely (no row exists yet).
+  // Distinct from /api/attendance/checkin (legacy unauth, current timestamp).
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/api/attendance",
+    requirePerm("all_access"),
+    validate(AttendanceCreateSchema),
+    async (req, res) => {
+      try {
+        const { employee_id, outlet_id, check_in, check_out, status, comment } = req.body;
+
+        const { rows: [emp] } = await db.query(
+          "SELECT id FROM employees WHERE id = $1",
+          [employee_id]
+        );
+        if (!emp) return res.status(400).json({ error: "Employee not found" });
+
+        const { rows: [outlet] } = await db.query(
+          "SELECT id FROM outlets WHERE id = $1",
+          [outlet_id]
+        );
+        if (!outlet) return res.status(400).json({ error: "Outlet not found" });
+
+        const hours = check_out ? calcHours(check_in, check_out) : null;
+        const finalStatus = status || (check_out ? "checked_out" : "present");
+
+        const { rows: [inserted] } = await db.query(
+          `INSERT INTO employee_attendance
+             (employee_id, outlet_id, check_in, check_out, hours, status, comment)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [employee_id, outlet_id, check_in, check_out || null, hours, finalStatus, comment || null]
+        );
+
+        res.status(201).json({ attendance: inserted });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }

@@ -20,8 +20,19 @@ const PinCheckoutSchema = z.object({
   outlet_id: z.coerce.number().int().positive().optional().nullable(),
 });
 
+const VALID_STATUSES = ["present", "checked_out", "absent", "late"];
+const AttendanceCreateSchema = z.object({
+  employee_id: z.coerce.number().int().positive("employee_id is required"),
+  outlet_id: z.coerce.number().int().positive("outlet_id is required"),
+  check_in: z.string().min(1, "check_in is required"),
+  check_out: z.string().optional().nullable(),
+  status: z.enum(VALID_STATUSES).optional().nullable(),
+  comment: z.string().max(2000).optional().nullable(),
+});
+
 module.exports = {
   PinStatusSchema,
   PinCheckinSchema,
   PinCheckoutSchema,
+  AttendanceCreateSchema,
 };
