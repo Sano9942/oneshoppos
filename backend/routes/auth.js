@@ -464,7 +464,12 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     });
 
-    // POST /api/auth/refresh — exchange refresh cookie for new access token
+    // POST /api/auth/refresh — exchange refresh cookie for new access token.
+    // Rotation policy: each refresh consumes the old token (sets revoked_at)
+    // and issues a fresh one. If a revoked token is ever presented again
+    // that is reuse — likely theft — and every refresh token for the same
+    // employee+tenant is killed so both the attacker and the legitimate
+    // user are forced through full login again.
     app.post("/api/auth/refresh", async (req, res) => {
       const JWT_SECRET = process.env.JWT_SECRET;
       const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
@@ -484,14 +489,27 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Invalid refresh token" });
         }
 
-        // 2. Check token in master.db (not revoked)
+        // 2. Look up by hash WITHOUT the revoked_at IS NULL filter so we can
+        //    distinguish "never seen" from "already revoked" — the latter
+        //    is reuse and triggers a family-wide revocation below.
         const tokenHash = hashToken(refreshToken);
         const { rows: [storedToken] } = await masterDb.query(
-          "SELECT * FROM tenant_refresh_tokens WHERE token_hash = $1 AND revoked_at IS NULL",
+          "SELECT id, tenant_id, employee_id, revoked_at FROM tenant_refresh_tokens WHERE token_hash = $1",
           [tokenHash]
         );
         if (!storedToken) {
-          return res.status(401).json({ error: "Refresh token invalid or revoked" });
+          // Clear the cookie so the client stops retrying with a phantom token
+          res.clearCookie("refreshToken", { path: "/api/auth" });
+          return res.status(401).json({ error: "Refresh token invalid" });
+        }
+        if (storedToken.revoked_at) {
+          // REUSE DETECTED — revoke every live refresh for this employee/tenant.
+          await masterDb.query(
+            "UPDATE tenant_refresh_tokens SET revoked_at = NOW() WHERE tenant_id = $1 AND employee_id = $2 AND revoked_at IS NULL",
+            [storedToken.tenant_id, storedToken.employee_id]
+          );
+          res.clearCookie("refreshToken", { path: "/api/auth" });
+          return res.status(401).json({ error: "Refresh token reuse detected — please log in again", code: "REFRESH_REUSE" });
         }
 
         // 3. Check tenant is still active
@@ -513,7 +531,23 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Employee not found" });
         }
 
-        // 5. Sign new access token — preserve the employee's outlet across
+        // 5. Sign a NEW refresh token, persist it, then mark the old one
+        //    revoked. Order matters: insert first so the new token has a
+        //    DB row before any window where the client could retry.
+        const { token: newRefreshToken, hash: newHash, expiresAt } = signRefreshToken(
+          { tid: decoded.tid, eid: decoded.eid },
+          JWT_REFRESH_SECRET
+        );
+        await masterDb.query(
+          "INSERT INTO tenant_refresh_tokens (tenant_id, employee_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
+          [decoded.tid, decoded.eid, newHash, expiresAt]
+        );
+        await masterDb.query(
+          "UPDATE tenant_refresh_tokens SET revoked_at = NOW() WHERE id = $1",
+          [storedToken.id]
+        );
+
+        // 6. Sign new access token — preserve the employee's outlet across
         //    refresh. The refresh token itself doesn't carry oid, so we
         //    re-derive it from employee_outlets the same way mt-login does.
         //    Without this, every silent token refresh dropped req.context.outletId.
@@ -522,6 +556,15 @@ module.exports = function registerAuthRoutes(app, deps) {
           { tid: decoded.tid, eid: decoded.eid, rid: employee.role_id, oid: defaultOutletId },
           JWT_SECRET
         );
+
+        // 7. Replace the refresh cookie (same options as login)
+        res.cookie("refreshToken", newRefreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          path: "/api/auth",
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
 
         return res.json({ token: accessToken });
       } catch (err) {
