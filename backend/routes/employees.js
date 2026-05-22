@@ -2,6 +2,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, requirePlanLimit } = deps;
   const bcrypt = require("bcryptjs");
   const { validate } = require("../middleware/validate");
+  const { pinValidateLimiter } = require("../middleware/rate-limit");
   const { ValidatePinSchema, CreateEmployeeSchema, SetPasswordSchema, ChangePasswordSchema, ChangePinSchema } = require("../schemas/employees");
   const EMPLOYEE_USAGE_CHECKS = [
     ["sales", "employee_id"],
@@ -58,7 +59,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Validate PIN (For POS Login)
-  app.post("/api/employees/validate-pin", validate(ValidatePinSchema), async (req, res) => {
+  app.post("/api/employees/validate-pin", pinValidateLimiter, validate(ValidatePinSchema), async (req, res) => {
     const { pin_code } = req.body;
 
     try {

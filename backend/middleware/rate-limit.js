@@ -211,6 +211,23 @@ const manufacturerPortalDataLimiter = rateLimit({
   },
 });
 
+// POS PIN validation: 20 attempts / 15 min / IP (per tenant). The
+// endpoint reveals "is this PIN any employee's PIN" so a 4-digit space
+// can be brute-forced inside the global 600/min limit in ~17 minutes.
+// 20/15m forces the search to ~5 years.
+const pinValidateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const tenantKey = req.headers["x-tenant-slug"] || req.query?.tenant || "unknown";
+    return `pin-validate:${tenantKey}:${req.ip}`;
+  },
+});
+
 module.exports = {
   globalLimiter,
   authLimiter,
@@ -223,4 +240,5 @@ module.exports = {
   customerPortalDataLimiter,
   manufacturerPortalAuthLimiter,
   manufacturerPortalDataLimiter,
+  pinValidateLimiter,
 };
