@@ -7094,6 +7094,34 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 97,
+    description:
+      "Impersonation jti + revocation columns on public.impersonation_sessions",
+    up: async (client) => {
+      // Public-schema-only — gate by presence of the tenants table.
+      const { rows } = await client.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' LIMIT 1"
+      );
+      if (!rows.length) return;
+      try {
+        await client.query("SAVEPOINT v97_imp_jti");
+        await client.query(
+          `ALTER TABLE impersonation_sessions
+             ADD COLUMN IF NOT EXISTS token_jti TEXT,
+             ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_jti
+             ON impersonation_sessions(token_jti)`
+        );
+        await client.query("RELEASE SAVEPOINT v97_imp_jti");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v97_imp_jti");
+        console.warn(`[migrate-pg v97] impersonation_sessions cols skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

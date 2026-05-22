@@ -473,8 +473,35 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
       }
       const startTime = Date.now();
       try {
-        const { restoreSchema, getSchemaName } = require("../utils/backup-pg");
+        const { restoreSchema, listSchemasInBackup, getSchemaName } = require("../utils/backup-pg");
         const schemaName = getSchemaName(req.tenantSlug);
+
+        // Inspect the dump's TOC before invoking pg_restore. A crafted
+        // archive could declare objects in OTHER tenant schemas or in
+        // public; pg_restore's --schema flag filters by schema name but
+        // does not stop a malicious operator from learning the layout of
+        // the platform or testing dumps tagged for other tenants. Reject
+        // anything that mentions a schema other than the caller's own.
+        let dumpSchemas;
+        try {
+          dumpSchemas = await listSchemasInBackup(req.file.path);
+        } catch (inspectErr) {
+          return res.status(400).json({
+            error: `Backup file is not a valid pg_dump archive: ${inspectErr.message}`,
+          });
+        }
+        const allowedSchemas = new Set([schemaName, "public"]);
+        const foreignSchemas = dumpSchemas.filter((s) => !allowedSchemas.has(s));
+        if (foreignSchemas.length) {
+          return res.status(400).json({
+            error: `Backup contains schemas this tenant cannot restore: ${foreignSchemas.join(", ")}`,
+          });
+        }
+        if (!dumpSchemas.includes(schemaName)) {
+          return res.status(400).json({
+            error: `Backup does not contain the expected schema "${schemaName}"`,
+          });
+        }
 
         runtimeState.isRestoreInProgress = true;
         const result = await restoreSchema(schemaName, req.file.path);

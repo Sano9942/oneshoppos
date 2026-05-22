@@ -23,6 +23,21 @@ const KIOSK_ALLOWED_PATHS = [
   /^\/api\/auth\//,
 ];
 
+// Paths allowed to resolve a tenant via ?tenant=<slug> WITHOUT a JWT.
+// Anything else hitting resolveTenant without req.tenantId derived from a
+// verified JWT will be ignored — the request continues with no tenant DB
+// scope so deps.db (the proxy) throws on first query. Routes mounted
+// before loadTenantAndPerms (storefront, public-restaurant, receipts,
+// customer portal, etc.) do their own tenant resolution and aren't
+// affected by this list.
+const PUBLIC_TENANT_PARAM_PATHS = [
+  /^\/api\/auth\//,                  // login, mt-login, kiosk-login, signup, refresh, forgot/reset password
+  /^\/api\/attendance\/pin-/,        // kiosk PIN check-in
+  /^\/api\/feature-flags/,           // anonymous bootstrap before auth
+  /^\/api\/setup\//,                 // first-run wizard (setup_token-gated)
+  /^\/api\/health/,                  // health check
+];
+
 const CONTEXT_EXEMPT_PATHS = [
   /^\/api\/auth\//,
   /^\/api\/context\//,
@@ -202,16 +217,35 @@ async function resolveTenant(req, res, next) {
 
   let resolvedTenantId = req.tenantId;
   if (!resolvedTenantId && req.query.tenant) {
-    try {
-      const masterMod = require("../master-db-pg");
-      const tenant = await masterMod.getTenantBySlug(req.query.tenant);
-      if (tenant) resolvedTenantId = tenant.id;
-    } catch {
-      // ignore — will fall through to next() below
+    // Only honor ?tenant=<slug> on the explicit public-path allowlist.
+    // Without this gate, ANY unauthenticated request to a route that
+    // lacks a per-route requirePerm guard (eg GET /api/parked-sales,
+    // POST /api/sales) could attach a tenant DB scope just by appending
+    // ?tenant=foo, bypassing auth entirely.
+    if (PUBLIC_TENANT_PARAM_PATHS.some((rx) => rx.test(req.path))) {
+      try {
+        const masterMod = require("../master-db-pg");
+        const tenant = await masterMod.getTenantBySlug(req.query.tenant);
+        if (tenant) resolvedTenantId = tenant.id;
+      } catch {
+        // ignore — will fall through to next() below
+      }
     }
   }
 
-  if (!resolvedTenantId) return next();
+  if (!resolvedTenantId) {
+    // For non-public /api/ routes, returning a clean 401 here is friendlier
+    // than letting the request crash at the tenant DB proxy with a 500
+    // ("[tenant-db-proxy-pg] No tenant DB in async context"). Public
+    // routes mounted before this middleware (admin/, webhooks, storefront,
+    // receipts, customer-portal, etc.) never reach this line. Anything
+    // else under /api/ that arrives here without a tenant context is an
+    // unauthenticated caller and should be told so explicitly.
+    if (req.path.startsWith("/api/") && !PUBLIC_TENANT_PARAM_PATHS.some((rx) => rx.test(req.path))) {
+      return res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+    }
+    return next();
+  }
 
   try {
     const tenantDb = await tenantDbManager.getDb(resolvedTenantId);

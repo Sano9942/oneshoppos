@@ -38,11 +38,13 @@ module.exports = function registerShopifyWebhookRoutes(app, deps) {
           webhookSecret: conn.webhook_secret,
         });
         if (!signatureCheck.ok) {
-          return res.status(401).json({
-            error: signatureCheck.reason === "missing_signature"
+          const errorMessage =
+            signatureCheck.reason === "missing_signature"
               ? "Missing webhook signature"
-              : "Invalid webhook signature",
-          });
+              : signatureCheck.reason === "no_secret_configured"
+                ? "Webhook secret not configured for this Shopify connection"
+                : "Invalid webhook signature";
+          return res.status(401).json({ error: errorMessage });
         }
 
         const replayWindow = evaluateWebhookTimestampWindow(triggeredAtHeader, Date.now());
