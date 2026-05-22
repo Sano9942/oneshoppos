@@ -111,7 +111,7 @@ export default function Attendance() {
       )
     : records;
 
-  const totalHours = filtered.reduce((sum, r) => sum + (r.hours || 0), 0);
+  const totalHours = filtered.reduce((sum, r) => sum + (Number(r.hours) || 0), 0);
 
   const openEdit = (row) => {
     setEditingRow(row);
