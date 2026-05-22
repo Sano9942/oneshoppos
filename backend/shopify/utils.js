@@ -73,7 +73,7 @@ function buildWebhookIdempotencyKey({
 
 function verifyWebhookSignature({ rawBody, providedHmac, webhookSecret }) {
   const secret = String(webhookSecret || "");
-  if (!secret) return { ok: true, reason: "no_secret_configured" };
+  if (!secret) return { ok: false, reason: "no_secret_configured" };
   const provided = String(providedHmac || "");
   if (!provided) return { ok: false, reason: "missing_signature" };
   const expected = crypto
