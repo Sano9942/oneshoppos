@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Clock, User, Search, Pencil, X, Check } from "lucide-react";
+import { Clock, User, Search, Pencil, X, Check, Download } from "lucide-react";
 
 import { api } from '../api';
 import { fmtLocalTime, fmtLocalDate, parseLocalDate } from '../utils/dates';
+import { downloadCsv } from '../utils/csvExport';
 
 // "8.25" → "8h 15m"
 const fmtHours = (n) => {
@@ -75,7 +76,7 @@ export default function Attendance() {
       setBreakLoading(false);
     }
   };
-  const [editForm, setEditForm] = useState({ check_in: "", check_out: "", comment: "" });
+  const [editForm, setEditForm] = useState({ check_in: "", check_out: "", status: "present", comment: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -118,6 +119,7 @@ export default function Attendance() {
     setEditForm({
       check_in: toInputDt(row.check_in),
       check_out: toInputDt(row.check_out),
+      status: row.status || "present",
       comment: row.comment || "",
     });
     setEditError("");
@@ -128,10 +130,17 @@ export default function Attendance() {
     setEditSaving(true);
     setEditError("");
     try {
+      // datetime-local inputs are TZ-less local strings. new Date() interprets them
+      // as browser-local, .toISOString() produces UTC ISO which Postgres TIMESTAMPTZ
+      // stores correctly. Sending TZ-less strings makes Postgres assume UTC,
+      // which silently shifts the time by the user's offset.
       const body = {
-        check_in: editForm.check_in ? editForm.check_in.replace("T", " ") + ":00" : undefined,
-        check_out: editForm.check_out ? editForm.check_out.replace("T", " ") + ":00" : undefined,
-        comment: editForm.comment || null,
+        check_in: editForm.check_in ? new Date(editForm.check_in).toISOString() : undefined,
+        check_out: editForm.check_out ? new Date(editForm.check_out).toISOString() : undefined,
+        status: editForm.status || undefined,
+        // Send empty string explicitly so the backend can clear the comment
+        // (COALESCE treats "" as a value, so it overwrites; null would preserve).
+        comment: editForm.comment,
       };
       await api.put(`/api/attendance/${editingRow.id}`, body);
       setEditingRow(null);
@@ -143,10 +152,37 @@ export default function Attendance() {
     }
   };
 
+  const exportCsv = () => {
+    const headers = ["Date", "Employee", "Role", "Outlet", "Check In", "Check Out", "Breaks", "Break Time", "Net Hours", "Status", "Comment"];
+    const rows = filtered.map((r) => [
+      fmtDate(r.check_in),
+      r.employee_name || "",
+      r.role || "",
+      r.outlet_name || "",
+      r.check_in ? fmtTime(r.check_in) : "",
+      r.check_out ? fmtTime(r.check_out) : "",
+      Number(r.break_sessions || 0),
+      Number(r.break_hours) > 0 ? fmtHours(r.break_hours) : "",
+      r.hours != null ? fmtHours(r.hours) : "",
+      r.status === "checked_out" ? "Checked Out" : (r.status || ""),
+      r.comment || "",
+    ]);
+    downloadCsv(headers, rows, "attendance");
+  };
+
   return (
     <div className="flex flex-col gap-6 h-full">
       {/* Net hours summary */}
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2">
+        <button
+          onClick={exportCsv}
+          disabled={filtered.length === 0}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Download visible rows as CSV"
+        >
+          <Download size={14} />
+          Export CSV
+        </button>
         <div className="flex gap-2 text-xs font-semibold text-slate-500 bg-slate-100 px-4 py-2 rounded-xl border border-slate-200">
           <Clock size={14} className="text-blue-500" />
           Net Work Hours (filtered):{" "}
@@ -229,7 +265,7 @@ export default function Attendance() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
                 <tr>
-                  {["Date", "Employee", "Role", "Outlet", "Check In", "Check Out", "Sessions", "Break", "Net Hours", "Status", ""].map((h) => (
+                  {["Date", "Employee", "Role", "Outlet", "Check In", "Check Out", "Breaks", "Break Time", "Net Hours", "Status", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                       {h}
                     </th>
@@ -246,20 +282,20 @@ export default function Attendance() {
                     <td className="px-4 py-3 text-slate-700 font-mono whitespace-nowrap">{fmtTime(r.check_in)}</td>
                     <td className="px-4 py-3 text-slate-700 font-mono whitespace-nowrap">{fmtTime(r.check_out)}</td>
                     <td className="px-4 py-3 text-center text-slate-600 whitespace-nowrap">
-                      {r.work_sessions > 0 ? (
+                      {Number(r.break_sessions || 0) > 0 ? (
                         <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold rounded-full px-2 py-0.5">
-                          {r.work_sessions}
+                          {Number(r.break_sessions)}
                         </span>
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {r.break_hours > 0 ? (
+                      {Number(r.break_sessions || 0) > 0 ? (
                         <button
                           onClick={() => openBreakDetail(r)}
                           className="text-amber-700 hover:text-amber-900 hover:underline font-medium"
                           title="View break details"
                         >
-                          {fmtHours(r.break_hours)}
+                          {Number(r.break_hours) > 0 ? fmtHours(r.break_hours) : "< 1m"}
                         </button>
                       ) : "—"}
                     </td>
@@ -324,6 +360,19 @@ export default function Attendance() {
                   onChange={(e) => setEditForm((f) => ({ ...f, check_out: e.target.value }))}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="present">Present</option>
+                  <option value="checked_out">Checked Out</option>
+                  <option value="absent">Absent</option>
+                  <option value="late">Late</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Comment</label>

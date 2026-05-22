@@ -148,6 +148,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
           e.name AS employee_name, e.role, o.name AS outlet_name,
           (SELECT COUNT(*) FROM attendance_sessions
            WHERE attendance_id = ea.id AND session_type = 'work') AS work_sessions,
+          (SELECT COUNT(*) FROM attendance_sessions
+           WHERE attendance_id = ea.id AND session_type = 'break') AS break_sessions,
           (SELECT COALESCE(SUM(duration_hours), 0) FROM attendance_sessions
            WHERE attendance_id = ea.id AND session_type = 'break') AS break_hours
         FROM employee_attendance ea
