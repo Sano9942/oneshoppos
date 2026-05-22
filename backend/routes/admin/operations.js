@@ -1,6 +1,8 @@
 /**
  * Admin operations — support tickets, impersonation, dead letter queue.
  */
+const crypto = require("crypto");
+
 module.exports = function registerOperationsRoutes(app, deps) {
   const { db, masterDb, jwt, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
@@ -171,6 +173,10 @@ module.exports = function registerOperationsRoutes(app, deps) {
       );
       const adminName = saRows[0]?.name || req.admin.email;
 
+      // jti enables hard-revocation: tenant-auth.js checks revoked_tokens
+      // by jti on every request. Without it the token stays valid for the
+      // full 1h regardless of /end being called.
+      const jti = crypto.randomUUID();
       const token = jwt.sign(
         {
           tid: tenant.id,
@@ -180,14 +186,15 @@ module.exports = function registerOperationsRoutes(app, deps) {
           scope: "full",
           impersonating: true,
           realIdentity: { id: req.admin.id, name: adminName, email: req.admin.email },
+          jti,
         },
         process.env.JWT_SECRET,
         { expiresIn: "1h" }
       );
 
       const { rows: sessionRows } = await masterDb.query(
-        "INSERT INTO impersonation_sessions (super_admin_id, tenant_id) VALUES ($1, $2) RETURNING id",
-        [req.admin.id, tenantId]
+        "INSERT INTO impersonation_sessions (super_admin_id, tenant_id, token_jti) VALUES ($1, $2, $3) RETURNING id",
+        [req.admin.id, tenantId, jti]
       );
       const sessionId = sessionRows[0].id;
 
@@ -203,8 +210,30 @@ module.exports = function registerOperationsRoutes(app, deps) {
   app.post("/api/admin/impersonate/:sessionId/end", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const sessionId = parseInt(req.params.sessionId, 10);
+      // Look up the session's jti + tenant so we can blacklist the token
+      // in the tenant's revoked_tokens table — the JWT itself stays valid
+      // until expiry otherwise.
+      const { rows: sessRows } = await masterDb.query(
+        "SELECT token_jti, tenant_id FROM impersonation_sessions WHERE id = $1",
+        [sessionId]
+      );
+      const session = sessRows[0];
+      if (session && session.token_jti) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(session.tenant_id);
+          await tenantDb.query(
+            "INSERT INTO revoked_tokens (token_jti, reason) VALUES ($1, $2) ON CONFLICT (token_jti) DO NOTHING",
+            [session.token_jti, "impersonation_ended"]
+          );
+        } catch (revokeErr) {
+          // Log but do not fail the /end call — UPDATE below still records
+          // the session as ended. Operator can also use revoke-all-tokens
+          // on the impersonated admin employee as a fallback.
+          console.warn(`[impersonate/end] revoke insert failed: ${revokeErr.message}`);
+        }
+      }
       await masterDb.query(
-        "UPDATE impersonation_sessions SET ended_at = NOW() WHERE id = $1",
+        "UPDATE impersonation_sessions SET ended_at = NOW(), revoked_at = NOW() WHERE id = $1",
         [sessionId]
       );
       logAdminAction(req.admin.email, "impersonation_ended", "session", req.params.sessionId, null, req.ip);
