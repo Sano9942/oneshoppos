@@ -31,6 +31,72 @@ const BREAK_REASONS = [
   { key: "other", label: "Other" },
 ];
 
+const KEYPAD_BTN =
+  "w-20 h-20 text-2xl font-bold rounded-2xl bg-slate-700 text-white hover:bg-slate-600 active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
+const KEYPAD_BTN_BACK =
+  "w-20 h-20 text-xl font-bold rounded-2xl bg-slate-600 text-slate-300 hover:bg-slate-500 active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
+const KEYPAD_BTN_OK =
+  "w-20 h-20 text-xl font-bold rounded-2xl bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition-transform duration-75 disabled:opacity-40 select-none cursor-pointer";
+
+function PinDots({ length }) {
+  const total = Math.max(length, 4);
+  return (
+    <div className="flex gap-3 justify-center mb-6">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`w-4 h-4 rounded-full border-2 ${
+            i < length ? "bg-white border-white" : "bg-transparent border-slate-500"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PinPad({ pin, error, loading, onDigit, onBackspace, onSubmit }) {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <PinDots length={pin.length} />
+      {error && <p className="text-red-400 text-sm mb-2 text-center">{error}</p>}
+      <div className="grid grid-cols-3 gap-3">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+          <button key={d} onClick={() => onDigit(String(d))} disabled={loading} className={KEYPAD_BTN}>
+            {d}
+          </button>
+        ))}
+        <button onClick={onBackspace} disabled={loading} className={KEYPAD_BTN_BACK}>
+          Back
+        </button>
+        <button onClick={() => onDigit("0")} disabled={loading} className={KEYPAD_BTN}>
+          0
+        </button>
+        <button onClick={onSubmit} disabled={loading || !pin} aria-label="Submit PIN" className={KEYPAD_BTN_OK}>
+          {loading ? "..." : "OK"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Clock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="text-right">
+      <p className="text-2xl font-mono font-semibold text-white">
+        {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </p>
+      <p className="text-xs text-slate-400">
+        {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+      </p>
+    </div>
+  );
+}
+
 export default function KioskRedesign() {
   const [searchParams] = useSearchParams();
   const [outlets, setOutlets] = useState([]);
@@ -52,12 +118,6 @@ export default function KioskRedesign() {
     const v = searchParams.get("outlet");
     return v ? Number(v) : null;
   }, [searchParams]);
-
-  const [clock, setClock] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const tenantSlug = searchParams.get("tenant") || readTenantSlug();
@@ -221,69 +281,17 @@ export default function KioskRedesign() {
     }
   };
 
-  const PinDots = () => (
-    <div className="flex gap-3 justify-center mb-6">
-      {Array.from({ length: Math.max(pin.length, 4) }).map((_, i) => (
-        <div
-          key={i}
-          className={`w-4 h-4 rounded-full border-2 transition-all ${
-            i < pin.length ? "bg-white border-white" : "bg-transparent border-slate-500"
-          }`}
-        />
-      ))}
-    </div>
-  );
-
-  const PinPad = () => (
-    <div className="flex flex-col items-center gap-2">
-      <PinDots />
-      {error && <p className="text-red-400 text-sm mb-2 text-center">{error}</p>}
-      <div className="grid grid-cols-3 gap-3">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
-          <button
-            key={d}
-            onClick={() => appendDigit(String(d))}
-            disabled={loading}
-            className="w-20 h-20 text-2xl font-bold rounded-2xl bg-slate-700 text-white hover:bg-slate-600 active:scale-95 transition-all disabled:opacity-50 select-none"
-          >
-            {d}
-          </button>
-        ))}
-        <button
-          onClick={backspace}
-          disabled={loading}
-          className="w-20 h-20 text-xl font-bold rounded-2xl bg-slate-600 text-slate-300 hover:bg-slate-500 active:scale-95 transition-all disabled:opacity-50 select-none"
-        >
-          Back
-        </button>
-        <button
-          onClick={() => appendDigit("0")}
-          disabled={loading}
-          className="w-20 h-20 text-2xl font-bold rounded-2xl bg-slate-700 text-white hover:bg-slate-600 active:scale-95 transition-all disabled:opacity-50 select-none"
-        >
-          0
-        </button>
-        <button
-          onClick={submitPin}
-          disabled={loading || !pin}
-          aria-label="Submit PIN"
-          className="w-20 h-20 text-xl font-bold rounded-2xl bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-40 select-none"
-        >
-          {loading ? "..." : "OK"}
-        </button>
-      </div>
-    </div>
-  );
-
   if (view === "idle") {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white px-4">
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <span className="text-slate-400 text-sm">Store:</span>
-            {outlet ? <span className="font-semibold text-white">{outlet.name}</span> : null}
             {kioskLocked && outlet ? (
-              <span className="text-xs text-slate-500 bg-slate-800 rounded px-2 py-1">Locked</span>
+              <>
+                <span className="font-semibold text-white">{outlet.name}</span>
+                <span className="text-xs text-slate-500 bg-slate-800 rounded px-2 py-1">Locked</span>
+              </>
             ) : (
               <select
                 value={outlet?.id || ""}
@@ -291,9 +299,7 @@ export default function KioskRedesign() {
                   const found = outlets.find((o) => o.id === Number(e.target.value));
                   setOutlet(found || null);
                 }}
-                className={`bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm ${
-                  outlet ? "text-slate-400" : "text-white"
-                }`}
+                className="bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm font-semibold cursor-pointer"
               >
                 <option value="">Select your store...</option>
                 {outlets.map((o) => (
@@ -304,24 +310,20 @@ export default function KioskRedesign() {
               </select>
             )}
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-mono font-semibold text-white">
-              {clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </p>
-            <p className="text-xs text-slate-400">
-              {clock.toLocaleDateString([], {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          </div>
+          <Clock />
         </div>
 
         <div className="flex flex-col items-center">
           <h1 className="text-3xl font-bold text-white mb-2">Attendance Kiosk</h1>
           <p className="text-slate-400 mb-8 text-center">Enter your PIN to clock in, break, or clock out</p>
-          <PinPad />
+          <PinPad
+            pin={pin}
+            error={error}
+            loading={loading}
+            onDigit={appendDigit}
+            onBackspace={backspace}
+            onSubmit={submitPin}
+          />
         </div>
       </div>
     );
