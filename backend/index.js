@@ -144,7 +144,12 @@ app.use((err, req, res, next) => {
 // Single-tenant static file serving (fallback for MT mode when no tenant context)
 app.use("/uploads", express.static(UPLOADS_DIR));
 
-// R2 proxy — serves /r2/<key> by streaming from Cloudflare R2
+// R2 proxy — serves /r2/<key> by streaming from Cloudflare R2.
+// Public prefixes only: products/, company/, support/ (displayed in browsers,
+// including unauthenticated public pages like /receipt/:invoice). The
+// backups/ prefix holds full pg_dump archives across all tenants and MUST
+// NOT be proxied — admins fetch those via the R2 console or signed URLs.
+const PUBLIC_R2_PREFIXES = ["products/", "company/", "support/"];
 if (!process.env.R2_PUBLIC_URL) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
   const { r2, bucket } = require("./utils/r2");
@@ -153,6 +158,9 @@ if (!process.env.R2_PUBLIC_URL) {
     // not a string. Join them back so S3 receives a valid key.
     const raw = req.params.key;
     const key = Array.isArray(raw) ? raw.join("/") : raw;
+    if (!PUBLIC_R2_PREFIXES.some((p) => key.startsWith(p))) {
+      return res.status(404).json({ error: "Not found" });
+    }
     try {
       const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
