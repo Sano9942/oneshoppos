@@ -732,62 +732,6 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
-  // Dead Stock (feature-gated variant — kept for backward compat with flag-enabled tenants)
-  app.get(
-    "/api/reports/dead-stock",
-    requireFeature("reports_inventory_health_plus"),
-    async (req, res) => {
-      try {
-        const inactiveDays = Math.max(
-          1,
-          Math.min(3650, parseInt(req.query.inactive_days || 60, 10)),
-        );
-        const where = ["os.quantity > 0"];
-        const params = [];
-        applyOutletFilter(where, params, req.query.outlet_id);
-        await applyInventoryProductFilters(where, params, req.query);
-        const { text: whereText, values, nextIdx } = helpers.pgWhere(where, params);
-        const sql = `
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.barcode,
-          p.category_id,
-          COALESCE(cat.name,'-') AS category,
-          COALESCE(b.name,'-') AS brand,
-          COALESCE(sup.name,'-') AS supplier,
-          o.id AS outlet_id,
-          o.name AS outlet_name,
-          os.quantity AS stock_qty,
-          ROUND(os.quantity * COALESCE(p.cost_price, 0), 2) AS stock_cost_value,
-          ROUND(os.quantity * COALESCE(p.price, 0), 2) AS stock_retail_value,
-          MAX(s.timestamp) AS last_sold_at,
-          FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int AS days_since_sale
-        FROM outlet_stock os
-        JOIN products p ON p.id = os.product_id
-        JOIN outlets o ON o.id = os.outlet_id
-        LEFT JOIN categories cat ON cat.id = p.category_id
-        LEFT JOIN brands b ON b.id = p.brand_id
-        LEFT JOIN suppliers sup ON sup.id = p.supplier_id
-        LEFT JOIN sale_items si ON si.product_id = p.id
-        LEFT JOIN sales s ON s.id = si.sale_id AND s.voided = false
-        WHERE ${whereText}
-        GROUP BY p.id, p.name, p.barcode, p.category_id, cat.name, b.name, sup.name,
-                 o.id, o.name, os.quantity, p.cost_price, p.price
-        HAVING COALESCE(FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int, 99999) >= $${nextIdx}
-        ORDER BY stock_cost_value DESC
-        LIMIT 500
-      `;
-        const { rows } = await db.query(sql, [...values, inactiveDays]);
-        const categoryMeta = await buildCategoryMetaMap();
-        const items = withCategoryPaths(rows, categoryMeta);
-        res.json({ items, rows: items, inactive_days: inactiveDays });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    },
-  );
-
   // Stock Aging
   app.get(
     "/api/reports/stock-aging",
@@ -993,67 +937,6 @@ module.exports = function (app, deps, helpers) {
         const categoryMeta = await buildCategoryMetaMap();
         const items = withCategoryPaths(rows, categoryMeta);
         res.json({ items, rows: items, lookback_days: lookbackDays });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    },
-  );
-
-  // Forecast Demand
-  app.get(
-    "/api/reports/forecast-demand",
-    requireFeature("reports_inventory_health_plus"),
-    async (req, res) => {
-      try {
-        const { rows, lookbackDays } = await buildForecastRows(req.query || {}, req.company?.timezone || "UTC");
-        const categoryMeta = await buildCategoryMetaMap();
-        const items = withCategoryPaths(rows, categoryMeta);
-        res.json({
-          items,
-          rows: items,
-          lookback_days: lookbackDays,
-          formula: "moving_average_daily_velocity",
-          data_as_of: new Date().toISOString(),
-        });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    },
-  );
-
-  // Replenishment Smart
-  app.get(
-    "/api/reports/replenishment-smart",
-    requireFeature("reports_inventory_health_plus"),
-    async (req, res) => {
-      try {
-        const forecastDays = Math.max(
-          7,
-          Math.min(90, parseInt(req.query.forecast_days || 14, 10)),
-        );
-        const { rows, lookbackDays } = await buildForecastRows(req.query || {}, req.company?.timezone || "UTC");
-        const smart = (rows || []).map((r) => {
-          const avgDaily = Number(r.avg_daily_units || 0);
-          const onHand = Number(r.on_hand_qty || 0);
-          const target = avgDaily * forecastDays;
-          const suggested = Math.max(0, Math.ceil(target - onHand));
-          return {
-            ...r,
-            forecast_days: forecastDays,
-            target_cover_units: Number(target.toFixed(2)),
-            suggested_reorder_qty: suggested,
-          };
-        });
-        const categoryMeta = await buildCategoryMetaMap();
-        const items = withCategoryPaths(smart, categoryMeta);
-        res.json({
-          items,
-          rows: items,
-          lookback_days: lookbackDays,
-          forecast_days: forecastDays,
-          formula: "moving_average_cover_gap",
-          data_as_of: new Date().toISOString(),
-        });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
