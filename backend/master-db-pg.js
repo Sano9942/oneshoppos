@@ -24,7 +24,13 @@ CREATE TABLE IF NOT EXISTS tenants (
   created_at             TIMESTAMPTZ DEFAULT NOW(),
   updated_at             TIMESTAMPTZ DEFAULT NOW(),
   suspended_at           TIMESTAMPTZ,
-  deleted_at             TIMESTAMPTZ
+  deleted_at             TIMESTAMPTZ,
+  email_verified_at      TIMESTAMPTZ,
+  email_verification_token TEXT,
+  tos_version            TEXT,
+  privacy_version        TEXT,
+  consent_at             TIMESTAMPTZ,
+  consent_ip             TEXT
 );
 
 CREATE TABLE IF NOT EXISTS super_admins (
@@ -127,8 +133,12 @@ CREATE TABLE IF NOT EXISTS impersonation_sessions (
   started_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   ended_at        TIMESTAMPTZ,
   pages_visited   JSONB DEFAULT '[]',
-  actions_taken   INTEGER DEFAULT 0
+  actions_taken   INTEGER DEFAULT 0,
+  token_jti       TEXT,
+  revoked_at      TIMESTAMPTZ
 );
+CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_jti
+  ON impersonation_sessions(token_jti) WHERE token_jti IS NOT NULL;
 `;
 
 let _db = null;

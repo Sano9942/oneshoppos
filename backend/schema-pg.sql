@@ -71,7 +71,10 @@ CREATE TABLE IF NOT EXISTS outlets (
   branch_code TEXT,
   company_id INTEGER DEFAULT 1,
   is_active BOOLEAN DEFAULT TRUE,
-  monthly_sales_target NUMERIC(12,2) DEFAULT 0
+  monthly_sales_target NUMERIC(12,2) DEFAULT 0,
+  latitude NUMERIC(10,7),
+  longitude NUMERIC(10,7),
+  geofence_radius_meters INTEGER
 );
 
 -- 2-R.6 — per-outlet timezone for day-parting (falls back to company_profile.timezone when NULL)
@@ -1149,7 +1152,10 @@ CREATE TABLE IF NOT EXISTS company_profile (
   -- v90 (Tier 1.1 wholesale): field-rep geofence radius. Check-ins outside
   -- this distance from customers.lat/lng are flagged (not blocked) for owner
   -- review. 500m = "same block" tolerance for dense PK bazaars.
-  field_geofence_meters INTEGER NOT NULL DEFAULT 500
+  field_geofence_meters INTEGER NOT NULL DEFAULT 500,
+  multi_outlet_flags_seeded BOOLEAN DEFAULT false,
+  test_receipt_printed_at TIMESTAMPTZ,
+  fbr_banner_dismissed BOOLEAN DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (
@@ -1253,7 +1259,11 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   approved_by INTEGER REFERENCES employees(id),
   approved_at TIMESTAMPTZ,
   rejection_note TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  partial_day BOOLEAN DEFAULT FALSE,
+  start_time TIME,
+  end_time TIME,
+  schedule_impact_status TEXT
 );
 
 CREATE TABLE IF NOT EXISTS payroll_periods (
@@ -4471,6 +4481,25 @@ CREATE INDEX IF NOT EXISTS idx_treatment_plans_subject ON treatment_plans(subjec
 CREATE INDEX IF NOT EXISTS idx_treatment_plans_provider ON treatment_plans(provider_id);
 CREATE INDEX IF NOT EXISTS idx_treatment_plans_overdue
   ON treatment_plans(expected_end_date) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS treatment_plan_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  default_title TEXT,
+  default_diagnosis_code TEXT,
+  default_diagnosis_notes TEXT,
+  default_sessions_planned INTEGER NOT NULL DEFAULT 1,
+  default_estimated_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  default_notes TEXT,
+  default_activities JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_by INTEGER REFERENCES employees(id),
+  is_archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_templates_archived
+  ON treatment_plan_templates(is_archived);
 
 CREATE TABLE IF NOT EXISTS treatment_sessions (
   id SERIAL PRIMARY KEY,
