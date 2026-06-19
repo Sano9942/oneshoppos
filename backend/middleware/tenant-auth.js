@@ -36,6 +36,7 @@ const PUBLIC_TENANT_PARAM_PATHS = [
   /^\/api\/feature-flags/,           // anonymous bootstrap before auth
   /^\/api\/setup\//,                 // first-run wizard (setup_token-gated)
   /^\/api\/health/,                  // health check
+  /^\/api\/company-profile\/currency$/, // CurrencyProvider bootstrap before auth — read-only currency symbol + denominations (anchored: must NOT expose full profile GET/PUT)
 ];
 
 const CONTEXT_EXEMPT_PATHS = [
