@@ -1,56 +1,78 @@
-# Shop Health Walkthrough — Adaptive Daily Check
+# Shop Health Walkthrough — Adaptive Daily Check (full end-to-end journeys)
 
-You are a careful QA person who has been handed four real SanoPOS shops and asked:
-"Log in like a real owner/cashier, use the app the way they would, and tell me in plain
-English what works and what's broken today." You are NOT running a rigid script. If a
-button moved, a layout changed, or something unexpected pops up (an install prompt, a
-plan-limit banner, a modal), adapt and keep going the way a person would — don't give up
-or report a false failure just because an element wasn't where you last saw it.
+You are a careful person who has been handed four real SanoPOS shops and asked:
+"Log in like a real owner/cashier, actually USE the app the way they would — ring up
+real sales start to finish — and tell me in plain English what works and what's broken."
 
-## Shops to check
+You are NOT running a rigid script. Buttons move, layouts change, popups appear (install
+prompts, plan-limit banners, "open a shift" / "clock in" flows). Adapt the way a real
+person would: read the screen, figure out the next step, and keep going. Don't report a
+false failure just because something wasn't where you last saw it — only report a failure
+when a real user genuinely couldn't get the job done.
 
-Read credentials from `shops.local.json` in this same folder. It has four shops:
-`retail`, `cafe`, `restaurant`, `wholesale`. Each entry has `storeCode`, `username`,
-`password`, and `expectedCurrency` (all are `Rs`/PKR).
+These are throwaway test shops. **Completing real transactions is expected and fine —
+leave the test data in place.** Do NOT try to delete or void what you create.
 
-## How to check each shop (use the Playwright browser MCP)
+## Shops
 
-For each of the four shops, behaving like a real person:
+Read credentials from `shops.local.json` in this folder: `retail`, `cafe`, `restaurant`,
+`wholesale`. Each has `storeCode`, `username`, `password`, `pin`, `expectedCurrency` (`Rs`),
+and `type`.
 
-1. Go to `https://sanopos.com/login`. If you're still logged in from the previous shop,
-   clear storage first: `localStorage.clear(); sessionStorage.clear();` then reload login.
-2. Log in with that shop's Store Code / Username / Password.
-3. Confirm you land on the dashboard and it actually renders (heading, insight cards).
-4. **Notice anything wrong**, especially:
-   - **Currency**: the figures should show `Rs` (PKR), NOT `$`. Count `$` vs `Rs` in the
-     page text. If `$` shows up where money should be, that's a bug — check the browser
-     console for failing requests (e.g. a 401 on `/api/company-profile/currency`) and note it.
-   - **Console errors**: read console messages (error level). A 401/403/500 on an API call
-     is a real finding — quote the URL and status.
-   - **Right personality for the shop type**: retail should say "sale", cafe/restaurant
-     should open a restaurant-style POS with a real menu, wholesale should show field
-     sales / A/R aging / manufacturer features. If a shop looks like the wrong type, flag it.
-5. Do ONE real task to prove the core loop works — prefer opening the POS and confirming
-   the product/menu catalog loads with items and prices. (You may start an order to see the
-   catalog, but do NOT complete a real sale / payment — leave no permanent transactions.)
-6. Optionally open Reports and confirm it loads without error.
+## For each shop — drive the real journey with the Playwright browser MCP
 
-Adapt the depth to what you see. If a shop is clearly broken at login, record that and
-move on — don't get stuck.
+Between shops, clear the session first: `localStorage.clear(); sessionStorage.clear();`
+then reload `https://sanopos.com/login`. Log in with Store Code / Username / Password.
+
+Throughout, **notice anything wrong** and record it:
+- **Currency**: figures must show `Rs` (PKR), not `$`. (This was a bug that was fixed
+  2026-06-19 — confirm it's still correct.)
+- **Console errors**: read error-level console messages; a 401/403/500 on any API call is
+  a real finding — quote the URL + status.
+- **Wrong behavior**: numbers that don't add up, a sale that doesn't appear in reports, a
+  step that silently does nothing.
+
+### Retail (general_retail) — ring up a complete cash sale
+1. From the dashboard, open the POS. If it asks you to open a shift and/or clock in, do it
+   (use the `pin` to clock in / re-auth as a real cashier would).
+2. Add a product to the cart (search or tap a product tile). Note its price.
+3. Apply a discount if the option is readily available (optional — skip if it needs perms).
+4. Check out and take a **cash** payment. Confirm the receipt / success screen appears.
+5. Go to Order History / Sales report and confirm the sale you just made shows up with the
+   right amount. **This propagation check is the most important part — it proves the whole
+   loop, not just the POS screen.**
+
+### Cafe & Restaurant (restaurant mode) — complete a dine-in or takeaway order
+1. Open the POS. Handle the opening flow (branch select, open shift, clock in with `pin`).
+2. Start an order — pick a table if a floor plan exists, otherwise "New Takeaway".
+3. Add 1–2 menu items (note prices). Send to Kitchen if that step exists.
+4. Pay (cash). Confirm the order closes / receipt shows.
+5. Confirm it appears in Order History or the restaurant checks/closed-orders list.
+
+### Wholesale (b2b_distribution) — exercise the B2B flow
+1. Open the POS and ring up a sale to a customer. If a credit/account payment option exists,
+   prefer a **credit** sale to a distributor customer; otherwise cash is fine.
+2. Confirm the sale completes.
+3. Open A/R aging (or the receivables/dashboard card) and confirm the credit sale is
+   reflected. If you used cash, just confirm the sale shows in Order History.
+
+If a shop is clearly broken at login or the POS won't open, record that plainly and move on
+— don't get stuck retrying.
 
 ## Output — THIS IS THE DELIVERABLE
 
-Write a plain-language markdown report to:
-`monitoring/shop-health/reports/<YYYY-MM-DD>.md` (use today's date).
+Write a plain-language markdown report to
+`monitoring/shop-health/reports/<YYYY-MM-DD>.md` (today's date). Write it like a human note:
 
-Structure it exactly like a human status note:
-- A one-line overall verdict at the top (all green / N issues found).
-- A table: Shop | Login | Dashboard | Core loop (POS) | Verdict (🟢/🟡/🔴).
-- A "What worked" section in everyday language.
-- A "What didn't" section: each issue described plainly (what you saw, why it matters,
-  and the technical detail — URL/status/console line — so it's actionable). Rank by severity.
-- If a previous day's report exists in that folder, add a short "Changes since last run"
-  note (newly broken / newly fixed).
+- One-line overall verdict at the top (all green / N issues found).
+- A table: Shop | Login | POS opens | **Completed a real sale** | Showed in reports | Verdict (🟢/🟡/🔴).
+- **What worked** — in everyday language, naming the actual journey you completed
+  ("rang up a Cappuccino for Rs 450, paid cash, it appeared in order history").
+- **What didn't** — each issue plainly: what you saw, why it matters, and the technical
+  detail (URL/status/console line) so it's actionable. Rank by severity.
+- **Changes since last run** — if a previous day's report exists in that folder, note what's
+  newly broken or newly fixed.
 
-Keep it honest and specific. If everything worked, say so plainly — don't invent issues.
-Do not edit any application code; this is a read-only health check that only writes its report.
+Be honest and specific. If a journey completed cleanly, say so. If you had to stop partway,
+say exactly where and why. Don't invent issues; don't paper over real ones.
+Do not edit any application code — this is a health check that only writes its report.
