@@ -19,4 +19,21 @@ Set-Location $repo
 # --model sonnet: capable enough for adaptive browsing, cheap enough for a daily run. Bump to opus if you want.
 & claude -p $prompt --dangerously-skip-permissions --model sonnet *>&1 | Tee-Object -FilePath $log
 
+# Auto-commit + push the day's report so history is preserved with zero manual steps.
+# Only the reports/ folder is touched — credentials (shops.local.json) and logs/ are gitignored.
+try {
+  & git -C $repo add monitoring/shop-health/reports/ 2>&1 | Out-Null
+  $pending = & git -C $repo status --porcelain monitoring/shop-health/reports/
+  if ($pending) {
+    $today = Get-Date -Format 'yyyy-MM-dd'
+    & git -C $repo commit -q -m "chore(monitoring): shop-health report $today (automated run)"
+    & git -C $repo push origin HEAD 2>&1 | Out-Null
+    Write-Host "Report committed + pushed."
+  } else {
+    Write-Host "No report changes to commit."
+  }
+} catch {
+  Write-Host "Auto-commit skipped (git error): $($_.Exception.Message)"
+}
+
 Write-Host "Done. Log: $log"
