@@ -7122,7 +7122,45 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 98,
+    description:
+      "Security: enable RLS on all public-schema tables (closes Supabase rls_disabled_in_public + sensitive_columns_exposed advisors)",
+    up: async (client) => {
+      // Supabase's PostgREST auto-API exposes the `public` schema to the anon /
+      // authenticated roles. The app never uses PostgREST — the backend connects
+      // as `postgres` (rolbypassrls=true), so enabling RLS with no policy denies
+      // those public roles while staying transparent to the backend and to
+      // service_role (also bypass). Filtered on rowsecurity=false → idempotent.
+      // Hardcoded to schemaname='public' so this is a harmless no-op when the
+      // migration runs inside a tenant search_path (tenant schemas aren't exposed
+      // via PostgREST and don't need RLS). See ensureRlsOnPublic() for the
+      // every-deploy sweep that re-covers any future public tables.
+      await enableRlsOnPublicTables(client);
+    },
+  },
 ];
+
+/**
+ * Enable RLS on every public-schema table that doesn't already have it.
+ * Idempotent and cheap (single catalog scan). Shared by migration v98 and the
+ * unconditional every-deploy sweep so newly-created public tables can never
+ * silently regress to RLS-off (and thus anon-readable via PostgREST).
+ */
+async function enableRlsOnPublicTables(client) {
+  await client.query(`
+    DO $$
+    DECLARE r RECORD;
+    BEGIN
+      FOR r IN
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND rowsecurity = false
+      LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.tablename);
+      END LOOP;
+    END $$;
+  `);
+}
 
 async function migrate(db) {
   // Ensure schema_version table exists (bootstrap)
@@ -7225,6 +7263,18 @@ async function migrateAllTenants(db) {
 
   // Migrate public schema first
   await migrate(publicDb);
+
+  // Unconditional, idempotent RLS sweep over the public schema on every deploy.
+  // Migration v98 enables RLS on all public tables, but a one-shot migration
+  // can't cover tables created by *future* migrations. This sweep runs every
+  // boot so any new public table (which Supabase would otherwise leave RLS-off
+  // and anon-readable via PostgREST) is locked down immediately. Backend runs
+  // as `postgres` (rolbypassrls=true) so this never affects app queries.
+  try {
+    await enableRlsOnPublicTables(publicDb);
+  } catch (err) {
+    console.error(`[migrate-pg] RLS sweep on public failed: ${err.message}`);
+  }
 
   // Check if multi-tenant mode — look for tenants table.
   // publicDb above is already pinned to public via SET LOCAL search_path,
