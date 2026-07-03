@@ -12,11 +12,13 @@ React 19 + Vite 7 + Tailwind CSS v4. Dev server runs on port 5173.
 ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App (BrowserRouter)
 ```
 
-`src/App.jsx` is not purely composition-only — it also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. It spreads three route arrays into a single `<Routes>`, renders `ImpersonationBanner` outside the router, and `SubscriptionBanner` + `PwaInstallPrompt` inside. Catch-all `path="*"` redirects to `/`. Do not add route logic here. Route definitions live in `src/routes/`.
+`src/App.jsx` is not purely composition-only — it also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. It spreads three route arrays (`publicRoutes`, `appRoutes`, `adminRoutes`) into a single `<Routes>`, renders `ImpersonationBanner` outside the router, and `SubscriptionBanner` + `PwaInstallPrompt` inside the router but outside `<Routes>` (global on every page). Catch-all `path="*"` redirects to `/`. Do not add route logic here. Route definitions live in `src/routes/`.
 
 ---
 
 ## src/ Subdirectories
+
+See `src/CLAUDE.md` for the full synthesis of these — summary below.
 
 ### `src/api.js` — centralized API layer
 Named export `api` with 6 methods: `api.get(path, query?)`, `api.post(path, data)`, `api.put(path, data)`, `api.del(path)`, `api.upload(path, formData)`, `api.raw(path, options?)`.
@@ -27,48 +29,49 @@ Named export `api` with 6 methods: `api.get(path, query?)`, `api.post(path, data
 - Does NOT inject auth headers itself — `AuthProvider` patches `window.fetch` globally; all calls through `api.js` pick up headers automatically.
 - On 403 with `code: "PLAN_LIMIT_REACHED"`, dispatches `CustomEvent("sanopos:plan-limit-reached")` before throwing.
 - Admin pages use `adminFetch` from `pages/admin/AdminLogin.jsx` — not `api.js`. Do not replace.
-- Portal pages use `portalApi` from `api/portalApi` — not `api.js`. Do not replace.
+- Portal pages use `portalApi` from `api/portalApi.js` — not `api.js`. Do not replace.
 - `CurrencyContext`, `useFeatureFlags`, admin pages (use `adminFetch`), `NotificationBell`, `ContextSwitcher`, `AuthProvider` (fetch interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware` posts directly), and at least one restaurant admin redesign file use raw `fetch()` or non-`api.js` paths intentionally. Do not replace these with `api.js`.
 
 ### `src/config.js` — sole env reader
 Never read `import.meta.env` directly anywhere else. Exports: `API_BASE` (no trailing slash, no `/api` suffix), `IS_MULTI_TENANT`, `SENTRY_DSN`, `TURNSTILE_SITE_KEY`, `ENV_MODE`, `IS_PROD`, `IS_DEV`.
 
-### `src/auth/` — see `src/CLAUDE.md`
-Key files: `AuthProvider.jsx` (exports `AuthProvider` + `useAuth()`), `authStore.js` (tenant session helpers), `adminAuthStore.js` (super-admin session helpers), `customerPortalStore.js` (slug-scoped portal session).
+### `src/auth/` — see `src/auth/CLAUDE.md`
+Four independent auth scopes with four independent localStorage stores — never mix them: tenant (`AuthProvider.jsx` exports `AuthProvider` + `useAuth()`, `authStore.js`), super-admin (`adminAuthStore.js`), customer portal (`customerPortalStore.js`, slug-scoped), manufacturer portal (`manufacturerPortalStore.js`, slug-scoped).
 
 `useAuth()` key fields: `employee`, `hasPerm(perm)`, `authHeaders()`, `isImpersonating`, `subscriptionStatus`, `company` (includes `tax_mode`).
 
 **Interceptor gotcha**: do NOT add `token` to any `useEffect` dep array wrapping the interceptor — causes re-registration loop. Token is read live via `readToken()`.
 
-### `src/contexts/` — see `src/CLAUDE.md`
+### `src/contexts/` — see `src/contexts/CLAUDE.md`
+Provider nesting: `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`.
 - `CurrencyContext.jsx` → `useCurrency()` → `{ symbol, code, fmt, refresh, denominations }`. `fmt` = `symbol + " " + toLocaleString(2dp)`.
 - `ToastContext.jsx` → `useToast()` → `{ toast, success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside provider.
 - `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded }`.
 
-### `src/ui/` — see `src/CLAUDE.md`
-Design system primitives, banners, and shared components. Most components use CSS custom property classes for dark mode (exception: POS uses hardcoded colors). However, several `ui/` files still use fixed Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors.
+### `src/ui/` — see `src/ui/CLAUDE.md`
+Design system primitives, banners, and shared components. Most components use CSS custom property classes for dark mode (exception: POS uses hardcoded colors). Several `ui/` files still use fixed Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors.
 
 Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `SectionCard({ children, className? })`, `Button`, `Input`, `Select`, `Badge`, `Modal`, `ConfirmDialog`, `TabBar`. `PageShell` has no `actions` prop; `SectionCard` has no `title` prop.
 
 `ErrorBoundary` is a **named export**: `import { ErrorBoundary } from "../ui/ErrorBoundary"`.
 
-### `src/utils/` — see `src/CLAUDE.md`
+### `src/utils/` — see `src/utils/CLAUDE.md`
 - `dates.js` — UTC formatters (`fmtUtcDateTime/Date/Time`) for sales/returns/shifts; LOCAL formatters (`fmtLocalDateTime/Date/Time`) for attendance/expenses/GRN/parked_sales. Never use raw `new Date(timestamp)` on DB values.
 - `csvExport.js` — `downloadCsv(headers, rows, filename)`. Use this for all new pages; do not write inline Blob code.
 - `receipt.js` — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. `slip.timestamp` must be a pre-formatted string — call `fmtDateTime()` before passing.
-- `offlineQueue.js` — IndexedDB-backed POS offline queue.
+- `offlineQueue.js` — IndexedDB-backed POS offline queue (sale/return/check_in/field_order types).
 - `theme.js` — dark mode: `getTheme()`, `setTheme()`, `toggleTheme()`, `initTheme()`. Stored in `localStorage["sanopos_theme"]`, applied via `document.documentElement.dataset.theme`.
 
-### `src/routes/` — see `src/CLAUDE.md`
-- `publicRoutes.jsx` — unauthenticated routes: `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug`, `/portal/:tenantSlug`, public booking/menu pages.
+### `src/routes/` — see `src/routes/CLAUDE.md`
+- `publicRoutes.jsx` — unauthenticated routes: `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug`, `/portal/:tenantSlug`, `/manufacturer-portal/:tenantSlug`, public booking/menu pages. Also hosts `/pos`, `/kiosk`, `/context-select` (full-screen, self-wrapped in `<RequireAuth>`).
 - `appRoutes.jsx` — all app routes under `RequireAuth > RequireContext > AppLayoutRedesign`. Uses `wrap(Component)` for Suspense and `perm(permStr, el)` for permission gating.
 - `adminRoutes.jsx` — `/admin/*` routes. Auth checked inside `AdminLayout`, not via `RequireAuth`.
 
-### `src/types/` — see `src/CLAUDE.md`
-TypeScript declaration files — reference-only for editor tooling, no runtime enforcement. `auth.ts` (employee shape), `api.ts` (response shape + `isApiError` runtime guard).
+### `src/types/` — see `src/types/CLAUDE.md`
+TypeScript declaration files — reference-only for editor tooling, no runtime enforcement. `auth.ts` (employee shape), `api.ts` (response shape + `isApiError` runtime guard, not actually matched by `api.js`'s real error shape).
 
 ### `src/pages/` — see `pages/CLAUDE.md` and `pages/redesign/CLAUDE.md`
-Most active tenant UI lives in `pages/redesign/` as `*Redesign.jsx` files. Route wrappers (`pages/*Route.jsx`) are 5-line lazy-load pass-throughs — never edit them. Other active subdirectories: `admin/`, `portal/`, `dashboard/`, `reports/`, `shopify/`, `storefront/`, `public/`.
+Most active tenant UI lives in `pages/redesign/` as `*Redesign.jsx` files. Route wrappers (`pages/*Route.jsx`) are thin lazy-load pass-throughs — never edit them (exceptions: `POSRoute.jsx`, `ReportsRoute.jsx`). Other active subdirectories: `admin/`, `portal/`, `dashboard/`, `reports/`, `shopify/`, `storefront/`, `public/`.
 
 ---
 
@@ -113,13 +116,19 @@ No `RequireFeature` wrapper exists — checks are always inline. Do NOT pass an 
 `hasPerm("perm_name")` from `useAuth()`. Returns true if `all_access` or the specific permission.
 
 ### Route Wrappers
-`pages/*Route.jsx` files are 5-line thin wrappers that lazy-load the corresponding `*Redesign.jsx`. Never edit these — all logic belongs in the `*Redesign.jsx`.
+`pages/*Route.jsx` files are thin wrappers that lazy-load the corresponding `*Redesign.jsx`. Never edit these (except `POSRoute.jsx`/`ReportsRoute.jsx`) — all logic belongs in the `*Redesign.jsx`.
 
 ### Multi-Tenant
 `IS_MULTI_TENANT` flag from `config.js`. In MT mode, login requires `tenantSlug`. Setup wizard check skipped for MT tenants (they go straight to dashboard).
 
 ### CSV Export
 Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`. Do not write inline Blob code in new pages.
+
+---
+
+## POS Architecture (quick reference)
+
+Full detail lives in `src/pages/redesign/pos/CLAUDE.md`. Headline facts: `POSContext.jsx` composes 8 domain hooks (`useShiftGate`, `useCart`, `useReceipt`, `useCustomerDisplay`, `useLoyaltyWallet`, `useFolioCharging`, `useOfflineQueue`, `useCheckout`) behind `usePOS()`. `completeSale` uses `api.raw` (never `api.post`) to inspect status codes mid-checkout — session expiry, insufficient stock, wholesale credit-limit exceeded. Offline-first: IndexedDB queue, idempotency key via `crypto.randomUUID()`. POS does not use design-system tokens (hardcoded colors), except `POSShortcutsOverlay` and `EndlessAisleModal`.
 
 ---
 

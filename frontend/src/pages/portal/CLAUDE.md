@@ -1,199 +1,118 @@
 # Portal Pages — Claude Guide
 
-- **18 files** — customer-facing self-service portal at `/portal/:tenantSlug`
-- All API calls use `portalApi` from `../../api/portalApi` (not the main `api.js`). `portalApi` attaches the portal JWT automatically, appends `?tenant=<slug>` to every request, and handles silent refresh on 401.
-- Auth is fully self-contained: `PortalAuthProvider` + `../../auth/customerPortalStore`. No main-app `useAuth`, no permissions system.
-- Tab visibility is server-driven: `PortalLayout` fetches `GET /api/portal/config` and passes `enabled_tabs` array down via `<Outlet context>`. Pages should not assume a tab is available.
-- No `ui/primitives`, no `useCurrency` — all UI is inline Tailwind, currency via `toLocaleString()`.
+Customer-facing self-service portal, mounted at `/portal/:tenantSlug`. Fully self-contained: separate auth (`PortalAuthProvider` + `../../auth/customerPortalStore`), separate API client (`portalApi`), no main-app `useAuth`, no permissions system, no `ui/primitives`, no `useCurrency`. All UI is inline Tailwind; currency via `toLocaleString()`.
+
+Tab visibility is server-driven: `PortalLayout` fetches `GET /api/portal/config` and passes `enabled_tabs` down via `<Outlet context>`. Never assume a tab/page is reachable — always check `enabledTabs` before wiring new nav or cross-links.
 
 ---
 
-## `portalApi` (at `../../api/portalApi.js`)
+## `portalApi` (`../../api/portalApi.js`)
 
-Named export `portalApi` object with methods:
+Named export `portalApi`: `get(slug, path, query?)`, `post(slug, path, data)`, `put(slug, path, data)`, `del(slug, path)`, `logout(slug)`.
 
-| Method | Signature | Notes |
-|--------|-----------|-------|
-| `portalApi.get` | `(slug, path, query?)` | Appends `?tenant=slug` + optional query params |
-| `portalApi.post` | `(slug, path, data)` | JSON body |
-| `portalApi.put` | `(slug, path, data)` | JSON body |
-| `portalApi.del` | `(slug, path)` | DELETE |
-| `portalApi.logout` | `(slug)` | `POST /api/portal/auth/logout` + clears session |
+- Every request appends `?tenant=<slug>` and sends `credentials: "include"` (httpOnly refresh cookie).
+- Attaches `Authorization: Bearer <access_token>` from the slug-scoped session if present.
+- **Auto-refresh on 401**: silently POSTs `/api/portal/auth/refresh`, retries the original request once. If the retry also 401s, clears the session and throws `Error("Session expired")`.
+- Non-ok responses throw `Error(body.error || "HTTP N")` with `.status` and `.body` attached (matches `api.js` conventions).
+- Exception: `PortalAppointments.jsx`'s booking modal uses raw `fetch()` against `API_BASE` directly for the public, unauthenticated `/api/public/bookings/config` and `/api/public/bookings/availability` endpoints (not portal-scoped, no auth needed).
 
-**Auto-refresh on 401:** On any 401 during a data call, `portalApi` silently calls `POST /api/portal/auth/refresh` with the httpOnly cookie, then retries the original request once. If retry also 401s, clears session and throws `"Session expired"`. All portal fetches use `credentials: "include"` for the httpOnly refresh cookie.
+---
+
+## Auth (`PortalAuthProvider.jsx`)
+
+Exports `PortalAuthProvider({ tenantSlug, children })` and `usePortalAuth()` (throws if used outside the provider).
+
+- On mount, attempts a silent refresh (`POST /api/portal/auth/refresh`) if a stored session has an `access_token`, to rotate the refresh cookie and confirm the tenant is still active. Clears the session on failure.
+- `usePortalAuth()` returns: `tenantSlug`, `session`, `customer` (`session.customer`), `accessToken`, `isAuthenticated`, `bootstrapping` (true until the silent refresh settles — gate redirects on this), `setSession(next)`, `logout()`.
+- Session persistence goes through `customerPortalStore.js` (`readPortalSession`/`writePortalSession`/`clearPortalSession`), keyed per tenant slug (`customerPortalSession:${slug}`) — one browser can hold sessions for multiple tenant portals simultaneously.
 
 ---
 
 ## `PortalLayout.jsx`
 
-Root layout. Default export wraps `PortalShell` in `<PortalAuthProvider tenantSlug={slug}>`.
+Default export wraps `PortalShell` in `<PortalAuthProvider tenantSlug={slug}>`.
 
-**`PortalShell` (internal component):**
-- Fetches `GET /api/portal/config` on mount — provides `enabled_tabs`, `portal_labels`, `branding`, tenant name/logo.
-- Auth guard (fires after `auth.bootstrapping` is false): unauthenticated users on non-public paths → `navigate(/portal/${slug}/login)`. Authenticated users on public paths → `navigate(/portal/${slug})`.
-- Public paths that bypass auth guard: `login`, `signup`, `forgot`, `reset`, `verify-otp`.
-- Tab nav only rendered when `auth.isAuthenticated`. Dashboard always shown first; `enabled_tabs` drive remaining tabs.
-- Renders: sticky header (logo/store name/customer email/sign-out) → tab nav → `<Outlet context={{ config, enabledTabs, labels, storeName, tenantSlug }}>`.
-- Error state: "Portal unavailable" shown if config fetch fails.
-
-**Known tab keys and their paths:**
-
-| Key | Path segment |
-|-----|-------------|
-| `invoices` | `invoices` |
-| `orders` | `orders` |
-| `appointments` | `appointments` |
-| `subscriptions` | `subscriptions` |
-| `contracts` | `contracts` |
-| `tickets` | `tickets` |
-| `loyalty` | `loyalty` |
-| `wallet` | `wallet` |
-| `profile` | `profile` |
-| `stays` | `stays` |
-| `treatments` | `treatments` |
+`PortalShell` (internal):
+- Fetches `GET /api/portal/config` on mount → `{ enabled_tabs, portal_labels, branding, tenant }`. Shows an "Portal unavailable" error state if this fails.
+- Auth guard (runs once `auth.bootstrapping` is false): unauthenticated + non-public path → redirect to `login`. Authenticated + public path → redirect to portal root. Public path segments: `login`, `signup`, `forgot`, `reset`, `verify-otp`.
+- Renders sticky header (logo/store name/customer name-or-email/sign-out), a tab nav (only when authenticated — Dashboard always first, then `enabled_tabs` in order), and `<Outlet context={{ config, enabledTabs, labels, storeName, tenantSlug }}>`.
+- Known tab keys (path segment = key, all flat under `/portal/:slug/`): `invoices`, `orders`, `appointments`, `subscriptions`, `contracts`, `tickets`, `loyalty`, `wallet`, `profile`, `stays`, `treatments`. Only `invoices`, `orders`, `appointments`, `loyalty`, `profile`, `treatments`, `stays`, `wallet` currently have page components in this directory — `subscriptions`, `contracts`, `tickets` are recognized tab keys with no corresponding page yet.
 
 ---
 
-## `PortalAuthProvider.jsx`
-
-Exports `PortalAuthProvider` component and `usePortalAuth()` hook. Throws if `usePortalAuth()` called outside provider.
-
-On mount: attempts a silent refresh via `POST /api/portal/auth/refresh`. On success session is rotated; on failure stored session is cleared.
-
-**`usePortalAuth()` returns:**
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `tenantSlug` | string | From props |
-| `session` | object\|null | Full session object |
-| `customer` | object\|null | `session.customer` |
-| `accessToken` | string\|null | `session.access_token` |
-| `isAuthenticated` | boolean | `!!session?.access_token` |
-| `bootstrapping` | boolean | True until silent refresh resolves — guard against premature redirects |
-| `setSession(next)` | function | Persists + updates session via `writePortalSession` |
-| `logout()` | async function | Calls `portalApi.logout`, clears session state |
-
----
-
-## Auth Pages (public, no session required)
+## Auth pages (public, no session required)
 
 ### `PortalLogin.jsx`
-Two modes on the same page: email+password (`POST /api/portal/auth/login`) and OTP magic-link (`POST /api/portal/auth/request-otp` → redirects to `verify-otp`). Calls `auth.setSession()` on password login success. OTP flow redirects to `verify-otp` page.
+Two modes toggled in-page: password (`POST /api/portal/auth/login` with `{ email, password }`) and OTP (`POST /api/portal/auth/request-otp` with `{ email, purpose: "login" }` → navigates to `verify-otp`). Fetches `GET /api/portal/config` on mount just to build a dynamic subtitle listing enabled tabs (fails open to a default subtitle). Password success calls `auth.setSession(res)` and navigates to portal root.
 
 ### `PortalSignup.jsx`
-Self-registration. `POST /api/portal/auth/signup`. Calls `auth.setSession()` and navigates to portal root on success.
+`POST /api/portal/auth/signup` with `{ name, email, mobile, password }`. On success navigates to `verify-otp?email=...&purpose=email_verify` (does NOT auto-login — verification is required first).
 
 ### `PortalOtpVerify.jsx`
-OTP code entry. Reads `?email=` and `?purpose=` from query params. `purpose=login` completes auth via `POST /api/portal/auth/verify-otp`. Resend CTA re-posts to `POST /api/portal/auth/request-otp`.
+Reads `?email=` and `?purpose=` (`login` default). `purpose=email_verify` → `POST /api/portal/auth/verify-email`; otherwise → `POST /api/portal/auth/verify-otp` with `{ email, code, purpose: "login" }`. Either path calls `auth.setSession(res)` on success and navigates to portal root. "Resend code" re-posts `/api/portal/auth/request-otp`.
 
 ### `PortalForgotPassword.jsx`
-Email input → `POST /api/portal/auth/request-password-reset`. Shows confirmation message after submit.
+`POST /api/portal/auth/request-password-reset` with `{ email }`. Always shows a generic confirmation (no user-enumeration signal).
 
 ### `PortalResetPassword.jsx`
-Reads `?token=` from query string → `POST /api/portal/auth/reset-password`. Navigates to login on success.
+Reads `?token=`. `POST /api/portal/auth/reset-password` with `{ token, password }`. Redirects to login after a 2.5s delay on success. Shows an error state (no form) if `token` is missing.
 
 ---
 
-## `PortalDashboard.jsx`
+## Authenticated pages
 
-Home screen after login. Uses `useOutletContext()` for `{ labels, storeName, enabledTabs }`.
+### `PortalDashboard.jsx`
+Home screen. Reads `{ labels, storeName, enabledTabs }` via `useOutletContext()`. Fires up to 3 parallel fetches:
+- Always: `GET /api/portal/me/invoices` → outstanding balance = sum of `balance_due` where `status` not in `paid`/`void`.
+- If `enabledTabs` includes `appointments`: `GET /api/portal/me/appointments?scope=upcoming`.
+- If `enabledTabs` includes `loyalty`: `GET /api/portal/me/loyalty`.
 
-Fires up to 3 fetches in `Promise.all`:
-- Always: `GET /api/portal/me/invoices` → computes outstanding balance (sum of `balance_due` on non-paid/non-void invoices)
-- If `appointments` in `enabledTabs`: `GET /api/portal/me/appointments?scope=upcoming`
-- If `loyalty` in `enabledTabs`: `GET /api/portal/me/loyalty`
+Renders conditional cards (invoices/appointments/loyalty) each linking to the matching tab. Greeting uses `labels.dashboard_heading || "Welcome back"`.
 
-Cards shown conditionally by `enabledTabs`:
-- `invoices` → Outstanding Balance card → `/portal/{slug}/invoices`
-- `appointments` → Next Appointment card (first from upcoming list) → `/portal/{slug}/appointments`
-- `loyalty` → Loyalty Points + tier name → `/portal/{slug}/loyalty`
+### `PortalInvoices.jsx`
+List with client-side status filter (all/unpaid/partial/overdue/paid). Fetches `GET /api/portal/me/invoices`. Each row links to `PortalInvoiceDetail`.
 
-Greeting uses `labels.dashboard_heading || "Welcome back"` + `auth.customer?.name`.
+### `PortalInvoiceDetail.jsx`
+Params: `:tenantSlug`, `:invoiceId`. Fetches `GET /api/portal/me/invoices/:invoiceId` → `{ invoice_number, status, balance_due, items[], payments[] }`.
 
----
+"Pay now" (shown when status not `paid`/`void` and `balance_due > 0`) posts `POST /api/portal/me/invoices/:invoiceId/pay` (no body) → `window.location.href = res.checkout_url`. Gateway redirects back to `invoice-paid?invoice=:id`.
 
-## `PortalInvoices.jsx`
+### `PortalInvoicePaidPage.jsx`
+Post-payment confirmation. Reads `?invoice=` from query params (errors immediately if missing). Polls `GET /api/portal/me/invoices/:id` every 1500ms (`POLL_INTERVAL_MS`) for up to 8 attempts (`MAX_POLLS`). Success condition: `status === "paid"` OR `Number(balance_due) === 0`. States: `polling` → `paid` | `timeout` | `error`.
 
-Filterable invoice list (All / Unpaid / Paid). Fetches `GET /api/portal/me/invoices`. Each row links to `PortalInvoiceDetail`.
+### `PortalAppointments.jsx`
+Fetches `?scope=upcoming` and `?scope=past` in parallel via `GET /api/portal/me/appointments`. Cancel: `PUT /api/portal/me/appointments/:id/cancel` with `{ reason }` (uses `window.confirm`). Includes two modals:
+- **BookingModal**: uses raw `fetch()` (not `portalApi`) against public `GET /api/public/bookings/config?tenant=` and `GET /api/public/bookings/availability?tenant=&service_id=&date=` to pick service/date/slot, then submits via `portalApi.post(..., "/api/portal/me/appointments", { service_id, start_at, employee_id, notes })`.
+- **RescheduleModal**: `PUT /api/portal/me/appointments/:id/reschedule` with `{ start_at }` (ISO string from a `datetime-local` input; UI note says must be ≥15 min from now — not enforced client-side beyond the hint text).
 
----
+### `PortalOrders.jsx`
+Fetches `GET /api/portal/me/order-history` (unified web + in-store order list, each row has a `source: "web"|"in-store"` field and composite key `${source}:${id}`). "Reorder" button posts `POST /api/portal/me/reorder` with `{ source, order_id }` → response includes `redirect_url` (storefront cart adopts the cart via a `?adopt=` query param) and optionally `items_added`/`items_skipped[]` (shown as a notice banner, including on partial failure via `err.body.items_skipped`).
 
-## `PortalInvoiceDetail.jsx`
+### `PortalLoyalty.jsx`
+Fetches `GET /api/portal/me/loyalty` → `{ loyalty_points, total_spend, tier }`. Read-only; redemption instructions point to in-store checkout.
 
-Single invoice view. Params: `:tenantSlug`, `:invoiceId`. Fetches `GET /api/portal/me/invoices/:invoiceId`.
+### `PortalProfile.jsx`
+Fetches `GET /api/portal/me` + `GET /api/portal/me/addresses` in parallel (address fetch swallows errors → `[]`). Editable fields: name, mobile, address, city, date_of_birth, gender, preferred_contact, email/sms/whatsapp consent checkboxes. Save: `PUT /api/portal/me` with the whole form. Address delete: `DELETE /api/portal/me/addresses/:id` (uses `window.confirm`) then reloads both fetches.
 
-Pay CTA: `POST /api/portal/me/invoices/:invoiceId/pay-intent` → `window.location.href = res.checkout_url`. Gateway redirects back to `.../invoice-paid?invoice=:id` after payment.
+### `PortalTreatments.jsx`
+Clinical treatment plan viewer, two-level UI (list → drill-down, no routing — just local state).
 
----
+- **List**: `GET /api/portal/me/treatment-plans` → `res.plans`. Shows title, plan_number, subject_name, provider_name, sessions_completed/total_sessions_planned, status.
+- **Detail**: `GET /api/portal/me/treatment-plans/:planId`. Renders 6 sections from the response: Sessions (SOAP `soap_subjective`, session_number, status, provider, scheduled_at), Prescriptions (medication_name, strength, dosage, frequency, duration, instructions), Chart (`chart_entries[]`: area_code, condition_code, severity, notes — table), Lab Results (`lab_orders[]`: test_name, lab_vendor, status, result_received_at, result_summary), Consent Documents (`consents[]`: title, signed_by_name/relation/at, `document_pdf_url` link), Shared Documents (`documents[]`: title, file_url, document_type — section only rendered if non-empty). Also shows an invoice reference block if `detail.plan.invoice_number` is set, with a balance_due warning.
+- "Back to plans" just clears local `selected`/`detail` state — no re-fetch of the list.
 
-## `PortalInvoicePaidPage.jsx`
+### `PortalStays.jsx`
+Hotel/hospitality stay history. Fetches `GET /api/portal/me/stays` → `data.stays[]`. Client-side filter: All / Upcoming (`check_in_date >= now` and `status !== "cancelled"`) / Past (`check_out_date < now` or `status === "checked_out"`). Columns: booking number, room (number · type), status badge, check-in/out dates (+nights), `folio_grand_total`, invoice link (only when `stay.invoice_id` is set, links to `PortalInvoiceDetail`).
 
-Post-payment confirmation page. Reads `?invoice=` from query params.
-
-Polls `GET /api/portal/me/invoices/:id` every **1500ms** for up to **8 attempts** (`MAX_POLLS = 8`, `POLL_INTERVAL_MS = 1500`). Success condition: `inv.status === "paid"` OR `Number(inv.balance_due) === 0`. Shows 4 states: `polling` (confirming), `paid` (success + link to invoice), `timeout` (still processing after max polls), `error` (missing invoice param).
-
----
-
-## `PortalAppointments.jsx`
-
-Upcoming and past appointments fetched in parallel (`?scope=upcoming` + `?scope=past`). Includes inline book-new-appointment form → `POST /api/portal/me/appointments` (collects service, date/time, notes).
-
----
-
-## `PortalOrders.jsx`
-
-Order history list. Fetches `GET /api/portal/me/orders`. Read-only.
+### `PortalWallet.jsx`
+Fetches `GET /api/portal/me/wallet` → `{ balance, ledger[] }`. Top-up: toggled inline amount input → `POST /api/portal/me/wallet/top-up-intent` with `{ amount }` → `window.location.href = res.checkout_url`. Ledger rows show date, `note || reference_type`, signed amount (`type === "credit"` → emerald `+`, else red `−`).
 
 ---
 
-## `PortalLoyalty.jsx`
+## Gotchas
 
-Points balance, current tier, tier progress bar. Fetches `GET /api/portal/me/loyalty`.
-
----
-
-## `PortalProfile.jsx`
-
-Account info + address management. Fetches `GET /api/portal/me` and `GET /api/portal/me/addresses` in parallel. Allows editing name/phone and managing address records.
-
----
-
-## `PortalTreatments.jsx`
-
-Clinical treatment plan viewer. Two-level UI — list then drill-down.
-
-**List level:** `GET /api/portal/me/treatment-plans` → `res.plans`. Each plan shows: title, plan_number, subject_name, provider_name, sessions_completed/total_sessions_planned, status. Click → loads detail.
-
-**Detail level:** `GET /api/portal/me/treatment-plans/:planId`. Shows 6 sections:
-1. Sessions — SOAP notes (subjective field), session number, status, provider, scheduled_at
-2. Prescriptions — medication_name, strength, dosage, frequency, duration, instructions
-3. Chart — `detail.chart_entries[]`: area_code, condition_code, severity, notes (table format)
-4. Lab Results — `detail.lab_orders[]`: test_name, lab_vendor, status, result_received_at, result_summary
-5. Consent Documents — `detail.consents[]`: title, signed_by_name/relation/at, document_pdf_url link
-6. Shared Documents — `detail.documents[]`: title, file_url link, document_type (only rendered if non-empty)
-
-Also shows invoice section if `detail.plan.invoice_number` is set (with balance_due warning if > 0).
-
-"Back to plans" button resets `selected`/`detail` to null — returns to list without re-fetching.
-
----
-
-## `PortalStays.jsx`
-
-Hotel/hospitality stay history. Fetches `GET /api/portal/me/stays` → `data.stays[]`.
-
-Client-side filter: All / Upcoming (`check_in_date >= now` AND `status !== "cancelled"`) / Past (`check_out_date < now` OR `status === "checked_out"`).
-
-Columns: Booking (booking_number or #id), Room (room_number · room_type_name), Status badge, Check-in, Check-out (with nights count), Folio (folio_grand_total), Invoice link (to PortalInvoiceDetail when `stay.invoice_id` set).
-
-Status badge colors: `checked_in`=emerald, `confirmed`=blue, `pending`=amber, `checked_out`=slate, `cancelled`=red.
-
----
-
-## `PortalWallet.jsx`
-
-Wallet balance + top-up flow. Fetches `GET /api/portal/me/wallet` → `{ balance, ledger[] }`.
-
-Top-up: inline amount input (toggle button to show/hide) → `POST /api/portal/me/wallet/top-up-intent` with `{ amount }` → `window.location.href = res.checkout_url`.
-
-Ledger list: date + `l.note || l.reference_type`, amount with +/− prefix. `type === "credit"` = emerald, else = red-600.
+- **Don't confuse `PortalInvoiceDetail`'s pay endpoint** (`/pay`) with `PortalWallet`'s / `PortalOrders`' checkout-intent-style endpoints (`/wallet/top-up-intent`) — they're not the same pattern; check the actual route file (`backend/routes/...portal...`) before assuming a naming convention.
+- Every payment-initiating flow here (invoice pay, wallet top-up) follows redirect-to-gateway, not inline card entry — always `window.location.href = res.checkout_url`, never render a card form.
+- `PortalOrders.jsx` is the only page that crosses into the storefront (`redirect_url` handoff via `?adopt=` cart token) — if working on storefront cart adoption, this is the other end of that handshake.
+- Several pages use `window.confirm`/`alert` for destructive actions (cancel appointment, delete address) instead of the toast/modal system used elsewhere in the app — this is intentional isolation from `ui/primitives`, not an oversight to "fix" by importing app-level UI.
+- Session bootstrap ordering: always check `auth.bootstrapping` before treating `isAuthenticated === false` as a real logged-out state — a false negative during the silent-refresh window causes a login-page flash/redirect loop if ignored.

@@ -19,7 +19,7 @@ pg-boss singleton factory. Exports: `getBoss()` (lazy-init, promise-deduplicated
 AES-256-GCM encryption for all integration credentials. Exports: `encryptSecret(plainText)`, `decryptSecret(storedText)`, `maskSecret(stored)`. Key source: `INTEGRATION_SECRET_KEY` (preferred) → `SHOPIFY_SECRET_KEY` fallback → SHA-256 of raw value if neither is hex/base64. Stored format: `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. If no key is configured, `encryptSecret` returns plaintext and `decryptSecret` returns stored value as-is (graceful degradation). `decryptSecret` returns plaintext directly when value doesn't start with `enc:v1:`.
 
 ### `email.js`
-Unified email service. Exports: `sendEmail({ type, to, tenant, data, subject, html })`, `enqueueEmail({ type, to, tenant, data, subject, html }, boss)`, `resolveFrom(type, tenant)`. `sendEmail` fires immediately via Resend. `enqueueEmail` inserts into pg-boss queue (3 retries × 60s). **Gotcha**: the `db` param accepted by `enqueueEmail` is completely ignored — emails always enqueue to the public schema pg-boss regardless of which DB is passed. Tenant→Customer emails (`receipt`, `digest` types) send from `slug@sanopos.com`; all other types send from `noreply@sanopos.com`.
+Unified email service. Exports: `sendEmail({ type, to, tenant, data, subject, html })`, `enqueueEmail({ type, to, tenant, data, subject, html }, boss)`, `resolveFrom(type, tenant)`. `sendEmail` fires immediately via Resend. `enqueueEmail` inserts into pg-boss queue (3 retries × 60s). **Gotcha**: the `db` param accepted by `enqueueEmail` is completely ignored — emails always enqueue to the public schema pg-boss regardless of which DB is passed. Tenant→customer emails (`receipt`, `digest` types) send from `slug@sanopos.com`; all other types send from `noreply@sanopos.com`.
 
 ### `email-templates.js`
 `TEMPLATES` registry maps email type string → `{ subject, html }` builder function. `wrapEmailHtml(title, body)` renders the branded shell. To add a new email type: add the builder here AND register it in `TEMPLATES`.
@@ -35,6 +35,18 @@ FBR Digital Invoicing client. Exports: `buildInvoicePayload`, `buildCreditNotePa
 
 ### `catalog-scheduler.js`
 Applies one pending scheduled change per call. Export: `applyScheduledChange(db, change)`. Validates `entity_type` + `field_name` against an allowlist from `schemas/scheduled-changes.js` — **security-critical**: column name is interpolated into the UPDATE string; the allowlist is the only SQL injection guard. Non-throwing — returns `{ status, reason }` so a batch loop can continue past bad rows. Called by the scheduled-catalog worker in `boot/workers.js`.
+
+### `geo.js`
+Pure geometry helpers, no external dependencies. Computes distance between two lat/lng points (haversine). Used by `routes/field.js` to flag a wholesale field-rep check-in as out-of-geofence against the customer's stored shop location.
+
+### `sms.js`
+SMS delivery adapter pattern. Exports: `sendSms`, `testProvider`, `getSmsAdapter`, `resolveProvider`, `BaseSmsAdapter`, `ADAPTERS`. Adapters: `GenericHttpAdapter` (keys: `generic`, `zong_sms`, `jazz_sms`) + `TwilioAdapter`. Persists to `sms_provider_messages`. Configured via `integration_settings` (`category = 'sms'`).
+
+### `manager-pin.js`
+PIN-based manager-approval verification for void/comp overrides at POS. Reuses the bcrypt algorithm from `routes/employees.js`, with a plaintext `pin_code` fallback for employees not yet migrated to hashed PINs. Hard refusal when `req.isImpersonating === true` — an impersonating super-admin can never self-approve an irreversible floor action.
+
+### `phase4-polling.js`
+Long-poll helper shared by real-time surfaces (KDS, floor plan, booking calendar): `getChangesSince(db, table, since, outletId)`. **Security note**: `table` name is interpolated directly into SQL — callers must never pass untrusted input.
 
 ---
 
@@ -61,9 +73,9 @@ Five files — abstract base + four platform adapters for the Integrations Hub. 
 - `daraz-client.js` — HMAC-SHA256 signed requests. N+1 pattern on `pullOrders`: one extra API call per order to fetch items. `pushInventory()` only sends caller-supplied SKUs; the Daraz route (`routes/integrations/daraz.js`) filters mapped rows to `daraz_sku IS NOT NULL` before calling `pushInventory`, using `daraz_product_map.daraz_sku || products.sku` — there is no broad client-side fallback to `barcode || "SP-${id}"` in the inventory push path.
 - `meta-commerce.js` — Graph API v19.0, access token as query param. Price format in `syncProducts`: integer cents as string (`"PKR 1000"`). `pullOrders` only fetches `FB_PROCESSING` state orders; prices in response are in cents (÷100 on ingest).
 - `whatsapp-client.js` — Not a marketplace; `syncProducts`/`pullOrders`/`pushInventory` are silent no-ops returning `[]`/`[]`/`{ updated: 0 }`. Real methods: `sendTemplate`, `sendTextMessage`, `sendOrderConfirmation`, `sendTrackingUpdate`. Uses `api_key` (not `oauth_token`) as bearer token.
-- `google-merchant.js` — Content API v2.1. `pullOrders()` always returns `[]` (Google sends traffic to your site, doesn't process orders). `pushInventory` silently swallows per-update errors but always returns `{ updated: N }`. Extra method `checkFeedStatus()` (not on base class) — called by 6-hour worker job.
+- `google-merchant.js` — Content API v2.1. `pullOrders()` always returns `[]` (Google sends traffic to your site, doesn't process orders). `pushInventory` silently swallows per-update errors but always returns `{ updated: N }`. Extra method `checkFeedStatus()` (not on base class) — called by the 6-hour worker job.
 
-**Background sync**: `workers/marketplace-sync-worker-boss.js` — `marketplace-order-poll` every 10 min, `marketplace-feed-check` every 6h (Google only). Both worker handlers are currently stubs; they schedule jobs and log intent but do not call DarazClient, MetaCommerceClient, or GoogleMerchantClient. Inbound webhooks: `POST /api/webhooks/{daraz,meta,whatsapp}` mounted before tenant middleware. Only `POST /api/webhooks/xpay` is HMAC-verified; Meta and WhatsApp GET handlers check verify tokens but their POST handlers, and the Daraz POST handler, are not HMAC-verified. See `marketplace/CLAUDE.md` for full config shape per adapter.
+**Background sync**: `workers/marketplace-sync-worker-boss.js` — `marketplace-order-poll` every 10 min, `marketplace-feed-check` every 6h (Google only). Both worker handlers are currently stubs; they schedule jobs and log intent but do not call `DarazClient`, `MetaCommerceClient`, or `GoogleMerchantClient`. Inbound webhooks: `POST /api/webhooks/{daraz,meta,whatsapp}` mounted before tenant middleware. Only `POST /api/webhooks/xpay` is HMAC-verified; Meta and WhatsApp GET handlers check verify tokens but their POST handlers, and the Daraz POST handler, are not HMAC-verified. See `marketplace/CLAUDE.md` for full config shape per adapter.
 
 ### `import/mappers/`
 Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.js` and `square.js` map platform-specific export formats to internal schema shape. Used by `routes/import.js`.
@@ -73,14 +85,17 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 ## Domain Service Modules
 
 ### Bookings / Appointments
-- **`booking-services.js`** — `createAppointment`, `rescheduleAppointment`, `cancelAppointment`. Public bookings add 15-min minimum notice guard and enqueue `booking_confirmation` email (non-fatal). Admin bookings bypass time guards. Auto-schedules 1-hour-before reminder.
+- **`booking-services.js`** — `createAppointment`, `rescheduleAppointment`, `cancelAppointment`. Public bookings add a 15-min minimum notice guard and enqueue `booking_confirmation` email (non-fatal). Admin bookings bypass time guards. Auto-schedules a 1-hour-before reminder.
 - **`booking-availability.js`** — `getAvailableSlots`, `checkOverlap`. Slot granularity hardcoded to 15-minute increments.
-- **`booking-reminders.js`** — `processPendingReminders(db, boss)`. **Known bug**: SMS channel silently skipped — only email is implemented, but `status='sent'` still fires for SMS rows.
+- **`booking-reminders.js`** — `processPendingReminders(db, boss)`. **Known bug**: SMS channel silently skipped — only email is implemented, but `status='sent'` still fires for SMS rows; this is intentionally documented behavior, don't "fix" without updating the guarding unit test.
 
 ### Restaurant
 - **`restaurant-checks.js`** — check lifecycle: `createRestaurantCheck`, `getOpenChecks`, `assignSeat`, `splitCheckByItem`, `splitCheckBySeat`, `fireCourse`, `openTab`, `closeTab`, `recalcCheckTotals`. Note: `addItemToCheck` and `closeCheck` do NOT exist.
 - **`restaurant-floor.js`** — floor plan + table sessions: `getFloorPlans`, `getFloorPlanWithTables`, `createFloorPlan`, `updateFloorPlan`, `openTableSession`, `updateTableSession`. Closing a table session uses `updateTableSession({ status: "closed" })` — `closeTableSession` does NOT exist.
 - **`restaurant-kds.js`** — KDS: `getStations`, `createStation`, `updateStation`, `sendToKitchen`, `getTickets`, `bumpTicket`, `recallTicket` (resets bumped → `'new'`).
+- **`modifiers.js`** — modifier groups + options, product links, draft-order-item attach flow. Summed `price_delta` is baked into `draft_order_items.price` on attach, so downstream total recalculation needs no special handling. Group constraint validation (`min_select`, `max_select`, `is_required`, `selection_type`) runs in this service, not via Zod.
+- **`menu-schedule-resolver.js`** — day-parting resolver. Menu schedules are restrictions, not allowlists: a product with zero schedule rows is always available; products with one or more schedule rows are only available within those windows. Per-outlet 60s cache (`invalidateMenuScheduleCache()` on writes) because the public QR menu endpoint can be hit at high rate.
+- **`tips.js`** — per-sale tip capture/lookup (`captureTipOnSale`, `listTipsForShift`) plus end-of-shift tip pooling (`openTipPool`, `closeTipPool`, `distributeTipPool`, `voidTipPool`). `tip_captures.pool_id` links the two halves; `distributeTipPool` writes `tip_pool_payouts` + `commission_earnings` (`earning_type='tip'`) as the single source of truth for payroll.
 
 ### Rentals
 - **`rental-service.js`** — full rental lifecycle: items, assets, contracts, status transitions (`confirmContract`, `checkoutContract`, `returnContract`, `completeContract`, `cancelContract`), availability, overdue detection, invoice generation. Also exports `generateContractNumber`, `computeLateFee`.
@@ -99,12 +114,14 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 - **`project-billing.js`** — links invoices/subscriptions to projects: `attachInvoiceToProject`, `getProjectBillingSummary`. Delegates activity logging to `projects.js`.
 
 ### Customer Finance
-- **`customer-invoicing.js`** — B2B invoices: `generateInvoiceNumber` (INV-000001), `computeInvoiceTotals` (pure), `recomputeBalance`, `convertQuotationToInvoice`, `createBatchInvoices`, `scheduleReminders`. `scheduleReminders` requires `tenantSlug` (throws if omitted). `createBatchInvoices` has 24h idempotency guard.
+- **`customer-invoicing.js`** — B2B invoices: `generateInvoiceNumber` (INV-000001), `computeInvoiceTotals` (pure), `recomputeBalance`, `convertQuotationToInvoice`, `createBatchInvoices`, `scheduleReminders`. `scheduleReminders` requires `tenantSlug` (throws if omitted). `createBatchInvoices` has a 24h idempotency guard.
 - **`subscriptions.js`** — recurring subscription lifecycle: `computeNextPeriod`, `processRenewal`, `cancelSubscription`, `pauseSubscription`, `resumeSubscription`. `processRenewal` requires `tenantSlug`. Renewal jobs use `singletonKey` (`${subscriptionId}:${date}`) in pg-boss to deduplicate. INTERVAL_DAYS: monthly=30, quarterly=90, yearly=365 (not calendar months/years).
 
 ### Omnichannel / Storefront
 - **`quote.js`** — storefront pricing engine: `calculateQuote`, `resolvePriceForContext`. Price-list cascade: outlet → channel → customer → customer_group → customer.price_list_id → base. Also evaluates active promotions and accepts `courierId` for flat shipping rate lookup.
-- **`storefront-cart.js`** — anonymous/authenticated cart: `getOrCreateCart`, `addItem`, `updateItem`, `removeItem`, `getCartWithItems`. Cart expires after 7 days. `addItem` upserts — same product+variant increments quantity.
+- **`storefront-cart.js`** — anonymous/authenticated cart: `getOrCreateCart`, `addItem`, `updateItem`, `removeItem`, `getCartWithItems`. Cart expires after 7 days. `addItem` upserts — same product+variant increments quantity. Delegates to `moq.js` and `product-visibility.js` before allowing an add.
+- **`moq.js`** — minimum order quantity + case-pack increment enforcement. Shared by the storefront cart (portal + public storefront) and `/api/sales` for field-rep order capture (gated by `field_visit_uuid`); POS is intentionally never gated — cashiers are in person with the buyer. Defaults (`min_order_qty=0`, `order_increment=1`) preserve pre-v95 behavior. Returns `{ ok, violations: [...] }` for one item or an array of items.
+- **`product-visibility.js`** — customer-group catalog visibility (Option C/C2). `products.visibility='all'` is visible to everyone; `'restricted'` is visible only to customers whose `customer_group_id` appears in `customer_group_products`. Ungrouped/anonymous buyers see only `'all'` rows by design — a forgotten new buyer sees a partial catalog, never private-label SKUs.
 - **`reservation.js`** — inventory reservation: `createReservation`, `convertReservations`, `releaseReservations`, `expireStaleReservations`, `getActiveReservationsForOutlet`. Uses `SELECT ... FOR UPDATE` to prevent oversell. Default TTL 15 minutes. `releaseReservations` sorts stock keys before locking to prevent deadlocks. No partial fulfillment — outlet must have full quantity or 400 is thrown.
 - **`allocation.js`** — fulfillment allocation: `allocateOrder`, `getAllocationsForOrder`. Pickup → fixed outlet; ship → highest-stock outlet. Runs inside `db.transaction()`. No partial fulfillment.
 - **`public-tenant-context.js`** — shared public tenant resolver: `resolvePublicTenantDb(req, deps)`. MT-aware (reads `tenant` query param or `x-tenant-slug` header). Used by storefront, QR ordering, and public booking routes.
@@ -112,14 +129,12 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 ### Marketing / Messaging
 - **`marketing.js`** — campaign audience resolution + delivery: `resolveAudience` (filter rules → customer IDs, or `previewOnly` → count+sample), `enqueueCampaignSend` (requires `tenantSlug`). Filter types: group, tag, loyalty_tier, city, birth_month, last_purchase_days, min_spend, max_spend, has_email, has_mobile.
 - **`messaging.js`** — generic messaging inbox: `findOrCreateThread`, `addMessage`. Auto-resolves customer from WhatsApp mobile number. Inbound increments `unread_count`, outbound replies reset it to 0.
-- **`sms.js`** — SMS delivery adapter pattern. Exports: `sendSms`, `testProvider`, `getSmsAdapter`, `resolveProvider`, `BaseSmsAdapter`, `ADAPTERS`. Adapters: `GenericHttpAdapter` (keys: `generic`, `zong_sms`, `jazz_sms`) + `TwilioAdapter`. Persists to `sms_provider_messages` table.
+- **`sms.js`** — see Core Infrastructure Services above.
 
 ### Retail / Pricing
-- **`pricing.js`** — price resolution utilities for POS and storefront contexts.
-- **`retail-flag-preset.js`** — feature flag preset seeding for new retail tenants. Called during tenant wizard setup.
-- **`modifiers.js`** — product modifier group/option management for restaurant and retail.
-- **`menu-schedule-resolver.js`** — resolves active menu/price schedule for a given datetime. Used by restaurant routes.
-- **`tips.js`** — tip calculation helpers for POS and service contexts.
+- **`pricing.js`** — customer-group + loyalty-tier price resolution. Fetches group/tier info for a customer, looks up group-scoped `price_list_items` overrides, and returns data the sales route needs to rewrite cart prices and stack discounts. Group and tier discounts stack additively (10% + 5% = 15%); per-product overrides and group-level auto-discount are both flag-gated.
+- **`retail-flag-preset.js`** — feature flag preset seeding for new tenants at wizard completion. `RETAIL_SEED_FLAGS` (general retail), `RESTAURANT_SEED_FLAGS` (restaurant/cafe — subset of retail tuned for F&B). Called during tenant provisioning/wizard, not on every request.
+- **`inventory-intelligence.js`** — ABC Pareto classification (with stable tie-break), sales velocity, GMROI, lead-time resolution priority chain, reorder quantity suggestion. Backs `/api/inventory-intelligence`.
 
 ### Service Tickets
 - **`service-tickets.js`** — repair/service ticket lifecycle: `generateTicketNumber`, `createTicket`, `updateTicket`, `getTicket`, `listTickets`, `generateInvoiceFromTicket`, `logActivity`. Supports direct invoice generation from a resolved ticket.
@@ -129,10 +144,6 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 
 ### Customer Portal
 - **`online-inbox.js`** — customer-facing message inbox for the self-service portal.
-
-### Infrastructure / Utilities
-- **`phase4-polling.js`** — long-poll helper for real-time surfaces (KDS, floor plan, booking calendar): `getChangesSince(db, table, since, outletId)`. **Security note**: `table` name is interpolated directly into SQL — callers must never pass untrusted input.
-- **`manager-pin.js`** — PIN validation for manager-approval flows in POS.
 
 ---
 
@@ -160,3 +171,6 @@ Courier and marketplace adapters read zero `process.env` variables. All config f
 
 ### Google Merchant `pushInventory` silent failures
 `google-merchant.js:pushInventory` swallows per-item errors and always returns `{ updated: N }` even if all updates fail. Do not rely on the return value for error detection.
+
+### Wholesale services intentionally skip POS
+`moq.js` and the field-sales geofencing in `geo.js` both apply to portal/storefront/field-rep flows, never to POS — cashiers transact face-to-face with the buyer and don't need programmatic enforcement.

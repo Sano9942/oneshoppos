@@ -1,190 +1,150 @@
 # Tier 4 Routes — Claude Guide
 
-All routes are under `/api/*` and are mounted after tenant middleware (have `req.employee`, `req.company`, `deps.db`). All modules use the factory pattern: `module.exports = function(deps)`.
+Routes under `/api/*` (mixed prefixes, not `/api/tier4/*`). Mounted after tenant middleware — every handler has `req.employee`, `req.company`, `deps.db` (tenant DB proxy). Every sub-module is a factory: `module.exports = function(deps) { ... return router; }`.
 
-## index.js — Orchestrator
+## index.js
 
-Composes 6 sub-routers into one Express router in this order: notifications → company-profile → accounting → hr → crm → approvals.
+Composes 6 sub-routers in this order: notifications → company-profile → accounting → hr → crm → approvals. Order matters only in that `company-profile.js`'s `/api/company-profile/currency` route has no auth — it must not be shadowed by anything requiring auth on the same path (it isn't).
 
 ## notifications.js
 
-Feature flag: `requireFeature("notifications")` on all routes. No `requirePerm` guard — any authenticated user can read/update their notifications.
+Deps: `db`, `requireFeature`. Flag: `notifications` on every route. No `requirePerm` — any authenticated user manages their own notifications.
 
-- `GET /api/notifications` — list last 50, ordered by `created_at DESC`. Supports `?unread_only=1`. Uses `is_read = false` filter (column is `is_read`, NOT `read` — Postgres reserved word).
-- `GET /api/notifications/count` — returns `{ unread: N }`, count of `is_read = false`.
-- `PUT /api/notifications/:id/read` — sets `is_read = true` on one notification.
-- `PUT /api/notifications/read-all` — sets `is_read = true` on all unread. **Note: the current code registers `PUT /:id/read` first and `PUT /read-all` after it. This is safe because Express matches `/read-all` as a literal path before treating it as a dynamic `:id` segment only when the routes are distinct static/dynamic paths — but the ordering is opposite to what older comments suggested. Do not swap the registration order without verifying Express path precedence rules.**
+- `GET /api/notifications` — last 50, `ORDER BY created_at DESC`. `?unread_only=1` filters `is_read = false` (column is `is_read`, not `read` — Postgres reserved word).
+- `GET /api/notifications/count` — `{ unread: N }`.
+- `PUT /api/notifications/:id/read` — one row.
+- `PUT /api/notifications/read-all` — all unread rows. Registered after `/:id/read` in the file; Express still resolves `/read-all` as a literal segment correctly since it's a distinct static path, not a shadowing conflict — but don't add other single-segment dynamic routes here without checking order.
 
-Tables: `notifications`.
+Table: `notifications`.
 
 ## company-profile.js
 
-Deps used: `db`, `requireFeature`, `requirePerm`. `COMPANY_UPLOADS_DIR` is destructured in the file but is NOT actually used — the logo upload path uses R2 via `uploadToR2`, not `COMPANY_UPLOADS_DIR`. Also imports from `config/industry-config`, `config/mode-registry`, `middleware/feature-flags`, `middleware/tenant-auth`.
+Deps: `db`, `requireFeature`, `requirePerm`, `COMPANY_UPLOADS_DIR` (destructured but unused — logo upload goes through R2, not this dir). Also imports `config/industry-config`, `config/mode-registry`, `middleware/feature-flags` (`invalidateModeCache`, `invalidateFeatureFlagCache`), `middleware/tenant-auth` (`invalidateCompanyProfileCache`).
 
-- `GET /api/company-profile` — `requireFeature("multi_company")`. Returns `company_profile WHERE id = 1`.
-- `GET /api/company-profile/currency` — **no auth, no feature flag** — public endpoint. Used by `CurrencyProvider` on mount. In MT mode, accepts `?tenant=<slug>` to resolve the correct schema by calling `masterDb.getTenantBySlug` + `tenantDbMgr.getDb`. Returns `{ symbol, code, denominations }`. `cash_denominations` column is JSON-parsed; falls back to `[100,50,20,10,5,1]` on parse error.
-- `PUT /api/company-profile` — `requirePerm("all_access")` + `requireFeature("multi_company")`. COALESCE update for most fields. `trading_name`, `ntn`, `strn`, `phone`, `email`, `website` are NOT coalesced (can be set to null). Supports `tax_mode` (`none|inclusive|exclusive` — validated, ignored if invalid). If `industry_type` is provided and valid, triggers a full mode+flag re-seed: clears `tenant_modes`, seeds new ones from preset, resets all mode-flags OFF then ON for the preset (uses `getFeatureFlagsForModes(VALID_MODES)` to avoid hardcoded lists). After any PUT: calls `invalidateCompanyProfileCache(req.tenantId)` so tax_mode takes effect immediately without waiting for 5-min cache TTL.
-- `PUT /api/company-profile/onboarding-dismiss` — `requirePerm("all_access")`, no feature flag. Sets `onboarding_dismissed = true`.
-- `PUT /api/company-profile/fbr-banner-dismiss` — `requirePerm("all_access")`, no feature flag. Sets `fbr_banner_dismissed = true`.
-- `POST /api/company-profile/logo` — `requirePerm("all_access")` + `requireFeature("multi_company")`. Multer in-memory, 5MB limit, `imageFileFilter`. Uploads to R2 at `company/company_logo_{timestamp}.{ext}`. Updates `logo_url` in `company_profile`.
+- `GET /api/company-profile` — flag `multi_company`. Returns `company_profile WHERE id = 1`.
+- `GET /api/company-profile/currency` — **no auth, no flag, public**. Used by frontend `CurrencyProvider` on mount. In MT mode, resolves via `?tenant=<slug>` → `masterDb.getTenantBySlug` → `tenantDbManager.getDb`. Returns `{ symbol, code, denominations }`; `cash_denominations` JSON-parsed, falls back to `[100,50,20,10,5,1]`.
+- `PUT /api/company-profile` — `requirePerm("all_access")` + flag `multi_company`. Most fields COALESCE-updated; `trading_name`, `ntn`, `strn`, `phone`, `email`, `website` are NOT coalesced (passing null clears them). `tax_mode` accepts `none|inclusive|exclusive`, silently ignored if invalid. If `industry_type` is valid, triggers a full re-seed: clears `tenant_modes`, inserts new ones from `getPreset()`, resets every mode-derived flag OFF (via `getFeatureFlagsForModes(VALID_MODES)` — not a hardcoded list, so new modes are automatically covered) then flips the preset's flags ON, calls `invalidateModeCache()` + `invalidateFeatureFlagCache()`. Always calls `invalidateCompanyProfileCache(req.tenantId)` at the end so a `tax_mode` change is visible immediately instead of waiting on the 5-minute company-profile cache.
+- `PUT /api/company-profile/onboarding-dismiss`, `PUT /api/company-profile/fbr-banner-dismiss` — `requirePerm("all_access")`, no flag. Set a single boolean column.
+- `POST /api/company-profile/logo` — `requirePerm("all_access")` + flag `multi_company`. Multer memory storage, 5MB cap, `rasterImageFileFilter` (SVG excluded — served same-origin, XSS risk), then `verifyImageMagicBytes` to catch a mismatched declared MIME. Uploads to R2 at `company/company_logo_{timestamp}.{ext}`, writes `logo_url`.
 
 Tables: `company_profile`, `tenant_modes`, `feature_flags`.
 
 ## accounting.js
 
-Feature flag: `requireFeature("accounting_core")` on all routes. Permission split:
-- Most routes: `requireAnyPerm(["view_reports", "manage_employees"])`
-- Credit/debit notes, COA, journal entries, cheques: `requireAnyPerm(["manage_employees", "all_access"])` or `requireAnyPerm(["all_access"])`
+Deps: `db`, `requireFeature`, `requireAnyPerm`. Flag `accounting_core` everywhere. Imports `utils/tz` (`toUtcStart`, `toUtcEnd`). Local helper `findClosedPeriodFor(entryDate)` — checks `accounting_periods` for a closed period containing the date; used to block journal-entry writes into closed periods.
 
-Date params: financial routes use `from`/`to` (not `date_from`/`date_to`). UTC conversion via `toUtcStart`/`toUtcEnd` for sales/returns; expenses use raw `::date` cast since `expense_date` is stored as local date.
+Perm tiers: most reporting routes use `requireAnyPerm(["view_reports","manage_employees"])`; period writes use `requireAnyPerm(["manage_employees","all_access"])`; credit/debit notes and cheques use `requireAnyPerm(["manage_employees","all_access"])`; COA and journal entries use `requireAnyPerm(["all_access"])` only.
 
-**P&L / Cashflow:**
-- `GET /api/accounting/pnl` — gross sales, discounts, returns, COGS, expenses by category, net profit. Requires `from` and `to`. Supports `?outlet_id=`.
-- `GET /api/accounting/cashflow` — inflows by payment method, expenses outflow, supplier payments outflow. Requires `from` and `to`.
-- `GET /api/accounting/cashflow/daily` — day-by-day cash inflows (Cash payment method only) vs expense outflows. Params: `date_from`, `date_to`, `outlet_id`. Merges two separate queries by date key in JS.
-- `GET /api/accounting/ap-ar` — summary totals: `total_ap` (outstanding supplier invoices), `total_ar` (customers with positive balance), `net_position`.
-- `GET /api/accounting/ap` — detailed AP list (supplier invoices with outstanding balance) + customer AR list (customers with non-zero balance). Filterable by `?status=`.
-- `GET /api/accounting/ap-aging` — AP buckets: current (not yet due), d30, d60, d90, over90. Computed from `EXTRACT(EPOCH FROM (NOW() - due_date)) / 86400.0`.
-- `GET /api/accounting/tax-ledger` — tax collected by rate. Requires `from`/`to`. Joins `sale_items → sales → products → taxes`. Returns per-rate rows + `total_tax`.
-- `GET /api/accounting/supplier-payments` — payment history from `supplier_payments`. Filterable by `from`/`to`.
-- `GET /api/accounting/expenses` — expense ledger with category/outlet/employee joins. Filterable by `from`/`to`/`category_id`/`outlet_id`. Also returns all `expense_categories`.
-- `GET /api/accounting/balance-sheet` — simplified: assets (inventory at cost + cash in open shifts), liabilities (supplier AP + customer credit balances), equity (assets - liabilities).
+Date param convention: `from`/`to` (not `date_from`/`date_to`) except `cashflow/daily` which uses `date_from`/`date_to`. Sales/returns date filters go through `toUtcStart`/`toUtcEnd` with `req.company.timezone`; `expenses.expense_date` is a local date column, filtered with raw `::date` cast, no UTC conversion.
 
-**Accounting periods:**
-- `GET /api/accounting/periods`
-- `POST /api/accounting/periods` — requires `period_name`, `start_date`, `end_date`. Inserts with `status='open'`.
-- `PUT /api/accounting/periods/:id` — updates `status`, `notes`. When `status='closed'`, records `closed_by` (from `x-employee-id` header) and `closed_at=NOW()`.
+**P&L / cashflow / balance sheet:**
+- `GET /api/accounting/pnl` — gross sales, discounts, returns, COGS (from `sale_items.cost_price_at_sale`), expense breakdown by category, net profit + margin %. Requires `from`/`to`, optional `outlet_id`.
+- `GET /api/accounting/cashflow` — inflows by `sale_payments.payment_method`, outflows = expenses + supplier payments. `supplier_payments` has no `outlet_id` column — never filtered per-outlet even when `outlet_id` is passed.
+- `GET /api/accounting/cashflow/daily` — day-by-day inflow (all payment methods via `sale_payments`) vs expense outflow, merged in JS by date key.
+- `GET /api/accounting/ap-ar` — `{ total_ap, total_ar, net_position }` summary.
+- `GET /api/accounting/ap` — detailed supplier invoice AP list + customer AR list (customers with non-zero `balance`).
+- `GET /api/accounting/ap-aging` — buckets `current/d30/d60/d90/over90` from `EXTRACT(EPOCH FROM (NOW() - due_date))/86400.0`.
+- `GET /api/accounting/tax-ledger` — tax collected grouped by `sale_items.tax_rate_at_sale`. Requires `from`/`to`.
+- `GET /api/accounting/supplier-payments` — payment history, filterable `from`/`to`.
+- `GET /api/accounting/expenses` — ledger with category/outlet/employee joins + full `expense_categories` list. Filterable `from`/`to`/`category_id`/`outlet_id`.
+- `GET /api/accounting/balance-sheet` — assets = inventory-at-cost + cash in open shifts (`cash_shifts.opening_float`); liabilities = supplier AP + customer credit balances (negative `customers.balance`); equity = assets − liabilities. This is a simplified snapshot, not a real double-entry balance sheet.
 
-**Credit/Debit Notes — `mountNoteRoutes(table, prefix)` factory:**
+**Accounting periods** (`accounting_periods`): `GET`/`POST /api/accounting/periods`, `PUT /api/accounting/periods/:id` (status/notes; closing records `closed_by` from `x-employee-id` header + `closed_at`).
 
-Shared factory mounts identical route sets for `credit_notes` (`/api/accounting/credit-notes`) and `debit_notes` (`/api/accounting/debit-notes`). Auth: `requireAnyPerm(["manage_employees","all_access"])` + `requireFeature("accounting_core")`.
+**Credit/Debit notes — shared factory `mountNoteRoutes(table, prefix)`:**
+Mounts identical routes twice: `credit_notes`/`credit-notes` and `debit_notes`/`debit-notes`.
+- `GET /api/accounting/{prefix}` (filters: status, type, from, to), `GET /:id`.
+- `POST` — auto `note_number` = `CN-YYYYMMDD-NNN` / `DN-YYYYMMDD-NNN`. Requires `type`, `amount` (>0), `reason`; `customer_id` required if `type='sales'`, `supplier_id` if `type='purchase'`.
+- `PUT /:id` — draft only.
+- `PUT /:id/approve` — transactional, row locked `FOR UPDATE`. Adjusts `customers.balance` or `suppliers.running_balance`: sales credit note decreases customer balance, sales debit note increases it (reverse for purchase type). Best-effort journal entry posting if COA codes `1100/2000/4000/5000` exist (won't fail the approve if COA isn't seeded).
+- `PUT /:id/cancel` — transactional; if the note was approved, reverses the balance adjustment.
 
-- `GET /api/accounting/{credit-notes|debit-notes}` — filterable by `status`, `type`, `from`, `to`.
-- `GET /api/accounting/{prefix}/:id`
-- `POST /api/accounting/{prefix}` — auto-generates `note_number` (`CN-YYYYMMDD-NNN` or `DN-YYYYMMDD-NNN`). Validates: `type`, `amount`, `reason` required; `customer_id` required for sales type; `supplier_id` required for purchase type; amount must be positive.
-- `PUT /api/accounting/{prefix}/:id` — draft only.
-- `PUT /api/accounting/{prefix}/:id/approve` — transactional. Locks note with `FOR UPDATE`. Adjusts customer `balance` or supplier `running_balance` based on type and note direction. Credit note (sales): decreases customer balance (gives credit). Debit note (sales): increases customer balance (owes more). Reverse logic for purchase types.
-- `PUT /api/accounting/{prefix}/:id/cancel` — transactional. If was `approved`, reverses the balance adjustment. Can cancel both draft and approved notes.
+**Chart of Accounts** (`chart_of_accounts`), perm `requireAnyPerm(["all_access"])`:
+- `GET /api/accounting/coa` — flat list + nested `tree` via `buildCoaTree()`, sorted by `code`.
+- `GET /api/accounting/coa/:id` — includes computed `balance` from posted `journal_entry_lines` (`normal_balance==='debit' ? debit-credit : credit-debit`).
+- `GET /api/accounting/coa/next-code/:type` — registered AFTER `/:id` in the file. Safe today only because `/next-code/asset` has 3 path segments vs `/:id`'s 2 — no shadowing currently. **Any new two-segment `/api/accounting/coa/*` route added after `/:id` will be shadowed by it; register it before `/:id` or give it 3+ segments.**
+- `POST /api/accounting/coa` — validates type ∈ asset/liability/equity/revenue/expense, code uniqueness, parent existence. `normal_balance` auto-derived (asset/expense→debit, else credit).
+- `POST /api/accounting/coa/seed` — idempotent, skips entirely if any account row exists; seeds 21 Pakistan-standard accounts with `ON CONFLICT (code) DO NOTHING`.
+- `PUT /api/accounting/coa/:id` — system accounts (`is_system=true`) can only update `name`/`description`; user accounts get full update with code-uniqueness + self-parent-cycle checks.
+- `DELETE /api/accounting/coa/:id` — soft delete (`is_active=false`). Blocked if `is_system` or if any `journal_entry_lines` reference the account.
 
-**Chart of Accounts (COA):**
-Auth: `requireAnyPerm(["all_access"])` + `requireFeature("accounting_core")`.
+**Post-dated cheques** (`postdated_cheques`), perm `requireAnyPerm(["manage_employees","all_access"])`:
+- `GET` (list, filterable), `GET /upcoming` (pending, maturing within 7 days), `GET /:id`, `POST`, `PUT /:id` (pending only), `DELETE /:id` (pending only).
+- `PUT /:id/deposit` — pending→deposited.
+- `PUT /:id/clear` — transactional, `FOR UPDATE`. deposited→cleared. Receivable+customer: decreases `customers.balance`. Payable+supplier: inserts a `supplier_payments` row with `supplier_invoice_id = NULL`. Best-effort journal entry if COA codes `1000/1100`(receivable) or `2000/1000`(payable) exist.
+- `PUT /:id/bounce` — deposited→bounced. `PUT /:id/cancel` — pending→cancelled.
 
-- `GET /api/accounting/coa` — returns flat `accounts` array + nested `tree` (built by `buildCoaTree()`). Sorted by `code` at each level.
-- `GET /api/accounting/coa/:id` — single account with computed balance from posted journal entry lines. `balance = (normal_balance==='debit') ? debits - credits : credits - debits`.
-- `GET /api/accounting/coa/next-code/:type` — suggests next account code for a type. Uses `MAX(code)` matching `^{prefix}\d+$` regex, increments by 10. **Route order note**: `next-code/:type` is registered after `/:id` in the file. This is currently safe because `/next-code/asset` has a different segment count (three segments) than `/:id` (two segments) so there is no shadowing. However, if you add any new `/api/accounting/coa/*` routes with two path segments, verify they are not shadowed by `/:id`.**
-- `POST /api/accounting/coa` — validates `code`, `name`, `type` (must be asset/liability/equity/revenue/expense). Checks code uniqueness. `normal_balance` auto-derived: asset/expense → debit, others → credit.
-- `POST /api/accounting/coa/seed` — idempotent seed of 21 Pakistan-standard accounts. Skips if any accounts exist. Uses `ON CONFLICT (code) DO NOTHING`.
-- `PUT /api/accounting/coa/:id` — system accounts (`is_system=true`) can only have `name` and `description` updated. User accounts: full update with code uniqueness check and parent cycle prevention.
-- `DELETE /api/accounting/coa/:id` — soft-delete (sets `is_active=false`). Blocks if `is_system=true` or if account has any `journal_entry_lines`.
+**Journal entries** (`journal_entries`, `journal_entry_lines`), perm `requireAnyPerm(["all_access"])`:
+- `GET` — paginated (`page`/`per_page`), filterable `from`/`to`/`status`, returns `total` + per-entry `total_debit`/`total_credit`/`line_count` from a subquery.
+- `GET /:id` — with `lines` joined to `chart_of_accounts`.
+- `POST` — requires `entry_date`, `description`, ≥2 `lines`. Debits must equal credits within 0.005 tolerance. All `account_id`s must exist and be `is_active`. Blocked via `findClosedPeriodFor(entry_date)` if the date falls in a closed accounting period. Auto entry_number `JE-YYYYMMDD-NNN`. Created in transaction (header + lines).
+- `PUT /:id` — draft only. Same validation as POST, including the closed-period check on the (possibly changed) `entry_date`. Replaces lines via DELETE + re-insert.
+- `PUT /:id/post` — draft→posted. Also blocked by `findClosedPeriodFor` — a draft created before a period closed can't be posted into it later.
+- `PUT /:id/void` — posted→voided only (draft entries must be deleted, not voided — though no DELETE route exists in this file for journal entries).
+- `GET /api/accounting/trial-balance` — all active COA accounts with posted-only debit/credit sums, optional `from`/`to`, `HAVING` filters out zero-activity accounts.
 
-**Post-Dated Cheques:**
-Auth: `requireAnyPerm(["manage_employees","all_access"])` + `requireFeature("accounting_core")`.
-
-- `GET /api/accounting/cheques` — filterable by `status`, `type`, `maturity_from`, `maturity_to`. Joins customer/supplier by `party_type`.
-- `GET /api/accounting/cheques/upcoming` — pending cheques maturing within next 7 days.
-- `GET /api/accounting/cheques/:id`
-- `POST /api/accounting/cheques` — requires `cheque_number`, `type`, `party_type`, `party_id`, `amount`, `issue_date`, `maturity_date`.
-- `PUT /api/accounting/cheques/:id` — pending cheques only.
-- `DELETE /api/accounting/cheques/:id` — pending cheques only.
-- `PUT /api/accounting/cheques/:id/deposit` — pending → deposited.
-- `PUT /api/accounting/cheques/:id/clear` — transactional (FOR UPDATE). deposited → cleared. Side effects: receivable cheque decreases customer balance; payable cheque inserts a `supplier_payments` row (with `supplier_invoice_id = NULL`).
-- `PUT /api/accounting/cheques/:id/bounce` — deposited → bounced.
-- `PUT /api/accounting/cheques/:id/cancel` — pending → cancelled.
-
-**Journal Entries:**
-Auth: `requireAnyPerm(["all_access"])` + `requireFeature("accounting_core")`.
-
-- `GET /api/accounting/journal-entries` — paginated (`page`, `per_page`). Filterable by `from`, `to`, `status`. Returns `total` count. Includes `total_debit`, `total_credit`, `line_count` from subquery.
-- `GET /api/accounting/journal-entries/:id` — with full `lines` array joined to `chart_of_accounts`.
-- `POST /api/accounting/journal-entries` — validates: `entry_date`+`description` required, ≥2 lines, debits must equal credits (within 0.005 tolerance), all `account_id`s must be active. Auto-generates `entry_number` (`JE-YYYYMMDD-NNN`). Creates in transaction (header + lines).
-- `PUT /api/accounting/journal-entries/:id` — draft only. Replaces all lines (DELETE + re-insert in transaction). Same validation as POST.
-- `PUT /api/accounting/journal-entries/:id/post` — draft → posted. Records `posted_by`, `posted_at`.
-- `PUT /api/accounting/journal-entries/:id/void` — posted → voided. Cannot void draft (delete instead). Records `voided_by`, `voided_at`.
-- `GET /api/accounting/trial-balance` — all active COA accounts with posted journal entry line totals. Optional `from`/`to` date filter. Only returns accounts with non-zero activity (`HAVING` clause). Returns per-account `balance` + `grand_total_debit`/`grand_total_credit`.
-
-Tables: `accounting_periods`, `credit_notes`, `debit_notes`, `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `postdated_cheques`, `supplier_invoices`, `supplier_payments`, `expenses`, `expense_categories`, `outlet_stock`, `cash_shifts`, `customers`, `suppliers`.
+Tables touched overall: `accounting_periods`, `credit_notes`, `debit_notes`, `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `postdated_cheques`, `supplier_invoices`, `supplier_payments`, `expenses`, `expense_categories`, `outlet_stock`, `cash_shifts`, `customers`, `suppliers`.
 
 ## hr.js
 
-Feature flag: `requireFeature("advanced_hr")` + `requirePerm("all_access")` on all routes. Deps: `db`, `requireFeature`, `requirePerm`, `createNotification`.
+Deps: `db`, `requireFeature`, `requirePerm`, `createNotification`. Every route: `requirePerm("all_access")` + flag `advanced_hr`.
 
-**Leave management:**
-- `GET /api/hr/leave` — all leave requests with employee + approver names.
-- `POST /api/hr/leave` — requires `employee_id`, `start_date`, `end_date`. Type defaults to `annual`. Fires `createNotification` (fire-and-forget) on creation.
-- `PUT /api/hr/leave/:id/status` — valid statuses: `approved`, `rejected`, `pending`. On `approved`: checks `scheduled_shifts` for conflicts (try/catch — table may not exist). Sets `schedule_impact_status` to `conflicts_found` or `no_conflicts`. `approved_by` taken from `x-employee-id` header.
-- `GET /api/hr/leave/balance` — per-employee monthly leave balance. Accepts `?month=YYYY-MM` (defaults to current month). Queries `employees.monthly_leave_allowance` (default 2) vs approved leave days. Iterates employees in a loop (N+1 per employee — no batch query).
-- `GET /api/hr/leave/schedule-conflicts` — requires `from` and `to`. Joins `leave_requests` with `scheduled_shifts` to find overlapping shifts. Filterable by `employee_id`.
+**Leave** (`leave_requests`):
+- `GET /api/hr/leave` — all requests + employee/approver names.
+- `POST /api/hr/leave` — requires `employee_id`, `start_date`, `end_date`; supports `partial_day`/`start_time`/`end_time`. Fires `createNotification` (fire-and-forget).
+- `PUT /api/hr/leave/:id/status` — status ∈ approved/rejected/pending. On approve, checks `scheduled_shifts` for date overlap (wrapped in try/catch — table may not exist on older tenants) and stores `schedule_impact_status` (`conflicts_found`/`no_conflicts`). `approved_by` comes from `x-employee-id` header, not `req.employee`.
+- `GET /api/hr/leave/balance` — per-employee monthly balance vs `employees.monthly_leave_allowance` (default 2). `?month=YYYY-MM`. Loops employees one-by-one, one query each — N+1, fine at small headcount only.
+- `GET /api/hr/leave/schedule-conflicts` — requires `from`/`to`, optional `employee_id`. Joins `leave_requests` to `scheduled_shifts` on date overlap.
 
-**Payroll:**
-- `GET /api/hr/payroll/periods` — all payroll periods.
-- `POST /api/hr/payroll/periods` — requires `period_name`, `start_date`, `end_date`. Inserts with `status='draft'`. Records `created_by` from `x-employee-id`.
-- `POST /api/hr/payroll/periods/:id/generate` — **heavy operation**: iterates all employees, computes attendance (from `employee_attendance`), leave days, overtime (regular hours capped at `work_hours_per_day`, overtime at 1.5x), and commissions (from `commission_earnings` — try/catch, table may not exist). Salary types: `hourly`, `daily`, `monthly`. Monthly salaries deduct for excess leave and absent days (vs 30-day month). Auto-approves pending commissions included in the payroll. Deletes existing `payroll_lines` before re-generating. Finalizes period to `status='finalized'` outside the transaction.
-- `GET /api/hr/payroll/periods/:id/lines` — payroll lines with employee names.
-- `POST /api/hr/payroll/periods/:id/lines` — manual override. Uses `ON CONFLICT(period_id, employee_id) DO UPDATE`. Inserts to `hr_payroll_lines` (separate from auto-generated `payroll_lines`).
-- `GET /api/hr/payroll-export` — requires `?period_id=`. Returns period + rows with computed overtime hours. Intended for CSV export (returns JSON, frontend converts).
-- `GET /api/hr/overtime-alerts` — employees approaching or exceeding 40h/week threshold. Alerts at 80% (32h+). Accepts `?week=YYYY-MM-DD` (Monday) and `?outlet_id=`. Uses `attendance_sessions` (not `employee_attendance`).
+**Payroll** (`payroll_periods`, `payroll_lines`, `hr_payroll_lines`):
+- `GET`/`POST /api/hr/payroll/periods` — create with `status='draft'`.
+- `POST /api/hr/payroll/periods/:id/generate` — heavy N+1: for every employee, pulls attendance hours from `employee_attendance` (regular capped at `work_hours_per_day`, overtime at 1.5×), leave days from `leave_requests`, and commissions from `commission_earnings` (try/catch — table may be absent). Salary types `hourly`/`daily`/`monthly` compute pay differently; monthly type deducts for excess leave (over allowance) and absent days against a 30-day month. Auto-approves any `pending` commissions swept into the period. Deletes existing `payroll_lines` for the period before regenerating; finalizes the period (`status='finalized'`) with a separate query *outside* the transaction.
+- `GET /api/hr/payroll/periods/:id/lines` — auto-generated lines with employee names.
+- `POST /api/hr/payroll/periods/:id/lines` — manual override row, `ON CONFLICT (period_id, employee_id) DO UPDATE`, writes to the *separate* `hr_payroll_lines` table (not `payroll_lines`).
+- `GET /api/hr/payroll-export` — requires `?period_id=`. Returns period + rows shaped for CSV (frontend does the CSV conversion; this returns JSON).
+- `GET /api/hr/overtime-alerts` — flags employees at ≥80% (32h) of a 40h/week threshold. Reads `attendance_sessions` (not `employee_attendance` — different table from the payroll generator above). `?week=YYYY-MM-DD` (Monday), `?outlet_id=`.
 
 Tables: `leave_requests`, `employees`, `scheduled_shifts`, `payroll_periods`, `payroll_lines`, `hr_payroll_lines`, `employee_attendance`, `attendance_sessions`, `commission_earnings`.
 
 ## crm.js
 
-Feature flag: `requireFeature("crm_quotations")` + `requirePerm("manage_orders")` on all routes. Deps: `db`, `requireFeature`, `requirePerm`, `createNotification`. Uses `nodemailer` directly (NOT `services/email.js`) for quotation sends.
+Deps: `db`, `requireFeature`, `requirePerm`, `createNotification`. Every route: `requirePerm("manage_orders")` + flag `crm_quotations`. Uses `nodemailer` directly for sending quotations — reads the tenant `email_config` table, does NOT go through `services/email.js`/Resend. File header has a dead FBR e-invoicing placeholder comment (not implemented, ignore).
 
-**Leads (`/api/crm/leads`):**
-- `GET /api/crm/leads` — with `assigned_to` name and `activity_count` subquery.
-- `POST /api/crm/leads` — requires `name`. Defaults: `stage='new'`, `priority='medium'`, `expected_value=0`.
-- `PUT /api/crm/leads/:id` — COALESCE update.
-- `DELETE /api/crm/leads/:id`
-- `POST /api/crm/leads/:id/activities` — requires `description`. Type defaults to `note`.
-- `GET /api/crm/leads/:id/activities` — with employee name.
-- `POST /api/crm/leads/:id/convert` — creates a customer from lead data (`phone → mobile`, `company → address`). Sets `stage='converted'`, `customer_id` on lead. Idempotent: returns existing `customer_id` if already converted.
+**Leads** (`crm_leads`, `crm_activities`):
+- `GET/POST/PUT/DELETE /api/crm/leads[/:id]` — standard CRUD, COALESCE update on PUT.
+- `POST /api/crm/leads/:id/activities`, `GET /api/crm/leads/:id/activities` — activity log per lead.
+- `POST /api/crm/leads/:id/convert` — creates a `customers` row (`phone→mobile`, `company→address`), sets lead `stage='converted'` + `customer_id`. Idempotent — returns the existing `customer_id` if already converted instead of erroring.
 
-**Quotations (`/api/quotations`):**
-- `GET /api/quotations` — filterable by `status`, `customer_id`, `from`, `to`. Joins customers, leads, employees, outlets.
-- `POST /api/quotations` — requires `outlet_id` and `items` array. Auto-generates `quote_number = Q-{Date.now()}`. Creates header + items in transaction. Computes `subtotal`, `tax_total`, `total_amount`. Supports `discount_type: 'percent' | 'fixed'`.
-- `GET /api/quotations/:id` — with items joined to products.
-- `PUT /api/quotations/:id` — draft or sent status only. Replaces items (DELETE + re-insert) in transaction.
-- `PUT /api/quotations/:id/status` — valid statuses: `draft`, `sent`, `accepted`, `rejected`, `expired`, `converted`.
-- `POST /api/quotations/:id/send` — reads `email_config` for SMTP credentials. Sends HTML email via nodemailer directly. Updates status to `sent`. Returns 400 if customer has no email or SMTP is not configured.
+**Quotations** (`quotations`, `quotation_items`):
+- `GET /api/quotations` — filters `status`, `customer_id`, `from`, `to`.
+- `POST /api/quotations` — requires `outlet_id` + non-empty `items[]`. Auto `quote_number = Q-{Date.now()}` (not sequential/zero-padded like the accounting note numbers). Computes subtotal/tax/discount/total; supports `discount_type: 'percent'|'fixed'`. Header + items written in one transaction.
+- `GET/PUT /api/quotations/:id` — PUT only allowed when status is `draft` or `sent`; replaces items via DELETE + re-insert.
+- `PUT /api/quotations/:id/status` — status ∈ draft/sent/accepted/rejected/expired/converted.
+- `POST /api/quotations/:id/send` — 400 if customer has no email or SMTP (`email_config.smtp_host`) isn't set. Builds an HTML table email inline and sends via nodemailer; sets status to `sent`.
 - `DELETE /api/quotations/:id` — draft only.
-- `POST /api/quotations/:id/convert` — **only works if status is `accepted`** (must PUT status to `accepted` first). Creates a `sales` record + `sale_items` + `sale_payments` + decrements `outlet_stock` in a transaction. Sets `converted_sale_id`. Fires `createNotification`.
+- `POST /api/quotations/:id/convert` — **requires status `accepted`** (PUT status first — sending straight to convert on draft/sent returns 400). Creates `sales` + `sale_items` + `sale_payments`, decrements `outlet_stock.quantity`, all in one transaction; sets `quotations.converted_sale_id`; fires `createNotification`.
 
 Tables: `crm_leads`, `crm_activities`, `quotations`, `quotation_items`, `customers`, `sales`, `sale_items`, `sale_payments`, `outlet_stock`, `email_config`.
 
 ## approvals.js
 
-Feature flag: `requireFeature("approvals")` on all routes. No `requirePerm` except reconciliation route.
+Deps: `db`, `requireFeature`, `requirePerm`, `requireAnyPerm`. Flag `approvals` on every route; most routes have no `requirePerm` guard (any authenticated user can submit/approve) except the reconciliation route.
 
-- `GET /api/approvals` — approval requests filterable by `?status=` (defaults to `pending_approval`). Reads from `approval_requests`.
-- `POST /api/purchase-orders/:id/submit` — PO must be `status='Draft'` (capital D). Creates `approval_requests` row (`request_type='po_approval'`) and updates PO to `'pending_approval'` in transaction.
-- `POST /api/purchase-orders/:id/approve` — PO must be `'pending_approval'`. Body: `{ action, action_by, reason }`. `action` must be `'approved'` or `'rejected'`. On approved: sets PO to `'Approved'` (capital A). On rejected: resets to `'Draft'`. Updates `approval_requests` + inserts `approval_actions` + inserts `action_history` in transaction.
-- `POST /api/transfers/:id/submit` — transfer must be `status='draft'` (lowercase). Creates `approval_requests` (`request_type='str_approval'`).
-- `POST /api/transfers/:id/approve` — transfer must be `'pending_approval'`. On approved: sets to `'approved'` (lowercase, unlike PO). On rejected: resets to `'draft'`.
-- `POST /api/reconciliation/inventory/:id/approve-fix` — `requireFeature("approvals")` + `requireAnyPerm(["manage_inventory","all_access"])`. Body: `{ mode }`. Two modes: `push_to_shopify` (marks `resolution_status='resolved'`, Shopify sync handled separately) or `pull_from_shopify` (overwrites `outlet_stock.quantity` with `external_qty` from reconciliation row, then marks resolved). Transactional.
+- `GET /api/approvals` — list from `approval_requests`, filter `?status=` (default `pending_approval`).
+- `POST /api/purchase-orders/:id/submit` — PO must be `status='Draft'` (capital D). Transitions to `pending_approval`, inserts `approval_requests` (`request_type='po_approval'`).
+- `POST /api/purchase-orders/:id/approve` — PO must be `pending_approval`. Body `{action: 'approved'|'rejected', action_by, reason}`. Approved → `'Approved'` (capital A); rejected → back to `'Draft'`. Updates `approval_requests`, inserts `approval_actions` + `action_history`, all in one transaction.
+- `POST /api/transfers/:id/submit` — transfer must be `status='draft'` (all-lowercase, unlike PO). Same `approval_requests` pattern with `request_type='str_approval'`.
+- `POST /api/transfers/:id/approve` — transfer must be `pending_approval`. Approved → `'approved'` (lowercase); rejected → `'draft'`. **Do not mix PO's capitalized statuses with transfer's lowercase ones — they are different state machines despite the parallel shape.**
+- `POST /api/reconciliation/inventory/:id/approve-fix` — `requireAnyPerm(["manage_inventory","all_access"])` + flag. Body `{mode: 'push_to_shopify'|'pull_from_shopify'}`. `push_to_shopify` just marks the reconciliation row resolved (actual Shopify sync happens elsewhere). `pull_from_shopify` overwrites `outlet_stock.quantity` with the row's `external_qty`, then marks resolved. Transactional.
 
 Tables: `approval_requests`, `approval_actions`, `purchase_orders`, `inventory_transfers`, `action_history`, `inventory_reconciliation`, `outlet_stock`.
 
-## Permission Summary
+## Cross-cutting gotchas
 
-| Module | Permission | Feature Flag |
-|--------|-----------|--------------|
-| notifications.js | none | `notifications` |
-| company-profile.js GET/PUT | `all_access` (PUT) | `multi_company` |
-| company-profile.js /currency | none (public) | none |
-| company-profile.js /onboarding-dismiss, /fbr-banner-dismiss | `all_access` | none |
-| accounting.js most routes | `view_reports` or `manage_employees` | `accounting_core` |
-| accounting.js COA + journal entries | `all_access` | `accounting_core` |
-| accounting.js credit/debit notes + cheques | `manage_employees` or `all_access` | `accounting_core` |
-| hr.js all routes | `all_access` | `advanced_hr` |
-| crm.js all routes | `manage_orders` | `crm_quotations` |
-| approvals.js most routes | none | `approvals` |
-| approvals.js reconciliation fix | `manage_inventory` or `all_access` | `approvals` |
-
-## Key Gotchas
-
-- **`/api/quotations/:id/convert`** requires status to be `accepted` — you must call `PUT /api/quotations/:id/status` with `{status:'accepted'}` before converting. Sending convert on a draft/sent quotation returns 400.
-- **`/api/hr/payroll/periods/:id/generate`** is a heavy N+1 operation — iterates every employee and runs multiple queries per employee inside a transaction. Not suited for large employee counts without optimization.
-- **Quotation email uses nodemailer directly** — reads `email_config` table from the tenant DB, not the Resend/system email service. Will fail with "Email not configured" if no SMTP config is set.
-- **PO approval status casing**: `'Draft'` → `'pending_approval'` → `'Approved'` (capital D and A). Transfer approval uses all-lowercase: `'draft'` → `'pending_approval'` → `'approved'`. Do NOT mix cases when querying.
-- **COA delete is soft** (sets `is_active=false`, does not DELETE the row). Can't delete system accounts or accounts with journal entries.
-- **`company-profile.js` PUT with `industry_type`** resets ALL mode-related feature flags and re-seeds from the preset. This is intentional but means changing industry type overwrites any manual flag overrides.
+- **Status casing is inconsistent across modules and even within accounting.js.** PO: `Draft`/`pending_approval`/`Approved`. Transfers: `draft`/`pending_approval`/`approved`. Cheques/notes/journal entries: all-lowercase. Always check the specific table's convention before writing a status filter.
+- **`x-employee-id` header, not `req.employee.id`**, is the source for `approved_by`/`created_by`/`closed_by`/`posted_by`/`voided_by` across accounting.js and hr.js. This is a legacy pattern in this directory — don't assume `req.employee` is used for attribution here even though it's available.
+- **Multiple journal-entry-posting code paths exist as inline best-effort logic** — credit/debit note approval, cheque clearing — each independently checks for specific COA account codes (`1000`, `1100`, `2000`, `4000`, `5000`) and silently skips posting if those codes aren't seeded. Approving/clearing never fails due to missing COA; it just doesn't produce a journal entry. If you add a new money-moving action that should hit the ledger, follow this same defensive pattern rather than assuming COA is always seeded.
+- **`/api/accounting/coa/next-code/:type` is registered after `/api/accounting/coa/:id`** — only safe due to segment-count difference; watch this if adding new COA sub-routes.
+- **Quotation email bypasses the shared email service** (`services/email.js`/Resend) entirely and uses raw `nodemailer` against tenant `email_config`. If you're auditing "where do tenant-configured SMTP settings get used," this is one of the only call sites.
+- **`hr.js` payroll generation is O(employees) sequential queries inside one transaction** — no batching. Large tenants will be slow; don't assume it scales without profiling first.
+- **Two separate leave/attendance tables feed different HR features**: `employee_attendance` feeds payroll generation; `attendance_sessions` feeds overtime alerts. They are not interchangeable.

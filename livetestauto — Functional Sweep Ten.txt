@@ -1,0 +1,40 @@
+livetestauto — Functional Sweep Tenant
+Field	Value
+Store code	livetestauto
+Username	Sweep Operator (with space, case-sensitive)
+Password	SweepRun123!
+PIN	1234
+Email	sano9942@hotmail.com
+
+
+3. sanoposlivetest1778021564659 — Restaurant Test Tenant
+Field	Value
+Store code	sanoposlivetest1778021564659
+Username	Test Owner
+Password	TestPass564659!
+PIN	1234
+Email	sano9942uae@hotmail.com
+
+
+4. cafetestphase8 — Cafe/QSR Test Tenant
+Field	Value
+Store code	cafetestphase8
+Username	Test Owner (case-sensitive, with space)
+Password	TestPass1935!
+PIN	1234
+
+
+5. wholesalewalktest1778451 — Wholesale Test Tenant
+Field	Value
+Store code	wholesalewalktest1778451
+Username	Wholesale Test Owner
+Password	TestWholesale778!
+PIN	4321
+Email	wholesalewalk-1778451+test@gmail.com
+Sub-accounts on this tenant:
+
+Role	                          Username	                               Password
+Field Rep	              Field Rep One	                              FieldRep778!
+Portal (distributor)	testdist+test@sanomerchandise.com	           PortalPass123!
+Portal (kiryana)	khalid+test@sanomerchandise.com	                   PortalPass123!
+Manufacturer portal	wholesalewalk-1778451+acme@gmail.com	            MfrPortal778!

@@ -1,12 +1,12 @@
 # Auth — Claude Guide
 
-**4 files** — authentication layer for tenant (app), admin, and customer portals.
+Authentication layer for tenant (app), super-admin, customer portal, and manufacturer portal. Four separate JWT scopes, four separate storage schemes — never mix them.
 
 ---
 
 ## `AuthProvider.jsx`
 
-Exports `AuthProvider` + `useAuth()`.
+Exports `AuthProvider` + `useAuth()`. This is the tenant-app auth context — do not use it for admin or portal pages.
 
 ### `useAuth()` return shape
 
@@ -14,130 +14,137 @@ Exports `AuthProvider` + `useAuth()`.
 |-------|------|-------|
 | `session` | `object\|null` | Full raw session object from localStorage |
 | `employee` | `object\|null` | `session.employee` |
-| `permissions` | `string[]` | `session.permissions` — fresh-fetched on boot |
+| `permissions` | `string[]` | `session.permissions` — fresh-fetched on boot, not trusted from localStorage |
 | `isAuthenticated` | `boolean` | `Boolean(employee?.id)` |
-| `isBootstrapping` | `boolean` | `true` while initial boot async work runs — use to gate redirects |
+| `isBootstrapping` | `boolean` | `true` while initial boot async work runs — gate redirects on this |
 | `login(username, password, tenantSlug?)` | `async fn` | See login flows below |
-| `logout()` | `async fn` | Clears session, posts AUTH_LOGOUT to SW, calls `/api/auth/logout` |
-| `refreshPermissions(roleId, employeeId?)` | `async fn` | Fetches fresh perms — called internally on boot |
-| `refreshAccessToken()` | `async fn` | Attempts token refresh via `/api/auth/refresh` |
+| `logout()` | `async fn` | Clears session, posts `AUTH_LOGOUT` to service worker, calls `/api/auth/logout` |
+| `refreshPermissions(roleId, employeeId?)` | `async fn` | Fetches fresh perms from `/api/roles/:roleId/permissions` — called internally on boot |
+| `refreshAccessToken()` | `async fn` | Refreshes JWT via `/api/auth/refresh` (httpOnly cookie) |
 | `hasPerm(perm)` | `fn → boolean` | `true` if `permissions` includes `"all_access"` OR the specific perm |
-| `authHeaders(extra?)` | `fn → object` | Returns `{ "x-employee-id": ..., "Authorization": ... }` — used by components needing manual headers (e.g. `useFeatureFlags`) |
+| `authHeaders(extra?)` | `fn → object` | Returns `{ "x-employee-id", "Authorization" }` for callers needing manual headers (e.g. `useFeatureFlags`) |
 | `token` | `string\|null` | JWT access token (MT mode only) |
 | `isImpersonating` | `boolean` | True during admin impersonation session |
-| `impersonationTenantName` | `string\|null` | Tenant name shown in amber banner |
+| `impersonationTenantName` | `string\|null` | Shown in amber banner |
 | `impersonationSessionId` | `string\|null` | Used for impersonation audit trail |
 | `subscriptionStatus` | `null\|'trial'\|'grace'\|'expired'\|'active'` | Drives `SubscriptionBanner` |
-| `subscriptionDaysLeft` | `number\|null` | Days remaining in trial or grace period |
-| `tenantPlan` | `null\|'free'\|'pro'` | Tenant subscription plan — used by billing UI and plan-gated features |
-| `company` | `object\|null` | `session.company` — loaded from `/api/auth/me` on boot; includes `tax_mode` (`'inclusive'\|'exclusive'\|'none'`), used by POS to default and hide the tax-inclusive toggle (P8/3.14) |
+| `subscriptionDaysLeft` | `number\|null` | Days remaining in trial or grace |
+| `tenantPlan` | `null\|'free'\|'pro'` | Drives billing UI + plan-gated features |
+| `company` | `object\|null` | `session.company`, loaded from `/api/auth/me` on boot; includes `tax_mode` (`'inclusive'\|'exclusive'\|'none'`) used by POS |
 
-### Fetch interceptor (patches `window.fetch`)
+### Fetch interceptor (patches `window.fetch` globally)
 
-Applied to all calls where URL contains `${API}/api/` or starts with `/api/`. Skipped for:
-- Non-API URLs
+Installed in a `useEffect` keyed only on `employee?.id`. Applies to any call whose URL contains `${API}/api/` or starts with `/api/`. Every call made through `api.js` — or raw `fetch()` to an `/api/` path anywhere in the app — passes through this. Skipped when:
+- URL isn't an API call
 - No authenticated employee
-- Public auth endpoints: `/api/auth/signup`, `/api/auth/forgot-password`, `/api/auth/reset-password`
+- URL matches a public auth endpoint: `/api/auth/signup`, `/api/auth/forgot-password`, `/api/auth/reset-password`
 
 **Headers injected automatically:**
 
 | Header | When |
 |--------|------|
-| `x-employee-id` | Always (when employee is authenticated) |
-| `Authorization: Bearer <token>` | MT mode only, reads live via `readToken()` |
-| `x-company-id` | When `context.active_company_id` is set in session |
-| `x-outlet-id` | When `context.active_outlet_id` is set in session |
-| `x-scope-mode` | When `context.scope_mode` is set in session |
+| `x-employee-id` | Always, when employee is authenticated |
+| `Authorization: Bearer <token>` | MT mode only, token read live via `readToken()` |
+| `x-company-id` | When `context.active_company_id` set in session |
+| `x-outlet-id` | When `context.active_outlet_id` set in session |
+| `x-scope-mode` | When `context.scope_mode` set in session |
 
-**Interceptor behaviors (in order):**
-1. **Offline guard** — non-GET while `!navigator.onLine` returns synthetic `503` with `X-Offline-Mode: 1`
-2. **Header injection** — injects employee/token/context headers
-3. **Token refresh** — on 401 with `body.code === "TOKEN_EXPIRED"` (MT only): calls `refreshAccessToken()`, retries once. `_refreshPromise` module-level lock prevents parallel refresh stampede
-4. **Request ID tracking** — sets `window.__lastFailedReqId` to `X-Request-Id` on any failed response (used by `SupportWidget`)
-5. **Subscription expiry** — on 403 with `body.code === "SUBSCRIPTION_EXPIRED"`: sets `subscriptionStatus = "expired"`
+**Interceptor behavior, in order:**
+1. **Offline guard** — non-GET/HEAD/OPTIONS while `!navigator.onLine` returns a synthetic `503` with `X-Offline-Mode: 1` header instead of hitting the network
+2. **Header injection** — as above
+3. **Silent token refresh** — on `401` with response body `{ code: "TOKEN_EXPIRED" }` (MT only): calls `refreshAccessToken()`, retries the original request once with the new token. Module-level `_refreshPromise` lock coalesces concurrent refreshes into one call
+4. **Failed-request tracking** — sets `window.__lastFailedReqId` from the `X-Request-Id` response header on any non-ok response (consumed by `SupportWidget`)
+5. **Subscription expiry detection** — on `403` with `{ code: "SUBSCRIPTION_EXPIRED" }`: sets `subscriptionStatus = "expired"`
 
-**Token reads live via `readToken()`** — the interceptor is only re-registered when `employee?.id` changes, NOT when `token` changes. Do NOT add `token` to any `useEffect` dep array that wraps the interceptor.
+`window._nativeFetch` is stashed by the interceptor so `refreshAccessToken()` and other internal calls can bypass it and avoid infinite recursion. Anything that must skip the interceptor (e.g. `ImpersonationBanner`'s exit flow) also reaches for `window._nativeFetch`.
 
-`window._nativeFetch` is set by the interceptor so the refresh function can bypass it (avoids infinite recursion).
+**Gotcha:** the interceptor is only re-registered when `employee?.id` changes, never when `token` changes — token is always read live via `readToken()`. Do NOT add `token` to the wrapping `useEffect`'s dependency array; it causes a re-registration loop.
 
-### Boot sequence (on mount)
+### Boot sequence (runs once on mount)
 
-1. Check URL for `?impersonate_token=&impersonate_session=` — if present, verify token via `GET /api/auth/me`, store impersonation session, clean URL params
-2. If existing session has `isImpersonation: true` — restore impersonation state
-3. No session → set `isBootstrapping = false`, done
-4. Existing session → **re-fetch permissions** fresh from `GET /api/roles/:roleId/permissions` (localStorage permissions not trusted)
-5. Also calls `GET /api/auth/me` best-effort to refresh `session.company` — result merged back via `writeSession` before the refreshed session is used (outside the impersonation verification path)
-6. In MT mode → fetch `GET /api/billing/status` to populate `subscriptionStatus` + `subscriptionDaysLeft`
-7. If permission fetch fails → `clearSession()`, logout
+1. Check URL for `?impersonate_token=&impersonate_session=`. If present: verify the token server-side via `GET /api/auth/me` (never trust the token client-side), build an impersonation session, write it, strip the params from the URL.
+2. If an existing stored session has `isImpersonation: true`, restore it as-is and stop.
+3. No existing session → `isBootstrapping = false`, done.
+4. Existing session → re-fetch permissions fresh from `GET /api/roles/:roleId/permissions` (never trust localStorage permissions).
+5. Best-effort `GET /api/auth/me` refreshes `session.company` (e.g. `tax_mode`) — merged into the session before it's committed. A failure here is non-fatal; boot continues with whatever `company` was already cached.
+6. MT mode only: fetch `GET /api/billing/status` to populate `subscriptionStatus`, `subscriptionDaysLeft`, `tenantPlan`.
+7. If the permissions re-fetch throws, the session is torn down (`clearSession()`, `setSession(null)`) — a stale/invalid session cannot silently persist.
 
 ### Login flows
 
-**Single-tenant:** `POST /api/auth/login` with `{ username, password }` — no `credentials: "include"`, no token stored
-
-**Multi-tenant:** `POST /api/auth/mt-login` with `{ tenant_slug, username, password }` + `credentials: "include"` (receives httpOnly refresh cookie). Session includes `token`, `tenant_slug`, `tenant` object.
+- **Single-tenant:** `POST /api/auth/login` with `{ username, password }`. No `credentials: "include"`, no token stored — session is just `{ employee, permissions }`.
+- **Multi-tenant:** `POST /api/auth/mt-login` with `{ tenant_slug, username, password }` and `credentials: "include"` (receives httpOnly refresh cookie). Session additionally carries `token`, `tenant_slug`, `tenant`.
 
 ### Logout
 
-1. `POST /api/auth/logout` (best-effort — errors swallowed)
-2. `navigator.serviceWorker.controller.postMessage({ type: "AUTH_LOGOUT" })` — clears SW cache
+1. `POST /api/auth/logout` (best-effort, errors swallowed — a failed logout call must never block client-side teardown)
+2. `navigator.serviceWorker.controller.postMessage({ type: "AUTH_LOGOUT" })` to clear SW cache
 3. `clearSession()` + `setSession(null)`
 
 ---
 
-## `authStore.js`
+## `authStore.js` — tenant session storage
 
-localStorage key: `"authSession"`. All reads/writes go through these helpers — never access `localStorage` directly for auth data. **Exceptions:** `CurrencyContext.jsx` reads `"authSession"` directly to extract `tenant_slug`; `ImpersonationBanner.jsx` reads `"adminSession"` and removes `"authSession"` and `"currentEmployee"` directly during exit.
-
-**Exports:**
+localStorage key: `"authSession"`. All reads/writes must go through these helpers — never touch `localStorage` directly for tenant auth data. Known exceptions: `CurrencyContext.jsx` reads `"authSession"` directly to pull `tenant_slug` (runs outside `AuthProvider`), and `ImpersonationBanner.jsx` removes `"authSession"`/`"currentEmployee"` directly on impersonation exit.
 
 | Export | Purpose |
 |--------|---------|
 | `AUTH_KEY` | Constant `"authSession"` |
-| `isSessionStructValid(session)` | Validates `session.employee.id` + `session.employee.role_id` exist |
-| `readSession()` | Parses + validates; returns `null` on invalid/missing |
-| `writeSession(session)` | Only writes if valid. Also writes `localStorage["currentEmployee"]` (backward compat) |
-| `clearSession()` | Removes both `"authSession"` and `"currentEmployee"` |
-| `readContext()` | Returns `session.context \| null` |
-| `writeContext(context)` | Merges `context` into existing session |
-| `clearContext()` | Removes `context` key from session (via destructuring) |
-| `readToken()` | Returns `session.token \| null` |
-| `writeToken(token)` | Merges `token` into existing session |
+| `isSessionStructValid(session)` | Requires `session.employee.id` and `session.employee.role_id` |
+| `readSession()` | Parses + validates; `null` on missing/invalid/corrupt JSON |
+| `writeSession(session)` | No-op if invalid. Also writes `localStorage["currentEmployee"]` for legacy readers |
+| `clearSession()` | Removes `"authSession"`, `"currentEmployee"`, and `"sanopos_feature_flags_cache_v1"` (so the next tenant logged into this browser doesn't see stale flags on first paint) |
+| `readContext()` / `writeContext(context)` / `clearContext()` | Outlet/company/scope context, merged into or stripped from the session |
+| `readToken()` / `writeToken(token)` | JWT access token, merged into the session |
 | `readTenantSlug()` | Returns `session.tenant_slug \| null` |
-
-**`writeSession` backward compat:** also writes `localStorage["currentEmployee"]` for any pages still reading that key directly.
 
 ---
 
-## `adminAuthStore.js`
+## `adminAuthStore.js` — super-admin session storage
 
-localStorage key: `"adminSession"`. Mirror of `authStore.js` for the `/admin` portal — simpler, no context or token refresh helpers.
-
-**Exports:**
+localStorage key: `"adminSession"`. Structurally mirrors `authStore.js` but simpler — no context, no token-refresh helpers, no struct validation.
 
 | Export | Notes |
 |--------|-------|
-| `readAdminSession()` | Alias for `getAdminSession()` — both call `_read()` |
-| `writeAdminSession(session)` | Stores full session object |
+| `readAdminSession()` / `getAdminSession()` | Both just call the same internal `_read()` — interchangeable |
+| `writeAdminSession(session)` | Stores the full session object |
 | `clearAdminSession()` | Removes `"adminSession"` |
 | `getAdminToken()` | Returns `session.token \| null` |
-| `getAdminSession()` | Returns full session object |
 
-No `isSessionStructValid` — admin session has no required-field check.
+Completely separate from tenant auth — an admin JWT and a tenant JWT are never the same token, and this store is never read by `AuthProvider`.
 
 ---
 
-## `customerPortalStore.js`
+## `customerPortalStore.js` — customer self-service portal storage
 
-localStorage key: `customerPortalSession:${slug}` (slug-scoped — one browser can be logged into multiple tenant portals simultaneously).
-
-**Exports:**
+localStorage key: `` customerPortalSession:${slug} `` — slug-scoped so one browser can hold sessions for multiple tenants' portals simultaneously.
 
 | Export | Purpose |
 |--------|---------|
-| `readPortalSession(slug)` | Returns full session object or null |
-| `writePortalSession(slug, session)` | Stores session keyed by tenant slug |
-| `clearPortalSession(slug)` | Removes session for this slug |
+| `readPortalSession(slug)` / `writePortalSession(slug, session)` / `clearPortalSession(slug)` | Basic CRUD, all require a slug (no-op / return null otherwise) |
 | `getPortalToken(slug)` | Returns `session.access_token \| null` |
 | `getPortalCustomer(slug)` | Returns `session.customer \| null` |
 
-Used by `PortalAuthProvider` in `pages/portal/` and by `frontend/src/api/portalApi.js` (which imports and uses `readPortalSession`, `writePortalSession`, and `clearPortalSession` directly). NOT interchangeable with `authStore.js` (tenant app) or `adminAuthStore.js` (super-admin).
+Consumed by `PortalAuthProvider` (`pages/portal/`) and `frontend/src/api/portalApi.js`. Uses its own JWT (`CUSTOMER_PORTAL_JWT_SECRET` server-side) — not interchangeable with `authStore.js` or `adminAuthStore.js`.
+
+---
+
+## `manufacturerPortalStore.js` — manufacturer/brand partner portal storage
+
+localStorage key: `` manufacturerPortalSession:${slug} `` — same slug-scoped pattern as `customerPortalStore.js`, built for the Tier 1.4 manufacturer-partner portal.
+
+| Export | Purpose |
+|--------|---------|
+| `readMfgPortalSession(slug)` / `writeMfgPortalSession(slug, session)` / `clearMfgPortalSession(slug)` | Basic CRUD, slug required |
+| `getMfgPortalToken(slug)` | Returns `session.access_token \| null` |
+| `getMfgPortalPartner(slug)` | Returns `session.partner \| null` |
+
+Its own parallel JWT scope, separate from tenant, admin, and customer-portal auth. Backs the manufacturer portal at `/manufacturer-portal/:slug`.
+
+---
+
+## Cross-cutting notes
+
+- **Four independent auth scopes, four independent storages**: tenant (`authStore.js`), super-admin (`adminAuthStore.js`), customer portal (`customerPortalStore.js`), manufacturer portal (`manufacturerPortalStore.js`). None of their tokens or localStorage keys overlap — do not read one store's key from another context.
+- Only the tenant scope (`AuthProvider.jsx`) patches `window.fetch`. Admin and portal pages call their own fetch wrappers (`adminFetch`, `portalApi`) that read from their respective stores directly — they are not covered by the interceptor above.
+- All portal-style stores (`customerPortalStore.js`, `manufacturerPortalStore.js`) follow the same slug-scoped key + CRUD-plus-two-getters shape. If adding a new portal type, copy that pattern rather than inventing a new one.

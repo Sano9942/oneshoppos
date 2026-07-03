@@ -1,6 +1,6 @@
 # Utils — Claude Guide
 
-**10 files** — frontend utility helpers. No React dependencies except `errorLog.js` (uses `api.js`).
+Frontend utility helpers. No React dependencies except `errorLog.js` (uses `api.js`).
 
 ---
 
@@ -17,218 +17,165 @@ Dual timestamp system: Postgres columns store timestamps two ways.
 
 | Export | Notes |
 |--------|-------|
-| `parseDbDate(str)` | Handles native `Date` objects (Postgres), ISO strings, SQLite `"2026-03-06 08:56:04"` format. Returns `null` only for empty inputs or invalid native `Date` objects; invalid strings produce an `Invalid Date` object (formatters may display `"Invalid Date"` rather than `"—"`) |
-| `parseLocalDate(str)` | Same but treats the value as local time (no `Z` suffix appended). Same `null`-vs-`Invalid Date` caveat applies |
-| `fmtUtcDateTime(str)` | → locale date+time string |
-| `fmtUtcDate(str)` | → locale date string |
-| `fmtUtcTime(str, opts?)` | → locale time string; `opts` passed to `toLocaleTimeString` |
-| `fmtLocalDateTime(str)` | → locale date+time string |
-| `fmtLocalDate(str)` | → locale date string |
-| `fmtLocalTime(str, opts?)` | → locale time string |
-| `fmtDateTime` | Alias → `fmtUtcDateTime` (backward compat) |
-| `fmtDate` | Alias → `fmtUtcDate` (backward compat) |
-| `fmtTime` | Alias → `fmtUtcTime` (backward compat) |
+| `parseDbDate(str)` | Handles native `Date` objects (Postgres driver), ISO strings, and legacy SQLite `"2026-03-06 08:56:04"` strings (assumed UTC, `Z` appended) |
+| `parseLocalDate(str)` | Same but treats space-separated strings as local time (no `Z` appended) |
+| `fmtUtcDateTime/Date/Time(str, opts?)` | Locale-formatted strings using `parseDbDate` |
+| `fmtLocalDateTime/Date/Time(str, opts?)` | Locale-formatted strings using `parseLocalDate` |
+| `fmtDateTime`, `fmtDate`, `fmtTime` | Back-compat aliases → the UTC variants |
+| `localDateStr(d?)` | Local `YYYY-MM-DD` for a `Date` (defaults to now) |
+| `todayLocalStr()` | Today, local, `YYYY-MM-DD` |
+| `daysAgoLocalStr(n)` | N days ago, local, `YYYY-MM-DD` |
+| `monthStartLocalStr()` | First of current local month, `YYYY-MM-DD` |
 
-**All formatters return `"—"` on null/empty input.**
+All formatters return `"—"` on null/empty input.
 
-**Gotcha:** Postgres `pg` driver returns UTC columns as native JS `Date` objects, not strings. Both parsers short-circuit on `instanceof Date`. Legacy SQLite strings (space-separated, no `T`/`Z`) are also handled.
+**Gotcha:** never use `toISOString().slice(0, 10)` for "today" — it returns the UTC date, which flips to tomorrow after ~19:00 PKT and silently breaks default date-filter ranges. Always use `todayLocalStr()`/`localDateStr()` instead.
+
+**Gotcha:** never pass a raw DB value straight to `new Date()`. Pick UTC vs LOCAL based on the column, not by guessing.
 
 ---
 
 ## `csvExport.js`
 
-Single export: `downloadCsv(headers, rows, filename)`
+Single export: `downloadCsv(headers, rows, filename)`.
 
-- **No-ops silently** if `rows.length === 0`
-- Filename: `${filename}_YYYY-MM-DD.csv` (today's date appended automatically)
-- Values are double-quote wrapped; inner `"` escaped as `""`
-- Creates a Blob → temporary anchor → click → revokes object URL
+- **This is the standard for every CSV export feature** — do not hand-roll `Blob`/anchor-click code in a new page.
+- No-ops silently if `rows.length === 0`.
+- Filename becomes `${filename}_YYYY-MM-DD.csv` (today's local date appended via `todayLocalStr()`).
+- Cell values are double-quote wrapped; inner `"` escaped as `""`.
 
 ---
 
 ## `offlineQueue.js`
 
-POS offline queue backed by **IndexedDB** (via `idb` library), not localStorage. Queue is per-employee and supports both sales and returns (Bucket F).
+POS offline queue backed by **IndexedDB** (via the `idb` library) — not localStorage. Database `sanopos_pos`, store `sales_queue`, keyPath `idempotency_key`, indexes `by_employee` / `by_state` / `by_queued_at`.
 
-**IndexedDB schema:** database `sanopos_pos`, store `sales_queue`, keyPath `idempotency_key`, indexes: `by_employee`, `by_state`, `by_queued_at`.
+Row `type` field distinguishes what's queued: `"sale"`, `"return"`, `"check_in"` (field-rep visits), `"field_order"` (field-rep orders, links back via `field_visit_uuid`). Legacy rows without a `type` are treated as `"sale"` on read (`normalizeRow`).
 
-**Row shape:**
+Row shape: `{ idempotency_key, employee_id, type, sync_state, retry_count, last_error, queued_at, last_attempt_at, payload }`. `sync_state` is one of `"pending" | "syncing" | "failed"`.
 
-| Field | Notes |
-|-------|-------|
-| `idempotency_key` | Unique key per row (from payload) |
-| `employee_id` | Used for all per-employee queries |
-| `type` | `"sale"` or `"return"` (Bucket F — legacy rows default to `"sale"` on read) |
-| `sync_state` | `"pending"` \| `"syncing"` \| `"failed"` |
-| `retry_count` | Incremented by `markFailed` |
-| `last_error` | Error message from last attempt |
-| `queued_at` | ISO timestamp set on enqueue |
-| `last_attempt_at` | Updated by `markSyncing` |
-| `payload` | Full sale/return payload |
-
-**Constants (exported):** `MAX_QUEUED = 50`, `WARN_THRESHOLD = 40`
+**Constants:** `MAX_QUEUED = 50` (shared cap across ALL types combined — sale+return+check_in+field_order), `WARN_THRESHOLD = 40`.
 
 **Exports:**
 
 | Export | Notes |
 |--------|-------|
-| `getQueueKey(employeeId)` | `"pos_offline_queue_{employeeId}"` — used for localStorage migration only |
-| `getQueue(employeeId)` | Returns all rows for employee (both sales + returns) |
-| `getSalesQueue(employeeId)` | Filtered to `type === "sale"` |
-| `getReturnsQueue(employeeId)` | Filtered to `type === "return"` |
+| `getQueue(employeeId)` | All rows for the employee, any type |
+| `getSalesQueue` / `getReturnsQueue` / `getCheckInsQueue` / `getFieldOrdersQueue` | Type-filtered views |
 | `getQueueByState(employeeId, state)` | Filtered by `sync_state` |
-| `enqueue(employeeId, salePayload)` | Back-compat: enqueues as `type="sale"`. Throws if queue full or `idempotency_key` missing |
-| `enqueueSale(employeeId, payload)` | Explicit sale enqueue |
-| `enqueueReturn(employeeId, payload)` | Explicit return enqueue |
-| `markSyncing(idempotencyKey)` | Sets `sync_state = "syncing"`, updates `last_attempt_at` |
-| `markSynced(idempotencyKey)` | Deletes the row (success) |
-| `markFailed(idempotencyKey, errorMessage)` | Sets `sync_state = "failed"`, increments `retry_count` |
-| `markPending(idempotencyKey)` | Resets back to `sync_state = "pending"` |
-| `clearQueue(employeeId)` | Deletes all rows for this employee |
-| `migrateFromLocalStorage(employeeId)` | One-time migration: reads old `localStorage["pos_offline_queue_{id}"]`, writes to IDB as `type="sale"`, removes LS key. Returns count of imported rows |
-| `dequeue(employeeId, idempotencyKey)` | **Deprecated** — calls `markSynced` with a console warning |
+| `enqueue(employeeId, payload)` | Back-compat — enqueues as `type="sale"` |
+| `enqueueSale` / `enqueueReturn` / `enqueueCheckIn` / `enqueueFieldOrder` | Explicit typed enqueue. All throw if queue is full (50) or `idempotency_key` is missing from payload |
+| `markSyncing(key)` | Sets `sync_state="syncing"`, stamps `last_attempt_at` |
+| `markSynced(key)` | Deletes the row (success path) |
+| `markFailed(key, errorMessage)` | Sets `sync_state="failed"`, increments `retry_count` |
+| `markPending(key)` | Resets to `sync_state="pending"` for retry |
+| `clearQueue(employeeId)` | Deletes all rows for the employee |
+| `migrateFromLocalStorage(employeeId)` | One-time migration from the old `localStorage["pos_offline_queue_{id}"]` key into IDB (as `type="sale"`); removes the LS key afterward |
+| `dequeue(employeeId, key)` | **Deprecated** — calls `markSynced` with a console warning; kept for old callers |
 
-**Cap:** `MAX_QUEUED = 50` is shared across sales + returns combined. Throws on the 51st enqueue.
+New offline-capable features that queue-and-sync should add a new `type` value and typed helpers here rather than building a parallel queue.
 
 ---
 
 ## `receipt.js`
 
-Single source of truth for receipt rendering. Both browser popup (`buildReceiptHtml`) and screen display (`POSReceiptModal`) consume `buildReceiptSections`. Also re-exports `PAPER_SIZES` and `pxForChars` from `paperSizes.js` for backward compat.
+Single source of truth for receipt rendering. Both the browser print popup and the on-screen `POSReceiptModal` consume `buildReceiptSections` — never duplicate receipt-line logic in a component. Re-exports `PAPER_SIZES` and `pxForChars` from `paperSizes.js` for callers that already import them from here.
 
 ### `formatPaymentMethodLabel(method)`
-
-Normalizes payment method IDs to display strings.
-
-| Input | Output |
-|-------|--------|
-| `"gift_card"` | `"Gift Card"` |
-| `"return_credit"` | `"Return Credit"` |
-| `"store_credit"` | `"Store Credit"` |
-| `"Cash"` | `"Cash"` (passthrough) |
-| `"my_custom_tender"` | `"My Custom Tender"` (generic title-case) |
+Normalizes payment method ids to display labels. Known aliases: `gift_card` → "Gift Card", `return_credit` → "Return Credit", `store_credit` → "Store Credit". Anything else is generically title-cased (`my_custom_tender` → "My Custom Tender"); already-pretty strings like `"Cash"` pass through unchanged.
 
 ### `buildReceiptSections(slip, template, currencySymbol?)`
+Pure function — returns a plain data object, renders nothing.
 
-Returns a plain data object — does not render anything. Both popup and modal consume this.
+Key `slip` fields it reads: `timestamp` (**must already be a formatted display string** — call `fmtDateTime()`/`fmtUtcDateTime()` before building the slip, never pass a raw DB value), `cart` (line items, supports weighted units, tare/gross weight, seat numbers for dine-in, serials/serialDetails), `payments` (Return Credit entries filtered out of display), `returnedItems` (non-empty triggers exchange-receipt mode with a `Balance Due` label), `balanceDue`, `fbr_irn` / `fbr_status` / `fbr_qr_code`, `offline`, `isHoldSlip`, `issuedGiftCards`, `orderNote`, `tax_breakdown` (per-rate array, P8), `taxInclusive`.
 
-**`slip` key fields:**
-
-| Field | Notes |
-|-------|-------|
-| `timestamp` | Must be a **pre-formatted display string** — call `fmtDateTime()` first, never pass a raw DB value |
-| `cart` | `[{ name, price, quantity, unit?, tare_weight?, gross_weight?, seat_number?, serials?, serialDetails? }]` |
-| `payments` | `[{ method, amount }]` — `"Return Credit"` entries are filtered out before display |
-| `returnedItems` | Non-empty → exchange receipt mode |
-| `balanceDue` | If set, overrides `total` as the displayed total (exchange balance) |
-| `fbr_irn` | FBR invoice ref — shown on receipt when set |
-| `fbr_status` | `"pending"` → shows `"FBR: Processing..."` line |
-| `fbr_qr_code` | Raw QR payload or data URL — encoded client-side if raw string |
-| `offline` | `true` → adds offline notice + `"PENDING (offline)"` invoice number |
-| `isHoldSlip` | `true` → hold slip mode (deposit/balance instead of payments) |
-| `issuedGiftCards` | `[{ code, initial_value }]` — gift card issue block |
-| `orderNote` | Footer order note |
-| `tax_breakdown` | `[{ rate, amount }]` sorted descending — P8 per-rate breakdown |
-| `taxInclusive` | `true` → tax shown as `"GST (incl.)"` |
-
-**Template fields used:**
-- `header_text`, `footer_text`, `show_barcode`, `logo_url`, `paper_width`, `show_tax_breakdown`, `show_fbr`, `show_qr`
-- All template fields default sensibly when missing (backward compat with pre-v76 tenants)
+Template fields (`header_text`, `footer_text`, `show_barcode`, `logo_url`, `paper_width`, `show_tax_breakdown`, `show_fbr`, `show_qr`) all default sensibly when the template is `null` or predates the receipt-designer migration.
 
 ### `buildReceiptHtml(slip, template, currencySymbol?, labels?)`
-
-Opens a browser popup (`window.open`) with the receipt rendered as HTML, then calls `w.print()`. Returns nothing. Alerts if popup is blocked.
-
-- Popup width is calculated from `template.paper_width` via `pxForChars()` — 48 chars (80mm) → 341px, 32 chars (58mm) → 227px
-- Barcode: CODE128 SVG via lazy `import("jsbarcode")` — only fetched for tenants with `show_barcode = true`
-- FBR QR: lazy `import("qrcode")` — only when `show_qr = true` and `fbr_qr_code` is a raw string
-- `labels` param passes industry-specific label overrides (e.g. `{ customer: "Patient" }`)
+Opens a `window.open` popup, builds the receipt as DOM nodes, calls `w.print()`. Alerts (and returns) if the popup is blocked. Popup width tracks `template.paper_width` via `pxForChars()`. Barcode (CODE128) and FBR QR code are lazy-loaded (`import("jsbarcode")` / `import("qrcode")`) so those libraries are only fetched by tenants that actually enable them. `labels` lets callers override industry-specific terms (e.g. `{ customer: "Patient" }`).
 
 ### `printToHardware(slip, template, labels?)`
-
-`async → { ok: true } | { error: string, fallback: true }`
-
-Posts to `/api/print/receipt` (relative URL — `AuthProvider` injects auth headers). Returns `{ fallback: true }` if printer offline or not configured. On failure, `useReceipt.printSlip()` sets `retryPrompt` rather than opening the browser fallback directly; `buildReceiptHtml()` is exposed separately via `printBrowserFallback()` or used by retry actions.
+`async` — POSTs to `/api/print/receipt` via an absolute `API_BASE` URL (needed because frontend and backend are on different origins in production). Returns `{ ok: true }` on success or `{ error, fallback: true }` on any failure (network error, non-2xx, printer not configured). Callers should fall back to `buildReceiptHtml()` when `fallback: true` comes back.
 
 ---
 
 ## `paperSizes.js`
 
-Shared paper-width definitions for thermal printers and receipt templates.
-
-**Exports:**
+Shared paper-width definitions used by both Printer Settings and Receipt Templates so the two surfaces stay in sync.
 
 | Export | Notes |
 |--------|-------|
-| `PAPER_SIZES` | `[{ label, value }]` — 4 entries: 48 (80mm), 42 (76mm), 32 (58mm), 30 (57mm) |
-| `pxForChars(chars)` | Converts char width to popup pixel width: `Math.round(chars * 7.1)`. Fallback to 48 if invalid |
-
-Used by printer settings and receipt template editor to stay in sync.
+| `PAPER_SIZES` | `[{ label, value }]` — 4 entries: 48 chars/80mm (standard), 42/76mm, 32/58mm (mini), 30/57mm (narrow) |
+| `pxForChars(chars)` | `Math.round(chars * 7.1)` — converts a char width to popup pixel width. Falls back to 48 chars if input is invalid |
 
 ---
 
 ## `publicReceipt.js`
 
-Utilities for shareable receipt URLs and WhatsApp sharing.
+Shareable receipt URL + WhatsApp share message builders. Centralizing this means every "share this receipt" entry point (POS post-checkout, Sales History) produces a URL that actually resolves.
 
 | Export | Notes |
 |--------|-------|
-| `buildPublicReceiptUrl(invoiceNumber)` | Returns absolute URL: `/receipt/${invoiceNumber}` + `?tenant=slug` when `IS_MULTI_TENANT`. Reads slug from `authStore.readTenantSlug()` |
-| `buildReceiptShareMessage({ invoiceNumber, totalLabel, outletName?, fallbackName? })` | Multi-line message body (NOT URL-encoded). Brand = `outletName \|\| fallbackName \|\| "SanoPOS"` |
-| `buildWhatsAppShareUrl(args)` | Returns `wa.me/?text=...` URL. `args` same as `buildReceiptShareMessage` |
-
-Used by POS post-checkout WhatsApp button and Sales History share panel.
+| `buildPublicReceiptUrl(invoiceNumber)` | `${origin}/receipt/${invoiceNumber}`, appends `?tenant=slug` when `IS_MULTI_TENANT` (reads slug via `authStore.readTenantSlug()`) |
+| `buildReceiptShareMessage({ invoiceNumber, totalLabel, outletName?, fallbackName? })` | Plain multi-line message body (not URL-encoded). Brand line prefers `outletName`, then `fallbackName` (e.g. template `header_text`), then `"SanoPOS"` — deliberately NOT the receipt footer greeting |
+| `buildWhatsAppShareUrl(args)` | Same args as above, returns a ready-to-open `wa.me/?text=...` URL |
 
 ---
 
 ## `categoryTree.js`
 
-Category tree UI helpers. All operate on flat `rows` arrays from the API.
+Category tree UI helpers. All operate on flat `rows` arrays from the API (hierarchical categories with leaf-only assignment).
 
 | Export | Notes |
 |--------|-------|
-| `sortCategories(rows)` | Sorts by `path_label` then `name` (locale-aware via `localeCompare`) |
-| `leafCategories(rows)` | Filters to `is_leaf === true`, then sorts |
-| `parentOptions(rows, currentId?)` | Returns valid parent choices — blocks current category AND all descendants (uses `path_ids` to find them) to prevent circular hierarchy |
-| `indentLabel(row)` | Returns `path_label \|\| name \|\| ""` — use for dropdown display |
-
-**`parentOptions` circular-safety:** blocks the current category ID plus any row whose `path_ids` includes `currentId`.
+| `sortCategories(rows)` | Sorts by `path_label` (falls back to `name`) via `localeCompare` |
+| `leafCategories(rows)` | Filters to `is_leaf` truthy, then sorts |
+| `parentOptions(rows, currentId?)` | Valid parent choices for a category picker — excludes the current row and every descendant (walks `path_ids`) so a category can never become its own ancestor |
+| `indentLabel(row)` | `path_label \|\| name \|\| ""` — use for dropdown display text |
 
 ---
 
 ## `theme.js`
 
-Dark mode management. Storage key: `localStorage["sanopos_theme"]`. Applied via `document.documentElement.dataset.theme`.
+Dark mode. Storage key `localStorage["sanopos_theme"]`, applied via `document.documentElement.dataset.theme`.
 
 | Export | Notes |
 |--------|-------|
-| `getTheme()` | Returns `"light"` or `"dark"` (defaults `"light"` if unset) |
-| `setTheme(theme)` | Persists to localStorage AND sets `dataset.theme` immediately |
-| `toggleTheme()` | Toggles + returns the new theme value |
-| `initTheme()` | Reads + applies persisted theme — called from `frontend/src/App.jsx` at module load (before rendering the app component), not from `main.jsx` |
+| `getTheme()` | `"light"` or `"dark"`, defaults `"light"` |
+| `setTheme(theme)` | Persists + applies immediately |
+| `toggleTheme()` | Flips and returns the new value |
+| `initTheme()` | Reads persisted theme and applies it — called once at module load in `App.jsx` (not `main.jsx`), before first render |
 
 ---
 
 ## `chunkReload.js`
 
-Stale-chunk recovery. After a deploy, clients holding an old Vite bundle hash try to lazy-load a chunk that no longer exists. This caused Sentry issue SANOPOS-FRONTEND-7 (2026-04-12).
+Stale-chunk recovery for post-deploy clients holding an old Vite bundle hash whose lazy chunks 404.
 
 | Export | Notes |
 |--------|-------|
-| `looksLikeChunkLoadFailure(err)` | Returns `true` for missing-chunk errors. The matcher includes `"failed to fetch"` which can also match real network failures — detection is broader than the name implies. The 30-second sessionStorage guard limits reload loops but does not fully exclude network outage scenarios |
-| `reloadOnceForChunkFailure(opts?)` | Reloads at most once per 30s (persisted in `sessionStorage`). Returns `true` if reload triggered. Accepts `{ storage, reload, now }` for testability |
-| `__test__` | `{ RELOAD_KEY, RELOAD_GUARD_MS }` — test internals |
+| `looksLikeChunkLoadFailure(err)` | Matches common chunk-load error strings. Note: the `"failed to fetch"` substring it checks can also fire on genuine network errors, so detection is intentionally broad, not exact |
+| `reloadOnceForChunkFailure(opts?)` | Reloads at most once per 30s window (guard persisted in `sessionStorage["__sanopos_chunk_reload_at"]`) to avoid reload loops. Accepts `{ storage, reload, now }` overrides for testability |
+| `__test__` | Exposes `RELOAD_KEY` / `RELOAD_GUARD_MS` for tests only |
 
-**Guard:** `RELOAD_GUARD_MS = 30_000` — prevents reload storms. `sessionStorage` key: `"__sanopos_chunk_reload_at"`.
+Wired up in `main.jsx` against `vite:preloadError` and `unhandledrejection`.
 
 ---
 
 ## `errorLog.js`
 
-Best-effort error state logger for POS recovery paths.
+| Export | Notes |
+|--------|-------|
+| `logErrorState(actionType, description, context?)` | `async` best-effort POST to `/api/action-history` via `api.js`. Swallows all errors — must never block the recovery flow it's logging (receipt retry, shift recovery, refund collision, cart resume, barcode miss, insufficient stock) |
 
-| Export | Signature | Notes |
-|--------|-----------|-------|
-| `logErrorState(actionType, description, context?)` | `async → void` | POSTs to `/api/action-history`. Swallows all errors — never blocks the recovery flow |
+---
 
-Used by receipt retry, shift recovery, refund collision, cart resume, barcode miss, insufficient stock flows. Failures here are silently ignored by design.
+## `imageCompress.js`
+
+| Export | Notes |
+|--------|-------|
+| `compressImage(fileOrBlob, opts?)` | `async → Promise<string>` (base64 data URL). Draws the image to a canvas capped at `maxWidth`/`maxHeight` (default 800×800), re-encodes as JPEG at `quality` (default 0.7) |
+
+Built for field-rep selfie check-ins (wholesale Tier 1.1) where phone cameras produce multi-MB JPEGs that are painful to upload over mobile data and bloat the IndexedDB offline queue. Typical output ~80-150KB.
+
+Falls back to the raw, uncompressed base64 read (via `FileReader`) if `canvas`/`Image` are unavailable, or if the compressed output would somehow be larger than the raw input. Reusable anywhere an image needs client-side downsizing before upload, not just check-ins.

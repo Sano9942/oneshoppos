@@ -1,80 +1,90 @@
 # Integrations Routes — Claude Guide
 
-All routes mount at `/api/integrations/*`. Feature flag `marketplace_integrations` is required on most routes (applied per-route, not injected centrally). The exception is `POST /api/integrations/:provider/send-test-sms`, which uses `requireFeature("phase5_sms_providers")` instead. Sub-modules receive `router` (not `app`) and `integrationDeps`.
+All routes mount at `/api/integrations/*`. Every sub-module exports a single factory `(router, deps) => {}` — they receive the shared `router` instance (not `app`) and a `deps` object, and register their paths directly on it. `requireFeature("marketplace_integrations")` is applied per-route (not injected centrally), so grep each handler rather than assuming a blanket gate. The lone exception is `POST /:provider/send-test-sms`, gated by `requireFeature("phase5_sms_providers")` instead.
 
 ## index.js — Orchestrator
 
-Mounts 6 sub-modules onto a single Express router, then attaches it at `/api/integrations`. Injects `encryptSecret`, `decryptSecret`, `maskSecret` from `services/crypto.js` into `integrationDeps` (not in the outer `deps` object from the tenant middleware chain). Sub-module load order: hub → credentials → daraz → facebook → whatsapp → google-merchant.
+`module.exports = function mountIntegrationRoutes(app, deps)`. Creates one `Router()`, builds `integrationDeps` by spreading `deps` and adding `encryptSecret`, `decryptSecret`, `maskSecret` from `services/crypto.js`, then requires each sub-module in order: hub → credentials → daraz → facebook → whatsapp → google-merchant. Finally mounts the router at `/api/integrations`. This is the only file in the directory that touches `services/crypto.js` directly — every other file receives the crypto helpers already injected via `deps`.
 
 ## hub.js
 
-- `GET /api/integrations/hub` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Returns unified integration dashboard:
-  - `channels` — `integration_settings` rows where `category` is NOT `payment` or `sms`/`messaging_sms`
-  - `couriers` — `courier_integrations` with capability flags (`supports_booking`, `supports_tracking`, `supports_cancellation`, `supports_labels`). `has_credentials` is `!!c.api_key`. Note: integration channel entries (in `channels`, `payment_providers`, `sms_providers`) use `has_credentials: !!i.is_active`, not a direct check for an API key or token.
-  - `payment_providers` — `integration_settings` rows where `category = 'payment'`
-  - `sms_providers` — `integration_settings` rows where `category = 'sms'` or `'messaging_sms'`
-  - `shopify` — active `shopify_connections` row (or null)
-  - `woocommerce` — the `integration_settings` row where `provider = 'woocommerce'` (or null)
+`module.exports = function registerHubRoutes(router, deps)`
 
-Tables: `integration_settings`, `courier_integrations`, `shopify_connections`.
+- `GET /hub` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Aggregates three tables into one dashboard payload:
+  - `channels` — `integration_settings` rows where `category` is not `payment` and not `sms`/`messaging_sms`
+  - `payment_providers` — `integration_settings` rows where `category = 'payment'`
+  - `sms_providers` — `integration_settings` rows where `category` is `sms` or `messaging_sms`
+  - All three use `has_credentials: !!i.is_active` — this checks the active flag, not whether an actual key/token is present
+  - `couriers` — `courier_integrations` mapped with capability flags (`supports_booking`, `supports_tracking`, `supports_cancellation`, `supports_labels`); `has_credentials: !!c.api_key` here IS a real key-presence check (inconsistent with the channels/payment/sms convention above — don't assume the same semantics apply)
+  - `shopify` — single active `shopify_connections` row or `null`
+  - `woocommerce` — the `integration_settings` row where `provider = 'woocommerce'`, found via `.find()` on the already-fetched `integrations` array (no separate query)
+
+Tables read: `integration_settings`, `courier_integrations`, `shopify_connections`.
 
 ## credentials.js
 
-Generic BYOK credential management. Credentials stored AES-256-GCM encrypted in `integration_settings`.
+`module.exports = function registerCredentialRoutes(router, deps)`. Generic BYOK credential CRUD — provider-agnostic, used by every marketplace channel plus payment/SMS providers.
 
-- `POST /api/integrations/connect` — `requirePerm("all_access")` + `requireFeature("marketplace_integrations")` + `validate(connectProviderSchema)`. Encrypts `api_key`, `api_secret`, `oauth_token`, `oauth_refresh_token` individually before storing. Uses `ON CONFLICT (provider) DO UPDATE SET` with COALESCE — only supplied fields overwrite existing values. Sets `is_active=true`, clears `last_error`.
-- `POST /api/integrations/disconnect` — `requirePerm("all_access")` + `requireFeature("marketplace_integrations")` + `validate(disconnectProviderSchema)`. Sets `is_active=false`, NULLs all credential columns (`api_key`, `api_secret`, `oauth_token`, `oauth_refresh_token`).
-- `POST /api/integrations/test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. **Does NOT call the remote API** — only checks if credentials exist in the DB. Returns 404 `{ error: "Integration not configured" }` when no row exists in the DB at all. Returns `{ success: false, error: "No credentials configured" }` if a row exists but has no API key or oauth token. Returns `{ success: true, provider }` otherwise.
-- `GET /api/integrations/:provider/status` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Returns masked config: `api_key_masked` via `maskSecret()`, never raw credentials. Parses `config_json` from string to object. Returns `{ connected: false, provider }` if provider not found.
-- `POST /api/integrations/:provider/send-test-sms` — `requirePerm("all_access")` + `requireFeature("phase5_sms_providers")` (different feature flag). Uses `services/sms.js` (lazy-required). Requires `to` in body; `message` defaults to "Test message from SanoPOS".
+- `POST /connect` — `requirePerm("all_access")` + `requireFeature("marketplace_integrations")` + `validate(connectProviderSchema)` (schema in `schemas/integrations.js`). Encrypts `api_key`, `api_secret`, `oauth_token`, `oauth_refresh_token` individually via `encryptSecret()` before storing. `INSERT ... ON CONFLICT (provider) DO UPDATE SET ... COALESCE(...)` — only fields present in the request body overwrite existing values; omitted fields keep their old encrypted value. Sets `is_active = true`, clears `last_error`.
+- `POST /disconnect` — `requirePerm("all_access")` + `requireFeature("marketplace_integrations")` + `validate(disconnectProviderSchema)`. Sets `is_active = false` and NULLs all four credential columns. To fully clear one credential field without killing others, you must disconnect then reconnect with only the fields you want — there's no partial-clear endpoint.
+- `POST /test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. **DB-only check, no outbound API call.** 404 `{ error: "Integration not configured" }` if no row exists; `{ success: false, error: "No credentials configured" }` if a row exists but has neither `api_key` nor `oauth_token`; `{ success: true, provider }` otherwise. Each provider's own `/test` route (daraz.js, facebook.js, etc.) is the one that actually calls the remote API — don't confuse the two.
+- `GET /:provider/status` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Returns `api_key_masked` via `maskSecret()` — raw credentials never leave this endpoint. Parses `config_json` (stored as text) into an object. `{ connected: false, provider }` if no row found.
+- `POST /:provider/send-test-sms` — `requirePerm("all_access")` + `requireFeature("phase5_sms_providers")` — different flag from every other route in this directory. Lazy-`require`s `services/sms.js` inline (not imported at module top). Requires `to` in body; `message` defaults to `"Test message from SanoPOS"`.
 
 Tables: `integration_settings`.
 
-## daraz.js
+## daraz.js / facebook.js / whatsapp.js / google-merchant.js — marketplace channel adapters
 
-Uses `DarazClient` from `services/marketplace/daraz-client`. All routes decrypt credentials on every request via `getDarazClient()` (no in-memory client cache).
+Each file follows the identical shape: a local `getXClient()` helper does `SELECT * FROM integration_settings WHERE provider = '<key>' AND is_active = true`, throws if not connected, decrypts whatever credential the provider needs, and constructs the client from `services/marketplace/*`. **No caching — every route call re-queries and re-decrypts on each request.** `/test` routes catch errors and return `{ success: false, error }` via `res.json()` (200 status), not a 500 — this is deliberate so the frontend can render a "connection failed" state without treating it as a server error.
 
-- `POST /api/integrations/daraz/test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Calls `client.testConnection()`. Returns `{ success: false, error }` on failure (not 500).
-- `POST /api/integrations/daraz/sync-products` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Reads active products (up to 100), calls `client.syncProducts()`, upserts successful mappings to `daraz_product_map` on conflict `daraz_item_id`. Returns `{ synced, failed, details }`.
-- `POST /api/integrations/daraz/pull-orders` — `requirePerm("manage_orders")` + `requireFeature("marketplace_integrations")`. Accepts `?since=` in body. Deduplicates by checking `daraz_order_map` before import. Inserts to `web_orders` (source=`'daraz'`) + `daraz_order_map`. Updates `last_sync_at` on `integration_settings`. Returns `{ imported, skipped, total }`.
-- `POST /api/integrations/daraz/push-inventory` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Reads `daraz_product_map JOIN products` with `WHERE dpm.daraz_sku IS NOT NULL` — rows with a null `daraz_sku` are excluded entirely (no fallback to `products.sku` for those rows). Calls `client.pushInventory(updates)`.
+| File | Client | Provider key (DB) | Auth fields used |
+|------|--------|--------------------|-------------------|
+| `daraz.js` | `services/marketplace/daraz-client` | `daraz` | `api_key`, `api_secret`, `oauth_token`, `store_url` |
+| `facebook.js` | `services/marketplace/meta-commerce` (`MetaCommerceClient`) | `facebook` | `oauth_token` + `config_json` (no `api_key`) |
+| `whatsapp.js` | `services/marketplace/whatsapp-client` | `whatsapp` | `api_key` + `config_json` |
+| `google-merchant.js` | `services/marketplace/google-merchant` (`GoogleMerchantClient`) | `google_merchant` (underscore) | `oauth_token` + `config_json` |
+
+**`google_merchant` vs `google-merchant`**: the DB `provider` column value uses an underscore; the URL path segment uses a hyphen. Don't copy-paste one into the other's query/route string.
+
+### daraz.js
+
+- `POST /daraz/test` — `manage_inventory`. Calls `client.testConnection()`.
+- `POST /daraz/sync-products` — `manage_inventory`. Reads up to 100 active products (optionally filtered by `product_ids` in body), calls `client.syncProducts()`, upserts successes into `daraz_product_map` (`ON CONFLICT (daraz_item_id) DO UPDATE SET last_synced_at = NOW()`). Returns `{ synced, failed, details }`.
+- `POST /daraz/pull-orders` — `manage_orders`. Accepts `{ since }` in body. Dedupes against `daraz_order_map.daraz_order_id` before inserting into `web_orders` (source `'daraz'`) + `daraz_order_map`. Updates `integration_settings.last_sync_at`. Returns `{ imported, skipped, total }`.
+- `POST /daraz/push-inventory` — `manage_inventory`. Query is `SELECT ... FROM daraz_product_map dpm JOIN products p ... WHERE dpm.daraz_sku IS NOT NULL` — **rows with a null `daraz_sku` are silently excluded**, there is no fallback to `products.sku` for them. `{ updated: 0, message: "No mapped products" }` short-circuit if nothing qualifies.
 
 Tables: `integration_settings`, `products`, `daraz_product_map`, `web_orders`, `daraz_order_map`.
 
-## facebook.js
+### facebook.js
 
-Uses `MetaCommerceClient` from `services/marketplace/meta-commerce`. Authenticates via `oauth_token` + `config_json` (not `api_key`). Handles both Facebook Shop and Instagram Commerce (same provider key `'facebook'`).
+Handles both Facebook Shop and Instagram Commerce under the single provider key `facebook` — `order.source` distinguishes them per-order (`'facebook'` or `'instagram'`) rather than a separate provider row.
 
-- `POST /api/integrations/facebook/test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`.
-- `POST /api/integrations/facebook/sync-products` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Upserts successful results to `facebook_product_map` on conflict `fb_product_id`. Returns `{ synced, failed, details }`.
-- `POST /api/integrations/facebook/pull-orders` — `requirePerm("manage_orders")` + `requireFeature("marketplace_integrations")`. Deduplicates via `facebook_order_map`. Source can be `'facebook'` or `'instagram'` depending on `order.source`. Updates `last_sync_at` on `integration_settings`.
-- `POST /api/integrations/facebook/push-inventory` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Uses `products.sku` (not a Facebook-specific SKU) for inventory updates. No filtering by `is_active` in the join (reads all mapped products).
+- `POST /facebook/test` — `manage_inventory`.
+- `POST /facebook/sync-products` — `manage_inventory`. Same product-read pattern as daraz. Upserts to `facebook_product_map` (`ON CONFLICT (fb_product_id) DO UPDATE SET last_synced_at = NOW()`).
+- `POST /facebook/pull-orders` — `manage_orders`. Dedupes via `facebook_order_map.fb_order_id`. Inserts `web_orders` with `source = order.source || "facebook"`.
+- `POST /facebook/push-inventory` — `manage_inventory`. **Unlike daraz, this uses `products.sku` directly** (no Facebook-specific SKU column check) and does **not** filter the join by `is_active` — all mapped products are pushed regardless of active status.
 
 Tables: `integration_settings`, `products`, `facebook_product_map`, `web_orders`, `facebook_order_map`.
 
-## whatsapp.js
+### whatsapp.js
 
-Uses `WhatsAppClient` from `services/marketplace/whatsapp-client`. Authenticates via `api_key` + `config_json`.
-
-- `POST /api/integrations/whatsapp/test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`.
-- `POST /api/integrations/whatsapp/send-template` — `requirePerm("manage_orders")` + `requireFeature("marketplace_integrations")`. Supports two templates: `order_confirmation` (requires `order_id`, looks up `web_orders`) and `shipping_update` (requires `tracking_number`). Logs sent message to `whatsapp_messages` — looks up `conversation_id` from `whatsapp_conversations` by `phone_number`. If no conversation exists, the `conversation_id` subquery returns NULL (no error thrown, silently logs with null FK).
-- `GET /api/integrations/whatsapp/conversations` — `requirePerm("manage_orders")` + `requireFeature("marketplace_integrations")`. Last 50 conversations joined with customer name + message count subquery. Orders by `last_message_at DESC NULLS LAST`.
+- `POST /whatsapp/test` — `manage_inventory`.
+- `POST /whatsapp/send-template` — `manage_orders`. Two supported templates: `order_confirmation` (requires `order_id`, looks up `web_orders`, 404 if missing) and `shipping_update` (requires `tracking_number`; `courier_name` optional, defaults `"Courier"`). Any other/missing combination → 400. After sending, logs to `whatsapp_messages` with `conversation_id` resolved via a `SELECT id FROM whatsapp_conversations WHERE phone_number = $1 LIMIT 1` subquery — **if no conversation row exists for that phone number, `conversation_id` is silently NULL; no error is raised.**
+- `GET /whatsapp/conversations` — `manage_orders`. Last 50 rows, joined to `customers` for name and a `message_count` subquery against `whatsapp_messages`. Ordered `last_message_at DESC NULLS LAST`.
 
 Tables: `integration_settings`, `web_orders`, `whatsapp_conversations`, `whatsapp_messages`, `customers`.
 
-## google-merchant.js
+### google-merchant.js
 
-Uses `GoogleMerchantClient` from `services/marketplace/google-merchant`. Authenticates via `oauth_token` + `config_json`. Provider key in DB is `'google_merchant'` (underscore, not hyphen).
-
-- `POST /api/integrations/google-merchant/test` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`.
-- `POST /api/integrations/google-merchant/sync-products` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Inserts successful products to `google_merchant_feed_log` (`ON CONFLICT DO NOTHING`). Updates `last_sync_at` on `integration_settings`.
-- `GET /api/integrations/google-merchant/feed-status` — `requirePerm("manage_inventory")` + `requireFeature("marketplace_integrations")`. Calls `client.checkFeedStatus()`, updates `google_merchant_feed_log` rows with current status and disapproval reasons.
+- `POST /google-merchant/test` — `manage_inventory`.
+- `POST /google-merchant/sync-products` — `manage_inventory`. Same product-read pattern. Successes inserted into `google_merchant_feed_log` with `ON CONFLICT DO NOTHING` (no update-on-conflict, unlike daraz/facebook's map tables) plus `feed_status = 'active'`. Updates `integration_settings.last_sync_at`.
+- `GET /google-merchant/feed-status` — `manage_inventory`. Calls `client.checkFeedStatus()`, then updates each `google_merchant_feed_log` row (matched by `gmc_offer_id`) with current `feed_status`, `disapproval_reason` (JSON-stringified array or null), and `last_checked_at`.
 
 Tables: `integration_settings`, `products`, `google_merchant_feed_log`.
 
-## Permission Summary
+## Permission / flag matrix
 
-| Route | Permission | Feature Flag |
+| Route | Permission | Feature flag |
 |-------|-----------|--------------|
 | `GET /hub` | `manage_inventory` | `marketplace_integrations` |
 | `POST /connect`, `POST /disconnect` | `all_access` | `marketplace_integrations` |
@@ -88,11 +98,18 @@ Tables: `integration_settings`, `products`, `google_merchant_feed_log`.
 | `/whatsapp/send-template`, `/whatsapp/conversations` | `manage_orders` | `marketplace_integrations` |
 | `/google-merchant/test`, `/google-merchant/sync-products`, `/google-merchant/feed-status` | `manage_inventory` | `marketplace_integrations` |
 
-## Key Gotchas
+## Cross-file dependencies
 
-- **`POST /test` is a DB-only check** — it never makes an outbound API call. It just confirms credentials are present in `integration_settings`. Don't rely on it to validate that the remote integration is working.
-- **`POST /connect` COALESCE upsert** — if a provider is already connected and you send a partial body (e.g., only `api_key`), all other credentials are preserved via COALESCE. To clear a field you must `POST /disconnect` first.
-- **`google_merchant` vs `google-merchant`** — the DB `provider` key uses underscore (`google_merchant`); the URL path uses hyphen (`/google-merchant/`). Don't mix them up in queries.
-- **WhatsApp message logging with null conversation** — `whatsapp/send-template` logs the message even if no `whatsapp_conversations` row exists for the phone number. The `conversation_id` becomes NULL (assuming the FK is nullable). This is silent — no error is raised.
-- **Facebook push-inventory uses `products.sku`** (not a Facebook-assigned SKU). Daraz push-inventory filters with `WHERE dpm.daraz_sku IS NOT NULL` — only mapped products with a non-null `daraz_sku` are pushed; there is no fallback to `products.sku` for rows where `daraz_sku` is null.
-- **Webhook inbounds** (Meta, WhatsApp, Daraz webhooks) are handled in `routes/webhooks.js` (mounted before tenant middleware), not here. These routes are for outbound API calls only.
+- `services/crypto.js` — `encryptSecret`/`decryptSecret`/`maskSecret`, injected only in `index.js`, then flow through `deps` to every sub-module. Format: `enc:v1:{iv}:{tag}:{ciphertext}`.
+- `services/marketplace/*` — one client class per channel (`daraz-client`, `meta-commerce`, `whatsapp-client`, `google-merchant`), each constructed fresh per-request inside the route's local `getXClient()` helper. There's a `services/marketplace/base.js`/shared client too — check there before adding a fifth adapter.
+- `schemas/integrations.js` — `connectProviderSchema`, `disconnectProviderSchema` (Zod, used only in `credentials.js`). The channel-specific routes (daraz/facebook/whatsapp/google-merchant) do not use `validate()` at all — request bodies are read and checked manually.
+- `services/sms.js` — used only by `credentials.js`'s `send-test-sms` route, lazy-required.
+
+## Key gotchas (quick reference)
+
+- `POST /test` (credentials.js) is DB-only; the per-provider `/test` routes (daraz/facebook/whatsapp/google-merchant) are the ones that call the live API.
+- `POST /connect` COALESCE upsert preserves any credential field not included in the request body — partial updates never clear a field.
+- `google_merchant` (DB) vs `/google-merchant/` (URL) — underscore vs hyphen, easy to typo.
+- WhatsApp template send logs with a NULL `conversation_id` if no matching conversation exists — check for this when debugging "missing" message history.
+- Daraz push-inventory drops rows with null `daraz_sku` (no `products.sku` fallback); Facebook push-inventory uses `products.sku` directly and skips the `is_active` filter entirely — these two behave differently even though they look like copies of each other.
+- Inbound webhooks (Meta, WhatsApp, Daraz) are NOT handled here — see `routes/webhooks.js` (mounted before tenant middleware). Everything in this directory is outbound-only (sync, push, test, pull-orders which is triggered by the tenant, not pushed by the marketplace).

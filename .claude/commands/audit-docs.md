@@ -155,9 +155,11 @@ Read every file in `frontend/src/pages/redesign/pos/`. Note: POSContext exports 
 **Agent 2k: frontend/tests/**
 List all .spec.js files in `frontend/tests/`. Read `playwright.config.js`, `global-setup.js`, and `helpers/`. Note test structure, auth setup, and what each spec covers. Write `frontend/tests/CLAUDE.md` from scratch.
 
-## Step 3 — Sessions 3 + 4 in Parallel (Mid-Level + Top-Level Docs)
+## Step 3 — Sessions 3 + 4 in Parallel (Mid-Level + Domain Top-Level Docs)
 
 After Sessions 1 and 2 both complete, launch Sessions 3 and 4 simultaneously.
+
+**Root `CLAUDE.md` is NOT part of Session 4.** It depends on both `backend/CLAUDE.md` (written at the end of Session 3) and `frontend/CLAUDE.md` (written at the end of Session 4). Writing it as the last step of Session 4 would race Session 3 — if the frontend track finishes first, root would synthesize from a `backend/CLAUDE.md` that is still stale or not yet written. Root is handled separately in Step 4, after both sessions fully complete.
 
 ### Session 3 — Backend Mid-Level + Top-Level
 
@@ -183,7 +185,11 @@ One agent sequentially (reads depend on previous writes):
 
 **Step 4d**: Read all Phase 4a-4c frontend docs + `src/App.jsx` lines 1-60 + `src/api.js` lines 1-60. Write `frontend/CLAUDE.md` from scratch.
 
-**Step 4e**: Read `backend/CLAUDE.md` + `frontend/CLAUDE.md` + last 100 lines of `backend/migrate-pg.js` + grep for CREATE TABLE in `backend/schema-pg.sql`. Write root `CLAUDE.md` from scratch, preserving the full comprehensive structure (all sections: What This Is, Sub-Guides, Efficiency Rules, Project Structure, Key Architecture, UX Features, Integrations, Reliability, Running Tests, Auth, Permissions, Migrations, API Contracts, Production Deployment, CLI Tools, Infrastructure Capacity, Storage Map).
+## Step 4 — Root (After Sessions 3 AND 4 Both Complete)
+
+Do not start this until both Session 3 (ending in `backend/CLAUDE.md`) and Session 4 (ending in `frontend/CLAUDE.md`) have finished writing. This step is intentionally sequential, not parallel — it is the top of the pyramid and must be verified against final, not in-flight, versions of both domain docs.
+
+**Step 5**: Read `backend/CLAUDE.md` + `frontend/CLAUDE.md` + last 100 lines of `backend/migrate-pg.js` + grep for CREATE TABLE in `backend/schema-pg.sql`. Write root `CLAUDE.md` from scratch, preserving the full comprehensive structure (all sections: What This Is, Sub-Guides, Efficiency Rules, Project Structure, Key Architecture, UX Features, Integrations, Reliability, Running Tests, Auth, Permissions, Migrations, API Contracts, Production Deployment, CLI Tools, Infrastructure Capacity, Storage Map).
 
 ## Rules for All Agents
 
@@ -198,7 +204,8 @@ One agent sequentially (reads depend on previous writes):
 ```
 ━━━ Documentation Audit Complete ━━━━━━━━━━━━━━━━━━━━━━━━━━
   Sessions 1+2 (leaf docs): [N] files written
-  Sessions 3+4 (mid + top): 9 files written
+  Sessions 3+4 (mid + domain top): 8 files written
+  Step 5 (root, after both sessions complete): 1 file written
 
   Summary:
     [one-line per doc written]

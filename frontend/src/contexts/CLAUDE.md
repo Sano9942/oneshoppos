@@ -1,6 +1,12 @@
 # Contexts — Claude Guide
 
-**3 files** — React contexts. `CurrencyProvider` and `ToastProvider` wrap the app globally (outside `AuthProvider`); `PresetProvider` wraps inside `AuthProvider`.
+React contexts: `CurrencyContext.jsx`, `ToastContext.jsx`, `PresetContext.jsx`.
+
+Provider nesting (outermost → innermost, see `main.jsx`):
+```
+CurrencyProvider → ToastProvider → AuthProvider → PresetProvider
+```
+`CurrencyProvider` and `ToastProvider` sit outside `AuthProvider` — they must not depend on the auth fetch interceptor. `PresetProvider` sits inside `AuthProvider` and depends on `useAuth()`.
 
 ---
 
@@ -8,21 +14,21 @@
 
 Exports `CurrencyProvider` + `useCurrency()`.
 
-**`useCurrency()` return shape:**
+`useCurrency()` returns:
 
 | Field | Default | Notes |
 |-------|---------|-------|
 | `symbol` | `"$"` | From `GET /api/company-profile/currency` |
 | `code` | `"USD"` | Currency code string |
-| `denominations` | `[100,50,20,10,5,1]` | Array used by cash-denomination UI |
+| `denominations` | `[100,50,20,10,5,1]` | For cash-denomination UI |
 | `fmt(n)` | `"$ 1,234.00"` | `symbol + " " + toLocaleString(2dp)` |
 | `refresh()` | — | Re-fetches currency; call after currency settings change |
 
-**Gotchas:**
-- In MT mode reads `localStorage["authSession"].tenant_slug` and appends `?tenant=slug` to the fetch URL — silently skips (uses defaults) if no slug is present yet (pre-login state)
-- Fetch errors are swallowed silently — component always has a valid currency object
-- `fmt` is memoized on `currency.symbol` only — changing `code` alone does not rebuild the formatter
-- Uses raw `fetch()` directly (not `api.js`) — intentional, `CurrencyProvider` is outside `AuthProvider` so the interceptor is not wired yet
+Gotchas:
+- Uses raw `fetch()`, not `api.js` — intentional, since this provider is outside `AuthProvider` and the fetch interceptor isn't wired yet.
+- In MT mode, reads `localStorage["authSession"].tenant_slug` and appends `?tenant=slug`. If no slug exists yet (pre-login), the fetch is skipped entirely and defaults are kept.
+- Fetch errors are swallowed silently — always returns a valid currency object.
+- `fmt` is memoized on `currency.symbol` only; a `code`-only change won't rebuild it (doesn't matter since `fmt` never uses `code`).
 
 ---
 
@@ -30,68 +36,48 @@ Exports `CurrencyProvider` + `useCurrency()`.
 
 Exports `ToastProvider` + `useToast()`.
 
-**`useToast()` return shape:**
+`useToast()` returns `{ toast(msg, type?), success(msg), error(msg), warning(msg) }`. `toast()` returns a numeric auto-increment id.
 
-| Method | Signature | Notes |
-|--------|-----------|-------|
-| `toast(msg, type?)` | `(string, string) → id` | Returns numeric auto-increment `id` |
-| `success(msg)` | `(string) → id` | Calls `toast(msg, "success")` |
-| `error(msg)` | `(string) → id` | Calls `toast(msg, "error")` |
-| `warning(msg)` | `(string) → id` | Calls `toast(msg, "warning")` |
+Behavior:
+- Max 3 toasts visible — oldest is dropped when a 4th arrives.
+- Auto-dismiss after 4000ms; manual `×` dismiss also available.
+- Rendered fixed bottom-right (`z-200`).
+- Type → color: `success` emerald, `error` red, `warning` amber, `info` (default) uses `--ui-surface`/`--ui-text`/`--ui-border` CSS vars.
 
-**Behaviour:**
-- Max 3 toasts visible — oldest dropped when a 4th arrives (slices to last 3)
-- Auto-dismiss after 4000ms
-- Manual dismiss button (`×`) on each toast
-- Rendered at `fixed bottom-4 right-4 z-200` with `animate-in fade-in slide-in-from-right-4`
-
-**Toast type colors:**
-
-| Type | Classes |
-|------|---------|
-| `success` | `bg-emerald-600 text-white` |
-| `error` | `bg-red-600 text-white` |
-| `warning` | `bg-amber-500 text-white` |
-| `info` (default) | CSS vars: `bg-(--ui-surface) text-(--ui-text) border-(--ui-border)` |
-
-**Gotcha:** `useToast()` throws `"useToast must be inside ToastProvider"` if called outside the provider — hard error, not a silent null.
+Gotcha: `useToast()` throws `"useToast must be inside ToastProvider"` if called outside the provider — hard error, not a silent no-op. Standard page pattern: `catch(err) { error(err.message || "Something went wrong") }`.
 
 ---
 
 ## `PresetContext.jsx`
 
-Exports `PresetProvider` + `usePreset()`.
+Exports `PresetProvider` + `usePreset()`. Also named exports `WEIGHTED_UNITS`, `DEFAULT_UNIT_VOCABULARY`, `isWeightedUnit(unit)`, `DEFAULT_PRESET`.
 
-**`usePreset()` return shape:**
+`usePreset()` returns:
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `industry_type` | `string` | e.g. `"general_retail"`, `"dental_clinic"`, `"restaurant"` |
-| `business_model` | `string` | e.g. `"buy_sell"`, `"service"` |
-| `labels` | `object` | Industry-specific label overrides — use `label(key)` helper instead of direct access |
-| `dashboard_widgets` | `object` | Which dashboard widget slots are enabled for this preset |
-| `onboarding_steps` | `string[]` | Setup wizard step sequence |
-| `pos_layout_mode` | `string` | `"grid"` or `"list"` — POS product display mode |
-| `visible_report_groups` | `string[]\|null` | Report groups to show; `null` means show all |
-| `pos_search_config` | `object` | `{ show_barcode, show_sku, show_price }` |
-| `enabled_modes` | `string[]` | Active tenant modes (e.g. `"restaurant"`, `"appointments"`) |
-| `unit_vocabulary` | `string[]` | Units available in product quantity fields |
-| `presetLoaded` | `boolean` | `false` until first `/api/context/bootstrap` completes. Also stays `false` (and no fetch is attempted) when `employee?.id` is absent after bootstrapping finishes — `PresetProvider` sets it back to `false` in that case |
-| `updatePreset(data)` | `fn` | Merges `data` over `DEFAULT_PRESET`, sets `presetLoaded = true` |
-| `hasMode(modeName)` | `fn → boolean` | Returns `true` if `enabled_modes` includes the mode. Returns `true` before preset loads (fail-open — feature flags remain the sole gate until preset is ready) |
-| `label(key)` | `fn → string` | Returns `preset.labels[key] \|\| key` — use for industry-aware UI text (e.g. `label("customer")` → `"Patient"` in clinic mode) |
+| Field | Notes |
+|-------|-------|
+| `industry_type` | e.g. `"general_retail"`, `"dental_clinic"`, `"restaurant"` |
+| `business_model` | e.g. `"buy_sell"`, `"service"` |
+| `labels` | Industry-specific label overrides — prefer `label(key)` over direct access |
+| `dashboard_widgets` | Which dashboard widget slots are enabled |
+| `onboarding_steps` | Setup wizard step sequence |
+| `pos_layout_mode` | `"grid"` or `"list"` |
+| `visible_report_groups` | `string[]` or `null` (null = show all) |
+| `pos_search_config` | `{ show_barcode, show_sku, show_price }` |
+| `enabled_modes` | Active tenant modes, e.g. `"restaurant"`, `"appointments"` |
+| `unit_vocabulary` | Units available in quantity fields |
+| `presetLoaded` | `false` until first bootstrap completes (see below) |
+| `updatePreset(data)` | Merges `data` over `DEFAULT_PRESET`, sets `presetLoaded = true` |
+| `hasMode(modeName)` | `→ boolean`. Fail-open: returns `true` before `presetLoaded` |
+| `label(key)` | `→ preset.labels[key] \|\| key` |
 
-**Bootstrap fetch:**
-- Calls `GET /api/context/bootstrap` via `api.js` after `employee?.id` is set AND `isBootstrapping` is false
-- Waits for `isBootstrapping = false` intentionally — child `useEffect`s run before parent `useEffect`s in React. Without this guard, the first fetch goes through unpatched `window.fetch` (interceptor not yet wired) and 401s, leaving the preset as `general_retail` — silently breaks clinic/restaurant tenants on direct `/pos` navigation
-- Uses cancellation flag (`cancelled`) to handle unmount during in-flight fetch
-- Always flips `presetLoaded = true` on completion whether success or error — consumers like `POSRoute` never hang
+Bootstrap sequence (`GET /api/context/bootstrap` via `api.js`):
+- Fires only once `employee?.id` is set AND `isBootstrapping` (from `useAuth()`) is false.
+- The `isBootstrapping` gate exists because child `useEffect`s run before parent ones — without it, the first fetch would go out through the not-yet-patched `window.fetch` and 401 silently, leaving the tenant stuck on `general_retail` (breaks clinic/restaurant on direct `/pos` navigation).
+- Additionally retries once on a 401 after a short delay, to absorb a race where `AuthProvider`'s interceptor effect commits after this provider's first fetch already fired.
+- If `employee?.id` becomes falsy after bootstrapping finishes, `presetLoaded` is reset to `false` (no fetch attempted).
+- On success, also auto-seeds a `single_branch` context (`writeContext`) using `primary_outlet_id` from the bootstrap response, if no context exists yet — needed so single-outlet/Free tenants that never visit `/context-select` still get `active_outlet_id` populated for outlet-scoped pages (Floor/Checks/KDS).
+- Always flips `presetLoaded = true` on completion (success or error) — consumers like `POSRoute` never hang waiting on it.
+- Uses a `cancelled` flag to guard against state updates after unmount.
 
-**Additional named exports:**
-
-| Export | Type | Notes |
-|--------|------|-------|
-| `WEIGHTED_UNITS` | `string[]` | `["kg","g","lb","oz","m","cm"]` — mirrors `backend/config/industry-config.js` |
-| `DEFAULT_UNIT_VOCABULARY` | `string[]` | `["pcs","kg","g","lb","oz","m","cm","dozen","pack"]` |
-| `isWeightedUnit(unit)` | `fn → boolean` | Checks if unit string is in `WEIGHTED_UNITS` (case-insensitive) |
-| `DEFAULT_PRESET` | `object` | Full default preset object — used as merge base in `updatePreset` and state init |
+Use `hasMode()` / `label()` for preset-aware UI decisions rather than reading `enabled_modes` / `labels` directly, to get the fail-open default behavior for free.

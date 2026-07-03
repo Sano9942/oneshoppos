@@ -16,12 +16,13 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 
 ## Entry Point — `index.js`
 
-319-line orchestrator. Key responsibilities:
-- Loads dotenv (line 1, before any `require`) — `db-pg.js` does NOT load dotenv itself
-- Initialises Sentry if `SENTRY_DSN` is set
-- Bootstraps multi-tenant proxy when `MULTI_TENANT=1`
-- Calls `tenantAuth.init(mtDeps)` and `featureFlags.init(mtDeps)` to inject shared deps
-- Registers all routes via `registerAllRoutes.js` (674 lines — contains inline health check routes, feature-flag routes, middleware wiring, outlet-assignment enforcement, and restore guard; not a pure orchestrator)
+Orchestrator. Key responsibilities:
+- Loads `.env` (`.env.production` if `DB_TARGET=production`) before any other require — logs a loud green/red console banner distinguishing local vs. production DB by inspecting `DATABASE_URL`
+- Initialises Sentry if `SENTRY_DSN` is set (`tracesSampleRate: 0` — request timing is handled by the app's own `request-id.js`, not Sentry tracing)
+- Bootstraps the multi-tenant proxy (`tenant-db-proxy-pg.js`, `tenant-db-manager-pg.js`, `master-db-pg.js`) when `MULTI_TENANT=1`
+- Calls `tenantAuth.init(mtDeps)` and `featureFlags.init(mtDeps)` to inject shared deps (`{ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore }`) into the middleware modules
+- Sets `app.set("trust proxy", ...)` in production — Railway sits ~2 proxy hops in front of the container, so IP-based rate limiting needs `TRUST_PROXY_HOPS` (default 2) to read the real client IP from `X-Forwarded-For` instead of the rotating internal router IP
+- Registers all routes via `registerAllRoutes.js` (contains inline health check routes, feature-flag routes, middleware wiring, outlet-assignment enforcement, and restore guard — not a pure orchestrator)
 - Starts workers via `boot/workers.js`
 - Calls `ensureCriticalRoutesRegistered()` — crashes boot if 4 routes are missing
 
@@ -36,11 +37,13 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 6.  /r2/*key proxy       — streams R2 object (when R2_PUBLIC_URL not set)
 7.  compression
 8.  cookieParser
-9.  globalLimiter        — 600/min default (skips POS burst paths)
+9.  globalLimiter        — rate-limited (skips POS burst paths)
 10. requestId            — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
 --- webhook routes (routes/webhooks.js) mount here — NO auth; only /api/webhooks/xpay is HMAC-verified; Meta, WhatsApp, Daraz POST handlers are rate-limited but not signature-verified ---
+--- customer portal routes: customerPortalAuthLimiter/customerPortalOtpLimiter/customerPortalDataLimiter → loadCustomerAuth(deps) → handler ---
+--- manufacturer portal routes: manufacturerPortalAuthLimiter/manufacturerPortalDataLimiter → loadManufacturerAuth(deps) → handler ---
 
 11. loadTenantAndPerms   — decode JWT, attach req.employee + req.employeePerms + req.tenantId
 12. resolveTenant        — SET search_path, run asyncStore, wire deps.db proxy
@@ -57,6 +60,8 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 20. requireActiveSubscription     — blocks writes when payment_status = 'expired'
 ```
 
+Customer portal and manufacturer portal routes are structurally separate chains — they never pass through `loadTenantAndPerms`/`resolveTenant`/`loadCompanyProfile`/`resolveContext`. Their handlers get `req.db` set directly by the portal auth middleware, not the ALS-proxied `deps.db`.
+
 **Boot-time assertions:**
 - `ensureCriticalRoutesRegistered()` verifies: `POST /api/products/bulk-import`, `POST /api/products/bulk-delete`, `POST /api/products/bulk-status`, `DELETE /api/integrations/shopify/import/products`
 - `ADMIN_ALLOWED_IPS` unset in prod → logs `[SECURITY]` error at boot
@@ -66,7 +71,7 @@ Node.js + Express v5 + PostgreSQL. Single active DB (Postgres). Multi-tenant rou
 ## Database
 
 ### `db-pg.js`
-Postgres pool (size: 20) connecting via Supabase **Transaction Pooler** (Supavisor, port 6543 in `DATABASE_URL`). Exports: `query`, `transaction`, `getClient`, `end`, `pool`.
+Postgres pool connecting via Supabase **Transaction Pooler** (Supavisor, port 6543 in `DATABASE_URL`). Exports: `query`, `transaction`, `getClient`, `end`, `pool`.
 - Does NOT load dotenv — callers are responsible
 - SSL disabled in non-prod
 - Transaction-mode pooling does NOT preserve session-level features across queries: `LISTEN/NOTIFY`, prepared statements, `SET SESSION`, and cross-statement advisory locks won't work. Codebase doesn't use any today. Any future feature needing session-level Postgres must connect via direct port `5432`, not the pooler.
@@ -92,14 +97,14 @@ AsyncLocalStorage-based Proxy. Exports: `asyncStore`, `createDbProxy`, `getCurre
 
 ### `tenant-db-manager-pg.js`
 Per-tenant DB manager. Exports: `init`, `getDb`, `healthCheck`, `clearCache`, `closeDb`, `closeAll`.
-- 60-second tenant cache; resets `search_path` on every query
+- Short-lived tenant cache; resets `search_path` on every query
 - Called by `resolveTenant` middleware to get a scoped DB handle
 
 ### `tenant-db-pg.js`
 Older ALS proxy (checks out one pool client per request via `runWithTenant`). Exports: `asyncStore`, `getProxy`, `getStore`, `runWithTenant`. Proxy only has `query` + `transaction` — no `getClient`. Use `tenant-db-proxy-pg.js` for new code.
 
 ### `schema-pg.sql`
-DDL source of truth (~4,463 lines, 271 tables). Grep for table names rather than reading the full file.
+DDL source of truth. Grep for table names rather than reading the full file.
 
 ### `migrate-pg.js`
 Exports: `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags).
@@ -107,18 +112,17 @@ Exports: `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags)
 - Each tenant has its own `schema_version` table
 - Per-tenant failures are caught and logged — one failure does not abort the run
 - Existing tenants need `schema_version` pre-populated or migrate will attempt to re-apply v1
-- Current version: 84
 
 ### `master-db-pg.js`
 Master tenant registry. Exports: `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`.
-- Manages 10 public tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`
+- Manages the public-schema tenant registry tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`
 - `query()` always sets `search_path` to public
 
 ---
 
 ## Middleware
 
-All middleware in `backend/middleware/`. Chain order documented above.
+All middleware in `backend/middleware/`. Chain order documented above; see `middleware/CLAUDE.md` for the full per-file reference (portal auth, rate-limit key patterns, upload validation).
 
 ### `tenant-auth.js`
 Exports: `init(deps)`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`, `loadEmployeePerms`, `invalidateCompanyProfileCache`
@@ -126,8 +130,8 @@ Exports: `init(deps)`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfil
 Requires `init({ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore })` at boot.
 
 - **`loadTenantAndPerms`** — JWT auth. Sets `req.employee`, `req.employeePerms`, `req.tenantId`, `req.tokenScope`, `req.isImpersonating`. No auth header → sets empty perms and calls `next()` (does not reject). Kiosk scope restricts to attendance/auth paths. Token revocation checked against `revoked_tokens` table + `employees.tokens_revoked_before`. Permission load retries once on transient DB failure; both failures → 503 instead of silent empty-perms.
-- **`resolveTenant`** — No-op in ST mode. In MT: resolves tenant, calls `tenantDbManager.getDb()`, runs `asyncStore.run(...)` to wire `deps.db`. Sets `req.tenantSlug`, `req.tenantDir`. Error codes: `TENANT_NOT_FOUND`, `TENANT_SUSPENDED`, `TENANT_DELETED` (all 403).
-- **`loadCompanyProfile`** — Reads `company_profile WHERE id = 1`. 5-minute cache per tenant (stale-while-revalidate). Sets `req.company`. Blocks with 503 `SETUP_REQUIRED` if `setup_complete` is falsy and path is not `/api/setup*` or `/api/health*`.
+- **`resolveTenant`** — No-op in ST mode. In MT: resolves tenant either from `req.tenantId` or from `?tenant=<slug>` on an explicit allowlist of public paths (`PUBLIC_TENANT_PARAM_PATHS` — auth, kiosk pin-checkin, feature-flags, setup, health, `company-profile/currency`), calls `tenantDbManager.getDb()`, runs `asyncStore.run(...)` to wire `deps.db`. Sets `req.tenantSlug`, `req.tenantDir`. Error codes: `TENANT_NOT_FOUND`, `TENANT_SUSPENDED`, `TENANT_DELETED` (all 403).
+- **`loadCompanyProfile`** — Reads `company_profile WHERE id = 1`. 5-minute cache per tenant (stale-while-revalidate; cold start awaits synchronously to avoid a post-signup race). Sets `req.company`. Blocks with 503 `SETUP_REQUIRED` if `setup_complete` is falsy and path is not `/api/setup*` or `/api/health*`.
 - **`resolveContext`** — Reads `x-outlet-id`, `x-company-id`, `x-scope-mode` headers. Sets `req.context`. When `context_header_enforced` flag is on, non-admin employees without `x-outlet-id` get 428 `CONTEXT_REQUIRED` (exempt: auth, context, feature-flags, attendance, roles, outlets paths).
 
 ### `permissions.js`
@@ -136,59 +140,57 @@ Exports: `requirePerm`, `requireAnyPerm`, `requireContextOutlet`, `DEFAULT_ROLE_
 - **`requirePerm(permission)`** — `all_access` bypasses everything. Returns 403 on failure.
 - **`requireAnyPerm(permissions[])`** — passes if employee has `all_access` OR any one listed.
 - **`requireContextOutlet`** — backfills `req.query.outlet_id` from `req.context.outletId` if absent.
-- **`DEFAULT_ROLE_PERMISSIONS`**: Administrator = `all_access`; Manager = 21 permissions (manage_inventory, manage_orders, view_reports, manage_employees, pos_discount, void_sales, pos_park, pos_void, manage_restaurant, manage_kds, manage_bookings, manage_projects, manage_contracts, manage_tickets, manage_rentals, manage_rooms, manage_treatment_plans, manage_tips, override_void_comp, manage_gift_cards, override_price); Cashier = view_reports, pos_discount, pos_park.
-- **`PERMISSION_RULES`** — declarative array covering common route-level guards; consumed by test helpers and route registration.
+- **`DEFAULT_ROLE_PERMISSIONS`**: Administrator = `all_access`; Manager = a broad permission set covering inventory, orders, reports, employees, POS discount/void/park, restaurant/KDS/bookings/projects/contracts/tickets/rentals/rooms/treatment-plans management, tips, void/comp override, gift cards, price override, credit-limit override, and field-sales management; Cashier = view_reports, pos_discount, pos_park; "Field Rep" = manage_field_sales only (minimal role for the wholesale mobile order-booker app).
+- **`PERMISSION_RULES`** — declarative array covering common route-level guards; consumed by test helpers and route registration, not auto-applied.
 
 ### `feature-flags.js`
 Exports: `init(deps)`, `DEFAULT_FEATURE_FLAGS`, `requireFeature`, `requireMode`, `getFeatureFlagsMap`, `getModesMap`, `invalidateFeatureFlagCache`, `invalidateModeCache`, `createNotification`, `notifyLowStockForSale`
 
 Requires `init({ db, IS_MULTI_TENANT, tenantDbManager, dbProxy })` at boot.
 
-- **`requireFeature(flagKey)`** — 403 if flag is off. 500 on DB error.
-- **`requireMode(modeName)`** — 403 if mode row is absent. Falls through if modes table is empty (pre-migration).
-- Flags: 60s cache per tenant. Merges `DEFAULT_FEATURE_FLAGS` with DB rows. Gracefully degrades if `feature_flags` table is missing.
-- **Gotchas**: `fbr_integration` is NOT in `DEFAULT_FEATURE_FLAGS` (DB-seeded by migration v9). `ai_insights` is a soft check in the route, not enforced via `requireFeature`. Shopify routes are gated by connection check, not a flag.
+- **`requireFeature(flagKey)`** — 403 if flag is off (deliberately 403 not 503 — "feature off" is a permission-style refusal, not a service outage). 500 on unexpected DB error.
+- **`requireMode(modeName)`** — 403 if the named mode is off/missing. Falls through if the `tenant_modes` table is empty (pre-migration back-compat) — feature flags become the sole gate in that case.
+- Flags: short in-memory cache per tenant. Merges `DEFAULT_FEATURE_FLAGS` with DB rows (DB overrides default). Gracefully degrades if `feature_flags` table is missing.
+- Most `DEFAULT_FEATURE_FLAGS` entries are mode-gated (restaurant, appointments, rentals, rooms, treatment plans, wholesale field sales/secondary sales, etc.) and default `false` — flipped on by the setup wizard or a migration backfill for the matching preset, never globally.
+- **Gotchas**: `fbr_integration` is NOT in `DEFAULT_FEATURE_FLAGS` (DB-seeded by a dedicated migration). `ai_insights` is a soft check in the route, not enforced via `requireFeature`. Shopify routes are gated by connection check, not a flag.
 
 ### `plan-limits.js`
 Exports: `requirePlanLimit`, `requireActiveSubscription`, `PLAN_DEFAULTS`
 
 - **`requirePlanLimit(resource)`** — resource must be `"employees"`, `"outlets"`, or `"products"`. No-op in ST mode. `0` or `null` in DB = unlimited. Returns 403 `{ code: "PLAN_LIMIT_REACHED" }` at cap. DB failure → best-effort, calls `next()`.
 - **`requireActiveSubscription`** — no-op for: GET/OPTIONS/HEAD, ST mode, auth/billing/support/setup/health/receipts paths, free plan tenants. `payment_status = 'expired'` → 403 `{ code: "SUBSCRIPTION_EXPIRED" }`. Uses `.then()` not `await` — outer function is synchronous.
-- **Plan defaults**: Free = 1 outlet / 3 employees / 100 products; Pro = 1 outlet / unlimited employees / unlimited products.
-- **Subscription lifecycle**: Trial (45 days) → Grace (7 days) → Expired (read-only).
+- **Plan defaults**: Free = 1 outlet / limited employees / limited products; Pro = 1 outlet / unlimited employees / unlimited products.
+- **Subscription lifecycle**: Trial → Grace → Expired (read-only), gated by these two middleware functions plus the email worker's hourly billing-lifecycle-check job.
 
 ### `rate-limit.js`
-Exports: `globalLimiter`, `authLimiter`, `webhookLimiter`, `reviewLimiter`, `publicBookingLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`
+Exports: `globalLimiter`, `authLimiter`, `webhookLimiter`, `reviewLimiter`, `publicBookingLimiter`, `publicRestaurantLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`, `manufacturerPortalAuthLimiter`, `manufacturerPortalDataLimiter`, `pinValidateLimiter`
 
-All return 429 with `Retry-After` header and `{ error, retry_after_seconds }`. `globalLimiter` skips POS burst paths (`/api/sales`, `/api/products/search`, `/api/products/scan/`, `/api/orders`). Portal limiters key on `?tenant=` / `x-tenant-slug` header (no `req.tenantSlug` at that point).
+All return 429 with `Retry-After` header and `{ error, retry_after_seconds }`. `globalLimiter` skips POS burst paths (`/api/sales`, `/api/products/search`, `/api/products/scan/`, `/api/orders`). Portal limiters (customer + manufacturer) and the review/booking/restaurant limiters key on `?tenant=` query param or `x-tenant-slug` header — they sit on routes mounted before `loadTenantAndPerms`/`resolveTenant`, so `req.tenantSlug` isn't set yet.
 
 ### `validate.js`
 Exports: `{ validate }`
 
-- `validate(schema)` — Zod middleware factory. On success, replaces `req.body` with parsed result. On `ZodError`: 400 `{ error, details: [{ field, message }] }`. Field is dot-joined path (e.g. `"items.0.price"`).
+- `validate(schema)` — Zod middleware factory. On success, **replaces** `req.body` with the parsed result — downstream handlers must not assume the raw body shape. On `ZodError`: 400 `{ error, details: [{ field, message }] }`. Field is dot-joined path (e.g. `"items.0.price"`).
 
 ### `upload-validation.js`
-Exports: `imageFileFilter`, `rasterImageFileFilter`, `safeExtension`, `detectImageType`, `verifyImageMagicBytes`, `ALLOWED_IMAGE_MIMES`, `ALLOWED_IMAGE_EXTS`
+Exports: `imageFileFilter`, `rasterImageFileFilter`, `clinicalDocFileFilter`, `safeExtension`, `detectImageType`, `verifyImageMagicBytes`, `ALLOWED_IMAGE_MIMES`, `ALLOWED_IMAGE_EXTS`, plus raster/clinical variants
 
-- `imageFileFilter` — multer fileFilter, checks mimetype + extension, allows SVG.
-- `rasterImageFileFilter` — stricter, excludes SVG (prevents XSS on same-origin serving). Use for support screenshots.
-- `verifyImageMagicBytes` — catches faked Content-Type after upload (e.g. exe renamed to jpg).
+- `imageFileFilter` — multer fileFilter, checks mimetype + extension, allows SVG (only for uploads rasterized before being served back).
+- `rasterImageFileFilter` — stricter, excludes SVG (prevents same-origin XSS). Use for anything served as-is (support ticket screenshots).
+- `clinicalDocFileFilter` — raster images + PDF + plain text, no SVG (clinical document uploads).
+- `verifyImageMagicBytes` — catches faked Content-Type after upload (e.g. an .exe renamed to .jpg with a spoofed image MIME).
 
 ### `request-id.js`
 Exports: default `requestId`, named `requestId.enrichReqLog`
 
 - Wraps `pino-http`. UUID per request (honours `X-Request-Id` header). Sets `X-Request-Id` response header, `req.log`, `req.id`, `req._startTime`.
 - `enrichReqLog` — wire after `loadTenantAndPerms` to rebind `req.log` with `{ tenantSlug, employeeId }`.
-- Log levels: error for 5xx/thrown, warn for 4xx/>2000ms, info otherwise.
+- Log levels: error for 5xx/thrown, warn for 4xx/slow requests, info otherwise.
 
-### `customer-auth.js`
-Customer portal auth (separate JWT secret from employee auth). Exports: `loadCustomerAuth(deps)`, `signCustomerTokens`, `verifyCustomerToken`, `hashRefreshToken`, `getSecret`.
-
-- Portal routes use: `customerPortalAuthLimiter` → `loadCustomerAuth(deps)` → handler (never sets `req.employee`)
-- Token scope must be `"customer"` — rejects staff tokens
-- Cross-tenant replay guard: `payload.tid` must match resolved tenant
-- Per-customer revocation via `customers.portal_tokens_revoked_before`
-- Env vars: `CUSTOMER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), `CUSTOMER_PORTAL_ACCESS_TTL` (default `"30m"`), `CUSTOMER_PORTAL_REFRESH_TTL` (default `"30d"`)
+### `customer-auth.js` / `manufacturer-auth.js`
+Two near-identical portal-auth modules, each with its own JWT secret/scope, separate from employee auth. Both delegate to `services/public-tenant-context.js:resolvePublicTenantDb()` for tenant routing (never `resolveTenant`), both cross-check the token's `tid` against the resolved tenant, and both support a per-principal revocation cursor. They've drifted apart on TTL defaults and status-check details — if you fix a bug in one, check whether it applies to the other.
+- `customer-auth.js` — scope `"customer"`, env `CUSTOMER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`).
+- `manufacturer-auth.js` — scope `"manufacturer"`, env `MANUFACTURER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), additionally checks partner `status` (suspended/active).
 
 ---
 
@@ -215,31 +217,20 @@ Key services:
 - `fbr.js` — FBR API client + payload builders + exponential backoff (60s → 5m → 15m → 1h → 4h)
 
 ### `tests/`
-See `tests/CLAUDE.md` for full test file list and helper API.
+See `tests/CLAUDE.md` for the full test suite breakdown.
 
-- Runner: **Vitest** (not Jest). `reports_accuracy.test.js` is the lone exception — uses Jest syntax
+- Runner: **Vitest** (not Jest). `reports_accuracy.test.js` is the lone exception — uses Jest syntax but still runs under `npx vitest`
 - Integration tests require `DATABASE_URL`. Prefer `backend/.env.test` (local Postgres) to keep tests off production
-- `smoke-gate.test.js` has pre-existing failures — do not run or investigate
+- `smoke-gate.test.js` has pre-existing failures — do not run or investigate unless explicitly asked
 - Test isolation: `createTestApp-pg.js` creates a fresh `test_<hex>` schema per test; `cleanup()` drops it
 
 ### `workers/`
-Background workers are started from `boot/workers.js`, which mixes pg-boss jobs with setInterval pollers — not all workers are pg-boss. Each requires an env var to enable. pg-boss workers survive server crashes; setInterval pollers do not.
+See `workers/CLAUDE.md` for the full per-worker reference (queues, cron schedule, heartbeat globals).
 
-| Worker file | Env var to enable | Schedule |
-|---|---|---|
-| `email-worker-boss.js` | `EMAIL_WORKER_ENABLED=1` | continuous |
-| `fbr-worker-boss.js` | `FBR_WORKER_ENABLED=1` | continuous |
-| `cleanup-worker-boss.js` | `CLEANUP_WORKER_ENABLED=1` | 24h |
-| `marketplace-sync-worker-boss.js` | `MARKETPLACE_SYNC_WORKER_ENABLED=1` | 10 min (orders), 6h (feed) |
-| `rental-overdue-worker-boss.js` | `RENTAL_OVERDUE_WORKER_ENABLED=1` | daily 8 AM UTC |
-| `room-overdue-checkout-worker-boss.js` | `ROOM_OVERDUE_WORKER_ENABLED=1` | daily 11 AM UTC |
-| `subscription-grace-worker-boss.js` | `SUBSCRIPTION_GRACE_WORKER_ENABLED=1` | hourly |
-| `treatment-plan-worker-boss.js` | `TREATMENT_PLAN_WORKER_ENABLED=1` | daily 9 AM UTC |
-
-Each worker exposes `global.__<name>WorkerStatus = { lastPollAt, processedToday, queueDepth }`. `GET /api/admin/worker-status` (in `routes/admin/system.js`) reads these globals. `queueDepth` is a real `SELECT COUNT(*)`.
+Background workers are started from `boot/workers.js`, which mixes pg-boss jobs with `setInterval` pollers and some inline cron logic — not everything in `boot/workers.js` has a corresponding file in this directory (Shopify sync poll, report-schedule poll, catalog scheduler, booking reminders live inline in `boot/workers.js`). Each pg-boss worker requires its own env var to enable and exposes `global.__<name>WorkerStatus = { lastPollAt, processedToday, queueDepth }`, read by `GET /api/admin/worker-status` (`routes/admin/system.js`). pg-boss workers survive server crashes; `setInterval` pollers do not. Prefer `workers/tenant-job-context.js:withTenantContext()` over raw schema-string interpolation for new tenant-scoped workers — the FBR worker is the one deliberate legacy exception.
 
 ### `schemas/`
-Zod validation schemas for all domains. Imported by `validate(schema)` middleware. One file per domain (auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions, customer-portal, rentals, rooms, service-tickets, treatment-plans).
+Zod validation schemas for all domains, one file per domain, consumed by `validate(schema)` middleware. See `schemas/CLAUDE.md` for the full file/export/importer table and conventions (`.passthrough()` vs `.strict()`, exported enum constants, `superRefine` for cross-field validation).
 
 ### `boot/workers.js`
 All worker startup. Imported by `index.js`. Mixes pg-boss workers with setInterval pollers (e.g. Shopify sync polling, report schedule worker). Do not start workers elsewhere.
@@ -267,7 +258,7 @@ SQLite code is deleted. `schema-pg.sql` is the DDL source of truth. All queries 
 Routes receive a `deps` object containing `db` (the tenant proxy), plus references to middleware functions and external clients. Routes are factory functions: `module.exports = (app, deps) => { ... }`.
 
 ### Feature flags
-Apply `requireFeature('flag_name')` as per-route middleware. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql`. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes.
+Apply `requireFeature('flag_name')` as per-route middleware, sometimes combined with `requireMode('mode_name')` for vertical-specific gating. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql`. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes.
 
 ### Permission guards
 Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (e.g. receipts, country-packs, public bookings/storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute.
@@ -312,6 +303,6 @@ Integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. 
 `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`
 
 ### Common optional
-`MULTI_TENANT`, `PORT` (default 5000), `NODE_ENV`, `CORS_ORIGIN`, `LOG_LEVEL`, `FRONTEND_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `EMAIL_WORKER_ENABLED`, `SENTRY_DSN`, `ALERT_EMAIL`, `FBR_WORKER_ENABLED`, `CLEANUP_WORKER_ENABLED`, `MARKETPLACE_SYNC_WORKER_ENABLED`, `PAYMENT_GATEWAY`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `SHOPIFY_SECRET_KEY`, `INTEGRATION_SECRET_KEY`, `ADMIN_ALLOWED_IPS`, `SELF_SERVICE_SIGNUP`, `CUSTOMER_PORTAL_JWT_SECRET`
+`MULTI_TENANT`, `PORT` (default 5000), `NODE_ENV`, `CORS_ORIGIN`, `LOG_LEVEL`, `FRONTEND_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `EMAIL_WORKER_ENABLED`, `SENTRY_DSN`, `ALERT_EMAIL`, `FBR_WORKER_ENABLED`, `CLEANUP_WORKER_ENABLED`, `MARKETPLACE_SYNC_WORKER_ENABLED`, `PAYMENT_GATEWAY`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `SHOPIFY_SECRET_KEY`, `INTEGRATION_SECRET_KEY`, `ADMIN_ALLOWED_IPS`, `SELF_SERVICE_SIGNUP`, `CUSTOMER_PORTAL_JWT_SECRET`, `MANUFACTURER_PORTAL_JWT_SECRET`, `TRUST_PROXY_HOPS`
 
-See existing `backend/CLAUDE.md` environment variable section for the full list with defaults.
+See individual worker/middleware sections above and their linked sub-guides for feature-specific env vars (per-worker enable flags, portal TTLs, rate-limit overrides).

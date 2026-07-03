@@ -1,160 +1,89 @@
 # Admin Routes — Claude Guide
 
-All routes in this directory are under `/api/admin/*` and are mounted **before** tenant middleware. There is no `deps.db` tenant proxy, no `req.company`, and no `req.employee`. Most routes require both `requireAllowedIp` and `requireSuperAdmin`. The two exceptions are: `POST /api/admin/auth/login`, which uses `requireAllowedIp` and `authLimiter` but NOT `requireSuperAdmin` (it is the route that creates the admin token); and `GET /api/announcements/active`, which is public/no-auth.
+All routes here are under `/api/admin/*` and mount **before** tenant middleware. There is no `deps.db` tenant proxy, no `req.company`, no `req.employee`. Almost every route requires both `requireAllowedIp` and `requireSuperAdmin`. Exceptions: `POST /api/admin/auth/login` (uses `requireAllowedIp` + `authLimiter` only — it's the route that mints the admin token), and `GET /api/announcements/active` (public, no auth at all).
 
 ## index.js — Orchestrator
 
-Initializes shared deps and registers all 8 domain modules in order. The `deps` object passed to every module contains: `db`, `masterDb`, `jwt`, `jwtDefaults`, `tenantDbManager`, `requireAllowedIp`, `requireSuperAdmin`, `authLimiter`, `bcrypt`, `BCRYPT_ROUNDS`, `provision`, `PLAN_DEFAULTS`, `auditLog`, `logAdminAction`, `logSecurityEvent`.
-
-`tenantDbManager.init(db)` is called here before any routes register.
+Builds a shared `deps` object and registers the 8 domain modules in order: `auth.js`, `tenants.js`, `monitoring.js`, `billing.js`, `operations.js`, `compliance.js`, `messaging.js`, `system.js`. `deps` carries: `db`, `masterDb`, `jwt`, `jwtDefaults`, `tenantDbManager`, `requireAllowedIp`, `requireSuperAdmin`, `authLimiter`, `bcrypt`, `BCRYPT_ROUNDS`, `provision`, `PLAN_DEFAULTS`, `auditLog`, `logAdminAction`, `logSecurityEvent`. Calls `tenantDbManager.init(db)` before any route registers.
 
 ## helpers.js — Shared Utilities
 
-**IP allowlist**: `createRequireAllowedIp()` reads `ADMIN_ALLOWED_IPS` env var (comma-separated, CIDR supported). If env var is empty/unset, all IPs pass. `ipInCidr()` handles `/32` single-host entries too.
+- **IP allowlist**: `createRequireAllowedIp()` reads `ADMIN_ALLOWED_IPS` (comma-separated, CIDR supported, `/32` for single hosts). Empty/unset env var = allow all.
+- **Auth middleware**: `createRequireSuperAdmin(verifyAccessToken)` verifies the Bearer token and requires `decoded.role === 'super_admin'`, then sets `req.admin = { id, email }`. Expired token → 401 `code: 'TOKEN_EXPIRED'`.
+- **Logging helpers** (`createLoggers(db, masterDb)`):
+  - `auditLog(tenantId, action, details, actor)` → `tenant_audit_log` (public schema, via `masterDb`)
+  - `logAdminAction(email, action, targetType, targetId, details, ip)` → `admin_activity_log` (via `db`); failures swallowed
+  - `logSecurityEvent(eventType, email, ip, userAgent, details)` → `admin_security_log`; failures swallowed
 
-**Auth middleware**: `createRequireSuperAdmin(verifyAccessToken)` verifies Bearer token, checks `decoded.role === 'super_admin'`, sets `req.admin = { id, email }`. Returns `401` with `code: 'TOKEN_EXPIRED'` on expired tokens.
+## auth.js
 
-**Logging helpers** (returned by `createLoggers(db, masterDb)`):
-- `auditLog(tenantId, action, details, actor)` → inserts into `tenant_audit_log` (public schema via masterDb)
-- `logAdminAction(email, action, targetType, targetId, details, ip)` → inserts into `admin_activity_log` (public schema via db); failures are swallowed (non-critical)
-- `logSecurityEvent(eventType, email, ip, userAgent, details)` → inserts into `admin_security_log`; failures swallowed
+**`POST /api/admin/auth/login`** — looks up `super_admins` by lowercased email, bcrypt-compares password, signs a JWT with `{ tid:0, eid:0, rid:0, oid:null, aid, email, role:'super_admin', scope:'admin' }`. Calls `masterDb.init(db)` on every login (idempotent). Logs success/failure to `admin_security_log`.
 
-## auth.js — Login
+## tenants.js — Tenant Lifecycle
 
-**`POST /api/admin/auth/login`** — `requireAllowedIp` + `authLimiter`. Looks up `super_admins` table by lowercase email. bcrypt-compares password. Signs JWT with `{ tid:0, eid:0, rid:0, oid:null, aid, email, role:'super_admin', scope:'admin' }`. Calls `masterDb.init(db)` on every login (idempotent). Logs success/failure to `admin_security_log`.
+Owns tenant CRUD, stats, feature flags, notes, setup tokens, migrations, PIN reset. Touches `tenants`, `tenant_audit_log`, `tenant_notes` (all public), plus per-tenant `feature_flags`, `company_profile`, `action_history`, `employees`, `roles`, `role_permissions`, `schema_version`.
 
-## tenants.js — Tenant CRUD
+Highlights:
+- `POST /api/admin/tenants` — validates slug (`^[a-z0-9_]{3,40}$`) and PIN (4-8 digits) before calling `provision()`, then applies `PLAN_DEFAULTS` limits for the chosen plan. Returns `setup_url`.
+- `DELETE /api/admin/tenants/:id` — soft-marks `status='deleted'` then hard `DROP SCHEMA IF EXISTS "tenant_{slug}" CASCADE`. Re-validates the slug against `/^[a-z0-9_]+$/` immediately before the DROP — never trust a value already in the DB for use in raw DDL.
+- `GET /api/admin/tenants/:id/stats` — 14 queries fanned out in parallel against one tenant's schema (counts, revenue by period, last login/sale/shift, active employees 7d/30d, schema size via `pg_total_relation_size`).
+- `POST /api/admin/tenants/:id/migrate` and `POST /api/admin/migrate-all` — both call `migrate()`/`MIGRATIONS` from `migrate-pg.js`, the same function Railway's boot sequence uses. `migrate-all` always migrates public schema first, then all active tenants sequentially; per-tenant errors are caught so one bad tenant doesn't abort the batch.
+- `POST /api/admin/tenants/:id/reset-pin` — finds the tenant's first employee with the `all_access` permission (joins `employees` → `roles` → `role_permissions`) and bcrypt-hashes a new PIN onto it. Defaults to `"0000"` if none supplied.
 
-Tables: `tenants`, `tenant_audit_log`, `tenant_notes`, `feature_flags` (per-tenant schema), `company_profile` (per-tenant), `action_history` (per-tenant), `employees` (per-tenant), `roles` (per-tenant), `role_permissions` (per-tenant), `schema_version` (per-tenant).
+**Gotcha — `buildTenantScopedDb()`**: a local helper in this file that wraps the raw pool and issues `SET search_path TO {schema}, public` on every query/transaction. This is separate from the tenant DB proxy (`tenant-db-proxy-pg.js`) used by normal tenant routes — it exists purely so migrations can run DDL inside one tenant's schema from admin context.
 
-**Routes:**
-- `GET /api/admin/tenants` — lists all non-deleted tenants. For active tenants, concurrently fetches `last_login`, `revenue_this_month`, and `setup_complete` from each tenant schema. Schema-missing errors are caught per-tenant (silently returns nulls).
-- `POST /api/admin/tenants` — validates `CreateTenantSchema` (Zod). Slug regex: `^[a-z0-9_]{3,40}$`. PIN: 4-8 digits. Calls `provision()`, then updates plan limits, then sends `auditLog` + `logAdminAction`. Returns `setup_url`.
-- `GET /api/admin/tenants/:id` — includes last 20 rows from `tenant_audit_log`.
-- `PUT /api/admin/tenants/:id` — COALESCE update; when `plan` changes, applies `PLAN_DEFAULTS` limits and fires `billing_plan_changed` email (non-blocking `.catch`).
-- `POST /api/admin/tenants/:id/suspend` — sets `status='suspended'`, `suspended_at=NOW()`.
-- `POST /api/admin/tenants/:id/activate` — sets `status='active'`, clears `suspended_at`. Refuses if `status='deleted'`.
-- `DELETE /api/admin/tenants/:id` — marks `status='deleted'`, then `DROP SCHEMA IF EXISTS "tenant_{slug}" CASCADE`. Validates slug is safe (`/^[a-z0-9_]+$/`) before DROP.
-- `GET /api/admin/tenants/:id/stats` — 14 parallel queries into the tenant schema: employee/product/outlet counts, sales counts/revenue (today/week/month), last_login, last_sale, last_shift, active employees 7d/30d, schema size in MB.
-- `GET /api/admin/tenants/:id/feature-usage` — queries `action_history` for all-time and last-30-days action type counts + top 5 users.
-- `GET /api/admin/tenants/:id/setup-token` — reads `company_profile.setup_token`. Returns `{ setup_complete: true, setup_token: null }` if already complete.
-- `POST /api/admin/tenants/:id/regenerate-setup-token` — generates new 32-byte hex token, sets 48h expiry, sets `setup_complete=false`.
-- `GET /api/admin/plan-defaults` — returns `PLAN_DEFAULTS` object (no DB query).
-- `GET /api/admin/tenants/:id/feature-flags` — merges DB rows with `DEFAULT_FEATURE_FLAGS` defaults; returns sorted by key.
-- `PUT /api/admin/tenants/:id/feature-flags` — upserts by `key`, calls `invalidateFeatureFlagCache(tenant.id)` after.
-- `GET /api/admin/tenants/:id/notes` — reads `tenant_notes` (public schema).
-- `POST /api/admin/tenants/:id/notes` — inserts to `tenant_notes`.
-- `DELETE /api/admin/tenants/:id/notes/:noteId` — deletes from `tenant_notes`.
-- `POST /api/admin/tenants/:id/migrate` — runs `migrate-pg.js` against a single tenant schema using `buildTenantScopedDb()`. Reads `schema_version` before/after to report applied versions. Idempotent.
-- `POST /api/admin/migrate-all` — migrates public schema first, then all `status='active'` tenants sequentially. Per-tenant errors are caught (one failed tenant doesn't abort others). Response: `{ public, results, migrated, skipped, errors }`.
-- `POST /api/admin/tenants/:id/reset-pin` — finds first `all_access` employee via role_permissions, bcrypt-hashes new PIN, updates `employees.pin_hash`. Defaults to "0000" if no PIN provided.
+## monitoring.js — Global Stats & Infra
 
-**Gotcha**: `buildTenantScopedDb()` creates a wrapper that sets `search_path TO {schema}, public` on every query/transaction — same pattern as `migrate-pg.js`. This is local to this file; it's not the tenant proxy used by normal routes.
-
-## monitoring.js — Global Stats & Infrastructure
-
-**`GET /api/admin/stats`** — tenant counts by status/plan, 5 most recent tenants, 10 most recent audit log entries. Single-DB queries (no per-tenant fanout).
-
-**`GET /api/admin/attention`** — iterates every active tenant; for each checks employees/products/outlets vs limits (flags at >85%), last login (flags dormant at ≥14 days), setup_complete. Returns `{ approaching_limits, dormant, setup_pending, dead_tenants }`. Dead tenants = `setup_pending` entries created >7 days ago.
-
-**`GET /api/admin/cleanup-preview`** — calls `cleanupDeadTenants({ dryRun: true })` from `jobs/cleanup-dead-tenants.js`.
-
-**`POST /api/admin/cleanup-run`** — calls `cleanupDeadTenants({ dryRun: false })`.
-
-**`GET /api/admin/revenue-stats`** — computes MRR from `plan_pricing` + count of pro active tenants. Then iterates all active tenants to sum `sales.total` for current month. Gotcha: column is `total` not `total_amount` in this query.
-
-**`GET /api/admin/infra`** — cached 5 min in `_infraCache` module variable (bypassed with `?force=1`). Response header `X-Infra-Cache: hit|miss`. Queries: `pg_stat_activity` (connections by state), `pg_settings` (max_connections), `pg_database_size`, active slow queries (>1s from `pg_stat_activity`), `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples/vacuum), schema sizes. Optional: `pg_stat_statements` historical slow queries — try/catch, skipped if extension not enabled. Triggers `alerting.recordDbPressure()` when connections >80% of max.
+- `GET /api/admin/stats` — tenant counts by status/plan + 5 most recent tenants + 10 most recent audit rows. Single-schema query, no fanout.
+- `GET /api/admin/attention` — iterates every active tenant checking employee/product/outlet usage vs. plan limits (flags >85%), dormancy (no login ≥14 days), and incomplete setup. `dead_tenants` = setup-pending tenants created >7 days ago.
+- `GET/POST /api/admin/cleanup-preview` / `cleanup-run` — thin wrappers around `cleanupDeadTenants()` from `jobs/cleanup-dead-tenants.js` (dry-run vs. live).
+- `GET /api/admin/revenue-stats` — MRR from `plan_pricing` × pro-plan active tenant count, plus a live fanout summing `sales.total` (not `total_amount`) across all active tenant schemas for the current month.
+- `GET /api/admin/infra` — the expensive one. Queries `pg_stat_activity`, `pg_settings`, `pg_database_size`, `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples), per-schema sizes, and optionally `pg_stat_statements` (try/catch — silently skipped if the extension isn't installed). Cached in-memory for 5 minutes (`_infraCache` module variable); `?force=1` bypasses. Response carries `X-Infra-Cache: hit|miss`. Fires `alerting.recordDbPressure()` when active connections exceed 80% of `max_connections`.
 
 ## billing.js — Plan Pricing & Payments
 
-Uses `masterDb` for `plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`. Uses `db` for per-tenant data access.
+Uses `masterDb` for everything here (`plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`), `tenantDbManager` only to look up a tenant's `company_profile.email` for notification emails.
 
-**Routes:**
-- `GET /api/admin/plan-pricing` — reads `plan_pricing` ordered by plan, cycle.
-- `PUT /api/admin/plan-pricing/:id` — partial update (`price` and/or `is_active`), uses dynamic param building.
-- `POST /api/admin/tenants/:id/record-payment` — requires `plan`, `cycle`, `amount`. Computes period (30 or 365 days) + 7-day grace. Updates `tenants` (plan, billing_cycle, plan_expires_at, grace_ends_at, payment_status='active', plan limits). Inserts to `payment_records`. Fires `billing_payment_recorded` email (non-blocking). All via `masterDb`.
-- `GET /api/admin/tenants/:id/payments` — reads `payment_records` for tenant.
-- `GET /api/admin/upgrade-requests` — pending requests joined with tenant info.
-- `PUT /api/admin/upgrade-requests/:id` — sets status to `'approved'` or `'dismissed'`, records `resolved_at` + `resolved_by`.
-- `GET /api/admin/billing-attention` — three lists: due soon (expires in 7 days), overdue (past expiry, in grace), past grace. Plus count of pending upgrade requests.
-- `GET /api/admin/payment-intents/stuck` — finds `payment_intents` in `'pending'` state older than threshold hours (default 2). Accepts `?hours=N`. Joins with `tenants`.
+- `POST /api/admin/tenants/:id/record-payment` — computes period length from `cycle` (30 or 365 days) plus a fixed 7-day grace window, updates `tenants` (plan/cycle/expiry/grace/payment_status/limits) and inserts into `payment_records`, then fires a non-blocking `billing_payment_recorded` email.
+- `GET /api/admin/billing-attention` — three tenant lists: due soon (expires within 7 days), overdue (past expiry, still in grace), past grace. Plus a count of pending upgrade requests.
+- `GET /api/admin/payment-intents/stuck` — `payment_intents` stuck in `'pending'` longer than `?hours=` (default 2).
 
 ## operations.js — Support Tickets, Impersonation, Dead Letters
 
-**Support tickets** (cross-tenant fanout — iterates all active tenants via `tenantDbManager`):
-- `GET /api/admin/support-tickets` — accepts `?status=` and `?limit=` (max 200). Reads `support_tickets` from each tenant schema, merges and sorts by `created_at`.
-- `PUT /api/admin/support-tickets/:tenantId/:ticketId` — updates status (`open|acknowledged|resolved`). On resolved: fires `support_resolved` email if employee has email.
-- `PUT /api/admin/support-tickets/:tenantId/:ticketId/reply` — sets `admin_reply`, `replied_at`, `status='acknowledged'`. Creates in-app notification in `notifications` table (type `support_reply`, link `/my-tickets`). Notification failure is logged but doesn't fail the reply.
-- `DELETE /api/admin/support-tickets/:tenantId/:ticketId`
+**Support tickets** are cross-tenant fanout: iterate every active tenant via `tenantDbManager.getDb()`, query `support_tickets`, merge and re-sort by `created_at`. Tables missing on a given tenant are caught and skipped silently. The `/reply` route also inserts an in-app `notifications` row (type `support_reply`, link `/my-tickets`) — notification-insert failures are logged (not swallowed) but never fail the reply itself.
 
-**Impersonation:**
-- `POST /api/admin/impersonate/:tenantId` — finds first employee with `role_id=1`, signs a 1h JWT with `{ tid, eid, rid:1, scope:'full', impersonating:true, realIdentity:{id,name,email} }`. Records session in `impersonation_sessions` (masterDb). Logs audit.
-- `POST /api/admin/impersonate/:sessionId/end` — sets `ended_at` in `impersonation_sessions`.
+**Impersonation**: `POST /api/admin/impersonate/:tenantId` finds the tenant's first `role_id=1` employee, signs a 1-hour JWT with `impersonating: true`, a `realIdentity` block, and a `jti`. The `jti` is what makes hard-revocation possible — `tenant-auth.js` checks incoming tokens against `revoked_tokens` by `jti`, so without it the token would stay valid for the full hour regardless of calling `/end`. Session tracked in `impersonation_sessions` (masterDb). `POST /api/admin/impersonate/:sessionId/end` inserts the `jti` into the tenant's `revoked_tokens` table (best-effort — logged, not fatal) and marks the session ended.
 
-**Dead letters** (Shopify webhook events):
-- `GET /api/admin/dead-letters` — cross-tenant fanout on `shopify_webhook_events WHERE status IN ('dead_letter','failed')`.
-- `POST /api/admin/dead-letters/:tenantId/:id/retry` — resets `status='pending'` on the event.
-
-**Payment webhook dead letters**:
-- `GET /api/admin/webhooks/payment-dead-letters` — reads public schema `payment_webhook_events` last 7 days (masterDb).
+**Dead letters**: `GET /api/admin/dead-letters` fans out over `shopify_webhook_events WHERE status IN ('dead_letter','failed')`. `GET /api/admin/webhooks/payment-dead-letters` reads the public-schema `payment_webhook_events` table directly (no fanout needed — it's cross-tenant by design).
 
 ## compliance.js — Tax Rates & FBR Health
 
-Tables: `public.tax_rate_reference`, `tenant_{slug}.tax_rate_suggestions`, `tenant_{slug}.feature_flags`, `tenant_{slug}.fbr_invoices`.
+`public.tax_rate_reference` is the shared HS-code/tax-rate table; CRUD here is straightforward. `tax_rate_suggestions` lives per-tenant (tenants can submit corrections) and is fanned out to build a review queue — approving a suggestion writes back into `public.tax_rate_reference`, but only for an allow-listed set of fields (`federal_gst`, `punjab_pra`, `sindh_srb`, `kpk_kpra`, `balochistan_bra`). Any route interpolating a tenant slug into a schema-qualified query (`tenant_${slug}.table`) validates it against `/^[a-z0-9_]{3,40}$/` first — this file builds those identifiers by string interpolation rather than parameterized queries, so the validation is load-bearing, not decorative.
 
-**Routes:**
-- `GET /api/admin/tax-rates` — all rows from `public.tax_rate_reference` ordered by hs_code.
-- `POST /api/admin/tax-rates` — validates `CreateTaxRateSchema`. Requires `hs_code` + `description_en`. Tax rate columns default to 0.
-- `PUT /api/admin/tax-rates/:id` — COALESCE update on all columns, sets `last_updated = CURRENT_DATE`.
-- `DELETE /api/admin/tax-rates/:id`
-- `GET /api/admin/tax-rate-suggestions` — cross-tenant fanout on `tax_rate_suggestions WHERE status='pending'`.
-- `PUT /api/admin/tax-rate-suggestions/:id` — body requires `status` (`approved|rejected`) + `tenant_slug`. On approved: if `field_name` is in the allowed list (`federal_gst`, `punjab_pra`, `sindh_srb`, `kpk_kpra`, `balochistan_bra`), updates `public.tax_rate_reference`. Tenant slug validated against `/^[a-z0-9_]{3,40}$/` before using in query.
-- `GET /api/admin/fbr-health` — cross-tenant: only tenants with `fbr_integration` flag enabled. Returns pending/failed/posted counts + oldest pending + avg delay in seconds.
+`GET /api/admin/fbr-health` — fanout restricted to tenants with the `fbr_integration` feature flag on; returns pending/failed/posted counts, oldest pending timestamp, and average pending delay in seconds.
 
 ## messaging.js — Email Queue, Broadcast, Logs, Announcements
 
-**Email queue** (reads from `pgboss.job` — NOT `public.email_queue` which is legacy):
-- `GET /api/admin/email-queue` — accepts `?status=pending|sent|failed`, `?limit=` (max 500). Joins with `tenants`. Returns emails array + `{ pending, sent, failed }` counts.
-- `POST /api/admin/email-queue/:id/retry` — resets pgboss job state to `'created'`, clears `retry_count`, `output`, timestamps.
-- `POST /api/admin/email-queue/:id/send-now` — sets `start_after=NOW()` for pending jobs (immediate pickup).
-- `DELETE /api/admin/email-queue/purge-deleted` — **must be registered before `:id` route** (Express route ordering). Deletes non-completed jobs for deleted tenants.
-- `DELETE /api/admin/email-queue/:id` — only deletes non-completed jobs.
+**Email queue reads `pgboss.job WHERE name='email'`** — not the legacy `public.email_queue` table, which nothing writes to anymore. State mapping: `created/retry/active` → pending, `completed` → sent, `failed/cancelled` → failed. Job IDs are UUID strings. Retry resets state to `created` and clears `retry_count`/`output`; send-now just brings `start_after` to `NOW()`. `DELETE /api/admin/email-queue/purge-deleted` **must stay registered before** the `:id` DELETE route, or Express will match `purge-deleted` as an `:id` param.
 
-**Broadcast:**
-- `POST /api/admin/email/broadcast` — type must be `'downtime'` or `'announcement'`. Iterates active tenants, reads `company_profile.email`, calls `enqueueEmail()` for each. Logs to `broadcast_log`. Returns `{ ok, enqueued }`.
-- `GET /api/admin/broadcast-history` — reads `broadcast_log` last 50.
+**Broadcast** (`POST /api/admin/email/broadcast`) iterates all active tenants, reads each `company_profile.email`, and calls `enqueueEmail()` per tenant. Logs a `broadcast_log` row (best-effort).
 
-**Logs:**
-- `GET /api/admin/activity-log` — from `admin_activity_log`; accepts `?action=`, `?limit=`, `?offset=`. Returns `{ entries, total }`.
-- `GET /api/admin/security-log` — from `admin_security_log`; accepts `?event_type=`, `?limit=`, `?offset=`.
-- `GET /api/admin/tenant-activity` — cross-tenant fanout on `action_history`; distributes limit across tenants (`limit / tenants.length`), merges and re-sorts.
+**Announcements**: `PUT /api/admin/announcements/:id` sets `ends_at = $4` unconditionally (not COALESCE) — passing `ends_at: undefined` in the body sets the column to NULL. `GET /api/announcements/active` is the one fully public route in this directory; it feeds the tenant-side `AnnouncementBanner.jsx`.
 
-**Announcements:**
-- `GET /api/admin/announcements` — all, last 50, requires auth.
-- `POST /api/admin/announcements` — validates `CreateAnnouncementSchema`. Type: `info|warning|maintenance`.
-- `PUT /api/admin/announcements/:id` — partial update; `ends_at = $4` is always set (not COALESCE) — passing `ends_at: undefined` sets it to NULL.
-- `DELETE /api/admin/announcements/:id`
-- **`GET /api/announcements/active`** — public, no auth. Returns active announcements where `starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())`. Used by tenant dashboard `AnnouncementBanner.jsx`.
+**Cross-tenant activity** (`GET /api/admin/tenant-activity`) divides the requested `limit` across the number of active tenants before querying each one's `action_history`, then merges and re-sorts — so a large tenant count can make the per-tenant slice quite small.
 
 ## system.js — Workers, Schemas, Backup
 
-**`GET /api/admin/worker-status`** — reads global heartbeat variables and returns structured status for 19 workers:
-`email`, `fbr`, `cleanup`, `reservation`, `marketplace_sync`, `booking_reminder`, `rental_overdue`, `room_overdue`, `treatment_plan`, `course_release`, `kds_snapshot`, `reservation_reminder`, `abc`, `hold_expiry`, `anomaly`, `retail_digest`, `shift_auto_close`, `subscription_grace`, `catalog_scheduler`.
+`GET /api/admin/worker-status` reads in-memory heartbeat globals (`global.__<name>WorkerStatus`) for every background worker, but heartbeats are wiped on every Railway redeploy. To avoid a scary "all workers stopped" dashboard right after a deploy, it also queries `pgboss.job MAX(completed_on)` per known queue (`PG_BOSS_QUEUES` map in this file) and uses whichever timestamp — in-memory or DB — is newer. Workers without a pg-boss queue (`booking_reminder`, `catalog_scheduler`) rely on the in-memory heartbeat alone. A worker is "running" if its last-poll time is within `pollIntervalMs * 2.5`.
 
-`workerInfo(status, pollIntervalMs)` considers a worker "running" if `lastPollAgo < pollIntervalMs * 2.5`.
+`GET /api/admin/orphaned-schemas` reads a cached snapshot from `public.infra_cache` (key `orphaned_schemas`, populated hourly by a background worker); `?force=1` triggers a live scan, which was measured at up to ~104s in prod — avoid forcing without reason. `POST /api/admin/orphaned-schemas/cleanup` always does a live comparison of `information_schema.schemata` against the tenant registry and drops anything unmatched.
 
-**`GET /api/admin/orphaned-schemas`** — reads from `public.infra_cache WHERE cache_key='orphaned_schemas'` (populated by `orphan-schema-scan-worker-boss`). Falls back to live `runScan()` only when cache missing or `?force=1`. Response header `X-Infra-Cache: hit|miss`. The live scan was historically slow (up to 104s in prod) — avoid forcing without reason.
+`POST /api/admin/backup` shells out to `pg_dump` (checks availability first) across all active tenant schemas + public, uploads the resulting dump to R2, and logs to `backup_log`. `POST /api/admin/backup/verify` takes a `filePath`, lists the schemas actually present in that dump, and diffs against the expected schema set.
 
-**`POST /api/admin/orphaned-schemas/cleanup`** — live scan: compares `information_schema.schemata` LIKE `'tenant_%'` against known slugs, DROPs schemas not in registry. Logs dropped list to `admin_activity_log`.
+## Cross-Cutting Conventions
 
-**Backup:**
-- `POST /api/admin/backup` — checks `pg_dump` availability, gathers all active tenant slugs, runs `backupAllSchemas()` from `utils/backup-pg.js`, uploads to R2 as `backups/full-backup-{timestamp}.dump`. Logs to `backup_log` table.
-- `POST /api/admin/backup/verify` — requires `filePath` in body. Calls `listSchemasInBackup(filePath)`, compares against expected schemas (public + all active tenants).
-- `GET /api/admin/backup-history` — reads `backup_log` last 20. Returns `[]` on error (no 500).
-
-## Cross-Cutting Concerns
-
-- **DB access pattern**: `db` (direct pool) for queries that set schema prefix like `tenant_{slug}.tablename`. `masterDb` for public-schema-only tables (`plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`). `tenantDbManager.getDb(tenantId)` for tenant-scoped queries using the proxy pattern.
-- **Most mutations** call `logAdminAction()`, but some do not — including tax/compliance mutations in `compliance.js`, `POST /api/admin/email-queue/:id/retry`, `PUT /api/admin/announcements/:id`, and `POST /api/admin/backup/verify`. Major lifecycle events also call `auditLog()`.
-- **Frontend**: admin pages use `adminFetch()` (not `api.js`). Token stored in `adminAuthStore.js` (separate from tenant token).
-- **Tenant slug safety**: any route doing `DROP SCHEMA` or dynamic SQL with the slug validates it against `/^[a-z0-9_]+$/` before use.
+- **DB access pattern**: `db` (direct pool) is used with schema-qualified queries like `tenant_{slug}.tablename` for cross-tenant fanout or superadmin-scoped work. `masterDb` is for public-schema-only tables (`plan_pricing`, `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`). `tenantDbManager.getDb(tenantId)` returns a proxy scoped to one tenant's schema — prefer this over raw `tenant_{slug}.` interpolation when you only need one tenant.
+- **Cross-tenant fanout is the dominant pattern** here (support tickets, dead letters, tax suggestions, FBR health, tenant activity) — always wrapped in a per-tenant try/catch so one tenant with a missing table or dropped schema doesn't break the whole response.
+- **Not every mutation calls `logAdminAction()`** — notable gaps include the tax/compliance CRUD routes, `POST /api/admin/email-queue/:id/retry`, `PUT /api/admin/announcements/:id`, and `POST /api/admin/backup/verify`. Don't assume audit coverage is complete; check the specific route.
+- **Tenant slug safety**: anywhere a slug is interpolated into raw SQL (schema-qualified table names, `DROP SCHEMA`), it is re-validated against a safe regex immediately before use — never trust that a DB-stored slug is still safe by the time it reaches a query string.
+- **Frontend**: admin pages call `adminFetch()`, not the tenant-side `api.js`. Token lives in `adminAuthStore.js`, entirely separate from tenant auth storage.

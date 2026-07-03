@@ -1,0 +1,22 @@
+# Frontend audit coverage ledger
+
+Audit date: 2026-07-03 (Asia/Karachi). Scope was read-only application review; only these audit notes were written. Existing working-tree changes were preserved. No production Playwright suite was run because `frontend/playwright.config.js:16-18` points at `https://sanopos.com` and the suite guide states that the specs mutate production.
+
+| Area | Evidence inspected | Coverage / outcome |
+|---|---|---|
+| Route topology | `src/routes/publicRoutes.jsx`, `appRoutes.jsx`, `adminRoutes.jsx`, route guards | All three route trees and guard composition mapped. App routes inherit auth + context; public full-screen POS/Kiosk routes self-wrap auth; admin auth is layout-owned. One restaurant feature-gate gap is recorded as F-08. |
+| API abstraction/contracts | `src/api.js`, all `api.upload` and `api.raw` call sites; matching receipt-template and treatment-plan backend routes | Upload contract fully enumerated (10 call sites). Two confirmed misuse defects: F-03 and F-04. Literal endpoint inventory was sampled across each route domain; grouped matrix is in `route-api-matrix.md`. |
+| Tenant auth/interceptor | `src/auth/AuthProvider.jsx`, `authStore.js`, `RequireAuth`, `RequireContext`, `RequirePerm`; unit guard tests | Boot, login, logout, context headers, offline guard, refresh and subscription handling reviewed. No unit tests exercise the real interceptor/refresh path. Request-object header preservation remains an unexercised design risk, not a confirmed finding. |
+| POS/restaurant behavior | `POSRoute.jsx`, `POSRestaurantRoute.jsx`, `POSRedesign.jsx`, `POSRestaurantRedesign.jsx`, `POSContext.jsx`, shift/offline/checkout hooks, shortcut overlay | Shift gate, feature/preset routing, checkout raw-response handling, keyboard handler, offline queue and retry UI reviewed. Findings F-01, F-02, F-07, F-08. |
+| Offline/PWA | `utils/offlineQueue.js`, POS offline hook, field check-in/order/today pages, `public/sw.js`, manifest, `main.jsx`, PWA prompt | Queue schema/state machine and all row types reviewed; service-worker install/activate/fetch/logout paths mapped. Critical cross-tenant queue isolation issue and field retry/routing defect confirmed. PWA caches app shell/static chunks only; API cache constant is currently unused. |
+| Loading/error states | `RouteLoading.jsx`, `ErrorBoundary.jsx`, shared API error construction, selected pages/hooks | Global/page error boundaries exist and report to Sentry when configured. Loading status is not announced to assistive tech (F-09). Raw upload callers have inconsistent error behavior (F-03/F-04). |
+| Accessibility/keyboard | `ui/primitives.jsx`, breadcrumbs, POS shortcut overlay/handler; repository-wide `fixed inset-0` modal inventory | Shared modal semantics/focus behavior inspected; 73 inline modal/backdrop sites inventoried. Representative keyboard/semantics defects recorded as F-06/F-07/F-09. No production axe run performed. |
+| Dark mode | `ui/tokens.css`, `theme.js`, shared `Input`/`Select`, theme E2E assertions | Theme variables and shared control colors compared. Confirmed near-white-on-white shared control defect in F-05. Existing E2E checks only the `data-theme` attribute/persistence, not computed contrast. |
+| Responsiveness | App/POS shells, shared primitives, representative full-screen and modal layouts | Most back-office primitives wrap and cap modal height. POS remains a fixed `h-screen`, dense desktop layout; no dedicated mobile POS viewport test was found. This is documented as residual coverage rather than a confirmed functional defect. |
+| Tests/tooling | `package.json`, Vitest unit inventory, Playwright config/global guidance, targeted test source searches | Safe checks attempted; evidence/results in `test-evidence.md`. Parity scripts reference a deleted scanner (F-10). Production E2E intentionally not executed. |
+
+Residual risk / not dynamically verified:
+
+- Browser behavior at phone/tablet breakpoints, screen-reader announcements, actual color rendering, service-worker upgrades, and refresh-cookie behavior require a local/staging browser target.
+- Public storefront, customer portal, manufacturer portal and super-admin API wrappers were route-mapped but not exhaustively contract-tested endpoint by endpoint.
+- Backend authorization is a separate enforcement layer; this pass evaluated frontend guard/UX behavior, not whether every backend endpoint independently denies unauthorized access.
