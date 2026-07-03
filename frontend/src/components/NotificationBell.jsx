@@ -33,7 +33,9 @@ const TYPE_META = {
   quotation_accepted: { Icon: FileCheck, color: "text-indigo-500" },
 };
 
-export default function NotificationBell() {
+// direction="up" anchors the panel above the trigger — used when the bell
+// lives at the bottom of the sidebar (Square layout) instead of a top bar.
+export default function NotificationBell({ direction = "down" }) {
   const { authHeaders } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -106,30 +108,34 @@ export default function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2 rounded-lg hover:bg-slate-100 text-slate-700"
+        className="ui-focus-ring relative cursor-pointer rounded-full p-2 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
         title="Notifications"
       >
         <Bell size={18} />
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 rounded-full bg-rose-500 text-white text-[10px] px-1 flex items-center justify-center font-bold">
+          <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 rounded-full bg-(--ui-danger) text-white text-[10px] px-1 flex items-center justify-center font-bold">
             {badgeText}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50">
-          <div className="sticky top-0 bg-white border-b border-slate-100 px-3 py-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-700">Notifications</p>
+        <div
+          className={`absolute z-50 max-h-96 w-80 overflow-y-auto rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-white shadow-(--ui-shadow-lg) ${
+            direction === "up" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"
+          }`}
+        >
+          <div className="sticky top-0 flex items-center justify-between border-b border-(--ui-border) bg-white px-3 py-2">
+            <p className="text-sm font-bold text-(--ui-text)">Notifications</p>
             <button
               onClick={markAllRead}
-              className="text-xs text-blue-600 hover:text-blue-700"
+              className="cursor-pointer text-xs font-medium text-(--ui-link) hover:underline"
             >
               Mark all read
             </button>
           </div>
           {rows.length === 0 ? (
-            <div className="px-3 py-8 text-sm text-slate-400 text-center">No notifications</div>
+            <div className="px-3 py-8 text-center text-sm text-(--ui-text-muted)">No notifications</div>
           ) : (
             rows.map((row) => {
               const meta = TYPE_META[row.type] || { Icon: Bell, color: "text-slate-500" };
@@ -138,18 +144,18 @@ export default function NotificationBell() {
                 <button
                   key={row.id}
                   onClick={() => onRowClick(row)}
-                  className={`w-full text-left px-3 py-2 border-b border-slate-100 hover:bg-slate-50 ${
-                    Number(row.is_read || 0) === 0 ? "bg-blue-50/30" : ""
+                  className={`w-full cursor-pointer border-b border-(--ui-border) px-3 py-2 text-left hover:bg-(--ui-muted-surface) ${
+                    Number(row.is_read || 0) === 0 ? "bg-(--ui-muted-surface)" : ""
                   }`}
                 >
                   <div className="flex gap-2">
                     <Icon size={16} className={`${meta.color} mt-0.5`} />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{row.title}</p>
-                      <p className="text-xs text-slate-500 truncate">
+                      <p className="truncate text-sm font-semibold text-(--ui-text)">{row.title}</p>
+                      <p className="truncate text-xs text-(--ui-text-muted)">
                         {String(row.message || "").slice(0, 80)}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="mt-0.5 text-[11px] text-(--ui-text-muted)">
                         {relativeTime(row.created_at)}
                       </p>
                     </div>

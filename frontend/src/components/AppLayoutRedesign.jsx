@@ -1,11 +1,21 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut, Menu, Search, User, UserCircle, X } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  CircleHelp,
+  LogOut,
+  Menu,
+  MonitorPlay,
+  Search,
+  User,
+  UserCircle,
+  X,
+} from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { readTenantSlug } from "../auth/authStore";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
-import { Input } from "../ui/primitives";
+import { Drawer } from "../ui/primitives";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
 import SupportWidget from "../ui/SupportWidget";
@@ -15,63 +25,58 @@ import AnnouncementBanner from "../ui/AnnouncementBanner";
 import PlanLimitModalInterceptor from "./PlanLimitModalInterceptor";
 import { usePreset } from "../contexts/PresetContext";
 
-function ProfileDropdown({ employee, logout, navigate }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
+// Square-style account panel: full-height slide-over from the right instead
+// of a small anchored dropdown. Same actions as the old profile dropdown.
+function AccountDrawer({ open, onClose, employee, logout, navigate }) {
+  const roleLabel =
+    employee?.role_id === 1 ? "Administrator" : employee?.role_id === 2 ? "Manager" : "Cashier";
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="ui-focus-ring flex items-center gap-2 rounded-lg border border-(--ui-border) px-2.5 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition cursor-pointer"
-      >
-        <UserCircle size={16} />
-        <span>{employee?.name || "Employee"}</span>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-(--ui-border) bg-(--ui-surface) py-1 shadow-lg z-50">
-          <div className="px-3 py-2 border-b border-(--ui-border)">
-            <p className="text-sm font-semibold text-(--ui-text)">{employee?.name}</p>
-            <p className="text-xs text-(--ui-text-muted)">
-              {employee?.role_id === 1 ? "Administrator" : employee?.role_id === 2 ? "Manager" : "Cashier"}
-            </p>
-          </div>
-          <button
-            onClick={() => { setOpen(false); navigate("/profile"); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
-          >
-            <User size={14} /> My Profile
-          </button>
-          <div className="border-t border-(--ui-border) mt-1 pt-1">
-            <button
-              onClick={async () => { setOpen(false); await logout(); navigate("/login", { replace: true }); }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-(--ui-muted-surface) cursor-pointer"
-            >
-              <LogOut size={14} /> Logout
-            </button>
-          </div>
+    <Drawer open={open} onClose={onClose} title="Account">
+      <div className="flex items-center gap-3 border-b border-(--ui-border) pb-4">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-(--ui-muted-surface) text-(--ui-text-muted)">
+          <UserCircle size={24} />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-(--ui-text)">
+            {employee?.name || "Employee"}
+          </p>
+          <p className="text-xs text-(--ui-text-muted)">{roleLabel}</p>
         </div>
-      )}
-    </div>
+      </div>
+      <div className="mt-2">
+        <button
+          onClick={() => {
+            onClose();
+            navigate("/profile");
+          }}
+          className="ui-focus-ring flex w-full cursor-pointer items-center gap-2.5 rounded-(--ui-radius-sm) px-3 py-2.5 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
+        >
+          <User size={16} /> My Profile
+        </button>
+        <button
+          onClick={async () => {
+            onClose();
+            await logout();
+            navigate("/login", { replace: true });
+          }}
+          className="ui-focus-ring flex w-full cursor-pointer items-center gap-2.5 rounded-(--ui-radius-sm) px-3 py-2.5 text-sm font-medium text-(--ui-danger) hover:bg-(--ui-muted-surface)"
+        >
+          <LogOut size={16} /> Sign out
+        </button>
+      </div>
+    </Drawer>
   );
 }
 
 export default function AppLayoutRedesign() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { employee, hasPerm, logout, authHeaders } = useAuth();
+  const { employee, hasPerm, logout, authHeaders, company } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
   const { hasMode, labels } = usePreset();
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState(null);
 
   // Preset bootstrap moved to PresetProvider so routes outside AppLayout
   // (e.g. /pos opens in a new tab) also get presetLoaded=true.
@@ -102,6 +107,11 @@ export default function AppLayoutRedesign() {
     [labels],
   );
 
+  const resolvePath = useCallback(
+    (path) => (path === "__STOREFRONT__" ? `/store/${readTenantSlug() || ""}` : path),
+    [],
+  );
+
   const nav = useMemo(
     () =>
       SHOPIFY_NAV_GROUPS.map((group) => ({
@@ -119,6 +129,53 @@ export default function AppLayoutRedesign() {
     [flags, hasPerm, hasMode, translateNavLabel],
   );
 
+  const isItemActive = useCallback(
+    (item) =>
+      !item.newTab && location.pathname.startsWith(resolvePath(item.path)),
+    [location.pathname, resolvePath],
+  );
+
+  // Single-open accordion: the group holding the active route opens on
+  // navigation; clicking a group header switches which one is open.
+  useEffect(() => {
+    const activeGroup = nav.find((g) => g.items.some(isItemActive));
+    if (activeGroup) setOpenGroup(activeGroup.label);
+  }, [nav, isItemActive]);
+
+  const businessName = company?.company_name || readTenantSlug() || "SanoPOS";
+  const saleLabel = labels?.sale || "Sale";
+
+  const leafClass = (active) =>
+    `flex items-center gap-2.5 rounded-(--ui-radius-sm) px-2.5 py-2 text-sm transition ${
+      active
+        ? "bg-[rgba(0,0,0,0.06)] font-semibold text-(--ui-text)"
+        : "font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
+    }`;
+
+  const renderLeaf = (item, { nested = false } = {}) => {
+    const Icon = item.icon;
+    const resolvedPath = resolvePath(item.path);
+    const active = isItemActive(item);
+    const cls = `${leafClass(active)} ${nested ? "pl-9" : ""}`;
+    return item.newTab ? (
+      <a
+        key={item.name}
+        href={resolvedPath}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cls}
+      >
+        {!nested && Icon ? <Icon size={16} className="shrink-0 text-(--ui-text-muted)" /> : null}
+        <span className="truncate">{item.name}</span>
+      </a>
+    ) : (
+      <NavLink key={item.name} to={resolvedPath} className={cls}>
+        {!nested && Icon ? <Icon size={16} className="shrink-0 text-(--ui-text-muted)" /> : null}
+        <span className="truncate">{item.name}</span>
+      </NavLink>
+    );
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-(--ui-bg)">
       {mobileOpen ? (
@@ -129,15 +186,8 @@ export default function AppLayoutRedesign() {
         />
       ) : null}
       <aside
-        className={`${collapsed ? "w-20" : "w-72"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r border-(--ui-border) bg-(--ui-surface) transition-transform lg:relative lg:translate-x-0`}
+        className={`${mobileOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 flex h-full w-[280px] flex-col border-r border-(--ui-border) bg-(--ui-sidebar) transition-transform lg:relative lg:translate-x-0`}
       >
-        <button
-          className="ui-focus-ring absolute -right-3 top-5 hidden rounded-full border border-(--ui-border) bg-(--ui-surface) p-1 text-(--ui-text-muted) shadow lg:block"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </button>
         <button
           className="ui-focus-ring absolute right-3 top-3 rounded-md p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) lg:hidden"
           onClick={() => setMobileOpen(false)}
@@ -145,113 +195,149 @@ export default function AppLayoutRedesign() {
         >
           <X size={18} />
         </button>
-        <div className="border-b border-(--ui-border) px-4 py-4">
-          {!collapsed ? (
-            <>
-              <div className="text-sm font-semibold tracking-wide text-(--ui-text-muted)">
-                SANOPOS
-              </div>
-              <div className="mt-1 text-lg font-semibold text-(--ui-text)">
-                Admin
-              </div>
-            </>
-          ) : (
-            <div className="text-center text-sm font-semibold tracking-wide text-(--ui-text-muted)">
-              SP
-            </div>
-          )}
+
+        {/* Account / business switcher + search — Square keeps these at the
+            very top of the sidebar instead of a top bar. */}
+        <div className="space-y-2 px-3 pb-2 pt-3">
+          <button
+            onClick={() => setAccountOpen(true)}
+            className="ui-focus-ring flex w-full cursor-pointer items-center gap-2.5 rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-white px-3 py-2.5 text-left transition hover:bg-(--ui-muted-surface)"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-(--ui-primary) text-[11px] font-bold uppercase text-white">
+              {String(businessName).slice(0, 2)}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-(--ui-text)">
+                {businessName}
+              </span>
+              <span className="block truncate text-xs text-(--ui-text-muted)">
+                {employee?.name || "Employee"}
+              </span>
+            </span>
+            <UserCircle size={16} className="shrink-0 text-(--ui-text-muted)" />
+          </button>
+          <ContextSwitcher />
+          <div className="relative">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
+            />
+            <input
+              className="ui-focus-ring w-full rounded-full border border-(--ui-border-strong) bg-white py-2 pl-8 pr-3 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
+              placeholder="Search"
+            />
+          </div>
         </div>
+
+        {/* Single-open inline accordion nav */}
         <nav
-          className="flex-1 space-y-5 overflow-y-auto p-3"
+          className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-2"
           onClick={(e) => {
             // Close mobile drawer when a nav link is clicked.
             if (e.target.closest("a")) setMobileOpen(false);
           }}
         >
-          {nav.map((group) => (
-            <div key={group.label}>
-              {!collapsed ? (
-                <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-(--ui-text-muted)">
-                  {group.label}
-                </p>
-              ) : null}
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  // Resolve tenant-specific storefront URL placeholder
-                  const resolvedPath = item.path === "__STOREFRONT__"
-                    ? `/store/${readTenantSlug() || ""}`
-                    : item.path;
-                  const active = location.pathname.startsWith(resolvedPath);
-                  const linkClass = `flex items-center gap-2 rounded-[var(--ui-radius-sm)] px-2.5 py-2 text-sm font-medium transition ${
-                    active
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "text-(--ui-text) hover:bg-(--ui-muted-surface)"
-                  } ${collapsed ? "justify-center" : ""}`;
-                  return item.newTab ? (
-                    <a
-                      key={item.name}
-                      href={resolvedPath}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={linkClass}
-                    >
-                      <Icon size={16} />
-                      {!collapsed ? <span>{item.name}</span> : null}
-                    </a>
-                  ) : (
-                    <NavLink
-                      key={item.name}
-                      to={resolvedPath}
-                      className={linkClass}
-                    >
-                      <Icon size={16} />
-                      {!collapsed ? <span>{item.name}</span> : null}
-                    </NavLink>
-                  );
-                })}
+          {nav.map((group) => {
+            // Single-item groups render as a direct top-level leaf
+            // (e.g. Overview → Dashboard, Online Store → View Storefront).
+            if (group.items.length === 1) return renderLeaf(group.items[0]);
+            const GroupIcon = group.items[0].icon;
+            const expanded = openGroup === group.label;
+            const containsActive = group.items.some(isItemActive);
+            return (
+              <div key={group.label}>
+                <button
+                  onClick={() => setOpenGroup(expanded ? null : group.label)}
+                  aria-expanded={expanded}
+                  className={`ui-focus-ring flex w-full cursor-pointer items-center gap-2.5 rounded-(--ui-radius-sm) px-2.5 py-2 text-sm transition ${
+                    containsActive && !expanded
+                      ? "font-semibold text-(--ui-text)"
+                      : "font-medium text-(--ui-text)"
+                  } hover:bg-(--ui-muted-surface)`}
+                >
+                  {GroupIcon ? (
+                    <GroupIcon size={16} className="shrink-0 text-(--ui-text-muted)" />
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate text-left">{group.label}</span>
+                  <ChevronDown
+                    size={14}
+                    className={`shrink-0 text-(--ui-text-muted) transition-transform ${expanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {expanded ? (
+                  <div className="mt-0.5 space-y-0.5 pb-1">
+                    {group.items.map((item) => renderLeaf(item, { nested: true }))}
+                  </div>
+                ) : null}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
+
+        {/* Fixed bottom: notifications + help, then the persistent primary CTA */}
+        <div className="space-y-2 border-t border-(--ui-border) px-3 py-3">
+          <div className="flex items-center gap-1">
+            <NotificationBell direction="up" />
+            <button
+              onClick={() => navigate("/my-tickets")}
+              className="ui-focus-ring cursor-pointer rounded-full p-2 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
+              title="Help & support"
+              aria-label="Help & support"
+            >
+              <CircleHelp size={18} />
+            </button>
+          </div>
+          <a
+            href="/pos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ui-focus-ring flex h-10 w-full items-center justify-center gap-2 rounded-full bg-(--ui-primary) text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong)"
+          >
+            <MonitorPlay size={16} />
+            New {saleLabel}
+          </a>
+        </div>
       </aside>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-(--ui-surface) px-3 lg:px-5">
+        {/* Mobile-only top bar — desktop has no header (Square pattern) */}
+        <header className="flex h-14 items-center gap-2 border-b border-(--ui-border) bg-(--ui-bg) px-3 lg:hidden">
           <button
-            className="ui-focus-ring mr-2 rounded-md p-2 text-(--ui-text) hover:bg-(--ui-muted-surface) lg:hidden"
+            className="ui-focus-ring rounded-md p-2 text-(--ui-text) hover:bg-(--ui-muted-surface)"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
           >
             <Menu size={20} />
           </button>
-          <div className="hidden w-full max-w-xl lg:block">
-            <div className="relative">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-3 top-2.5 text-(--ui-text-muted)"
-              />
-              <Input
-                className="pl-8"
-                placeholder="Search products, orders, customers"
-              />
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-3 lg:ml-4 lg:gap-4">
-            <ContextSwitcher />
-            <NotificationBell />
-            <ProfileDropdown employee={employee} logout={logout} navigate={navigate} />
-          </div>
+          <span className="text-sm font-bold tracking-tight text-(--ui-text)">SanoPOS</span>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto p-4">
-          <AnnouncementBanner />
-          <Breadcrumbs />
-          <ErrorBoundary level="page">
-            <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">Loading...</div></div>}>
-              <Outlet />
-            </Suspense>
-          </ErrorBoundary>
+        <main className="min-h-0 flex-1 overflow-auto">
+          <div className="mx-auto w-full max-w-300 px-4 py-5 lg:px-10 lg:py-8">
+            <AnnouncementBanner />
+            <Breadcrumbs />
+            <ErrorBoundary level="page">
+              <Suspense
+                fallback={
+                  <div className="flex min-h-[40vh] items-center justify-center">
+                    <div className="rounded-full border border-(--ui-border-strong) bg-white px-4 py-2 text-sm font-medium text-(--ui-text-muted)">
+                      Loading...
+                    </div>
+                  </div>
+                }
+              >
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
+      <AccountDrawer
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        employee={employee}
+        logout={logout}
+        navigate={navigate}
+      />
       <SupportWidget />
       <PlanLimitModalInterceptor />
     </div>
