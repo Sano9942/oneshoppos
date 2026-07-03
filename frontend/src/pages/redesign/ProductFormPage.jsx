@@ -419,7 +419,7 @@ export default function ProductFormPage() {
       }
     >
       {error && (
-        <div className="mx-6 mt-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+        <div className="mx-6 mt-4 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) px-4 py-3 text-sm text-(--ui-danger-fg)">{error}</div>
       )}
       <div className="p-6 grid grid-cols-3 gap-6 items-start">
         {/* LEFT MAIN (2/3) */}
@@ -454,7 +454,7 @@ export default function ProductFormPage() {
                 <div className="relative w-32 h-32">
                   <img src={form.image_url.startsWith("/uploads") ? `${API}${form.image_url}` : form.image_url} alt="Product" className="w-32 h-32 rounded-lg object-cover border border-(--ui-border)" />
                   <button type="button" onClick={() => upd("image_url", "")}
-                    className="absolute -top-1.5 -right-1.5 rounded-full bg-rose-500 text-white p-0.5 hover:bg-rose-600">
+                    className="absolute -top-1.5 -right-1.5 rounded-full bg-(--ui-danger) text-white p-0.5 hover:opacity-80">
                     <X size={14} />
                   </button>
                 </div>
@@ -542,8 +542,8 @@ export default function ProductFormPage() {
                   if (!next) setBundleComponents([]);
                 }}
               >
-                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.is_bundle ? "bg-violet-500" : "bg-slate-200 dark:bg-slate-600"}`}>
-                  <div className={`w-5 h-5 rounded-full bg-white dark:bg-slate-200 shadow transition-transform ${form.is_bundle ? "translate-x-4" : ""}`} />
+                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.is_bundle ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.is_bundle ? "translate-x-4" : ""}`} />
                 </div>
                 <span className="text-sm font-medium text-(--ui-text) flex items-center gap-1.5">
                   <Package size={14} /> This product is a bundle / kit
@@ -567,13 +567,13 @@ export default function ProductFormPage() {
                       />
                     </div>
                     {componentResults.length > 0 && (
-                      <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-(--ui-border) rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-(--ui-border) rounded-(--ui-radius-sm) shadow-(--ui-shadow-lg) max-h-48 overflow-y-auto">
                         {componentResults.map((p) => (
                           <button
                             key={p.id}
                             type="button"
                             onClick={() => addComponent(p)}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex justify-between items-center"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) flex justify-between items-center"
                           >
                             <span className="font-medium text-(--ui-text)">{p.name}</span>
                             <span className="text-xs text-(--ui-text-muted)">{p.sku || "—"}</span>
@@ -612,7 +612,7 @@ export default function ProductFormPage() {
                               </td>
                               <td className="py-2 text-center">
                                 <button type="button" onClick={() => removeComponent(c.product_id)}
-                                  className="text-rose-400 hover:text-rose-600 p-1">
+                                  className="text-(--ui-danger-fg) hover:opacity-70 p-1">
                                   <Trash2 size={14} />
                                 </button>
                               </td>
@@ -668,7 +668,7 @@ export default function ProductFormPage() {
                   <div key={ov.outlet_id} className="flex items-center justify-between text-sm py-1 border-b border-(--ui-border) last:border-0">
                     <span className="text-(--ui-text)">{ov.outlet_name}</span>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <span className={ov.is_visible ? "text-green-600 text-xs" : "text-red-500 text-xs"}>{ov.is_visible ? "Visible" : "Hidden"}</span>
+                      <span className={ov.is_visible ? "text-(--ui-success-fg) text-xs" : "text-(--ui-danger-fg) text-xs"}>{ov.is_visible ? "Visible" : "Hidden"}</span>
                       <input type="checkbox" checked={ov.is_visible} onChange={async (e) => {
                         try {
                           const res = await api.put(`/api/products/${id}/outlet-visibility`, { outlets: [{ outlet_id: ov.outlet_id, is_visible: e.target.checked }] });
@@ -731,8 +731,8 @@ export default function ProductFormPage() {
                   }
                 }}
               >
-                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.has_variants ? "bg-(--ui-primary)" : "bg-slate-200 dark:bg-slate-600"}`}>
-                  <div className={`w-5 h-5 rounded-full bg-white dark:bg-slate-200 shadow transition-transform ${form.has_variants ? "translate-x-4" : ""}`} />
+                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.has_variants ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.has_variants ? "translate-x-4" : ""}`} />
                 </div>
                 <span className="text-sm font-medium text-(--ui-text)">This product has variants</span>
               </div>
@@ -870,8 +870,8 @@ export default function ProductFormPage() {
                         }}
                         className="relative"
                       >
-                        <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${ch.is_published ? "bg-(--ui-primary)" : "bg-slate-200 dark:bg-slate-600"}`}>
-                          <div className={`w-4 h-4 rounded-full bg-white dark:bg-slate-200 shadow transition-transform ${ch.is_published ? "translate-x-4" : ""}`} />
+                        <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${ch.is_published ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${ch.is_published ? "translate-x-4" : ""}`} />
                         </div>
                       </button>
                     </div>
@@ -1176,14 +1176,14 @@ export default function ProductFormPage() {
                 <div className="flex items-center gap-2 text-xs text-(--ui-text-muted)">
                   <span>{r.customer_name}</span>
                   {r.sale_id && (
-                    <span className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                    <span className="inline-flex items-center gap-0.5 text-(--ui-success-fg)">
                       <ShieldCheck size={12} /> Verified Purchase
                     </span>
                   )}
                   <span>·</span>
                   <span>{new Date(r.created_at).toLocaleDateString()}</span>
                   {r.status && r.status !== "approved" && (
-                    <span className={`ml-auto px-1.5 py-0.5 rounded text-xs font-medium ${r.status === "pending" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"}`}>
+                    <span className={`ml-auto px-1.5 py-0.5 rounded text-xs font-medium ${r.status === "pending" ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"}`}>
                       {r.status}
                     </span>
                   )}

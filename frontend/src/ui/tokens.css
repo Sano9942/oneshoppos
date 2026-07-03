@@ -46,6 +46,15 @@
   --ui-bg-muted: var(--ui-muted-surface);
   --ui-bg-elevated: var(--ui-surface);
   --ui-surface-muted: var(--ui-muted-surface);
+  /* Second legacy namespace (un-prefixed) — same situation, ~200 sites. */
+  --text-primary: var(--ui-text);
+  --text-secondary: var(--ui-text-muted);
+  --text-muted: var(--ui-text-muted);
+  --accent: var(--ui-primary);
+  --border: var(--ui-border-strong);
+  --bg-input: #ffffff;
+  --bg-card: var(--ui-surface);
+  --bg-subtle: var(--ui-muted-surface);
 
   /* Radii */
   --ui-radius-sm: 8px; /* inputs, small controls */

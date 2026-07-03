@@ -23,9 +23,9 @@ import {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const TYPE_META = {
-  customer_group: { label: "Customer Group", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
-  volume: { label: "Volume", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  promotional: { label: "Promotional", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
+  customer_group: { label: "Customer Group", color: "bg-(--ui-muted-surface) text-(--ui-text)" },
+  volume: { label: "Volume", color: "bg-(--ui-warning-bg) text-(--ui-warning-fg)" },
+  promotional: { label: "Promotional", color: "bg-(--ui-success-bg) text-(--ui-success-fg)" },
 };
 
 function TypeBadge({ type }) {
@@ -333,7 +333,7 @@ function ItemsPanel({ listId, products }) {
                   </td>
                   <td className="px-4 py-2 text-right">
                     {pct !== null ? (
-                      <span className={`text-xs font-semibold ${parseFloat(pct) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                      <span className={`text-xs font-semibold ${parseFloat(pct) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                         {parseFloat(pct) >= 0 ? `-${pct}%` : `+${Math.abs(pct)}%`}
                       </span>
                     ) : (
@@ -341,7 +341,7 @@ function ItemsPanel({ listId, products }) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <Button tone="plain" size="sm" iconOnly onClick={() => removeItem(item.id)} title="Remove" aria-label="Remove" className="hover:text-red-500">
+                    <Button tone="plain" size="sm" iconOnly onClick={() => removeItem(item.id)} title="Remove" aria-label="Remove" className="hover:text-(--ui-danger-fg)">
                       <Trash2 size={14} />
                     </Button>
                   </td>
@@ -566,7 +566,7 @@ export default function PriceListsRedesign() {
                         <button
                           disabled={togglingId === list.id}
                           onClick={() => toggleActive(list)}
-                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${list.is_active ? "bg-green-500" : "bg-(--border)"} ${togglingId === list.id ? "opacity-50" : ""}`}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${list.is_active ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"} ${togglingId === list.id ? "opacity-50" : ""}`}
                           title={list.is_active ? "Active — click to deactivate" : "Inactive — click to activate"}
                         >
                           <span
@@ -581,7 +581,7 @@ export default function PriceListsRedesign() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(list)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
-                        <Button tone="plain" size="sm" iconOnly onClick={() => deleteList(list)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
+                        <Button tone="plain" size="sm" iconOnly onClick={() => deleteList(list)} title="Delete" aria-label="Delete" className="hover:text-(--ui-danger-fg)"><Trash2 size={14} /></Button>
                       </div>
                     </div>
 
@@ -708,7 +708,7 @@ function AssignmentsPanel({ listId }) {
                 {a.outlet_name || `#${a.scope_id}`}
                 {a.priority > 0 && <span className="ml-1 text-(--text-muted)">(priority {a.priority})</span>}
               </span>
-              <button onClick={() => removeAssignment(a.id)} className="text-red-500 hover:underline">Remove</button>
+              <button onClick={() => removeAssignment(a.id)} className="text-(--ui-danger-fg) hover:underline">Remove</button>
             </div>
           ))}
         </div>

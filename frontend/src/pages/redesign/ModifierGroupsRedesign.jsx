@@ -121,7 +121,7 @@ export default function ModifierGroupsRedesign() {
                     <td className="py-2 px-3 text-right">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => setEditing(g)} className="p-1 rounded hover:bg-(--ui-bg-hover)"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => deactivateGroup(g.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => deactivateGroup(g.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-(--ui-danger-fg)"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -180,7 +180,7 @@ export default function ModifierGroupsRedesign() {
                     <div className="font-medium">{o.name}</div>
                     <div className="text-xs text-(--ui-text-muted)">{Number(o.price_delta) >= 0 ? "+" : ""}{fmt(Number(o.price_delta))}</div>
                   </div>
-                  <button onClick={() => deactivateOption(o.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => deactivateOption(o.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-(--ui-danger-fg)"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
               <div className="pt-2 border-t border-(--ui-border)">
