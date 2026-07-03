@@ -267,13 +267,13 @@ export default function RetailRiskRedesign() {
                       </td>
                       <td className="px-3 py-2 text-right">{(Number(f.value) * 100).toFixed(2)}%</td>
                       <td className="px-3 py-2 text-right">{(Number(f.peer_mean) * 100).toFixed(2)}%</td>
-                      <td className="px-3 py-2 text-right font-semibold text-rose-600">{Number(f.z_score).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-danger-fg)">{Number(f.z_score).toFixed(2)}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">
                         {fmtUtcDate(f.period_start)} → {fmtUtcDate(f.period_end)}
                       </td>
                       <td className="px-3 py-2">
                         {f.reviewed_at ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                          <span className="inline-flex items-center gap-1 text-xs text-(--ui-success-fg)">
                             <CheckCircle2 size={12} />
                             {fmtUtcDate(f.reviewed_at)}
                             {f.reviewed_by_name ? ` by ${f.reviewed_by_name}` : ""}
@@ -302,7 +302,7 @@ export default function RetailRiskRedesign() {
           ) : (
             <>
               <div className="mb-3 flex items-center gap-2">
-                <Shield size={16} className="text-[#8066FF]" />
+                <Shield size={16} className="text-(--ui-text)" />
                 <h3 className="text-base font-semibold">Risk thresholds</h3>
               </div>
               <div className="space-y-3">

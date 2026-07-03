@@ -5,9 +5,9 @@ import { PageShell, SectionCard } from "../../ui/primitives";
 
 function rowClass(days) {
   if (days == null) return "";
-  if (days < 7) return "bg-red-50";
-  if (days <= 14) return "bg-amber-50";
-  return "bg-green-50";
+  if (days < 7) return "bg-(--ui-danger-bg)";
+  if (days <= 14) return "bg-(--ui-warning-bg)";
+  return "";
 }
 
 export default function ReorderAlertsRedesign() {
@@ -32,7 +32,7 @@ export default function ReorderAlertsRedesign() {
     <PageShell title="Reorder Alerts" subtitle="Products sorted by urgency (most critical first)">
       <SectionCard>
         {loading && <p className="p-4 text-sm text-(--ui-text-muted)">Loading...</p>}
-        {error && <p className="p-4 text-sm text-red-500">{error}</p>}
+        {error && <p className="p-4 text-sm text-(--ui-danger-fg)">{error}</p>}
         {!loading && !error && products.length === 0 && (
           <p className="p-4 text-sm text-(--ui-text-muted)">No products require reordering.</p>
         )}
@@ -74,7 +74,7 @@ export default function ReorderAlertsRedesign() {
                             },
                           })
                         }
-                        className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                        className="rounded-full bg-(--ui-primary) px-3 py-1 text-xs font-semibold text-white hover:bg-(--ui-primary-strong)"
                       >
                         Create PO
                       </button>

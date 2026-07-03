@@ -173,7 +173,7 @@ export default function ReturnedStockRedesign() {
       subtitle="supplier return (RMA) workflow and stock-out tracking."
       right={<div className="flex gap-2"><Button onClick={() => downloadCsv(["id","reference","supplier","outlet","items","value","date","status"], visibleRows.map(r => [r.id, r.reference_number||"", r.supplier_name||"", r.outlet_name||"", r.items?.length||0, r.total_value||0, r.created_at||"", r.status||""]), "returned_stock")}><Download size={14} className="mr-1 inline" />Export CSV</Button><Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Supplier Return</Button></div>}
     >
-      {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}
+      {error ? <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard> : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <SectionCard className="xl:col-span-8">
@@ -196,7 +196,7 @@ export default function ReturnedStockRedesign() {
               </thead>
               <tbody>
                 {!loading && visibleRows.map((r) => (
-                  <tr key={r.id} className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selectedId === r.id ? "bg-emerald-50" : ""}`} onClick={() => loadDetail(r.id)}>
+                  <tr key={r.id} className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selectedId === r.id ? "bg-(--ui-muted-surface)" : ""}`} onClick={() => loadDetail(r.id)}>
                     <td className="px-3 py-2 font-medium text-(--ui-text)">#{r.id} {r.reference_number ? `(${r.reference_number})` : ""}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">{r.supplier_name || "-"}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
