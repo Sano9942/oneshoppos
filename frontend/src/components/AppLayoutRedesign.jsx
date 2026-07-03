@@ -1,12 +1,11 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Sun, User, UserCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, Menu, Search, User, UserCircle, X } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { readTenantSlug } from "../auth/authStore";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
-import { getTheme, toggleTheme } from "../utils/theme";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
 import SupportWidget from "../ui/SupportWidget";
@@ -18,7 +17,6 @@ import { usePreset } from "../contexts/PresetContext";
 
 function ProfileDropdown({ employee, logout, navigate }) {
   const [open, setOpen] = useState(false);
-  const [theme, setThemeState] = useState(getTheme());
   const ref = useRef(null);
 
   useEffect(() => {
@@ -51,13 +49,6 @@ function ProfileDropdown({ employee, logout, navigate }) {
             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
           >
             <User size={14} /> My Profile
-          </button>
-          <button
-            onClick={() => { const next = toggleTheme(); setThemeState(next); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
-          >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </button>
           <div className="border-t border-(--ui-border) mt-1 pt-1">
             <button

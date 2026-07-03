@@ -1,45 +1,88 @@
+/*
+ * SanoPOS design tokens — Square-style redesign.
+ * Light-only. Near-monochrome: primary actions are black, color is reserved
+ * for text links, focus rings, and pale status badges.
+ */
 :root {
-  --ui-bg: #f6f6f7;
-  --ui-surface: #ffffff;
-  --ui-muted-surface: #f1f2f3;
-  --ui-border: #d9dce1;
-  --ui-text: #1f2937;
+  /* Text */
+  --ui-text: #101010; /* near-black, not pure #000 */
   --ui-text-muted: #6b7280;
-  --ui-primary: #008060;
-  --ui-primary-strong: #006e52;
-  --ui-danger: #d82c0d;
-  --ui-warning: #b98900;
-  --ui-radius-sm: 8px;
-  --ui-radius-md: 12px;
-  --ui-radius-lg: 16px;
-  --ui-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --ui-shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.1);
+
+  /* Surfaces */
+  --ui-bg: #ffffff; /* main content canvas */
+  --ui-surface: #ffffff; /* cards */
+  --ui-sidebar: #fafafa; /* sidebar bg — subtly separates nav from content */
+  --ui-muted-surface: #f5f5f5; /* hover / disabled / secondary-button bg */
+
+  /* Borders */
+  --ui-border: #f0f0f0; /* near-invisible hairline — THE key flat-card cue */
+  --ui-border-strong: #e3e3e3; /* input borders, dividers that need to read */
+
+  /* Primary action = black */
+  --ui-primary: #101010;
+  --ui-primary-strong: #000000; /* hover */
+  --ui-on-primary: #ffffff;
+
+  /* Accent — text links + focus ring ONLY, never fills */
+  --ui-link: #006aff;
+  --ui-focus: #006aff;
+
+  /* Status (pale-bg badge style) */
+  --ui-success-bg: #e7f6ec;
+  --ui-success-fg: #0a7d33;
+  --ui-warning-bg: #fdf1e3;
+  --ui-warning-fg: #a5620a;
+  --ui-danger-bg: #fdecea;
+  --ui-danger-fg: #c0341d;
+  --ui-danger: #c0341d;
+  --ui-warning: #a5620a; /* legacy alias — ad-hoc consumers predating the redesign */
+
+  /* Radii */
+  --ui-radius-sm: 8px; /* inputs, small controls */
+  --ui-radius-md: 12px; /* cards */
+  --ui-radius-lg: 16px; /* large containers */
+  --ui-radius-pill: 9999px; /* buttons, chips, filter pills */
+
+  /* Elevation — none. Flatness comes from hairline borders. */
+  --ui-shadow: none;
+  --ui-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08); /* drawers/modals only */
+
+  /* Type */
+  --ui-font: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
 }
 
 .ui-shell-bg {
-  background: linear-gradient(180deg, #fbfcfd 0%, var(--ui-bg) 100%);
+  background: var(--ui-bg);
 }
 
 .ui-focus-ring:focus-visible {
-  outline: 2px solid var(--ui-primary);
+  outline: 2px solid var(--ui-focus);
   outline-offset: 1px;
 }
 
-[data-theme="dark"] {
-  --ui-bg: #0f172a;
-  --ui-surface: #1e293b;
-  --ui-muted-surface: #334155;
-  --ui-border: #475569;
-  --ui-text: #f1f5f9;
-  --ui-text-muted: #94a3b8;
-  --ui-primary: #10b981;
-  --ui-primary-strong: #059669;
-  --ui-danger: #ef4444;
-  --ui-warning: #f59e0b;
-  --ui-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --ui-shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.4);
+/* Slide-over drawer entrance */
+@keyframes ui-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
-[data-theme="dark"] .ui-shell-bg {
-  background: linear-gradient(180deg, #1e293b 0%, var(--ui-bg) 100%);
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ui-anim-drawer {
+  animation: ui-slide-in-right 0.2s ease-out;
+}
+
+.ui-anim-fade {
+  animation: ui-fade-in 0.15s ease-out;
 }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useState } from "react";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 
 const ToastContext = createContext(null);
 let _id = 0;
@@ -24,26 +25,29 @@ export function ToastProvider({ children }) {
   const error = useCallback((msg) => toast(msg, "error"), [toast]);
   const warning = useCallback((msg) => toast(msg, "warning"), [toast]);
 
-  const COLORS = {
-    success: "bg-emerald-600 text-white",
-    error: "bg-red-600 text-white",
-    warning: "bg-amber-500 text-white",
-    info: "bg-(--ui-surface) text-(--ui-text) border border-(--ui-border)",
+  // Square-style toast: near-black pill, white text, colored status icon.
+  const ICONS = {
+    success: <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />,
+    error: <XCircle size={16} className="shrink-0 text-red-400" />,
+    warning: <AlertTriangle size={16} className="shrink-0 text-amber-400" />,
+    info: <Info size={16} className="shrink-0 text-white/70" />,
   };
 
   return (
     <ToastContext.Provider value={{ toast, success, error, warning }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-200 flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 left-4 z-200 flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg animate-in fade-in slide-in-from-right-4 duration-200 ${COLORS[t.type] || COLORS.info}`}
+            className="ui-anim-fade pointer-events-auto flex items-center gap-2.5 rounded-(--ui-radius-md) bg-(--ui-primary) px-4 py-2.5 text-sm font-medium text-white shadow-(--ui-shadow-lg)"
           >
+            {ICONS[t.type] || ICONS.info}
             <span className="flex-1">{t.message}</span>
             <button
               onClick={() => dismiss(t.id)}
-              className="ml-2 opacity-70 hover:opacity-100 cursor-pointer"
+              className="ml-2 cursor-pointer opacity-70 hover:opacity-100"
+              aria-label="Dismiss"
             >
               &times;
             </button>

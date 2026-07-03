@@ -1,7 +1,5 @@
 import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
-import { initTheme } from "./utils/theme";
-initTheme();
 import { useAuth } from "./auth/AuthProvider";
 import ImpersonationBanner from "./ui/ImpersonationBanner";
 import SubscriptionBanner from "./ui/SubscriptionBanner";
