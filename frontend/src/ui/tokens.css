@@ -37,6 +37,16 @@
   --ui-danger: #c0341d;
   --ui-warning: #a5620a; /* legacy alias — ad-hoc consumers predating the redesign */
 
+  /* Legacy aliases — token names pages used that were never defined in the old
+     tokens.css either (they silently resolved to nothing). Mapped onto the
+     Square palette so those sites heal instead of rendering transparent. */
+  --ui-muted: var(--ui-text-muted);
+  --ui-accent: var(--ui-primary);
+  --ui-bg-hover: var(--ui-muted-surface);
+  --ui-bg-muted: var(--ui-muted-surface);
+  --ui-bg-elevated: var(--ui-surface);
+  --ui-surface-muted: var(--ui-muted-surface);
+
   /* Radii */
   --ui-radius-sm: 8px; /* inputs, small controls */
   --ui-radius-md: 12px; /* cards */

@@ -130,7 +130,7 @@ export default function ParkedSalesRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -232,7 +232,7 @@ export default function ParkedSalesRedesign() {
           )}
           {!loading && filtered.length === 0 && (
             <EmptyState
-              icon={PauseCircle}
+              icon={<PauseCircle size={28} />}
               title="No parked sales"
               body={
                 outletFilter

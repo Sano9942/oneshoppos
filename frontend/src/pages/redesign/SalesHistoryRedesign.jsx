@@ -276,7 +276,7 @@ export default function SalesHistoryRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -284,7 +284,7 @@ export default function SalesHistoryRedesign() {
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Transactions</p><p className="text-2xl font-semibold text-(--ui-text)">{total}</p></SectionCard>
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible Rows</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Voided</p><p className="text-2xl font-semibold text-rose-700">{rows.filter((r) => Number(r.voided || 0) === 1).length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Voided</p><p className="text-2xl font-semibold text-(--ui-danger-fg)">{rows.filter((r) => Number(r.voided || 0) === 1).length}</p></SectionCard>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -316,7 +316,7 @@ export default function SalesHistoryRedesign() {
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                 </Select>
-                <div className="flex gap-1 rounded border border-(--ui-border) p-1">
+                <div className="flex gap-1 rounded-full bg-(--ui-muted-surface) p-1">
                   {[
                     ["all", "All"],
                     ["completed", "Completed"],
@@ -324,7 +324,7 @@ export default function SalesHistoryRedesign() {
                   ].map(([id, label]) => (
                     <button
                       key={id}
-                      className={`rounded px-2 py-1 text-xs ${activeTab === id ? "bg-(--ui-primary) text-white" : "text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"}`}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${activeTab === id ? "bg-white font-semibold text-(--ui-text) shadow-[inset_0_0_0_1px_var(--ui-border-strong)]" : "text-(--ui-text-muted) hover:text-(--ui-text)"}`}
                       onClick={() => setActiveTab(id)}
                     >
                       {label}
@@ -355,7 +355,7 @@ export default function SalesHistoryRedesign() {
                   visibleRows.map((r) => (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
+                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-(--ui-muted-surface)" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
                       <td className="px-3 py-2 font-medium text-(--ui-text)">#{r.id}</td>
@@ -371,11 +371,11 @@ export default function SalesHistoryRedesign() {
                       </td>
                       <td className="px-3 py-2 text-center">
                         {r.fbr_status === "posted" ? (
-                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" title="Posted" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-(--ui-success-fg)" title="Posted" />
                         ) : r.fbr_status === "pending" ? (
-                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" title="Pending" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-(--ui-warning-fg)" title="Pending" />
                         ) : r.fbr_status === "failed" ? (
-                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" title="Failed" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-(--ui-danger-fg)" title="Failed" />
                         ) : (
                           <span className="inline-block h-2.5 w-2.5 rounded-full bg-(--ui-border)" title="N/A" />
                         )}
@@ -444,7 +444,7 @@ export default function SalesHistoryRedesign() {
                         <p className="text-xs text-(--ui-text-muted)">
                           {fullyRefunded ? "Fully refunded" : "Partially refunded"}
                         </p>
-                        <p className="font-semibold text-rose-600">
+                        <p className="font-semibold text-(--ui-danger-fg)">
                           −{money(refundTotal)}
                         </p>
                       </SectionCard>
@@ -474,7 +474,7 @@ export default function SalesHistoryRedesign() {
                                   <p className="text-(--ui-text-muted)">
                                     {item.quantity} x {money(item.price_at_sale)}
                                     {refunded > 0 ? (
-                                      <span className="ml-1 text-rose-600">
+                                      <span className="ml-1 text-(--ui-danger-fg)">
                                         ({refunded} refunded
                                         {item.remainingQty > 0 ? `, ${item.remainingQty} remaining` : ""})
                                       </span>
@@ -485,10 +485,10 @@ export default function SalesHistoryRedesign() {
                                       {lineAdjustments.map((a) => (
                                         <span
                                           key={a.id}
-                                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                                             a.adjustment_type === "comp"
-                                              ? "bg-emerald-50 text-emerald-700"
-                                              : "bg-rose-50 text-rose-700"
+                                              ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+                                              : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
                                           }`}
                                           title={`${a.reason_label || a.reason_code}${a.reason_note ? ` — ${a.reason_note}` : ""}`}
                                         >
@@ -511,7 +511,7 @@ export default function SalesHistoryRedesign() {
                                         itemName: item.product_name,
                                         remainingAmount: remainingAdjustable,
                                       })}
-                                      className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                      className="inline-flex items-center gap-1 rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-success-fg) hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       <Gift size={11} /> Comp
                                     </button>
@@ -526,7 +526,7 @@ export default function SalesHistoryRedesign() {
                                         itemName: item.product_name,
                                         remainingAmount: remainingAdjustable,
                                       })}
-                                      className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                      className="inline-flex items-center gap-1 rounded-full bg-(--ui-danger-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-danger-fg) hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       <Ban size={11} /> Void
                                     </button>
