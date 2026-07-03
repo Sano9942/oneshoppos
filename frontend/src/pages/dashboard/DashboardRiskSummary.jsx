@@ -41,10 +41,10 @@ export default function DashboardRiskSummary() {
     <SectionCard>
       <div className="flex items-center justify-between mb-2">
         <h3 className="flex items-center gap-2 text-sm font-bold text-(--ui-text)">
-          <Shield size={14} className="text-[#8066FF]" />
+          <Shield size={14} className="text-(--ui-text-muted)" />
           Retail risk
         </h3>
-        <Link to="/retail-risk" className="text-xs text-[#8066FF] hover:underline">
+        <Link to="/retail-risk" className="text-xs font-medium text-(--ui-link) hover:underline">
           View →
         </Link>
       </div>
@@ -55,10 +55,10 @@ export default function DashboardRiskSummary() {
         </div>
         <div>
           <p className="text-xs text-(--ui-text-muted)">Unreviewed anomalies</p>
-          <p className={`text-2xl font-black ${unreviewed > 0 ? "text-rose-600" : "text-(--ui-text)"}`}>
+          <p className={`text-2xl font-black ${unreviewed > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}>
             {unreviewed}
             {unreviewed > 0 && (
-              <AlertTriangle className="inline-block ml-1 h-5 w-5 text-rose-500" />
+              <AlertTriangle className="ml-1 inline-block h-5 w-5 text-(--ui-danger-fg)" />
             )}
           </p>
         </div>

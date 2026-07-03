@@ -25,7 +25,7 @@ export function DashboardRecentSales({ recentSales, data, isSingleBranch, onNavi
         <h3 className="text-sm font-semibold text-(--ui-text)">Recent {label("sale")}s</h3>
         <button
           onClick={() => navigate("/sales-history")}
-          className="text-xs font-medium text-(--ui-primary) hover:underline"
+          className="cursor-pointer text-xs font-medium text-(--ui-link) hover:underline"
         >
           View all →
         </button>

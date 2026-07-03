@@ -61,11 +61,11 @@ export default function MultiOutletEnabledBanner() {
   }
 
   return (
-    <div className="mb-4 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-      <Sparkles size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+    <div className="mb-4 flex items-start gap-3 rounded-(--ui-radius-md) bg-(--ui-muted-surface) p-3 text-sm">
+      <Sparkles size={16} className="mt-0.5 shrink-0 text-(--ui-text-muted)" />
       <div className="flex-1">
-        <p className="font-medium text-emerald-900">Multi-outlet features enabled</p>
-        <p className="mt-0.5 text-xs text-emerald-800">
+        <p className="font-semibold text-(--ui-text)">Multi-outlet features enabled</p>
+        <p className="mt-0.5 text-xs text-(--ui-text-muted)">
           We turned on outlet selection, per-outlet pricing, outlet-level product visibility, and price books.
           You can manage price lists in the Inventory section. Outlet visibility appears on each product's edit page.
         </p>
@@ -73,7 +73,7 @@ export default function MultiOutletEnabledBanner() {
       <button
         type="button"
         onClick={() => navigate("/price-lists")}
-        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+        className="cursor-pointer rounded-full bg-(--ui-primary) px-3.5 py-1.5 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
       >
         Manage price lists
       </button>
@@ -81,7 +81,7 @@ export default function MultiOutletEnabledBanner() {
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="rounded-full p-1 text-emerald-600 hover:bg-emerald-100 cursor-pointer"
+        className="cursor-pointer rounded-full p-1 text-(--ui-text-muted) hover:bg-(--ui-border-strong)"
       >
         <X size={14} />
       </button>

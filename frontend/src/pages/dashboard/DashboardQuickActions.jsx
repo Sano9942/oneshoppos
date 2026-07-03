@@ -28,7 +28,7 @@ export function DashboardQuickActions({ isAdmin, isManager }) {
           <button
             key={key}
             onClick={() => newTab ? window.open(path, "_blank") : navigate(path)}
-            className="flex items-center gap-1.5 rounded-md border border-(--ui-border) bg-(--ui-surface) px-3 py-1.5 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition"
+            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-4 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)"
           >
             <Icon size={15} />
             {label}

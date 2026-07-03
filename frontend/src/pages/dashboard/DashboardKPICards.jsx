@@ -1,4 +1,4 @@
-import { SectionCard } from "../../ui/primitives";
+﻿import { SectionCard } from "../../ui/primitives";
 import { useCurrency, DeltaArrow } from "./DashboardShared";
 
 /** Absolute-value delta: "↑ PKR 1,200 vs yesterday" */
@@ -9,7 +9,7 @@ function AbsDelta({ today, yesterday, fmt, invert = false }) {
   const isPositive = invert ? diff < 0 : diff > 0;
   const arrow = diff > 0 ? "↑" : "↓";
   return (
-    <span className={`text-xs font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+    <span className={`text-xs font-medium ${isPositive ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
       {arrow} {fmt(Math.abs(diff))} vs yesterday
     </span>
   );
@@ -17,8 +17,8 @@ function AbsDelta({ today, yesterday, fmt, invert = false }) {
 
 function KPICard({ label, value, yesterday, fmt, invert = false, onClick }) {
   return (
-    <SectionCard className="p-4 flex flex-col gap-1 cursor-pointer hover:shadow-md transition" onClick={onClick}>
-      <p className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide">{label}</p>
+    <SectionCard className="flex cursor-pointer flex-col gap-1 p-5 transition hover:border-(--ui-border-strong)" onClick={onClick}>
+      <p className="text-[13px] font-medium text-(--ui-text-muted)">{label}</p>
       <p className="text-2xl font-bold text-(--ui-text)">{fmt(value)}</p>
       <div className="flex items-center gap-2">
         <DeltaArrow today={value} yesterday={yesterday} invert={invert} />
@@ -33,8 +33,8 @@ function KPICard({ label, value, yesterday, fmt, invert = false, onClick }) {
 /** Smaller secondary KPI card — no yesterday delta, just label + value */
 function SecondaryKPICard({ label, value, fmt, onClick, colorClass = "text-(--ui-text)" }) {
   return (
-    <SectionCard className="p-3 flex flex-col gap-0.5 cursor-pointer hover:shadow-md transition" onClick={onClick}>
-      <p className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide">{label}</p>
+    <SectionCard className="flex cursor-pointer flex-col gap-0.5 p-4 transition hover:border-(--ui-border-strong)" onClick={onClick}>
+      <p className="text-[13px] font-medium text-(--ui-text-muted)">{label}</p>
       <p className={`text-xl font-bold ${colorClass}`}>{fmt(value)}</p>
     </SectionCard>
   );
@@ -91,17 +91,17 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
       {/* Primary KPI row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SectionCard
-          className="p-4 flex flex-col gap-1 cursor-pointer hover:shadow-md transition"
+          className="flex cursor-pointer flex-col gap-1 p-5 transition hover:border-(--ui-border-strong)"
           onClick={() => onNavigate?.("/reports?tab=sales&date=today")}
         >
-          <p className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide">Revenue Today</p>
+          <p className="text-[13px] font-medium text-(--ui-text-muted)">Revenue Today</p>
           <p className="text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
           <AbsDelta today={totalRevenue} yesterday={data?.yesterdayRevenue} fmt={fmt} />
           {monthTarget > 0 && (
             <div className="mt-1">
               <div className="h-1.5 w-full rounded-full bg-(--ui-muted-surface)">
                 <div
-                  className="h-1.5 rounded-full bg-sky-500"
+                  className="h-1.5 rounded-full bg-(--ui-primary)"
                   style={{ width: `${Math.min(100, (monthSales / monthTarget) * 100).toFixed(1)}%` }}
                 />
               </div>
@@ -112,10 +112,10 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
           )}
         </SectionCard>
         <SectionCard
-          className="p-4 flex flex-col gap-1 cursor-pointer hover:shadow-md transition"
+          className="flex cursor-pointer flex-col gap-1 p-5 transition hover:border-(--ui-border-strong)"
           onClick={() => onNavigate?.("/reports?tab=finance&date=today")}
         >
-          <p className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide">Net Profit</p>
+          <p className="text-[13px] font-medium text-(--ui-text-muted)">Net Profit</p>
           <p className="text-2xl font-bold text-(--ui-text)">{fmt(data?.todayProfit ?? 0)}</p>
           <AbsDelta today={data?.todayProfit ?? 0} yesterday={data?.yesterdayProfit} fmt={fmt} />
         </SectionCard>
@@ -126,10 +126,10 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
           onClick={() => onNavigate?.("/reports?tab=sales&date=today")}
         />
         <SectionCard
-          className="p-4 flex flex-col gap-1 cursor-pointer hover:shadow-md transition"
+          className="flex cursor-pointer flex-col gap-1 p-5 transition hover:border-(--ui-border-strong)"
           onClick={() => onNavigate?.("/reports?tab=governance&sub=exceptions")}
         >
-          <p className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide">Refunds</p>
+          <p className="text-[13px] font-medium text-(--ui-text-muted)">Refunds</p>
           <p className="text-2xl font-bold text-(--ui-text)">{fmt(data?.refundsToday?.value ?? 0)}</p>
           <div className="flex items-center gap-2">
             <DeltaArrow today={data?.refundsToday?.value ?? 0} yesterday={data?.yesterdayRefunds} invert />
@@ -147,14 +147,14 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
             label="Expenses Today"
             value={todayExpenses}
             fmt={fmt}
-            colorClass="text-red-500"
+            colorClass="text-(--ui-danger-fg)"
             onClick={() => onNavigate?.("/reports?tab=finance&date=today")}
           />
           <SecondaryKPICard
             label="Month Gross Margin"
             value={monthGrossMargin}
             fmt={fmt}
-            colorClass={monthGrossMargin >= 0 ? "text-emerald-600" : "text-red-500"}
+            colorClass={monthGrossMargin >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}
             onClick={() => onNavigate?.("/reports?tab=finance")}
           />
         </div>

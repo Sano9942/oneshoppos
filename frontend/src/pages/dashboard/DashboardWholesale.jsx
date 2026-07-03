@@ -45,7 +45,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
   if (error) {
     return (
       <SectionCard className="p-4">
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-(--ui-danger-fg)">{error}</p>
       </SectionCard>
     );
   }
@@ -60,7 +60,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <SectionCard
-          className="cursor-pointer p-4 hover:shadow-md transition"
+          className="cursor-pointer p-4 transition hover:border-(--ui-border-strong)"
           onClick={() => navigate("/reports/payables-receivables")}
         >
           <div className="flex items-start justify-between">
@@ -80,7 +80,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
         </SectionCard>
 
         <SectionCard
-          className="cursor-pointer p-4 hover:shadow-md transition"
+          className="cursor-pointer p-4 transition hover:border-(--ui-border-strong)"
           onClick={() => navigate("/reports/ar-aging")}
         >
           <div className="flex items-start justify-between">
@@ -90,7 +90,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
               </p>
               <p
                 className={`mt-1 text-2xl font-bold ${
-                  data.overdue_amount > 0 ? "text-red-600" : "text-(--ui-text)"
+                  data.overdue_amount > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text)"
                 }`}
               >
                 {fmt(data.overdue_amount)}
@@ -103,7 +103,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
             </div>
             <AlertTriangle
               size={20}
-              className={data.overdue_amount > 0 ? "text-red-500" : "text-(--ui-text-muted)"}
+              className={data.overdue_amount > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text-muted)"}
             />
           </div>
         </SectionCard>
@@ -118,7 +118,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
           <button
             type="button"
             onClick={() => navigate("/reports/ar-aging")}
-            className="text-xs text-(--ui-primary) hover:underline"
+            className="cursor-pointer text-xs font-medium text-(--ui-link) hover:underline"
           >
             View A/R aging →
           </button>
@@ -149,7 +149,7 @@ export default function DashboardWholesale({ refreshKey = 0 }) {
                     </td>
                     <td
                       className={`py-2 text-right ${
-                        b.overdue_amount > 0 ? "text-red-600" : "text-(--ui-text-muted)"
+                        b.overdue_amount > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text-muted)"
                       }`}
                     >
                       {b.overdue_amount > 0 ? fmt(b.overdue_amount) : "—"}

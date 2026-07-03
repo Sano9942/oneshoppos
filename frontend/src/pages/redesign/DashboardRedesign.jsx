@@ -128,7 +128,7 @@ export default function DashboardRedesign() {
           <button
             onClick={handleManualRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+            className="flex cursor-pointer items-center gap-1.5 text-xs text-(--ui-text-muted) transition-colors hover:text-(--ui-text) disabled:opacity-50"
             title="Refresh dashboard"
           >
             <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
@@ -140,7 +140,7 @@ export default function DashboardRedesign() {
       }
     >
       {error && (
-        <SectionCard className="mb-4 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-4 border-transparent bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       )}

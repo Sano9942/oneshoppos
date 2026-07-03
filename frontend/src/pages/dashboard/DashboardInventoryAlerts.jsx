@@ -30,7 +30,7 @@ export function DashboardInventoryAlerts({ data }) {
             <h3 className="text-sm font-semibold text-(--ui-text)">Low Stock Alerts</h3>
             <button
               onClick={() => navigate("/inventory")}
-              className="text-xs font-medium text-(--ui-primary) hover:underline"
+              className="cursor-pointer text-xs font-medium text-(--ui-link) hover:underline"
             >
               View all →
             </button>
@@ -43,7 +43,7 @@ export function DashboardInventoryAlerts({ data }) {
               >
                 <span className="text-sm text-(--ui-text)">{item.name}</span>
                 <div className="flex items-center gap-4 text-xs">
-                  <span className="font-semibold text-red-600">{item.stock} left</span>
+                  <span className="font-semibold text-(--ui-danger-fg)">{item.stock} left</span>
                   <span className="text-(--ui-text-muted)">{fmt(item.price)}</span>
                 </div>
               </div>

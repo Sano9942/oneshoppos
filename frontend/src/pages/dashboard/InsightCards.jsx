@@ -12,12 +12,13 @@ const ICON_MAP = {
   avg_transaction: DollarSign,
 };
 
+// Near-monochrome icon badges — only low stock keeps a (pale) warning tint.
 const COLOR_MAP = {
-  revenue_trend: "text-emerald-600 bg-emerald-50",
-  top_products: "text-blue-600 bg-blue-50",
-  low_stock: "text-amber-600 bg-amber-50",
-  busiest_hour: "text-violet-600 bg-violet-50",
-  avg_transaction: "text-emerald-600 bg-emerald-50",
+  revenue_trend: "text-(--ui-text) bg-(--ui-muted-surface)",
+  top_products: "text-(--ui-text) bg-(--ui-muted-surface)",
+  low_stock: "text-(--ui-warning-fg) bg-(--ui-warning-bg)",
+  busiest_hour: "text-(--ui-text) bg-(--ui-muted-surface)",
+  avg_transaction: "text-(--ui-text) bg-(--ui-muted-surface)",
 };
 
 function TrendBadge({ trend }) {
@@ -27,7 +28,7 @@ function TrendBadge({ trend }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-        isUp ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+        isUp ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
       }`}
     >
       <Icon size={12} />
@@ -58,13 +59,11 @@ export function InsightCards() {
 
   return (
     <div className="mb-4">
-      <h3 className="mb-2 text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wide">
-        Insights
-      </h3>
+      <h3 className="mb-2 text-base font-bold text-(--ui-text)">Insights</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const Icon = ICON_MAP[card.type] || DollarSign;
-          const colorCls = COLOR_MAP[card.type] || "text-blue-600 bg-blue-50";
+          const colorCls = COLOR_MAP[card.type] || "text-(--ui-text) bg-(--ui-muted-surface)";
           const isCurrency = card.type === "revenue_trend" || card.type === "avg_transaction";
 
           return (

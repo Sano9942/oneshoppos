@@ -21,12 +21,12 @@ export default function DashboardCashPosition({ data }) {
     <SectionCard>
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-bold text-(--ui-text)">
-          <Banknote size={14} className="text-emerald-500" />
+          <Banknote size={14} className="text-(--ui-text-muted)" />
           Cash in drawer
           <span className="text-xs font-normal text-(--ui-text-muted)">({rows.length} open)</span>
         </h3>
         <div className="text-xs text-(--ui-text-muted)">
-          Total: <span className="font-bold text-[#8066FF]">{fmt(pos.total_expected)}</span>
+          Total: <span className="font-bold text-(--ui-text)">{fmt(pos.total_expected)}</span>
         </div>
       </div>
       <div className="divide-y divide-(--ui-border)">
@@ -41,9 +41,9 @@ export default function DashboardCashPosition({ data }) {
             <div className="text-right shrink-0 ml-3">
               <div className="font-bold text-(--ui-text)">{fmt(r.expected_cash)}</div>
               <div className="text-xs text-(--ui-text-muted)">
-                <span className="text-emerald-500">+{fmt(r.cash_in)}</span>
+                <span className="text-(--ui-success-fg)">+{fmt(r.cash_in)}</span>
                 <span className="mx-1">/</span>
-                <span className="text-rose-500">-{fmt(r.cash_out)}</span>
+                <span className="text-(--ui-danger-fg)">-{fmt(r.cash_out)}</span>
               </div>
             </div>
           </div>

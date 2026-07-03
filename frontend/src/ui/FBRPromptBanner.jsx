@@ -47,11 +47,11 @@ export default function FBRPromptBanner({ countryCode, fbrBannerDismissed, fbrIn
   }
 
   return (
-    <div className="mb-4 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
-      <FileCheck2 size={16} className="mt-0.5 shrink-0 text-blue-600" />
+    <div className="mb-4 flex items-start gap-3 rounded-(--ui-radius-md) bg-(--ui-muted-surface) p-3 text-sm">
+      <FileCheck2 size={16} className="mt-0.5 shrink-0 text-(--ui-text-muted)" />
       <div className="flex-1">
-        <p className="font-medium text-blue-900">FBR Digital Invoicing</p>
-        <p className="mt-0.5 text-xs text-blue-800">
+        <p className="font-semibold text-(--ui-text)">FBR Digital Invoicing</p>
+        <p className="mt-0.5 text-xs text-(--ui-text-muted)">
           Required for Pakistan businesses registered for sales tax (STRN). If
           your business isn&apos;t registered for sales tax, you can dismiss this.
         </p>
@@ -59,7 +59,7 @@ export default function FBRPromptBanner({ countryCode, fbrBannerDismissed, fbrIn
       <button
         type="button"
         onClick={() => navigate("/settings/fbr")}
-        className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer"
+        className="shrink-0 cursor-pointer rounded-full bg-(--ui-primary) px-3.5 py-1.5 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
       >
         Set up FBR
       </button>
@@ -67,7 +67,7 @@ export default function FBRPromptBanner({ countryCode, fbrBannerDismissed, fbrIn
         type="button"
         onClick={handleDismiss}
         disabled={dismissing}
-        className="shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50 cursor-pointer"
+        className="shrink-0 cursor-pointer rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-(--ui-text) shadow-[inset_0_0_0_1px_var(--ui-border-strong)] hover:bg-(--ui-muted-surface) disabled:opacity-50"
       >
         {dismissing ? "Saving…" : "Not required"}
       </button>
@@ -75,7 +75,7 @@ export default function FBRPromptBanner({ countryCode, fbrBannerDismissed, fbrIn
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="rounded-full p-1 text-blue-600 hover:bg-blue-100 cursor-pointer"
+        className="cursor-pointer rounded-full p-1 text-(--ui-text-muted) hover:bg-(--ui-border-strong)"
       >
         <X size={14} />
       </button>

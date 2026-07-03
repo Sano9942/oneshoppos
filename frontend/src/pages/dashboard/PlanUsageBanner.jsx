@@ -90,18 +90,18 @@ export default function PlanUsageBanner() {
   }
 
   return (
-    <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-      <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+    <div className="mb-4 flex items-start gap-3 rounded-(--ui-radius-md) bg-(--ui-warning-bg) p-3 text-sm">
+      <AlertTriangle size={16} className="mt-0.5 shrink-0 text-(--ui-warning-fg)" />
       <div className="flex-1">
-        <p className="font-medium text-amber-900">Approaching plan limit</p>
-        <p className="mt-0.5 text-xs text-amber-800">
+        <p className="font-semibold text-(--ui-warning-fg)">Approaching plan limit</p>
+        <p className="mt-0.5 text-xs text-(--ui-warning-fg)">
           You're using {summary}. Upgrade to Pro for unlimited.
         </p>
       </div>
       <button
         type="button"
         onClick={() => navigate("/billing")}
-        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 cursor-pointer"
+        className="cursor-pointer rounded-full bg-(--ui-primary) px-3.5 py-1.5 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
       >
         Upgrade
       </button>
@@ -109,7 +109,7 @@ export default function PlanUsageBanner() {
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="rounded-full p-1 text-amber-600 hover:bg-amber-100 cursor-pointer"
+        className="cursor-pointer rounded-full p-1 text-(--ui-warning-fg) hover:opacity-70"
       >
         <X size={14} />
       </button>

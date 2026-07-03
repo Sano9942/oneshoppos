@@ -36,11 +36,11 @@ export default function DashboardHoldsExpiring() {
     <SectionCard>
       <div className="flex items-center justify-between mb-2">
         <h3 className="flex items-center gap-2 text-sm font-bold text-(--ui-text)">
-          <Package size={14} className="text-amber-500" />
+          <Package size={14} className="text-(--ui-warning-fg)" />
           Holds expiring this week
           <span className="text-xs font-normal text-(--ui-text-muted)">({rows.length})</span>
         </h3>
-        <Link to="/holds?expiring=7" className="text-xs text-[#8066FF] hover:underline">
+        <Link to="/holds?expiring=7" className="text-xs font-medium text-(--ui-link) hover:underline">
           View all →
         </Link>
       </div>
@@ -55,8 +55,8 @@ export default function DashboardHoldsExpiring() {
               </div>
             </div>
             <div className="text-right shrink-0 ml-3">
-              <div className="font-bold text-[#8066FF]">{fmt(h.balance_due)}</div>
-              <div className="text-xs text-amber-600">{fmtUtcDate(h.hold_until)}</div>
+              <div className="font-bold text-(--ui-text)">{fmt(h.balance_due)}</div>
+              <div className="text-xs text-(--ui-warning-fg)">{fmtUtcDate(h.hold_until)}</div>
             </div>
           </div>
         ))}

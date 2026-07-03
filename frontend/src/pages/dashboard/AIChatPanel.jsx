@@ -142,7 +142,7 @@ export function AIChatPanel({ flagEnabled }) {
           {/* Input */}
           <div className="border-t border-(--ui-border) px-3 py-2">
             {error && (
-              <p className="text-xs text-red-500 mb-1">{error}</p>
+              <p className="mb-1 text-xs text-(--ui-danger-fg)">{error}</p>
             )}
             <div className="flex items-center gap-2">
               <input

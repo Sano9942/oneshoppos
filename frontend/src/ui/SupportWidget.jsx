@@ -104,7 +104,7 @@ export default function SupportWidget() {
       {/* Floating button */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 transition cursor-pointer"
+        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-(--ui-primary) text-white shadow-(--ui-shadow-lg) transition hover:bg-(--ui-primary-strong)"
         aria-label="Support"
       >
         <span className="text-lg font-bold">?</span>
@@ -165,7 +165,7 @@ export default function SupportWidget() {
                 accept="image/*"
                 multiple
                 onChange={handleFiles}
-                className="block w-full text-xs text-(--ui-text-muted) file:mr-2 file:rounded file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-emerald-700 file:cursor-pointer"
+                className="block w-full text-xs text-(--ui-text-muted) file:mr-2 file:cursor-pointer file:rounded-full file:border-0 file:bg-(--ui-muted-surface) file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-(--ui-text)"
               />
               {files.length > 0 && (
                 <div className="mt-2 flex gap-2">

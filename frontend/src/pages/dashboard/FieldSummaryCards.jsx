@@ -80,7 +80,7 @@ export function FieldSummaryCards() {
                   </div>
                 </div>
                 {r.flagged_count > 0 && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 text-amber-900 px-1.5 py-0.5 text-xs">
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-(--ui-warning-bg) px-1.5 py-0.5 text-xs text-(--ui-warning-fg)">
                     <AlertCircle className="h-3 w-3" /> {r.flagged_count}
                   </span>
                 )}
@@ -95,7 +95,7 @@ export function FieldSummaryCards() {
                 </div>
                 <div className="mt-1 h-1.5 w-full rounded-full bg-(--ui-muted-surface) overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 transition-all"
+                    className="h-full bg-(--ui-primary) transition-all"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -103,7 +103,7 @@ export function FieldSummaryCards() {
 
               <div className="mt-2 grid grid-cols-4 gap-1 text-center text-xs">
                 <div>
-                  <div className="font-semibold text-emerald-700">{r.ordered_count}</div>
+                  <div className="font-semibold text-(--ui-success-fg)">{r.ordered_count}</div>
                   <div className="text-(--ui-text-muted)">orders</div>
                 </div>
                 <div>

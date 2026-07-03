@@ -209,7 +209,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
           <div>
             <p className="text-sm font-semibold text-(--ui-text)">
               {allDone ? (
-                <span className="flex items-center gap-1.5 text-emerald-600">
+                <span className="flex items-center gap-1.5 text-(--ui-success-fg)">
                   <PartyPopper size={16} />
                   You&apos;re all set! Great work.
                 </span>
@@ -236,7 +236,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
         {!allDone && (
           <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-(--ui-muted-surface)">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              className="h-full rounded-full bg-(--ui-primary) transition-all duration-500"
               style={{ width: `${(doneCount / steps.length) * 100}%` }}
             />
           </div>
@@ -247,7 +247,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
           {steps.map((step) => (
             <li key={step.id} className="flex items-center gap-3">
               {step.done ? (
-                <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
+                <CheckCircle2 size={18} className="shrink-0 text-(--ui-success-fg)" />
               ) : (
                 <Circle size={18} className="shrink-0 text-(--ui-text-muted)" />
               )}
@@ -263,7 +263,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
               {!step.done && (
                 <button
                   onClick={step.navigate}
-                  className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                  className="shrink-0 cursor-pointer text-xs font-medium text-(--ui-link) transition-colors hover:underline"
                 >
                   Go →
                 </button>

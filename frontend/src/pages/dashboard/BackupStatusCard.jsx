@@ -39,41 +39,37 @@ export function BackupStatusCard() {
   const isStale72 = !backup || hours > 72;
   const isStale24 = hours > 24;
 
-  // Determine color scheme
-  let borderColor = "border-emerald-200";
-  let bgColor = "bg-emerald-50";
-  let dotColor = "bg-emerald-500";
-  let labelColor = "text-emerald-700";
+  // Determine status badge scheme (white card + pale status pill)
+  let badgeColor = "bg-(--ui-success-bg) text-(--ui-success-fg)";
+  let dotColor = "bg-(--ui-success-fg)";
   let label = "Backup OK";
 
   if (isFailed || isStale72) {
-    borderColor = "border-rose-200";
-    bgColor = "bg-rose-50";
-    dotColor = "bg-rose-500";
-    labelColor = "text-rose-700";
+    badgeColor = "bg-(--ui-danger-bg) text-(--ui-danger-fg)";
+    dotColor = "bg-(--ui-danger-fg)";
     label = isFailed ? "Backup Failed" : "No Recent Backup";
   } else if (isStale24) {
-    borderColor = "border-amber-200";
-    bgColor = "bg-amber-50";
-    dotColor = "bg-amber-400";
-    labelColor = "text-amber-700";
+    badgeColor = "bg-(--ui-warning-bg) text-(--ui-warning-fg)";
+    dotColor = "bg-(--ui-warning-fg)";
     label = "Backup Aging";
   }
 
   return (
-    <SectionCard className={`p-4 ${borderColor} ${bgColor}`}>
+    <SectionCard className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={`h-3 w-3 shrink-0 rounded-full ${dotColor}`} />
+          <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${badgeColor}`}>
+            <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+          </span>
           <div>
-            <p className={`text-sm font-bold ${labelColor}`}>{label}</p>
+            <p className="text-sm font-bold text-(--ui-text)">{label}</p>
             <p className="text-xs text-(--ui-text-muted)">
               {backup
                 ? `Last backup: ${relativeTime(backup.created_at)}${backup.size_bytes ? ` (${(backup.size_bytes / 1024).toFixed(0)} KB)` : ""}`
                 : "No backups recorded yet"}
             </p>
             {isFailed && backup?.error_message && (
-              <p className="mt-0.5 text-xs text-rose-600 truncate max-w-xs" title={backup.error_message}>
+              <p className="mt-0.5 max-w-xs truncate text-xs text-(--ui-danger-fg)" title={backup.error_message}>
                 Error: {backup.error_message}
               </p>
             )}
