@@ -126,7 +126,19 @@ module.exports = function registerSystemRoutes(app, deps) {
         fbr: workerInfo("fbr", fbrStatus, 30_000),
         cleanup: workerInfo("cleanup", cleanupStatus, 24 * 60 * 60 * 1000),
         reservation: workerInfo("reservation", reservationStatus, 60_000),
-        marketplace_sync: workerInfo("marketplace_sync", marketplaceSyncStatus, 5 * 60_000),
+        // Marketplace sync is intentionally manual-only (no background polling
+        // is implemented — see marketplace-sync-worker-boss.js). Report it
+        // honestly instead of as a "stopped" worker, which would look broken.
+        marketplace_sync: {
+          enabled: true,
+          running: false,
+          mode: marketplaceSyncStatus?.mode || "manual",
+          note:
+            marketplaceSyncStatus?.note ||
+            "Background auto-sync not implemented — marketplace sync is manual via the Integrations Hub.",
+          processed_today: 0,
+          queue_depth: 0,
+        },
         booking_reminder: workerInfo("booking_reminder", bookingReminderStatus, 5 * 60_000),
         rental_overdue: workerInfo("rental_overdue", rentalOverdueStatus, 24 * 60 * 60 * 1000),
         room_overdue: workerInfo("room_overdue", roomOverdueStatus, 24 * 60 * 60 * 1000),

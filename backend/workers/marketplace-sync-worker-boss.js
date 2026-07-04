@@ -1,9 +1,30 @@
 /**
- * Marketplace sync worker — pg-boss implementation.
+ * Marketplace sync worker — pg-boss registration.
  *
- * Cron jobs:
- *   - "marketplace-order-poll"  — every 10 min: pull orders from Daraz/Facebook for tenants with active integrations
- *   - "marketplace-feed-check"  — every 6 hours: check Google Merchant feed status
+ * HONEST STATE (completion-11, 2026-07-05): background marketplace sync is
+ * NOT implemented. The previous version scheduled a `marketplace-order-poll`
+ * cron (every 10 min) and a `marketplace-feed-check` cron (every 6 h) that
+ * iterated every tenant, logged "Polling Daraz orders" / "Checking Google
+ * Merchant feed status", and updated a heartbeat — but never called
+ * DarazClient/MetaCommerceClient/GoogleMerchantClient. It was decorative: the
+ * admin worker-status dashboard showed it "running" while it did nothing, and
+ * it burned a per-tenant DB fanout every 10 minutes for no result.
+ *
+ * A read-only production audit (all active tenants) found ZERO tenants with an
+ * active marketplace integration configured, so wiring real polling is not
+ * justified yet. Marketplace sync is MANUAL — the tenant triggers it from the
+ * Integrations Hub (Pull Orders / Sync Products, which DO call the live
+ * adapters via routes/integrations/{daraz,facebook,google-merchant}.js).
+ *
+ * This registration therefore:
+ *   - schedules NOTHING (no dead crons, no per-tenant fanout),
+ *   - best-effort UNSCHEDULES any legacy schedule a prior deploy may have left
+ *     in pgboss so the decorative crons stop firing,
+ *   - exposes a heartbeat marked `mode: "manual"` so worker-status is honest.
+ *
+ * If a real tenant ever depends on background sync, wire the three client calls
+ * inside `withTenantContext()` (see workers/tenant-job-context.js) and restore
+ * the cron schedules — do NOT re-introduce the log-only stub.
  *
  * Env: MARKETPLACE_SYNC_WORKER_ENABLED=1
  * Heartbeat: global.__marketplaceSyncWorkerStatus
@@ -11,113 +32,37 @@
 
 const logger = require("../services/logger").child({ component: "marketplace-sync-worker" });
 
+// Legacy queue/schedule names the decorative version registered. Kept here only
+// so we can unschedule them defensively on boot.
+const LEGACY_SCHEDULES = ["marketplace-order-poll", "marketplace-feed-check"];
+
 global.__marketplaceSyncWorkerStatus = {
   lastPollAt: null,
   processedToday: 0,
   queueDepth: 0,
+  mode: "manual", // read by GET /api/admin/worker-status
+  note: "Background auto-sync not implemented — marketplace sync is manual via the Integrations Hub.",
 };
 
-async function registerMarketplaceSyncWorker(boss, pool) {
-  const queueName = "marketplace-order-poll";
-  const feedQueueName = "marketplace-feed-check";
-
-  await boss.createQueue(queueName);
-  await boss.createQueue(feedQueueName);
-
-  // Schedule order polling every 10 minutes
-  await boss.schedule(queueName, "*/10 * * * *", {}, {
-    singletonKey: "marketplace-order-poll",
-  });
-
-  // Schedule feed check every 6 hours
-  await boss.schedule(feedQueueName, "0 */6 * * *", {}, {
-    singletonKey: "marketplace-feed-check",
-  });
-
-  // Order poll handler
-  await boss.work(queueName, async (job) => {
-    logger.info("Marketplace order poll starting");
-    const now = new Date();
-
+async function registerMarketplaceSyncWorker(boss /* , pool */) {
+  // Remove any leftover decorative schedules from earlier deploys so the empty
+  // cron stops firing. Best-effort — a fresh pg-boss (nothing scheduled) or an
+  // older API just no-ops here.
+  for (const name of LEGACY_SCHEDULES) {
     try {
-      // Find all tenants with active marketplace integrations
-      const masterDb = require("../master-db-pg");
-      const { rows: tenants } = await masterDb.query(
-        "SELECT id, slug FROM tenants WHERE status = 'active'"
-      );
-
-      let totalImported = 0;
-
-      for (const tenant of tenants) {
-        try {
-          const schema = `tenant_${tenant.slug}`;
-          const { rows: integrations } = await pool.query(
-            `SELECT provider, is_active, sync_enabled FROM ${schema}.integration_settings WHERE is_active = true AND sync_enabled = true`
-          );
-
-          for (const integration of integrations) {
-            if (integration.provider === "daraz") {
-              // Poll Daraz for new orders
-              const since = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // last 15 min
-              logger.info({ tenant: tenant.slug, provider: "daraz" }, "Polling Daraz orders");
-              // Actual polling would call DarazClient.pullOrders here
-              // For now, log the poll attempt
-            }
-
-            if (integration.provider === "facebook") {
-              logger.info({ tenant: tenant.slug, provider: "facebook" }, "Polling Facebook orders");
-              // Actual polling would call MetaCommerceClient.pullOrders here
-            }
-          }
-        } catch (err) {
-          logger.error({ tenant: tenant.slug, err }, "Error polling marketplace orders for tenant");
-        }
+      if (typeof boss.unschedule === "function") {
+        await boss.unschedule(name);
       }
-
-      // Store as millisecond timestamp to match the format the other workers
-      // use and the format /api/admin/worker-status expects. Previously this
-      // was an ISO string, which produced NaN when subtracted from Date.now().
-      global.__marketplaceSyncWorkerStatus.lastPollAt = Date.now();
-      global.__marketplaceSyncWorkerStatus.processedToday += totalImported;
-      logger.info({ totalImported }, "Marketplace order poll complete");
     } catch (err) {
-      logger.error({ err }, "Marketplace order poll failed");
+      // Not fatal — nothing to unschedule, or the queue never existed.
+      logger.debug({ err, schedule: name }, "No legacy marketplace schedule to remove");
     }
-  });
+  }
 
-  // Feed check handler
-  await boss.work(feedQueueName, async (job) => {
-    logger.info("Google Merchant feed check starting");
-
-    try {
-      const masterDb = require("../master-db-pg");
-      const { rows: tenants } = await masterDb.query(
-        "SELECT id, slug FROM tenants WHERE status = 'active'"
-      );
-
-      for (const tenant of tenants) {
-        try {
-          const schema = `tenant_${tenant.slug}`;
-          const { rows: [gmcConfig] } = await pool.query(
-            `SELECT is_active FROM ${schema}.integration_settings WHERE provider = 'google_merchant' AND is_active = true`
-          );
-
-          if (gmcConfig) {
-            logger.info({ tenant: tenant.slug }, "Checking Google Merchant feed status");
-            // Actual check would call GoogleMerchantClient.checkFeedStatus here
-          }
-        } catch (err) {
-          logger.error({ tenant: tenant.slug, err }, "Error checking feed for tenant");
-        }
-      }
-
-      logger.info("Google Merchant feed check complete");
-    } catch (err) {
-      logger.error({ err }, "Google Merchant feed check failed");
-    }
-  });
-
-  logger.info("Marketplace sync worker registered (order poll + feed check)");
+  logger.info(
+    "Marketplace sync worker registered as MANUAL-ONLY — background polling is not implemented; " +
+      "tenants sync via the Integrations Hub (Pull Orders / Sync Products). No cron scheduled."
+  );
 }
 
 module.exports = { registerMarketplaceSyncWorker };
