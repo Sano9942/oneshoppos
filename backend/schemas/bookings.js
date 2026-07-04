@@ -9,6 +9,8 @@ const createServiceSchema = z.object({
   outlet_id: z.number().int().positive().optional(),
   requires_confirmation: z.boolean().default(false),
   max_advance_days: z.number().int().positive().default(90),
+  // F06 — POS product representing this service at checkout (prefill line).
+  product_id: z.number().int().positive().optional().nullable(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 
@@ -20,6 +22,7 @@ const updateServiceSchema = z.object({
   price: z.number().min(0).optional(),
   is_active: z.boolean().optional(),
   requires_confirmation: z.boolean().optional(),
+  product_id: z.number().int().positive().optional().nullable(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 

@@ -40,6 +40,10 @@ export function useCheckout({
   enqueueSale,
   // parked sales reload
   loadParked,
+  // F06 — appointment checkout link: id rides the sale payload; the backend
+  // completes the appointment on commit. Cleared with the cart after a sale.
+  activeAppointmentId,
+  clearActiveAppointment,
   // Phase 2-R.0 — restaurant shell context (all nullable; retail leaves at defaults)
   draftOrderId,
   orderContext,
@@ -249,7 +253,9 @@ export function useCheckout({
     // (cart already cleared above). No-op for retail because closeCheck
     // is undefined when the restaurant shell isn't mounted.
     closeCheck?.();
-  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck, setSignatureSvg, setShowGuestMode]);
+    // F06 — the appointment link is consumed by the completed sale.
+    clearActiveAppointment?.();
+  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck, setSignatureSvg, setShowGuestMode, clearActiveAppointment]);
 
   const completeSale = useCallback(async () => {
     if (!selectedOutletId || !cart.length) return;
@@ -320,6 +326,8 @@ export function useCheckout({
       // Tier 0.1 wholesale — manager PIN to override a hard credit-limit block
       // on a Credit tender. Read once and cleared so retries don't reuse.
       manager_pin: managerPinRef.current || undefined,
+      // F06 — appointment checkout link; backend completes the appointment.
+      appointment_id: activeAppointmentId || null,
     };
     // Clear the pin immediately after stamping the payload; if the retry
     // itself fails the user is prompted to enter again rather than silently
@@ -463,7 +471,7 @@ export function useCheckout({
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
     buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
     draftOrderId, orderContext, tableSessionId, seatCount, signatureSvg,
-    onInsufficientStock,
+    onInsufficientStock, activeAppointmentId,
   ]);
 
   const retryPendingSale = useCallback(async () => {

@@ -458,6 +458,18 @@ module.exports = function registerSalesRoutes(app, deps) {
           [id]
         ).catch(err => console.error("[commission] void reversal error:", err.message));
 
+        // F06 — unlink + reopen the appointment this sale paid for, so the
+        // cashier can re-ring it after a mistaken sale (same reversal duty as
+        // the completion-04 on-account invoice lesson). 'in_progress', not
+        // 'completed' — the service happened; only the payment was undone.
+        if (sale.appointment_id) {
+          db.query(
+            `UPDATE appointments SET sale_id = NULL, status = 'in_progress', updated_at = NOW()
+             WHERE id = $1 AND sale_id = $2`,
+            [sale.appointment_id, id]
+          ).catch(err => console.error("[f06] appointment unlink on void error:", err.message));
+        }
+
         res.json({
           message: "Sale voided successfully. Stock has been restored.",
         });
@@ -561,6 +573,10 @@ module.exports = function registerSalesRoutes(app, deps) {
       // here (works even when the rep app never saw the visit's numeric id).
       field_visit_id: field_visit_id_in = null,
       field_visit_uuid = null,
+      // F06 — when the POS checkout started from "today's appointments", the
+      // sale links back to the appointment; post-commit the appointment is
+      // marked completed with the sale backlink (revenue attribution).
+      appointment_id = null,
       // Tier 1.3 wholesale schemes — POS / rep-app sends the applied promotions
       // from /api/promotions/quote. Persisted to sale_promotion_applications
       // as an audit trail (snapshot — doesn't affect totals; the discount is
@@ -611,6 +627,29 @@ module.exports = function registerSalesRoutes(app, deps) {
         // here. Logging only — never block the sale on the guard's own bug.
         if (!String(moqErr.message || "").includes("min_order_qty")) {
           console.warn("[sales] MOQ guard skipped:", moqErr.message);
+        }
+      }
+    }
+
+    // F06 — validate the appointment link before opening the transaction: it
+    // must exist, be in a checkout-able state, and not already be paid for.
+    if (appointment_id) {
+      try {
+        const { rows: [appt] } = await db.query(
+          "SELECT id, status, sale_id FROM appointments WHERE id = $1",
+          [Number(appointment_id)]
+        );
+        if (!appt) return res.status(400).json({ error: "Linked appointment not found" });
+        if (appt.sale_id) {
+          return res.status(409).json({ error: "Appointment is already linked to a sale", code: "APPOINTMENT_ALREADY_PAID" });
+        }
+        if (!["confirmed", "in_progress", "pending"].includes(appt.status)) {
+          return res.status(400).json({ error: `Appointment is ${appt.status} and cannot be checked out` });
+        }
+      } catch (apptErr) {
+        // Pre-v100 tenant without the sale_id column — treat as no linkage.
+        if (!/sale_id/.test(String(apptErr.message || ""))) {
+          console.warn("[sales] appointment link check skipped:", apptErr.message);
         }
       }
     }
@@ -1362,7 +1401,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id, appointment_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -1382,6 +1421,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             taxTotalSnapshot,
             taxInclusiveResolved,
             field_visit_id || null,
+            appointment_id ? Number(appointment_id) : null,
           ]
         );
         const newSaleId = saleRow.id;
@@ -1978,6 +2018,18 @@ module.exports = function registerSalesRoutes(app, deps) {
             "UPDATE restaurant_table_sessions SET status = 'dirty', updated_at = NOW() WHERE id = $1 AND status NOT IN ('closed','dirty')",
             [table_session_id]
           ).catch((err) => logger.error({ err, table_session_id }, "[settle] table_session dirty flip failed (non-blocking)"));
+        }
+
+        // F06 — checkout completes the linked appointment (backlink + status).
+        // sale_id IS NULL guard: if two sales raced past the pre-check, only
+        // the first one wins the link; the second keeps its own forward link
+        // for audit but doesn't flip the appointment twice.
+        if (appointment_id) {
+          db.query(
+            `UPDATE appointments SET sale_id = $1, status = 'completed', updated_at = NOW()
+             WHERE id = $2 AND sale_id IS NULL`,
+            [saleId, Number(appointment_id)]
+          ).catch((err) => logger.error({ err, appointment_id, saleId }, "[f06] appointment completion failed (non-blocking)"));
         }
 
         // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-

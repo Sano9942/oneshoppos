@@ -43,6 +43,9 @@ const CreateSaleSchema = z.object({
   // id at insert time. Pass either, not both.
   field_visit_id: z.coerce.number().int().positive().optional().nullable(),
   field_visit_uuid: z.string().min(8).max(200).optional().nullable(),
+  // F06 — POS checkout started from "today's appointments": links the sale to
+  // the appointment; backend completes the appointment post-commit.
+  appointment_id: z.coerce.number().int().positive().optional().nullable(),
   // Tier 1.3 wholesale schemes — applied promotions audit snapshot from
   // /api/promotions/quote. Passthrough on each entry preserves extra fields
   // the evaluator may add later (priority, tier, etc.).

@@ -148,6 +148,14 @@ export const POSProvider = ({ children }) => {
   const [parkedSales, setParkedSales] = useState([]);
   const [showParked, setShowParked] = useState(false);
 
+  // ── F06 appointments checkout link ──────────────────────────────────────
+  // activeAppointment ties the in-progress cart to the appointment it was
+  // prefilled from; completeSale sends appointment_id and the backend marks
+  // the appointment completed with the sale backlink.
+  const [showAppointments, setShowAppointments] = useState(false);
+  const [activeAppointment, setActiveAppointment] = useState(null);
+  const clearActiveAppointment = useCallback(() => setActiveAppointment(null), []);
+
   // ── Endless aisle ────────────────────────────────────────────────────────
   const [endlessAisleProduct, setEndlessAisleProduct] = useState(null);
   const handleEndlessAisle = useCallback((product) => setEndlessAisleProduct(product), []);
@@ -599,6 +607,10 @@ export const POSProvider = ({ children }) => {
     // `offline_returns` feature flag — hook exports the function either way.
     enqueueReturn: offlineQueue.enqueueReturn,
     loadParked,
+    // F06 — appointment checkout link (id rides the sale payload; cleared
+    // together with the cart after a completed sale).
+    activeAppointmentId: activeAppointment?.id || null,
+    clearActiveAppointment,
     // Phase 2-R.0 — restaurant shell context wired into completeSale payload
     draftOrderId,
     orderContext,
@@ -724,6 +736,34 @@ export const POSProvider = ({ children }) => {
       setError(e.message || "Failed to restore parked sale");
     }
   }, [cartHook, shift.selectedOutletId, loadParked, showNotice, posFlags.phase2_draft_orders]);
+
+  // ── F06: prefill cart from a "today's appointments" row ────────────────
+  const loadAppointmentToCart = useCallback((appt) => {
+    if (appt.service_product_id) {
+      const line = {
+        id: appt.service_product_id,
+        variant_id: null,
+        name: appt.service_name || appt.product_name,
+        quantity: 1,
+        // Service price wins over the product's own price; cashier can still
+        // override per the normal price-override flow.
+        price: Number(appt.service_price ?? appt.product_price ?? 0),
+        originalPrice: Number(appt.product_price ?? appt.service_price ?? 0),
+        effectiveTaxRate: Number(appt.effective_tax_rate || 0),
+        effectiveTaxName: appt.effective_tax_name || "No Tax",
+        availableStock: 99999,
+        // Provider gets the per-line commission attribution.
+        staff_id: appt.employee_id || null,
+      };
+      cartHook.setCart((prev) => [line, ...prev]);
+    } else {
+      showNotice("No POS product linked to this service — add the lines manually.");
+    }
+    if (appt.customer_id) setSelectedCustomerId(String(appt.customer_id));
+    setActiveAppointment({ id: appt.id, service_name: appt.service_name });
+    setShowAppointments(false);
+    showNotice(`Appointment #${appt.id} attached — checkout will complete it.`);
+  }, [cartHook, showNotice]);
 
   // ── Return-from-sale ────────────────────────────────────────────────────
   const openReturnFromSale = useCallback((sale) => {
@@ -978,6 +1018,12 @@ export const POSProvider = ({ children }) => {
     setParkedSales,
     showParked,
     setShowParked,
+    // F06 — appointments checkout entry point
+    showAppointments,
+    setShowAppointments,
+    activeAppointment,
+    clearActiveAppointment,
+    loadAppointmentToCart,
     checkoutOpen,
     setCheckoutOpen,
     payments: checkout.payments,

@@ -37,9 +37,9 @@ module.exports = function registerBookingRoutes(app, deps) {
     try {
       const { staff_ids, ...data } = req.body;
       const { rows: [service] } = await deps.db.query(
-        `INSERT INTO booking_services (name, description, duration_minutes, padding_minutes, price, outlet_id, requires_confirmation, max_advance_days)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [data.name, data.description || null, data.duration_minutes, data.padding_minutes, data.price, data.outlet_id || null, data.requires_confirmation, data.max_advance_days]
+        `INSERT INTO booking_services (name, description, duration_minutes, padding_minutes, price, outlet_id, requires_confirmation, max_advance_days, product_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [data.name, data.description || null, data.duration_minutes, data.padding_minutes, data.price, data.outlet_id || null, data.requires_confirmation, data.max_advance_days, data.product_id || null]
       );
 
       if (staff_ids?.length) {
@@ -137,6 +137,54 @@ module.exports = function registerBookingRoutes(app, deps) {
         [from, to]
       );
       res.json({ events: rows });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // F06 — POS "today's appointments" checkout entry point. Deliberately NOT
+  // behind manage_bookings: cashiers ring up appointments they can't manage.
+  // Mode+flag gated; auth comes from the standard tenant chain.
+  app.get("/api/appointments/pos-today", requireMode("appointments"), requireFeature("phase4_appointments"), async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "UTC";
+      const { toUtcStart, toUtcEnd, toLocalDateStr } = require("../utils/tz");
+      const today = toLocalDateStr(new Date().toISOString(), tz);
+      const params = [toUtcStart(today, tz), toUtcEnd(today, tz)];
+      let outletFilter = "";
+      if (req.query.outlet_id) {
+        params.push(Number(req.query.outlet_id));
+        outletFilter = ` AND (a.outlet_id = $${params.length} OR a.outlet_id IS NULL)`;
+      }
+      const { rows } = await deps.db.query(
+        `SELECT a.id, a.start_at, a.end_at, a.status, a.customer_id, a.customer_name,
+           a.customer_phone, a.employee_id, a.sale_id,
+           bs.id AS service_id, bs.name AS service_name, bs.price AS service_price,
+           bs.product_id AS service_product_id,
+           p.name AS product_name, p.price AS product_price, p.gst AS product_gst,
+           t.rate AS product_tax_rate, t.name AS product_tax_name,
+           e.name AS employee_name, c.name AS customer_display_name
+         FROM appointments a
+         JOIN booking_services bs ON bs.id = a.service_id
+         LEFT JOIN products p ON p.id = bs.product_id AND p.deleted_at IS NULL
+         LEFT JOIN taxes t ON t.id = p.tax_id
+         LEFT JOIN employees e ON e.id = a.employee_id
+         LEFT JOIN customers c ON c.id = a.customer_id
+         WHERE a.start_at >= $1 AND a.start_at < $2
+           AND a.status IN ('confirmed','in_progress')
+           AND a.sale_id IS NULL${outletFilter}
+         ORDER BY a.start_at ASC`,
+        params
+      );
+      // Same effective-tax normalization the POS product endpoints use.
+      res.json({
+        appointments: rows.map((r) => ({
+          ...r,
+          effective_tax_rate: r.product_tax_rate != null ? Number(r.product_tax_rate)
+            : r.product_gst != null ? Number(r.product_gst) : 0,
+          effective_tax_name: r.product_tax_name || (r.product_gst != null ? "GST" : "No Tax"),
+        })),
+      });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
