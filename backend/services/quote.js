@@ -1,6 +1,8 @@
 'use strict';
 
 const { resolveTaxSnapshot } = require('./tax-snapshot');
+const { evaluatePromotions: evaluatePromotionsEngine } = require('./promo-engine');
+const { resolvePriceForContext } = require('./pricing');
 
 /**
  * Quote service — single source of truth for storefront order pricing.
@@ -19,6 +21,9 @@ const { resolveTaxSnapshot } = require('./tax-snapshot');
  * @param {number}  channelId        – sales_channels.id
  * @param {number|null} courierId    – selected courier for shipping rate lookup
  * @param {object}  [opts]           – optional context
+ * @param {number|null} [opts.customerId] – buyer identity (portal reorder /
+ *   logged-in storefront cart). Enables the customer/group tiers of the
+ *   shared price-list cascade; anonymous carts resolve channel/outlet only.
  * @param {string}  [opts.taxMode]   – 'none' | 'inclusive' | 'exclusive' (default 'none').
  *   When 'inclusive', `unitPrice` is treated as already containing tax — the customer-facing
  *   subtotal/grandTotal stay equal to (price × qty) and `taxAmount` is the slice extracted
@@ -155,10 +160,28 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
       }
     }
 
-    // Price resolution: variant price overrides product price
-    const unitPrice = Number(
+    // Price resolution: shared price-list cascade (services/pricing.js —
+    // customer → group → channel → outlet, qty-aware min_qty breaks), same
+    // precedence POS applies in useCart.js. Falls back to variant/product
+    // base price when no price-list row matches. Pre-unification this path
+    // used base price only, so portal reorder / storefront never saw the
+    // buyer's negotiated price list.
+    let unitPrice = Number(
       (variant && variant.price != null) ? variant.price : product.price
     );
+    try {
+      const resolved = await resolvePriceForContext(db, {
+        productId,
+        variantId: variantId || null,
+        qty,
+        outletId: deliveryMethod === 'pickup' ? pickupOutletId : null,
+        channelId,
+        customerId: opts.customerId || null,
+      });
+      if (resolved && resolved.price_list_id != null) {
+        unitPrice = Number(resolved.price);
+      }
+    } catch (_) { /* price-list tables unavailable — keep base price */ }
 
     const grossLine = unitPrice * qty;
 
@@ -269,8 +292,15 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
 /**
  * Evaluate active promotions against quote line items.
  *
- * Mirrors the logic in POST /api/promotions/quote (routes/promotions.js)
- * so storefront quotes apply the same discounts as the POS.
+ * Delegates to services/promo-engine.js — the same engine behind
+ * POST /api/promotions/quote (POS + field-rep) — so every surface applies
+ * identical schemes: priority-ordered, brand-scoped, slab_percent tiers.
+ * The pre-unification inline copy here was missing all three (Tier 1.3
+ * additions never ported) — plan-01 trap 6.
+ *
+ * This wrapper keeps the storefront-specific behavior on top of the
+ * engine result: camelCase applied-promotion shape and proportional
+ * distribution of the discount across line items.
  *
  * @param {object} db       – tenant db proxy
  * @param {Array}  items    – quote line items (from step 7)
@@ -278,20 +308,8 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
  * @returns {Promise<{ totalDiscount: number, appliedPromotions: Array }>}
  */
 async function evaluatePromotions(db, items, orderTotal) {
-  const now = new Date().toISOString().slice(0, 10);
-
-  const { rows: promos } = await db.query(
-    `SELECT * FROM promotions WHERE active = true
-     AND (starts_at IS NULL OR starts_at <= $1)
-     AND (ends_at IS NULL OR ends_at >= $2)
-     ORDER BY id ASC`,
-    [now, now]
-  );
-
-  const appliedPromotions = [];
-  let totalDiscount = 0;
-
-  // Map quote items to the shape the promo matcher expects
+  // Map quote items to the shape the shared engine expects. brand_id is
+  // hydrated inside the engine when a brand-scoped promo is active.
   const promoItems = items.map(i => ({
     product_id: i.productId,
     category_id: i.categoryId || null,
@@ -299,59 +317,15 @@ async function evaluatePromotions(db, items, orderTotal) {
     price: i.unitPrice
   }));
 
-  for (const promo of promos) {
-    const itemMatches = (item) => {
-      if (promo.applies_to === 'all') return true;
-      if (promo.applies_to === 'product' && promo.product_id)
-        return item.product_id === promo.product_id;
-      if (promo.applies_to === 'category' && promo.category_id)
-        return item.category_id === promo.category_id;
-      return false;
-    };
-
-    const matchedItems = promoItems.filter(itemMatches);
-    const matchedTotal = matchedItems.reduce((s, i) => s + i.price * i.quantity, 0);
-    let discount = 0;
-
-    if (promo.type === 'percent') {
-      discount = matchedTotal * (promo.value / 100);
-    } else if (promo.type === 'fixed') {
-      discount = Math.min(promo.value, matchedTotal);
-    } else if (promo.type === 'threshold_percent') {
-      if (orderTotal >= promo.min_order_amount)
-        discount = matchedTotal * (promo.value / 100);
-    } else if (promo.type === 'threshold_fixed') {
-      if (orderTotal >= promo.min_order_amount)
-        discount = Math.min(promo.value, matchedTotal);
-    } else if (promo.type === 'bxgy') {
-      if (promo.buy_qty > 0 && promo.get_qty > 0) {
-        const aggregated = {};
-        matchedItems.forEach((item) => {
-          const pid = item.product_id;
-          if (!aggregated[pid]) {
-            aggregated[pid] = { quantity: 0, totalValue: 0 };
-          }
-          aggregated[pid].quantity += item.quantity;
-          aggregated[pid].totalValue += item.quantity * item.price;
-        });
-        Object.values(aggregated).forEach((agg) => {
-          const sets = Math.floor(agg.quantity / (promo.buy_qty + promo.get_qty));
-          const avgPrice = agg.totalValue / agg.quantity;
-          discount += sets * promo.get_qty * avgPrice;
-        });
-      }
-    }
-
-    if (discount > 0) {
-      totalDiscount += discount;
-      appliedPromotions.push({
-        promotionId: promo.id,
-        name: promo.name,
-        type: promo.type,
-        discount: round2(discount)
-      });
-    }
-  }
+  const { applied, totalDiscount } = await evaluatePromotionsEngine(db, promoItems, orderTotal);
+  const appliedPromotions = applied.map(a => ({
+    promotionId: a.promotion_id,
+    name: a.name,
+    type: a.type,
+    discount: a.discount,
+    qtyQualifying: a.qty_qualifying,
+    tier: a.tier
+  }));
 
   // Distribute discount proportionally across line items
   if (totalDiscount > 0 && items.length > 0) {
@@ -389,89 +363,7 @@ function emptyQuote(deliveryMethod, pickupOutletId) {
   };
 }
 
-/**
- * Resolve the effective price for a product in a given context.
- * Cascade: outlet assignment → channel → customer → customer_group → base price.
- *
- * @param {object}  db
- * @param {object}  opts - { productId, variantId, outletId, channelId, customerId }
- * @returns {Promise<{ price: number, source: string, price_list_id: number|null }>}
- */
-async function resolvePriceForContext(db, { productId, variantId, outletId, channelId, customerId }) {
-  const now = new Date().toISOString();
-  const scopes = [];
-  if (outletId) scopes.push({ type: "outlet", id: outletId });
-  if (channelId) scopes.push({ type: "channel", id: channelId });
-  if (customerId) {
-    scopes.push({ type: "customer", id: customerId });
-    try {
-      const { rows } = await db.query(
-        "SELECT group_id FROM customer_group_members WHERE customer_id = $1 LIMIT 1",
-        [customerId]
-      );
-      if (rows[0]) scopes.push({ type: "customer_group", id: rows[0].group_id });
-    } catch (_) {}
-  }
-
-  for (const scope of scopes) {
-    try {
-      const { rows: assignments } = await db.query(
-        `SELECT pla.price_list_id
-         FROM price_list_assignments pla
-         JOIN price_lists pl ON pl.id = pla.price_list_id AND pl.is_active = TRUE
-         WHERE pla.scope_type = $1 AND pla.scope_id = $2 AND pla.is_active = TRUE
-           AND (pla.starts_at IS NULL OR pla.starts_at <= $3)
-           AND (pla.ends_at IS NULL OR pla.ends_at >= $4)
-         ORDER BY pla.priority DESC LIMIT 1`,
-        [scope.type, scope.id, now, now]
-      );
-      if (assignments[0]) {
-        const { rows: priceRows } = await db.query(
-          `SELECT price FROM price_list_items
-           WHERE price_list_id = $1 AND product_id = $2
-             AND (variant_id = $3 OR ($3 IS NULL AND variant_id IS NULL))
-           ORDER BY min_qty ASC LIMIT 1`,
-          [assignments[0].price_list_id, productId, variantId || null]
-        );
-        if (priceRows[0]) {
-          return { price: Number(priceRows[0].price), source: `assignment:${scope.type}`, price_list_id: assignments[0].price_list_id };
-        }
-      }
-    } catch (_) {}
-  }
-
-  // Customer's direct price_list_id
-  if (customerId) {
-    try {
-      const { rows } = await db.query(
-        "SELECT price_list_id FROM customers WHERE id = $1 AND price_list_id IS NOT NULL", [customerId]
-      );
-      if (rows[0]) {
-        const { rows: priceRows } = await db.query(
-          `SELECT price FROM price_list_items
-           WHERE price_list_id = $1 AND product_id = $2
-             AND (variant_id = $3 OR ($3 IS NULL AND variant_id IS NULL))
-           ORDER BY min_qty ASC LIMIT 1`,
-          [rows[0].price_list_id, productId, variantId || null]
-        );
-        if (priceRows[0]) {
-          return { price: Number(priceRows[0].price), source: "customer_price_list", price_list_id: rows[0].price_list_id };
-        }
-      }
-    } catch (_) {}
-  }
-
-  // Base price fallback
-  const { rows } = await db.query(
-    `SELECT p.price, pv.price AS variant_price
-     FROM products p LEFT JOIN product_variants pv ON pv.id = $2 AND pv.product_id = p.id
-     WHERE p.id = $1`,
-    [productId, variantId]
-  );
-  const base = rows[0]
-    ? (rows[0].variant_price != null ? Number(rows[0].variant_price) : Number(rows[0].price))
-    : 0;
-  return { price: base, source: "base_price", price_list_id: null };
-}
-
+// resolvePriceForContext moved to services/pricing.js (shared with the POS
+// /api/price-resolve route and the field-rep price quote) — re-exported here
+// for backward compatibility.
 module.exports = { calculateQuote, resolvePriceForContext };

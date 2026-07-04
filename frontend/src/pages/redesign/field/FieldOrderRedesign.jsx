@@ -149,6 +149,51 @@ export default function FieldOrderRedesign() {
     // the dep is value-equal across renders.
   }, [cartItems.map((c) => `${c.id}:${c.quantity}:${c.price}`).join(","), products.length]);
 
+  // Shared pricing cascade — resolve the buyer's negotiated price for each
+  // cart line (customer/group price lists, qty breaks) via the field-scoped
+  // quote endpoint. Debounced like the promo quote above; deps deliberately
+  // exclude price so applying resolved prices doesn't re-fire this effect
+  // (the promo quote re-fires on price change and picks the new base up).
+  useEffect(() => {
+    if (!cartItems.length) return undefined;
+    const key = cartItems.map((c) => `${c.id}:${c.quantity}`).join(",");
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api.post("/api/field/price-quote", {
+          customer_id: Number(customer_id),
+          items: cartItems.map((it) => ({
+            product_id: Number(it.id),
+            quantity: Number(it.quantity || 0),
+          })),
+        });
+        const priceMap = new Map(
+          (data?.prices || [])
+            .filter((p) => p.source !== "not_found")
+            .map((p) => [Number(p.product_id), Number(p.unit_price)])
+        );
+        setCart((c) => {
+          // Ignore stale responses — cart changed while the quote ran.
+          const nowKey = Object.values(c).map((x) => `${x.id}:${x.quantity}`).join(",");
+          if (nowKey !== key) return c;
+          let changed = false;
+          const next = { ...c };
+          for (const id of Object.keys(next)) {
+            const resolved = priceMap.get(Number(id));
+            if (resolved != null && Number(next[id].price) !== resolved) {
+              next[id] = { ...next[id], price: resolved };
+              changed = true;
+            }
+          }
+          return changed ? next : c;
+        });
+      } catch {
+        // Soft fail — base prices remain; backend still books the sale.
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItems.map((c) => `${c.id}:${c.quantity}`).join(","), customer_id]);
+
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return products.slice(0, 50);

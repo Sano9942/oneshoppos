@@ -44,6 +44,58 @@ module.exports = function registerFieldRoutes(app, deps) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // POST /api/field/price-quote — per-customer prices for the rep's cart
+  //
+  // The rep app showed base prices only — a wholesale buyer's negotiated
+  // price list never applied on field orders (plan-01 trap 6, field half).
+  // Resolves each line through the shared cascade in services/pricing.js
+  // (same precedence as POS + storefront). Gated by the Field Rep role's
+  // own flag+perm pair — the rep cannot read /api/price-lists directly
+  // (manage_inventory) and phase2_outlet_pricing may be off, so the
+  // /api/price-resolve route is not usable from this surface.
+  //
+  // Body: { customer_id, items: [{ product_id, variant_id?, quantity }] }
+  // Returns: { prices: [{ product_id, variant_id, unit_price, source }] }
+  // ─────────────────────────────────────────────────────────────────────
+  app.post(
+    "/api/field/price-quote",
+    requireFeature("wholesale_field_sales"),
+    requirePerm("manage_field_sales"),
+    async (req, res) => {
+      const { customer_id, items } = req.body || {};
+      if (!customer_id || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "customer_id and items are required" });
+      }
+      if (items.length > 200) {
+        return res.status(400).json({ error: "Too many items (max 200)" });
+      }
+      try {
+        const { resolvePriceForContext } = require("../services/pricing");
+        const prices = [];
+        for (const it of items) {
+          const productId = Number(it.product_id);
+          if (!Number.isInteger(productId) || productId <= 0) continue;
+          const resolved = await resolvePriceForContext(db, {
+            productId,
+            variantId: it.variant_id ? Number(it.variant_id) : null,
+            qty: Number(it.quantity) || 1,
+            customerId: Number(customer_id),
+          });
+          prices.push({
+            product_id: productId,
+            variant_id: it.variant_id ? Number(it.variant_id) : null,
+            unit_price: resolved.price,
+            source: resolved.source,
+          });
+        }
+        res.json({ prices });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
   // GET /api/field/route/today — rep view
   // ─────────────────────────────────────────────────────────────────────
   app.get(
