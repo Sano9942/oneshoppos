@@ -7250,6 +7250,265 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 100,
+    description:
+      "F06 scheduling engine activation — appointment↔sale link, class sessions/bookings deltas, waitlist offer flow, appointment overlap exclusion constraint, ICS feed token, phase4_appointments_resources flag",
+    up: async (client) => {
+      // 1. btree_gist — needed for the appointments overlap EXCLUDE constraint
+      //    (integer equality inside a gist index). DB-global; first schema to
+      //    run this installs it, later schemas no-op. Installed into public so
+      //    the opclass resolves under every tenant's "<schema>, public" path.
+      try {
+        await client.query("SAVEPOINT v100_btree_gist");
+        await client.query("CREATE EXTENSION IF NOT EXISTS btree_gist SCHEMA public");
+        await client.query("RELEASE SAVEPOINT v100_btree_gist");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_btree_gist");
+        console.warn(`[migrate-pg v100] btree_gist extension skipped: ${err.message}`);
+      }
+
+      // 2. appointment↔sale checkout link (salon P0 — revenue attribution for
+      //    every appointment vertical). Both directions: sales.appointment_id is
+      //    stamped inside the sale transaction; appointments.sale_id +
+      //    status='completed' are set right after commit.
+      try {
+        await client.query("SAVEPOINT v100_appt_sale_link");
+        await client.query(
+          "ALTER TABLE sales ADD COLUMN IF NOT EXISTS appointment_id INTEGER REFERENCES appointments(id)"
+        );
+        await client.query(
+          "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS sale_id INTEGER REFERENCES sales(id)"
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_sales_appointment ON sales(appointment_id)
+           WHERE appointment_id IS NOT NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v100_appt_sale_link");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_appt_sale_link");
+        console.warn(`[migrate-pg v100] appointment↔sale link skipped: ${err.message}`);
+      }
+
+      // 3. booking_services.product_id — maps a bookable service to the POS
+      //    product that represents it at checkout (services ring up as products;
+      //    the POS appointment prefill uses this to build the cart line).
+      try {
+        await client.query("SAVEPOINT v100_service_product");
+        await client.query(
+          "ALTER TABLE booking_services ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id)"
+        );
+        await client.query("RELEASE SAVEPOINT v100_service_product");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_service_product");
+        console.warn(`[migrate-pg v100] booking_services.product_id skipped: ${err.message}`);
+      }
+
+      // 4. appointments.source CHECK gains 'kiosk' (V07 member check-in kiosk
+      //    books through the same engine — extend now while the table is open).
+      try {
+        await client.query("SAVEPOINT v100_appt_source");
+        await client.query(
+          "ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_source_check"
+        );
+        await client.query(
+          `ALTER TABLE appointments ADD CONSTRAINT appointments_source_check
+           CHECK (source IN ('admin','public','import','portal','kiosk'))`
+        );
+        await client.query("RELEASE SAVEPOINT v100_appt_source");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_appt_source");
+        console.warn(`[migrate-pg v100] appointments source CHECK skipped: ${err.message}`);
+      }
+
+      // 5. Overlap exclusion constraint — the DB-level backstop for the
+      //    booking double-book race (completion-03 verdict). The service layer
+      //    also takes a transaction-scoped advisory lock (friendly 409), but
+      //    this guarantees correctness for ANY write path (e.g. admin PUT
+      //    reassigning employee_id, which never ran checkOverlap). Half-open
+      //    tstzrange means back-to-back appointments never conflict. Skipped
+      //    with a warning if existing rows already overlap — the advisory lock
+      //    still protects new writes on such tenants.
+      try {
+        await client.query("SAVEPOINT v100_appt_excl");
+        const { rows: hasConstraint } = await client.query(
+          `SELECT 1 FROM pg_constraint c
+           JOIN pg_class t ON t.oid = c.conrelid
+           JOIN pg_namespace n ON n.oid = t.relnamespace
+           WHERE c.conname = 'excl_appointments_employee_overlap'
+             AND t.relname = 'appointments' AND n.nspname = current_schema()`
+        );
+        if (!hasConstraint.length) {
+          await client.query(
+            `ALTER TABLE appointments ADD CONSTRAINT excl_appointments_employee_overlap
+             EXCLUDE USING gist (employee_id WITH =, tstzrange(start_at, end_at) WITH &&)
+             WHERE (employee_id IS NOT NULL AND status NOT IN ('cancelled','no_show'))`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v100_appt_excl");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_appt_excl");
+        console.warn(`[migrate-pg v100] appointments overlap exclusion skipped: ${err.message}`);
+      }
+
+      // 6. class_sessions deltas — recurrence (simple 'weekly:0,2,4' day-list
+      //    encoding materialized ahead at save time, not RRULE), per-session
+      //    price, notes, and the parent pointer occurrences link back to.
+      try {
+        await client.query("SAVEPOINT v100_class_sessions");
+        await client.query(`
+          ALTER TABLE class_sessions
+            ADD COLUMN IF NOT EXISTS recurrence_rule TEXT,
+            ADD COLUMN IF NOT EXISTS recurrence_parent_id INTEGER REFERENCES class_sessions(id) ON DELETE SET NULL,
+            ADD COLUMN IF NOT EXISTS price NUMERIC(12,2),
+            ADD COLUMN IF NOT EXISTS notes TEXT,
+            ADD COLUMN IF NOT EXISTS cancellation_reason TEXT
+        `);
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_sessions_start ON class_sessions(start_at)"
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_sessions_parent ON class_sessions(recurrence_parent_id) WHERE recurrence_parent_id IS NOT NULL"
+        );
+        await client.query("RELEASE SAVEPOINT v100_class_sessions");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_class_sessions");
+        console.warn(`[migrate-pg v100] class_sessions deltas skipped: ${err.message}`);
+      }
+
+      // 7. class_session_bookings deltas — booking source, walk-in contact
+      //    fields (public bookings without a customer record resolve to a
+      //    customer row in the service, but the columns keep the raw input),
+      //    F02 package redemption stub (plain INTEGER — customer_packages
+      //    doesn't exist yet; F02 adds the FK), and the anti-double-book
+      //    uniqueness. Partial unique (status <> 'cancelled') so a member who
+      //    cancels can rebook the same session.
+      try {
+        await client.query("SAVEPOINT v100_class_bookings");
+        await client.query(`
+          ALTER TABLE class_session_bookings
+            ADD COLUMN IF NOT EXISTS booked_via TEXT NOT NULL DEFAULT 'admin',
+            ADD COLUMN IF NOT EXISTS customer_package_id INTEGER,
+            ADD COLUMN IF NOT EXISTS customer_name TEXT,
+            ADD COLUMN IF NOT EXISTS customer_phone TEXT,
+            ADD COLUMN IF NOT EXISTS customer_email TEXT,
+            ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
+        `);
+        await client.query(
+          "ALTER TABLE class_session_bookings DROP CONSTRAINT IF EXISTS class_session_bookings_booked_via_check"
+        );
+        await client.query(
+          `ALTER TABLE class_session_bookings ADD CONSTRAINT class_session_bookings_booked_via_check
+           CHECK (booked_via IN ('admin','portal','public','kiosk'))`
+        );
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_class_booking_active
+           ON class_session_bookings(class_session_id, customer_id)
+           WHERE status <> 'cancelled' AND customer_id IS NOT NULL`
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_bookings_session ON class_session_bookings(class_session_id, status)"
+        );
+        await client.query("RELEASE SAVEPOINT v100_class_bookings");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_class_bookings");
+        console.warn(`[migrate-pg v100] class_session_bookings deltas skipped: ${err.message}`);
+      }
+
+      // 8. Waitlist offer flow — class linkage, offer window, the public claim
+      //    token the F05 notification link carries, and email for the email
+      //    channel. status CHECK gains 'cancelled' (admin removal ≠ 'expired').
+      try {
+        await client.query("SAVEPOINT v100_waitlist");
+        await client.query(`
+          ALTER TABLE appointment_waitlist_entries
+            ADD COLUMN IF NOT EXISTS class_session_id INTEGER REFERENCES class_sessions(id) ON DELETE CASCADE,
+            ADD COLUMN IF NOT EXISTS offered_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS offer_expires_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS claim_token TEXT,
+            ADD COLUMN IF NOT EXISTS customer_email TEXT
+        `);
+        await client.query(
+          "ALTER TABLE appointment_waitlist_entries DROP CONSTRAINT IF EXISTS appointment_waitlist_entries_status_check"
+        );
+        await client.query(
+          `ALTER TABLE appointment_waitlist_entries ADD CONSTRAINT appointment_waitlist_entries_status_check
+           CHECK (status IN ('waiting','offered','booked','expired','cancelled'))`
+        );
+        await client.query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS uq_waitlist_claim_token ON appointment_waitlist_entries(claim_token) WHERE claim_token IS NOT NULL"
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_waitlist_class_status ON appointment_waitlist_entries(class_session_id, status)"
+        );
+        await client.query("RELEASE SAVEPOINT v100_waitlist");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_waitlist");
+        console.warn(`[migrate-pg v100] waitlist deltas skipped: ${err.message}`);
+      }
+
+      // 9. ICS feed token — calendar_sync_accounts finally gets a feature:
+      //    per-employee one-way ICS feed (signed random token in the URL).
+      //    Full Google OAuth sync stays unbuilt; the dead flag is deleted below.
+      try {
+        await client.query("SAVEPOINT v100_ics_feed");
+        await client.query(
+          "ALTER TABLE calendar_sync_accounts ADD COLUMN IF NOT EXISTS feed_token TEXT"
+        );
+        await client.query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS uq_calendar_feed_token ON calendar_sync_accounts(feed_token) WHERE feed_token IS NOT NULL"
+        );
+        await client.query("RELEASE SAVEPOINT v100_ics_feed");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_ics_feed");
+        console.warn(`[migrate-pg v100] calendar feed token skipped: ${err.message}`);
+      }
+
+      // 10. Flags — seed phase4_appointments_resources (default OFF; vertical
+      //     presets flip it), delete the never-implemented
+      //     phase4_google_calendar_sync (replaced by the ICS feed above).
+      try {
+        await client.query("SAVEPOINT v100_flags");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('phase4_appointments_resources', false,
+               'F06 — bookable resources (chairs/beds/bays) required alongside staff availability')
+             ON CONFLICT (key) DO NOTHING`
+          );
+          await client.query(
+            "DELETE FROM feature_flags WHERE key = 'phase4_google_calendar_sync'"
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v100_flags");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_flags");
+        console.warn(`[migrate-pg v100] flags skipped: ${err.message}`);
+      }
+
+      // 11. Default F06 notification rules (inert until customer_notifications
+      //     flag is on — same F05 pattern as the repair-ticket seeds).
+      try {
+        await client.query("SAVEPOINT v100_notif_rules");
+        await client.query(`
+          INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+            ('class_session.cancelled', 'sms',   'class_cancelled', true),
+            ('class_session.cancelled', 'email', 'class_cancelled', true),
+            ('waitlist.offer',          'sms',   'waitlist_offer',  true),
+            ('waitlist.offer',          'email', 'waitlist_offer',  true)
+          ON CONFLICT (event, channel) DO NOTHING
+        `);
+        await client.query("RELEASE SAVEPOINT v100_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_notif_rules");
+        console.warn(`[migrate-pg v100] F06 notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

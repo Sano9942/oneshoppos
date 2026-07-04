@@ -81,7 +81,7 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_appointments: false,
   phase4_appointments_waitlists: false,
   phase4_appointments_classes: false,
-  phase4_google_calendar_sync: false,
+  phase4_appointments_resources: false,
   // Mode-gated (service_projects mode).
   phase4_service_projects: false,
   phase4_service_contracts: false,

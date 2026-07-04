@@ -2378,7 +2378,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log'),
   ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
   ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility'),
-  ('customer_notifications', false, 'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules')
+  ('customer_notifications', false, 'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules'),
+  ('phase4_appointments_resources', false, 'F06 — bookable resources (chairs/beds/bays) required alongside staff availability')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -3573,6 +3574,9 @@ CREATE TABLE IF NOT EXISTS booking_services (
   is_active BOOLEAN DEFAULT TRUE,
   requires_confirmation BOOLEAN DEFAULT FALSE,
   max_advance_days INTEGER DEFAULT 90,
+  -- v100 (F06): the POS product that represents this service at checkout —
+  -- the appointment→POS prefill builds the cart line from it.
+  product_id INTEGER REFERENCES products(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -3654,15 +3658,44 @@ CREATE TABLE IF NOT EXISTS appointments (
   customer_phone TEXT,
   customer_email TEXT,
   notes TEXT,
-  source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import','portal')),
+  source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import','portal','kiosk')),
   cancelled_at TIMESTAMPTZ,
   cancellation_reason TEXT,
+  -- v100 (F06): backlink set at POS checkout (sales.appointment_id is the
+  -- forward link — added by ALTER below since sales is created earlier).
+  sale_id INTEGER REFERENCES sales(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_appointments_employee_time ON appointments(employee_id, start_at, end_at) WHERE status NOT IN ('cancelled','no_show');
 CREATE INDEX IF NOT EXISTS idx_appointments_customer ON appointments(customer_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+
+-- v100 (F06): appointment↔sale forward link (appointments is created after
+-- sales, so the FK lands here — same pattern as the v88 customer_invoice_id note).
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS appointment_id INTEGER REFERENCES appointments(id);
+CREATE INDEX IF NOT EXISTS idx_sales_appointment ON sales(appointment_id) WHERE appointment_id IS NOT NULL;
+
+-- v100 (F06): DB-level double-book backstop. The booking service also takes a
+-- transaction-scoped advisory lock for a friendly 409, but this constraint
+-- guarantees one-winner semantics for ANY write path. Half-open tstzrange —
+-- back-to-back appointments never conflict. Guarded: skipped with a NOTICE when
+-- btree_gist can't install (constraint is a hardening layer, not load-bearing
+-- for correctness of the locked service path).
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS btree_gist SCHEMA public;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'btree_gist unavailable: %', SQLERRM;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE appointments ADD CONSTRAINT excl_appointments_employee_overlap
+    EXCLUDE USING gist (employee_id WITH =, tstzrange(start_at, end_at) WITH &&)
+    WHERE (employee_id IS NOT NULL AND status NOT IN ('cancelled','no_show'));
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_table THEN NULL;
+  WHEN OTHERS THEN RAISE NOTICE 'appointments overlap exclusion skipped: %', SQLERRM;
+END $$;
 
 CREATE TABLE IF NOT EXISTS appointment_segments (
   id SERIAL PRIMARY KEY,
@@ -3687,21 +3720,6 @@ CREATE TABLE IF NOT EXISTS appointment_reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_appointment_reminders_scheduled ON appointment_reminders(scheduled_for) WHERE status = 'pending';
 
-CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
-  id SERIAL PRIMARY KEY,
-  service_id INTEGER NOT NULL REFERENCES booking_services(id),
-  customer_id INTEGER REFERENCES customers(id),
-  employee_id INTEGER REFERENCES employees(id),
-  preferred_date DATE,
-  preferred_time_start TIME,
-  preferred_time_end TIME,
-  status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','offered','booked','expired')),
-  customer_name TEXT,
-  customer_phone TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS class_sessions (
   id SERIAL PRIMARY KEY,
   service_id INTEGER NOT NULL REFERENCES booking_services(id),
@@ -3711,9 +3729,19 @@ CREATE TABLE IF NOT EXISTS class_sessions (
   end_at TIMESTAMPTZ NOT NULL,
   max_capacity INTEGER NOT NULL DEFAULT 10,
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','in_progress','completed','cancelled')),
+  -- v100 (F06): recurrence — simple 'weekly:0,2,4' day-list encoding (JS
+  -- getDay numbers), occurrences materialized at save time; occurrences point
+  -- back via recurrence_parent_id. Not RRULE on purpose.
+  recurrence_rule TEXT,
+  recurrence_parent_id INTEGER REFERENCES class_sessions(id) ON DELETE SET NULL,
+  price NUMERIC(12,2),
+  notes TEXT,
+  cancellation_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_class_sessions_start ON class_sessions(start_at);
+CREATE INDEX IF NOT EXISTS idx_class_sessions_parent ON class_sessions(recurrence_parent_id) WHERE recurrence_parent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS class_session_bookings (
   id SERIAL PRIMARY KEY,
@@ -3721,8 +3749,45 @@ CREATE TABLE IF NOT EXISTS class_session_bookings (
   customer_id INTEGER REFERENCES customers(id),
   appointment_id INTEGER REFERENCES appointments(id),
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed','cancelled','no_show')),
+  -- v100 (F06): booking source + walk-in contact snapshot + F02 package
+  -- redemption stub (plain INTEGER — customer_packages lands with F02).
+  booked_via TEXT NOT NULL DEFAULT 'admin' CHECK (booked_via IN ('admin','portal','public','kiosk')),
+  customer_package_id INTEGER,
+  customer_name TEXT,
+  customer_phone TEXT,
+  customer_email TEXT,
+  cancelled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Partial unique (not plain UNIQUE) so a cancelled member can rebook.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_class_booking_active
+  ON class_session_bookings(class_session_id, customer_id)
+  WHERE status <> 'cancelled' AND customer_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_class_bookings_session ON class_session_bookings(class_session_id, status);
+
+CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  customer_id INTEGER REFERENCES customers(id),
+  employee_id INTEGER REFERENCES employees(id),
+  preferred_date DATE,
+  preferred_time_start TIME,
+  preferred_time_end TIME,
+  status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','offered','booked','expired','cancelled')),
+  customer_name TEXT,
+  customer_phone TEXT,
+  -- v100 (F06): offer flow — class linkage, offer window, public claim token
+  -- (carried by the F05 notification link), email channel recipient.
+  class_session_id INTEGER REFERENCES class_sessions(id) ON DELETE CASCADE,
+  offered_at TIMESTAMPTZ,
+  offer_expires_at TIMESTAMPTZ,
+  claim_token TEXT,
+  customer_email TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_waitlist_claim_token ON appointment_waitlist_entries(claim_token) WHERE claim_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_waitlist_class_status ON appointment_waitlist_entries(class_session_id, status);
 
 CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
   id SERIAL PRIMARY KEY,
@@ -3734,9 +3799,12 @@ CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
   calendar_id TEXT,
   sync_enabled BOOLEAN DEFAULT FALSE,
   last_synced_at TIMESTAMPTZ,
+  -- v100 (F06): per-employee one-way ICS feed token (provider='ics').
+  feed_token TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_calendar_feed_token ON calendar_sync_accounts(feed_token) WHERE feed_token IS NOT NULL;
 
 -- ═══════════════════════════════════════════════════════════════
 -- Phase 4C — Service Workspace
@@ -4128,6 +4196,14 @@ INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
   ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
   ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
   ('appointment.reminder',              'sms',   'appointment_reminder', true)
+ON CONFLICT (event, channel) DO NOTHING;
+
+-- Default F06 scheduling notification rules (same inert-until-flag pattern).
+INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+  ('class_session.cancelled', 'sms',   'class_cancelled', true),
+  ('class_session.cancelled', 'email', 'class_cancelled', true),
+  ('waitlist.offer',          'sms',   'waitlist_offer',  true),
+  ('waitlist.offer',          'email', 'waitlist_offer',  true)
 ON CONFLICT (event, channel) DO NOTHING;
 
 -- ── M7 Rentals (migration v36) ──────────────────────────────────────
