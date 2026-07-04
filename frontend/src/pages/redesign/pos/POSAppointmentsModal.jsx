@@ -92,7 +92,12 @@ export default function POSAppointmentsModal() {
                   {a.customer_display_name || a.customer_name || "Walk-in"}
                   {a.employee_name ? <span className="text-slate-400"> · with {a.employee_name}</span> : null}
                 </div>
-                {!a.service_product_id && (
+                {Array.isArray(a.segments) && a.segments.length > 0 && (
+                  <div className="text-[10px] text-indigo-600 mt-0.5">
+                    {a.segments.length} services: {a.segments.map((s) => s.service_name).join(" + ")}
+                  </div>
+                )}
+                {!a.service_product_id && !(Array.isArray(a.segments) && a.segments.some((s) => s.product_id)) && (
                   <div className="text-[10px] text-amber-600 flex items-center gap-1 mt-0.5">
                     <AlertTriangle size={10} className="shrink-0" />
                     No POS product linked to this service — add lines manually

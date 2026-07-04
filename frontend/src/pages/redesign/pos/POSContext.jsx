@@ -739,7 +739,28 @@ export const POSProvider = ({ children }) => {
 
   // ── F06: prefill cart from a "today's appointments" row ────────────────
   const loadAppointmentToCart = useCallback((appt) => {
-    if (appt.service_product_id) {
+    // Multi-segment visit (color+cut): one line per segment, each with its
+    // own provider so commissions attribute to the stylist who did the work.
+    const segments = Array.isArray(appt.segments) && appt.segments.length ? appt.segments : null;
+    if (segments) {
+      const lines = segments.filter((s) => s.product_id).map((s) => ({
+        id: s.product_id,
+        variant_id: null,
+        name: s.service_name || s.product_name,
+        quantity: 1,
+        price: Number(s.service_price ?? s.product_price ?? 0),
+        originalPrice: Number(s.product_price ?? s.service_price ?? 0),
+        effectiveTaxRate: s.product_tax_rate != null ? Number(s.product_tax_rate)
+          : s.product_gst != null ? Number(s.product_gst) : 0,
+        effectiveTaxName: s.product_tax_name || (s.product_gst != null ? "GST" : "No Tax"),
+        availableStock: 99999,
+        staff_id: s.employee_id || null,
+      }));
+      if (lines.length) cartHook.setCart((prev) => [...lines, ...prev]);
+      if (lines.length < segments.length) {
+        showNotice("Some services have no POS product linked — add those lines manually.");
+      }
+    } else if (appt.service_product_id) {
       const line = {
         id: appt.service_product_id,
         variant_id: null,

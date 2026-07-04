@@ -5,9 +5,10 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input } from "../../ui/primitives";
-import { Plus, Pencil, Clock, Users, X, Copy, ExternalLink, Link2 } from "lucide-react";
+import { Plus, Pencil, Clock, Users, X, Copy, ExternalLink, Link2, Armchair } from "lucide-react";
 import { api } from "../../api";
 import { readTenantSlug } from "../../auth/authStore";
+import { API_BASE } from "../../config";
 
 export default function AppointmentServicesRedesign() {
   const { authHeaders } = useAuth();
@@ -20,7 +21,12 @@ export default function AppointmentServicesRedesign() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", duration_minutes: 30, padding_minutes: 0, price: 0, requires_confirmation: false, max_advance_days: 30, staff_ids: [] });
+  const [form, setForm] = useState({ name: "", description: "", duration_minutes: 30, padding_minutes: 0, price: 0, requires_confirmation: false, max_advance_days: 30, staff_ids: [], resource_ids: [] });
+
+  // F06 resources (chairs / beds / bays) — flag-gated section state
+  const [resources, setResources] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+  const [resourceForm, setResourceForm] = useState({ name: "", outlet_id: "", resource_type: "chair" });
 
   const loadServices = useCallback(async () => {
     setLoading(true);
@@ -38,7 +44,26 @@ export default function AppointmentServicesRedesign() {
     } catch {}
   }, []);
 
+  const loadResources = useCallback(async () => {
+    try {
+      const data = await api.get("/api/booking-resources");
+      setResources(data.resources || []);
+    } catch { /* flag off or feature unavailable — section hides itself */ }
+  }, []);
+
+  const loadOutlets = useCallback(async () => {
+    try {
+      const data = await api.get("/api/outlets");
+      setOutlets(data.outlets || data || []);
+    } catch {}
+  }, []);
+
   useEffect(() => { loadServices(); loadEmployees(); }, [loadServices, loadEmployees]);
+
+  const resourcesEnabled = !!flags.phase4_appointments_resources;
+  useEffect(() => {
+    if (resourcesEnabled) { loadResources(); loadOutlets(); }
+  }, [resourcesEnabled, loadResources, loadOutlets]);
 
   const tenantSlug = useMemo(() => readTenantSlug(), []);
   const publicBookingUrl = useMemo(() => {
@@ -75,7 +100,7 @@ export default function AppointmentServicesRedesign() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", description: "", duration_minutes: 30, padding_minutes: 0, price: 0, requires_confirmation: false, max_advance_days: 30, staff_ids: [] });
+    setForm({ name: "", description: "", duration_minutes: 30, padding_minutes: 0, price: 0, requires_confirmation: false, max_advance_days: 30, staff_ids: [], resource_ids: [] });
     setShowModal(true);
   };
 
@@ -86,6 +111,7 @@ export default function AppointmentServicesRedesign() {
       padding_minutes: svc.padding_minutes || 0, price: Number(svc.price) || 0,
       requires_confirmation: svc.requires_confirmation, max_advance_days: svc.max_advance_days || 30,
       staff_ids: (svc.staff || []).map(s => s.id),
+      resource_ids: (svc.resources || []).map(r => r.id),
     });
     setShowModal(true);
   };
@@ -97,6 +123,13 @@ export default function AppointmentServicesRedesign() {
     }));
   };
 
+  const toggleResource = (id) => {
+    setForm(prev => ({
+      ...prev,
+      resource_ids: prev.resource_ids.includes(id) ? prev.resource_ids.filter(x => x !== id) : [...prev.resource_ids, id],
+    }));
+  };
+
   const save = async () => {
     try {
       const payload = {
@@ -105,15 +138,50 @@ export default function AppointmentServicesRedesign() {
         price: Number(form.price), requires_confirmation: form.requires_confirmation,
         max_advance_days: Number(form.max_advance_days), staff_ids: form.staff_ids,
       };
+      let serviceId = editing?.id;
       if (editing) {
         await api.put(`/api/booking-services/${editing.id}`, payload);
         toast.success("Service updated");
       } else {
-        await api.post("/api/booking-services", payload);
+        const created = await api.post("/api/booking-services", payload);
+        serviceId = created?.id;
         toast.success("Service created");
+      }
+      if (resourcesEnabled && serviceId) {
+        await api.put(`/api/booking-services/${serviceId}/resources`, { resource_ids: form.resource_ids });
       }
       setShowModal(false);
       loadServices();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const createResource = async () => {
+    try {
+      await api.post("/api/booking-resources", {
+        name: resourceForm.name,
+        outlet_id: Number(resourceForm.outlet_id),
+        resource_type: resourceForm.resource_type || "chair",
+      });
+      toast.success("Resource added");
+      setResourceForm({ name: "", outlet_id: resourceForm.outlet_id, resource_type: resourceForm.resource_type });
+      loadResources();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const toggleResourceActive = async (r) => {
+    try {
+      await api.put(`/api/booking-resources/${r.id}`, { is_active: !r.is_active });
+      loadResources();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  // F06 — mint (or fetch existing) a per-employee ICS feed and copy the URL.
+  const copyStaffFeed = async (emp) => {
+    try {
+      const data = await api.post(`/api/booking-staff/${emp.id}/ics-feed`, {});
+      const url = `${API_BASE}${data.feed_path}`;
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+      toast.success(`Calendar feed link for ${emp.name} copied — paste into Google/Apple Calendar as a URL subscription`);
     } catch (err) { toast.error(err.message); }
   };
 
@@ -214,6 +282,65 @@ export default function AppointmentServicesRedesign() {
         </div>
       )}
 
+      {/* F06 — per-staff ICS calendar feeds */}
+      {employees.length > 0 && (
+        <SectionCard className="mt-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-(--ui-text) mb-1">
+            <ExternalLink className="w-4 h-4" /> Staff calendar feeds
+          </div>
+          <p className="text-xs text-(--ui-text-muted) mb-3">
+            Each staff member can subscribe to their appointments from Google or Apple Calendar. Copy their feed link and add it as a calendar-by-URL subscription.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {employees.map(emp => (
+              <Button key={emp.id} size="xs" variant="ghost" onClick={() => copyStaffFeed(emp)}>
+                <Copy className="w-3 h-3 mr-1" /> {emp.name}
+              </Button>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* F06 — Bookable resources (chairs / beds / bays) */}
+      {resourcesEnabled && (
+        <SectionCard className="mt-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-(--ui-text) mb-1">
+            <Armchair className="w-4 h-4" /> Resources
+          </div>
+          <p className="text-xs text-(--ui-text-muted) mb-3">
+            Chairs, beds, or bays a service occupies. A service linked to resources is only bookable when one is free — assigned automatically at booking.
+          </p>
+          {resources.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {resources.map(r => (
+                <span key={r.id} className={`inline-flex items-center gap-2 px-3 py-1 text-xs rounded-full border ${r.is_active ? "border-(--ui-border) text-(--ui-text)" : "border-(--ui-border) text-(--ui-text-muted) line-through"}`}>
+                  {r.name}
+                  <span className="text-(--ui-text-muted)">{r.resource_type}{r.outlet_name ? ` · ${r.outlet_name}` : ""}</span>
+                  <button type="button" onClick={() => toggleResourceActive(r)} className="text-(--ui-text-muted) hover:text-(--ui-text)" title={r.is_active ? "Deactivate" : "Activate"}>
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input value={resourceForm.name} onChange={e => setResourceForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Chair 1" className="sm:max-w-40" />
+            <Input value={resourceForm.resource_type} onChange={e => setResourceForm(p => ({ ...p, resource_type: e.target.value }))} placeholder="Type (chair, bed, bay)" className="sm:max-w-40" />
+            <select
+              value={resourceForm.outlet_id}
+              onChange={e => setResourceForm(p => ({ ...p, outlet_id: e.target.value }))}
+              className="px-3 py-2 text-sm rounded-md border border-(--ui-border) bg-(--ui-surface) text-(--ui-text)"
+            >
+              <option value="">Outlet…</option>
+              {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <Button size="sm" onClick={createResource} disabled={!resourceForm.name || !resourceForm.outlet_id}>
+              <Plus className="w-4 h-4 mr-1" /> Add Resource
+            </Button>
+          </div>
+        </SectionCard>
+      )}
+
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
@@ -265,6 +392,21 @@ export default function AppointmentServicesRedesign() {
                       <button key={emp.id} type="button" onClick={() => toggleStaff(emp.id)}
                         className={`px-3 py-1 text-xs rounded-full border transition-colors ${form.staff_ids.includes(emp.id) ? "bg-(--ui-accent) text-white border-(--ui-accent)" : "border-(--ui-border) text-(--ui-text-muted) hover:border-(--ui-accent)"}`}>
                         {emp.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {resourcesEnabled && resources.filter(r => r.is_active).length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-(--ui-text) mb-1 block">Required Resources</label>
+                  <p className="text-xs text-(--ui-text-muted) mb-1">Bookings need any ONE of the selected resources free.</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {resources.filter(r => r.is_active).map(r => (
+                      <button key={r.id} type="button" onClick={() => toggleResource(r.id)}
+                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${form.resource_ids.includes(r.id) ? "bg-(--ui-accent) text-white border-(--ui-accent)" : "border-(--ui-border) text-(--ui-text-muted) hover:border-(--ui-accent)"}`}>
+                        {r.name}
                       </button>
                     ))}
                   </div>

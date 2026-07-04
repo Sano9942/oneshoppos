@@ -111,7 +111,7 @@ export default function AppointmentsCalendarRedesign() {
     dt.setHours(hour, 0, 0, 0);
     const isoStr = dt.toISOString().slice(0, 16);
     setCreateSlot({ day, hour });
-    setCreateForm({ service_id: "", employee_id: "", customer_name: "", start_at: isoStr, notes: "" });
+    setCreateForm({ service_id: "", employee_id: "", customer_name: "", start_at: isoStr, notes: "", segments: [] });
     loadFormData();
     setShowCreateModal(true);
   };
@@ -122,6 +122,14 @@ export default function AppointmentsCalendarRedesign() {
       if (!svc) { toast.error("Select a service"); return; }
       const startAt = new Date(createForm.start_at);
       const endAt = new Date(startAt.getTime() + svc.duration_minutes * 60000);
+      // F06 — extra services run back-to-back after the primary; backend
+      // computes windows and blocks each segment's staff.
+      const segments = (createForm.segments || [])
+        .filter(s => s.service_id)
+        .map(s => ({
+          service_id: Number(s.service_id),
+          employee_id: s.employee_id ? Number(s.employee_id) : undefined,
+        }));
       await api.post("/api/appointments", {
         service_id: Number(createForm.service_id),
         employee_id: createForm.employee_id ? Number(createForm.employee_id) : undefined,
@@ -130,6 +138,7 @@ export default function AppointmentsCalendarRedesign() {
         end_at: endAt.toISOString(),
         notes: createForm.notes || undefined,
         source: "admin",
+        segments: segments.length ? segments : undefined,
       });
       toast.success("Appointment created");
       setShowCreateModal(false);
@@ -139,7 +148,7 @@ export default function AppointmentsCalendarRedesign() {
 
   const updateStatus = async (id, status) => {
     try {
-      await api.put(`/appointments/${id}`, { status });
+      await api.put(`/api/appointments/${id}`, { status });
       toast.success(`Appointment ${status}`);
       setSelectedEvent(null);
       loadEvents();
@@ -275,6 +284,42 @@ export default function AppointmentsCalendarRedesign() {
                   {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
+
+              {/* F06 — extra services (segments) run back-to-back after the primary */}
+              {(createForm.segments || []).map((seg, i) => (
+                <div key={i} className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Then service</label>
+                    <select className="w-full rounded-lg border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm text-(--ui-text)"
+                      value={seg.service_id}
+                      onChange={e => setCreateForm(p => ({ ...p, segments: p.segments.map((s, j) => j === i ? { ...s, service_id: e.target.value } : s) }))}>
+                      <option value="">Select service</option>
+                      {services.filter(s => s.is_active !== false).map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}min)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">With</label>
+                    <select className="w-full rounded-lg border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm text-(--ui-text)"
+                      value={seg.employee_id}
+                      onChange={e => setCreateForm(p => ({ ...p, segments: p.segments.map((s, j) => j === i ? { ...s, employee_id: e.target.value } : s) }))}>
+                      <option value="">Any available</option>
+                      {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    </select>
+                  </div>
+                  <button type="button" className="text-(--ui-text-muted) hover:text-(--ui-text) pb-2"
+                    onClick={() => setCreateForm(p => ({ ...p, segments: p.segments.filter((_, j) => j !== i) }))}>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button type="button"
+                className="text-xs font-medium text-(--ui-accent) hover:underline"
+                onClick={() => setCreateForm(p => ({ ...p, segments: [...(p.segments || []), { service_id: "", employee_id: "" }] }))}>
+                + Add service
+              </button>
+
               <div>
                 <label className="text-sm font-medium text-(--ui-text) mb-1 block">Start Time *</label>
                 <Input type="datetime-local" value={createForm.start_at} onChange={e => setCreateForm(p => ({ ...p, start_at: e.target.value }))} />

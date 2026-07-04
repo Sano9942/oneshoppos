@@ -196,12 +196,15 @@ async function offerForFreedAppointmentSlot(db, appt, notifyCtx) {
       `UPDATE appointment_waitlist_entries SET
          status = 'offered', offered_at = NOW(),
          offer_expires_at = NOW() + make_interval(mins => $4),
-         claim_token = $5, offered_start_at = $2, offered_employee_id = $3, updated_at = NOW()
+         claim_token = $5, offered_start_at = $2::timestamptz, offered_employee_id = $3, updated_at = NOW()
        WHERE id = (
          SELECT id FROM appointment_waitlist_entries
          WHERE class_session_id IS NULL AND status = 'waiting' AND service_id = $1
            AND (employee_id IS NULL OR employee_id IS NOT DISTINCT FROM $3)
-           AND (preferred_date IS NULL OR preferred_date = ($2)::date)
+           -- $2 must be cast timestamptz FIRST: a bare ($2)::date makes PG
+           -- type the parameter itself as date, truncating offered_start_at
+           -- to local midnight (claim would then book the wrong slot).
+           AND (preferred_date IS NULL OR preferred_date = ($2::timestamptz)::date)
          ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        ) RETURNING *`,
       [appt.service_id, appt.start_at, appt.employee_id || null, OFFER_WINDOW_MINUTES, newClaimToken()]

@@ -416,4 +416,81 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // GET /api/public/bookings/employee-feed.ics?tenant=slug&token=... —
+  // F06 per-employee subscription feed (the approved replacement for the
+  // deleted phase4_google_calendar_sync flag). The token IS the auth: minted
+  // per employee via POST /api/booking-staff/:id/ics-feed, revocable, unique.
+  app.get("/api/public/bookings/employee-feed.ics", publicBookingLimiter, async (req, res) => {
+    try {
+      const resolved = await resolvePublicTenantDb(req, deps);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const token = String(req.query.token || "");
+      if (token.length < 24) return res.status(401).json({ error: "Invalid feed token" });
+
+      const { rows: [account] } = await db.query(
+        `SELECT csa.employee_id, e.name AS employee_name
+         FROM calendar_sync_accounts csa
+         JOIN employees e ON e.id = csa.employee_id
+         WHERE csa.provider = 'ics' AND csa.sync_enabled = true AND csa.feed_token = $1`,
+        [token]
+      );
+      if (!account) return res.status(401).json({ error: "Invalid feed token" });
+
+      // Upcoming 60 days (plus yesterday, so in-flight events don't vanish
+      // mid-day). Direct bookings UNION segment assignments — a color+cut's
+      // second stylist sees their segment window, not the whole visit.
+      const { rows: events } = await db.query(
+        `SELECT 'appt-' || a.id AS uid_key, a.start_at, a.end_at, a.status,
+                bs.name AS service_name, COALESCE(c.name, a.customer_name) AS customer_name, a.notes
+         FROM appointments a
+         JOIN booking_services bs ON bs.id = a.service_id
+         LEFT JOIN customers c ON c.id = a.customer_id
+         WHERE a.employee_id = $1 AND a.status NOT IN ('cancelled','no_show')
+           AND a.start_at >= NOW() - INTERVAL '1 day' AND a.start_at < NOW() + INTERVAL '60 days'
+         UNION ALL
+         SELECT 'seg-' || s.id AS uid_key, s.start_at, s.end_at, pa.status,
+                sbs.name AS service_name, COALESCE(c.name, pa.customer_name) AS customer_name, pa.notes
+         FROM appointment_segments s
+         JOIN appointments pa ON pa.id = s.appointment_id
+         JOIN booking_services sbs ON sbs.id = s.service_id
+         LEFT JOIN customers c ON c.id = pa.customer_id
+         WHERE s.employee_id = $1 AND pa.status NOT IN ('cancelled','no_show')
+           AND s.start_at >= NOW() - INTERVAL '1 day' AND s.start_at < NOW() + INTERVAL '60 days'
+         ORDER BY start_at ASC
+         LIMIT 500`,
+        [account.employee_id]
+      );
+
+      let companyName = "";
+      let address = "";
+      try {
+        const { rows: [p] } = await db.query("SELECT company_name, address FROM company_profile LIMIT 1");
+        companyName = p?.company_name || "";
+        address = p?.address || "";
+      } catch { /* optional */ }
+
+      const host = (process.env.FRONTEND_URL || "sanopos.com").replace(/^https?:\/\//, "");
+      const { buildIcsFeed } = require("../utils/ics");
+      const ics = buildIcsFeed({
+        calName: companyName ? `${companyName} — ${account.employee_name}` : account.employee_name,
+        events: events.map((ev) => ({
+          uid: `${ev.uid_key}@${host}`,
+          start: ev.start_at,
+          end: ev.end_at,
+          summary: ev.customer_name ? `${ev.service_name} — ${ev.customer_name}` : ev.service_name,
+          description: ev.notes || undefined,
+          location: address || undefined,
+        })),
+      });
+
+      res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+      res.setHeader("Content-Disposition", 'inline; filename="appointments.ics"');
+      res.status(200).send(ics);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 };
