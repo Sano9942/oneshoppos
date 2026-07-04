@@ -112,6 +112,7 @@ const KDSRoute = lazy(() => import("../pages/KDSRoute"));
 const AppointmentServicesRoute = lazy(() => import("../pages/AppointmentServicesRoute"));
 const AppointmentsCalendarRoute = lazy(() => import("../pages/AppointmentsCalendarRoute"));
 const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
+const ClassTimetableRoute = lazy(() => import("../pages/ClassTimetableRoute"));
 const ProjectsRoute = lazy(() => import("../pages/ProjectsRoute"));
 const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
@@ -269,6 +270,7 @@ export const appRoutes = [
     <Route path="/appointments/services" element={perm("manage_bookings", wrap(AppointmentServicesRoute))} />
     <Route path="/appointments/calendar" element={perm("manage_bookings", wrap(AppointmentsCalendarRoute))} />
     <Route path="/appointments/bookings" element={perm("manage_bookings", wrap(AppointmentsRoute))} />
+    <Route path="/classes/timetable" element={perm("manage_bookings", wrap(ClassTimetableRoute))} />
     {/* Phase 4 — Service Workspace */}
     <Route path="/projects" element={perm("manage_projects", wrap(ProjectsRoute))} />
     <Route path="/contracts" element={perm("manage_contracts", wrap(ContractsRoute))} />

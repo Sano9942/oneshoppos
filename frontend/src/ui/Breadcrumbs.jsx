@@ -73,6 +73,8 @@ const LABELS = {
   services: "Services",
   calendar: "Calendar",
   bookings: "Bookings",
+  classes: "Classes",
+  timetable: "Timetable",
   projects: "Projects",
   contracts: "Contracts",
   "service-tickets": "Service Tickets",

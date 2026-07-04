@@ -207,6 +207,9 @@ const INDUSTRY_PRESETS = Object.freeze({
       customers: "Members",
       sale: "Enrollment",
       order: "Booking",
+      // F06 — class timetable vocabulary
+      class_singular: "Class",
+      timetable: "Class Timetable",
     },
     public_booking_labels: {
       booking_cta: "Book a session",
