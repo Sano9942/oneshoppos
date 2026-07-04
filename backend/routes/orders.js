@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 
 module.exports = function registerOrderRoutes(app, deps) {
   const {
@@ -1157,7 +1158,26 @@ module.exports = function registerOrderRoutes(app, deps) {
           });
         }
 
-        const subtotal = enrichedItems.reduce((sum, i) => sum + i.lineTotal, 0);
+        // v83 tax snapshot — resolved server-side via the shared cascade
+        // (services/tax-snapshot.js) so endless-aisle orders carry tax like
+        // POS sales and storefront checkouts instead of silently writing 0.
+        const taxSnapshot = await resolveTaxSnapshot(client, {
+          items: enrichedItems.map((i) => ({
+            productId: i.productId,
+            price: i.unitPrice,
+            quantity: i.qty,
+          })),
+          taxMode: (req.company && req.company.tax_mode) || "none",
+          outletId: deliveryMethod === "pickup" ? pickupOutletId : null,
+          tenantId: req.tenantId,
+        });
+        const grossTotal = enrichedItems.reduce((sum, i) => sum + i.lineTotal, 0);
+        // inclusive: tax is inside the sticker price — customer pays gross.
+        // exclusive: tax stacks on top of gross.
+        const subtotal = taxSnapshot.subtotal;
+        const grandTotal = taxSnapshot.taxInclusive
+          ? grossTotal
+          : grossTotal + taxSnapshot.taxTotal;
         const externalOrderId = `ea_${crypto.randomUUID()}`;
         const publicOrderToken = crypto.randomUUID();
 
@@ -1167,16 +1187,16 @@ module.exports = function registerOrderRoutes(app, deps) {
             source, external_order_id, customer_id, channel_id,
             delivery_method, pickup_outlet_id, shipping_address_json,
             customer_name_snapshot, customer_phone_snapshot, customer_email_snapshot,
-            currency, subtotal, grand_total,
+            currency, subtotal, tax_total, grand_total,
             payment_status, fulfillment_status, order_status,
             ordered_at, public_order_token
           ) VALUES (
             'pos_endless_aisle', $1, $2, $3,
             $4, $5, $6,
             $7, $8, $9,
-            'PKR', $10, $10,
+            'PKR', $10, $11, $12,
             'pending', 'unfulfilled', 'open',
-            NOW(), $11
+            NOW(), $13
           ) RETURNING id, external_order_id, public_order_token`,
           [
             externalOrderId,
@@ -1189,19 +1209,25 @@ module.exports = function registerOrderRoutes(app, deps) {
             customerContact?.phone || null,
             customerContact?.email || null,
             subtotal,
+            taxSnapshot.taxTotal,
+            grandTotal,
             publicOrderToken,
           ]
         );
 
-        // Create web_order_items
+        // Create web_order_items (per-line tax from the snapshot above)
         const insertedItems = [];
-        for (const item of enrichedItems) {
+        for (let idx = 0; idx < enrichedItems.length; idx++) {
+          const item = enrichedItems[idx];
+          const taxLine = taxSnapshot.lines[idx] || { amount: 0 };
           const { rows: [row] } = await client.query(
             `INSERT INTO web_order_items
-               (web_order_id, product_id, variant_id, sku, barcode, title, qty, unit_price, line_total)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               (web_order_id, product_id, variant_id, sku, barcode, title, qty, unit_price, tax, line_total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id`,
-            [order.id, item.productId, item.variantId, item.sku, item.barcode, item.title, item.qty, item.unitPrice, item.lineTotal]
+            [order.id, item.productId, item.variantId, item.sku, item.barcode, item.title, item.qty, item.unitPrice,
+             Number(taxLine.amount || 0),
+             taxSnapshot.taxInclusive ? item.lineTotal : item.lineTotal + Number(taxLine.amount || 0)]
           );
           insertedItems.push({ ...item, webOrderItemId: row.id });
         }

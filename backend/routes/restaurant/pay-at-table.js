@@ -12,6 +12,7 @@
 // Retail tenants and restaurants without the flag see 503.
 
 const crypto = require("crypto");
+const { resolveTaxSnapshot } = require("../../services/tax-snapshot");
 
 // Staff-facing routes (mounted AFTER tenant middleware).
 module.exports = function registerPayAtTableRoutes(app, deps) {
@@ -404,14 +405,49 @@ async function handleRestaurantPayWebhook(db, { gatewayRef, status, eventType, r
       }
 
       const totalAmount = Number(session.amount) + Number(session.tip_amount || 0);
+
+      // Fetch the draft lines up front so the v83 tax snapshot can be
+      // resolved before the sale row is written. cost_price_at_sale is
+      // captured via a lookup so menu engineering (Wave C) still gets
+      // accurate margins for these sales.
+      const { rows: items } = await client.query(
+        `SELECT doi.product_id, doi.variant_id, doi.quantity, doi.price,
+                COALESCE(p.cost_price, 0) AS cost_price, doi.seat_number
+         FROM draft_order_items doi
+         LEFT JOIN products p ON p.id = doi.product_id
+         WHERE doi.draft_order_id = $1`,
+        [session.draft_order_id]
+      );
+
+      // v83 per-line tax snapshot — shared cascade (services/tax-snapshot).
+      // Webhook context has no req/tenantId, so tax_mode comes straight from
+      // company_profile and outlet tax profiles are skipped (falls back to
+      // the product/category cascade).
+      let taxMode = "none";
+      try {
+        const { rows: [cp] } = await client.query(
+          "SELECT tax_mode FROM company_profile LIMIT 1"
+        );
+        if (cp?.tax_mode) taxMode = cp.tax_mode;
+      } catch { /* not-yet-migrated tenant */ }
+      const taxSnapshot = await resolveTaxSnapshot(client, {
+        items: items.map((it) => ({
+          productId: it.product_id,
+          price: it.price,
+          quantity: it.quantity,
+        })),
+        taxMode,
+      });
+
       // sales has no tip_amount/draft_order_id/order_context columns —
       // tips flow through tip_captures; draft_order linkage is persisted
       // in the notes + the tip_captures row.
       const { rows: [saleRow] } = await client.query(
         `INSERT INTO sales
           (total_amount, payment_method, outlet_id, employee_id, customer_id,
-           discount_amount, discount_type, notes, shift_id)
-         VALUES ($1, 'card', $2, $3, $4, 0, 'fixed', $5, $6)
+           discount_amount, discount_type, notes, shift_id,
+           subtotal, tax_total, tax_inclusive)
+         VALUES ($1, 'card', $2, $3, $4, 0, 'fixed', $5, $6, $7, $8, $9)
          RETURNING id`,
         [
           totalAmount,
@@ -420,6 +456,9 @@ async function handleRestaurantPayWebhook(db, { gatewayRef, status, eventType, r
           draft.customer_id || null,
           `Pay-at-table via SanoPay sandbox (session ${session.id}, draft_order ${session.draft_order_id})`,
           shiftId,
+          taxSnapshot.subtotal,
+          taxSnapshot.taxTotal,
+          taxSnapshot.taxInclusive,
         ]
       );
       const saleId = saleRow.id;
@@ -438,24 +477,19 @@ async function handleRestaurantPayWebhook(db, { gatewayRef, status, eventType, r
       }
 
       // Copy each draft_order_item into sale_items, carrying seat_number
-      // (Wave A). cost_price_at_sale is captured via a lookup so menu
-      // engineering (Wave C) still gets accurate margins for these sales.
-      const { rows: items } = await client.query(
-        `SELECT doi.product_id, doi.variant_id, doi.quantity, doi.price,
-                COALESCE(p.cost_price, 0) AS cost_price, doi.seat_number
-         FROM draft_order_items doi
-         LEFT JOIN products p ON p.id = doi.product_id
-         WHERE doi.draft_order_id = $1`,
-        [session.draft_order_id]
-      );
-      for (const it of items) {
+      // (Wave A) and the per-line v83 tax snapshot resolved above.
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const taxLine = taxSnapshot.lines[i] || { rate: 0, amount: 0, hsCode: null };
         await client.query(
           `INSERT INTO sale_items
             (sale_id, product_id, variant_id, quantity, price_at_sale,
-             cost_price_at_sale, seat_number)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             cost_price_at_sale, seat_number,
+             tax_rate_at_sale, tax_amount_at_sale, hs_code_at_sale)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [saleId, it.product_id, it.variant_id, it.quantity, it.price,
-           it.cost_price, it.seat_number]
+           it.cost_price, it.seat_number,
+           Number(taxLine.rate || 0), Number(taxLine.amount || 0), taxLine.hsCode || null]
         );
       }
 
