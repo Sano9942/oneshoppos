@@ -7139,6 +7139,117 @@ const MIGRATIONS = [
       await enableRlsOnPublicTables(client);
     },
   },
+  {
+    version: 99,
+    description:
+      "F05 customer notifications — notification_rules + customer_notifications tables, customer_notifications flag, default repair-ticket rules",
+    up: async (client) => {
+      // 1. notification_rules — event→channel→template map, per-rule enable toggle.
+      //    UNIQUE(event, channel) so the engine resolves a deterministic set of
+      //    channels per event and seeds/edits are idempotent.
+      try {
+        await client.query("SAVEPOINT v99_notif_rules");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS notification_rules (
+            id SERIAL PRIMARY KEY,
+            event TEXT NOT NULL,
+            channel TEXT NOT NULL CHECK (channel IN ('email','sms','whatsapp')),
+            template_key TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(event, channel)
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_notification_rules_event ON notification_rules(event)`
+        );
+        await client.query("RELEASE SAVEPOINT v99_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_notif_rules");
+        console.warn(`[migrate-pg v99] notification_rules skipped: ${err.message}`);
+      }
+
+      // 2. customer_notifications — one row per dispatch attempt (audit + truth log).
+      //    status reflects real provider outcome; 'skipped' = rule off or no recipient
+      //    (never 'failed' for a missing mobile — see engine recipient resolution).
+      try {
+        await client.query("SAVEPOINT v99_customer_notif");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS customer_notifications (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER REFERENCES customers(id),
+            event TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            recipient TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'queued'
+              CHECK (status IN ('queued','sent','failed','skipped')),
+            provider_ref TEXT,
+            error TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_customer ON customer_notifications(customer_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_entity ON customer_notifications(entity_type, entity_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_created ON customer_notifications(created_at DESC)`
+        );
+        await client.query("RELEASE SAVEPOINT v99_customer_notif");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_customer_notif");
+        console.warn(`[migrate-pg v99] customer_notifications skipped: ${err.message}`);
+      }
+
+      // 3. customer_notifications feature flag — default OFF. Consumers (repair
+      //    tickets, reminders) only dispatch when this is flipped on per tenant.
+      try {
+        await client.query("SAVEPOINT v99_notif_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('customer_notifications', false,
+               'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v99_notif_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_notif_flag");
+        console.warn(`[migrate-pg v99] customer_notifications flag skipped: ${err.message}`);
+      }
+
+      // 4. Default repair-ticket rules. INERT until the flag is on AND the ticket
+      //    flow calls the engine — safe to seed for every tenant (ON CONFLICT
+      //    keeps it idempotent and never overrides a tenant's own toggles).
+      try {
+        await client.query("SAVEPOINT v99_default_rules");
+        await client.query(`
+          INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+            ('ticket.status_changed:approved',    'email', 'ticket_approved',    true),
+            ('ticket.status_changed:in_progress', 'email', 'ticket_in_progress', true),
+            ('ticket.status_changed:completed',   'sms',   'ticket_completed',   true),
+            ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
+            ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
+            ('appointment.reminder',              'sms',   'appointment_reminder', true)
+          ON CONFLICT (event, channel) DO NOTHING
+        `);
+        await client.query("RELEASE SAVEPOINT v99_default_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_default_rules");
+        console.warn(`[migrate-pg v99] default notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

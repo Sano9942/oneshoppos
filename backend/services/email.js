@@ -83,8 +83,11 @@ async function _send(from, to, subject, html) {
  * @param {object} [opts.tenant]   — { slug, name } for sender resolution
  * @param {object} [opts.data]     — template-specific data
  * @param {Date}   [opts.sendAt]   — schedule send for later (pg-boss startAfter)
+ * @param {number} [opts.priority] — pg-boss job priority (higher runs first).
+ *   Transactional status notifications pass a positive value so a bulk marketing
+ *   burst on the same queue can't delay a "your order is ready" message.
  */
-async function enqueueEmail(db, { tenantId, type, to, tenant, data, sendAt }) {
+async function enqueueEmail(db, { tenantId, type, to, tenant, data, sendAt, priority }) {
   const from = resolveFrom(type, tenant);
   const templateFn = TEMPLATES[type];
   if (!templateFn) throw new Error(`Unknown email type: ${type}`);
@@ -95,6 +98,7 @@ async function enqueueEmail(db, { tenantId, type, to, tenant, data, sendAt }) {
   const boss = await getBoss();
   const opts = { retryLimit: 3, retryDelay: 60 };
   if (sendAt) opts.startAfter = sendAt;
+  if (priority != null) opts.priority = priority;
   await boss.send(
     "email",
     { to, from, subject, html, tenantId: tenantId || null, type },
