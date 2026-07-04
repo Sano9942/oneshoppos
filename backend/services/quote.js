@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveTaxSnapshot } = require('./tax-snapshot');
+
 /**
  * Quote service — single source of truth for storefront order pricing.
  *
@@ -52,23 +54,13 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
   const productIds = [...new Set(cartItems.map(i => i.productId))];
   const variantIds = cartItems.map(i => i.variantId).filter(Boolean);
 
-  // ── 3. Batch-fetch product + category + tax data ───────────────────
-  // Resolution cascade mirrors `routes/sales.js` P8 (3.14) so storefront quote
-  // matches POS sales:
-  //   1. products.tax_id  → taxes.rate
-  //   2. products.gst     (legacy direct rate column, still in active use)
-  //   3. category.tax_id  → taxes.rate (legacy JOIN preserved as a fallback;
-  //      full multi-level inheritance via category-tree below)
+  // ── 3. Batch-fetch product + category data ─────────────────────────
+  // Tax resolution lives in services/tax-snapshot.js (the shared P8
+  // cascade, same code path as POS sales) — applied in step 7b below.
   const { rows: productRows } = await db.query(
     `SELECT p.id, p.name, p.price, p.compare_at_price, p.category_id,
-            p.gst,
-            (p.status = 'active' AND p.deleted_at IS NULL) AS is_active,
-            t2.rate AS product_tax_id_rate,
-            t.rate  AS category_tax_id_rate
+            (p.status = 'active' AND p.deleted_at IS NULL) AS is_active
        FROM products p
-       LEFT JOIN categories c ON p.category_id = c.id
-       LEFT JOIN taxes t ON c.tax_id = t.id
-       LEFT JOIN taxes t2 ON p.tax_id = t2.id
       WHERE p.id = ANY($1)`,
     [productIds]
   );
@@ -168,34 +160,13 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
       (variant && variant.price != null) ? variant.price : product.price
     );
 
-    // Tax-rate resolution (P13). tax_mode='none' wins regardless of column data.
-    let rawRate = 0;
-    if (taxMode !== 'none') {
-      if (product.product_tax_id_rate != null) {
-        rawRate = Number(product.product_tax_id_rate);
-      } else if (product.gst != null) {
-        rawRate = Number(product.gst);
-      } else if (product.category_tax_id_rate != null) {
-        rawRate = Number(product.category_tax_id_rate);
-      }
-      if (!isFinite(rawRate)) rawRate = 0;
-    }
-    const taxRate = rawRate / 100; // e.g. 17 → 0.17
     const grossLine = unitPrice * qty;
 
-    // Inclusive mode: unit price already contains tax. Extract the tax slice
-    // so reports/FBR see a non-zero tax amount, but keep grandTotal == grossLine.
-    // Exclusive: tax stacks on top.
-    // None: zero (rate already forced to 0 above).
-    let taxAmount;
-    let lineTotal;
-    if (taxMode === 'inclusive' && taxRate > 0) {
-      taxAmount = round2(grossLine - (grossLine / (1 + taxRate)));
-      lineTotal = round2(grossLine);
-    } else {
-      taxAmount = round2(grossLine * taxRate);
-      lineTotal = round2(grossLine + taxAmount);
-    }
+    // Tax fields are placeholders here — patched after the loop by the
+    // shared tax-snapshot resolver (step 7b) so the item shape stays stable.
+    const taxRate = 0;
+    const taxAmount = 0;
+    const lineTotal = round2(grossLine);
 
     // Stock availability
     const availableQty = stockMap.get(productId) || 0;
@@ -226,6 +197,30 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
       inStock,
       availableQty
     });
+  }
+
+  // ── 7b. Per-line tax snapshot (shared cascade with POS sales) ──────
+  // services/tax-snapshot.js applies the full P8 cascade — outlet tax
+  // profiles (pickup orders, flag-gated), products.tax_id, products.gst,
+  // and category-TREE inherited tax — so storefront quotes match POS to
+  // the paisa. The pre-refactor inline copy missed outlet profiles and
+  // multi-level category inheritance.
+  if (items.length > 0) {
+    const snap = await resolveTaxSnapshot(db, {
+      items: items.map(i => ({ productId: i.productId, price: i.unitPrice, quantity: i.qty })),
+      taxMode,
+      outletId: deliveryMethod === 'pickup' ? pickupOutletId : null,
+      tenantId: opts.tenantId,
+    });
+    for (let i = 0; i < items.length; i++) {
+      const line = snap.lines[i] || { rate: 0, amount: 0 };
+      const gross = items[i].unitPrice * items[i].qty;
+      items[i].taxRate = Number(line.rate) / 100; // decimal, e.g. 0.17
+      items[i].taxAmount = round2(Number(line.amount || 0));
+      items[i].lineTotal = taxMode === 'inclusive'
+        ? round2(gross)
+        : round2(gross + Number(line.amount || 0));
+    }
   }
 
   // ── 8. Compute subtotals ───────────────────────────────────────────

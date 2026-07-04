@@ -612,7 +612,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         pickup_outlet_id || null,
         cart.channel_id,
         courier_id || null,
-        { taxMode }
+        { taxMode, tenantId: resolved.tenant?.id }
       );
 
       // Save quote snapshot to cart for later checkout reference
@@ -698,7 +698,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         pickup_outlet_id || null,
         cart.channel_id,
         courier_id || null,
-        { taxMode: checkoutTaxMode }
+        { taxMode: checkoutTaxMode, tenantId: resolved.tenant?.id }
       );
 
       // 3. Check for availability errors

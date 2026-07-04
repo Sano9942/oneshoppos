@@ -2,6 +2,7 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
+const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const { verifyManagerPin } = require("../services/manager-pin");
 
 module.exports = function registerSalesRoutes(app, deps) {
@@ -1204,163 +1205,26 @@ module.exports = function registerSalesRoutes(app, deps) {
     }
 
     // P8 (3.14) — Per-line tax snapshot resolution (read-only, before tx).
-    // For each cart line, resolve the effective tax rate using the cascade:
-    //   1. outlet_tax_profiles match (when phase2_outlet_tax flag on)
-    //   2. products.tax_id → taxes.rate
-    //   3. products.gst (legacy direct rate)
-    //   4. category-tree inherited tax_id → taxes.rate
-    //   5. 0
-    // tax_mode='none' overrides everything to 0.
+    // The cascade lives in services/tax-snapshot.js — shared with storefront
+    // quotes, layaway settle, pay-at-table, quotation convert, and manual
+    // orders so every sale writer resolves tax identically.
     const taxMode = (req.company && req.company.tax_mode) || "none";
-    const taxInclusiveResolved =
-      taxMode === "none"
-        ? false
-        : typeof tax_inclusive_in === "boolean"
-          ? tax_inclusive_in
-          : taxMode === "inclusive";
-
-    const taxByIndex = new Array(cartItems.length).fill(null);
-    if (taxMode === "none") {
-      for (let i = 0; i < cartItems.length; i++) {
-        taxByIndex[i] = { rate: 0, amount: 0, hsCode: null };
-      }
-    } else {
-      // Pre-fetch product rows for all cart items once.
-      const productIdsForTax = Array.from(
-        new Set(cartItems.map((x) => Number(x.original_product_id || x.id)).filter(Boolean))
-      );
-      let productMap = new Map();
-      if (productIdsForTax.length) {
-        const { rows: pRows } = await db.query(
-          `SELECT p.id, p.gst, p.tax_id, p.category_id,
-                  t.rate AS tax_table_rate
-             FROM products p
-             LEFT JOIN taxes t ON t.id = p.tax_id
-            WHERE p.id = ANY($1::int[])`,
-          [productIdsForTax]
-        );
-        for (const r of pRows) productMap.set(Number(r.id), r);
-      }
-
-      // Outlet tax profile lookup — only if the flag is on AND the table exists.
-      // Build a small in-memory map keyed by (product_id, category_id) → rate.
-      let outletProfileLines = [];
-      try {
-        const flags = await getFeatureFlagsMap(req.tenantId);
-        if (flags.phase2_outlet_tax) {
-          const { rows } = await db.query(
-            `SELECT otpl.product_id, otpl.category_id, otpl.priority, t.rate
-               FROM outlet_tax_profiles otp
-               JOIN outlet_tax_profile_lines otpl ON otpl.profile_id = otp.id
-               LEFT JOIN taxes t ON t.id = otpl.tax_id
-              WHERE otp.outlet_id = $1 AND otp.is_active = TRUE`,
-            [Number(outlet_id)]
-          );
-          outletProfileLines = rows;
-        }
-      } catch { /* outlet_tax_profiles table may not exist on older tenants */ }
-
-      // Lazy-load category indexes for resolveInheritedField (only if needed).
-      let categoryByIdMap = null;
-      const ensureCategoryMap = async () => {
-        if (categoryByIdMap) return categoryByIdMap;
-        try {
-          const { fetchCategoryIndexes } = require("../category-tree");
-          const idx = await fetchCategoryIndexes(db);
-          categoryByIdMap = idx?.byId || new Map();
-        } catch {
-          categoryByIdMap = new Map();
-        }
-        return categoryByIdMap;
-      };
-
-      for (let i = 0; i < cartItems.length; i++) {
-        const item = cartItems[i];
-        const productId = Number(item.original_product_id || item.id) || null;
-        const product = productId ? productMap.get(productId) : null;
-        const categoryId = product?.category_id || null;
-
-        let rate = null;
-
-        // 1. Outlet tax profile (highest priority match wins)
-        if (outletProfileLines.length) {
-          const matches = outletProfileLines
-            .filter(
-              (l) =>
-                (l.product_id != null && Number(l.product_id) === productId) ||
-                (l.category_id != null && Number(l.category_id) === Number(categoryId)) ||
-                (l.product_id == null && l.category_id == null)
-            )
-            .sort((a, b) => (b.priority || 0) - (a.priority || 0));
-          if (matches.length && matches[0].rate != null) {
-            rate = Number(matches[0].rate);
-          }
-        }
-
-        // 2. products.tax_id → taxes.rate
-        if (rate == null && product?.tax_table_rate != null) {
-          rate = Number(product.tax_table_rate);
-        }
-
-        // 3. products.gst direct
-        if (rate == null && product?.gst != null) {
-          rate = Number(product.gst);
-        }
-
-        // 4. Category inheritance via tax_id
-        if (rate == null && categoryId) {
-          const byId = await ensureCategoryMap();
-          const { resolveInheritedField } = require("../category-tree");
-          const inheritedTaxId = resolveInheritedField(byId, categoryId, "tax_id");
-          if (inheritedTaxId) {
-            try {
-              const { rows: [tr] } = await db.query(
-                "SELECT rate FROM taxes WHERE id = $1",
-                [Number(inheritedTaxId)]
-              );
-              if (tr) rate = Number(tr.rate);
-            } catch { /* ignore */ }
-          }
-        }
-
-        if (rate == null || !isFinite(rate)) rate = 0;
-
-        // HS code: product → category inheritance
-        let hsCode = null;
-        if (categoryId) {
-          const byId = await ensureCategoryMap();
-          const { resolveInheritedField } = require("../category-tree");
-          hsCode = resolveInheritedField(byId, categoryId, "hs_code") || null;
-        }
-
-        // Per-line amount
-        const lineGross = Number(item.price) * Number(item.quantity);
-        let amount = 0;
-        if (rate > 0) {
-          if (taxInclusiveResolved) {
-            amount = Math.round((lineGross * rate / (100 + rate)) * 100) / 100;
-          } else {
-            amount = Math.round((lineGross * rate / 100) * 100) / 100;
-          }
-        }
-        taxByIndex[i] = { rate, amount, hsCode };
-      }
-    }
-
-    // Aggregate tax totals for the sale row. Subtotal differs by mode:
-    //   inclusive: subtotal = sum(price*qty) - tax_total (tax was inside)
-    //   exclusive: subtotal = sum(price*qty) (tax sits on top)
-    const taxTotalSnapshot = taxByIndex.reduce(
-      (s, t) => s + Number(t?.amount || 0),
-      0
-    );
-    const grossSnapshot = cartItems.reduce(
-      (s, it) => s + Number(it.price) * Number(it.quantity),
-      0
-    );
-    const subtotalSnapshot = taxInclusiveResolved
-      ? grossSnapshot - taxTotalSnapshot
-      : grossSnapshot;
+    const taxSnapshot = await resolveTaxSnapshot(db, {
+      items: cartItems.map((x) => ({
+        productId: Number(x.original_product_id || x.id) || null,
+        price: x.price,
+        quantity: x.quantity,
+      })),
+      taxMode,
+      taxInclusive:
+        typeof tax_inclusive_in === "boolean" ? tax_inclusive_in : undefined,
+      outletId: Number(outlet_id),
+      tenantId: req.tenantId,
+    });
+    const taxInclusiveResolved = taxSnapshot.taxInclusive;
+    const taxByIndex = taxSnapshot.lines;
+    const taxTotalSnapshot = taxSnapshot.taxTotal;
+    const subtotalSnapshot = taxSnapshot.subtotal;
 
     // Start Transaction Logic
     try {
