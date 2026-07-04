@@ -44,8 +44,6 @@ beforeAll(async () => {
   customerId = rows[0]?.id || 1;
 }, 180000);
 
-jest.setTimeout(30000);
-
 afterAll(async () => {
   if (cleanup) await cleanup();
 }, 30000);
