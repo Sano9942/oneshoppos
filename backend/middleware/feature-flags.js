@@ -42,6 +42,10 @@ const DEFAULT_FEATURE_FLAGS = {
   customer_messaging: true,
   customer_invoicing: true,
   payment_links: false,
+  // AI insights chat (routes/insights-ai.js). Default OFF — surfaces the flag
+  // in the admin flags editor so it can be toggled on per tenant. Also requires
+  // ANTHROPIC_API_KEY on the server; the route soft-checks both.
+  ai_insights: false,
   // Mode-gated (subscriptions mode): flag default flipped false so retail
   // tenants without the subscriptions mode don't see the Subscriptions nav.
   // Tenants on the subscriptions mode get the flag enabled via v44 backfill.
