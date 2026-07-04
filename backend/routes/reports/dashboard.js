@@ -508,6 +508,8 @@ module.exports = function (app, deps) {
       let ticketCount = 0;
       let contractCount = 0;
       let roomCount = 0;
+      let treatmentPlanCount = 0;
+      let chartEntryCount = 0;
       let lifetimeSaleCount = 0;
       let testReceiptPrinted = false;
       let countryCode = req.company?.country_code || null;
@@ -551,6 +553,18 @@ module.exports = function (app, deps) {
       } catch { /* table missing — leave 0 */ }
       try {
         const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM treatment_plans"
+        );
+        treatmentPlanCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM session_chart_entries"
+        );
+        chartEntryCount = Number(r?.cnt || 0);
+      } catch { /* table missing — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
           "SELECT COUNT(*)::int AS cnt FROM sales WHERE voided = false"
         );
         lifetimeSaleCount = Number(r?.cnt || 0);
@@ -581,6 +595,8 @@ module.exports = function (app, deps) {
         ticketCount,
         contractCount,
         roomCount,
+        treatmentPlanCount,
+        chartEntryCount,
         lifetimeSaleCount,
         testReceiptPrinted,
         countryCode,
