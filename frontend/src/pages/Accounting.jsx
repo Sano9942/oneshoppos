@@ -130,7 +130,7 @@ export default function Accounting() {
   };
 
   const tabCls = (id) =>
-    `px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === id ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500"}`;
+    `px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === id ? "border-(--ui-primary) text-(--ui-primary)" : "border-transparent text-(--ui-text-muted)"}`;
 
   const agingBuckets = [
     { key: "current", label: "Current" },
@@ -142,18 +142,18 @@ export default function Accounting() {
 
   return (
     <div className="space-y-5">
-      <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-slate-500">From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block border rounded-lg px-3 py-2 text-sm" />
+          <label className="text-xs text-(--ui-text-muted)">From</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block border border-(--ui-border-strong) rounded-(--ui-radius-sm) px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="text-xs text-slate-500">To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="block border rounded-lg px-3 py-2 text-sm" />
+          <label className="text-xs text-(--ui-text-muted)">To</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="block border border-(--ui-border-strong) rounded-(--ui-radius-sm) px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="text-xs text-slate-500">Outlet</label>
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="block border rounded-lg px-3 py-2 text-sm">
+          <label className="text-xs text-(--ui-text-muted)">Outlet</label>
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="block border border-(--ui-border-strong) rounded-(--ui-radius-sm) px-3 py-2 text-sm">
             <option value="">All outlets</option>
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
@@ -162,7 +162,7 @@ export default function Accounting() {
         </div>
       </div>
 
-      <div className="flex gap-0 border-b overflow-x-auto">
+      <div className="flex gap-0 border-b border-(--ui-border) overflow-x-auto">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={tabCls(t.id)}>{t.label}</button>
         ))}
@@ -173,15 +173,15 @@ export default function Accounting() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {(kpis || []).map((k) => (
-              <div key={k.label} className="bg-white border rounded-xl p-4">
-                <p className="text-xs text-slate-500">{k.label}</p>
-                <p className="text-lg font-bold text-slate-800 mt-1">{k.value}</p>
+              <div key={k.label} className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+                <p className="text-xs text-(--ui-text-muted)">{k.label}</p>
+                <p className="text-lg font-bold text-(--ui-text) mt-1">{k.value}</p>
               </div>
             ))}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border rounded-xl p-4">
-              <p className="font-semibold text-slate-700 mb-2">Revenue Breakdown</p>
+            <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+              <p className="font-semibold text-(--ui-text) mb-2">Revenue Breakdown</p>
               <table className="w-full text-sm">
                 <tbody>
                   <tr><td>Gross Sales</td><td className="text-right">{fmt(pnl?.revenue?.gross_sales)}</td></tr>
@@ -193,8 +193,8 @@ export default function Accounting() {
                 </tbody>
               </table>
             </div>
-            <div className="bg-white border rounded-xl p-4">
-              <p className="font-semibold text-slate-700 mb-2">Operating Expenses</p>
+            <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+              <p className="font-semibold text-(--ui-text) mb-2">Operating Expenses</p>
               <table className="w-full text-sm">
                 <tbody>
                   {(pnl?.operating_expenses || []).map((r) => (
@@ -213,8 +213,8 @@ export default function Accounting() {
       {tab === "cashflow" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border rounded-xl p-4">
-              <p className="font-semibold text-slate-700 mb-2">Inflows</p>
+            <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+              <p className="font-semibold text-(--ui-text) mb-2">Inflows</p>
               <table className="w-full text-sm">
                 <tbody>
                   {(cashflow?.inflows || []).map((r) => (
@@ -224,8 +224,8 @@ export default function Accounting() {
                 </tbody>
               </table>
             </div>
-            <div className="bg-white border rounded-xl p-4">
-              <p className="font-semibold text-slate-700 mb-2">Outflows</p>
+            <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+              <p className="font-semibold text-(--ui-text) mb-2">Outflows</p>
               <table className="w-full text-sm">
                 <tbody>
                   <tr><td>Expenses</td><td className="text-right">{fmt(cashflow?.outflows?.expenses)}</td></tr>
@@ -236,11 +236,11 @@ export default function Accounting() {
               <p className="text-xl font-bold mt-4">Net Cash Flow: {fmt(cashflow?.net_cashflow)}</p>
             </div>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-3">Daily Cash Flow</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+            <p className="font-semibold text-(--ui-text) mb-3">Daily Cash Flow</p>
             <div className="overflow-auto max-h-100">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
+                <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left sticky top-0">
                   <tr>
                     <th className="px-2 py-2">Date</th>
                     <th className="px-2 py-2 text-right">Inflow</th>
@@ -254,13 +254,13 @@ export default function Accounting() {
                       <td className="px-2 py-2">{fmtUtcDate(r.date) || r.date}</td>
                       <td className="px-2 py-2 text-right">{fmt(r.inflow)}</td>
                       <td className="px-2 py-2 text-right">{fmt(r.outflow)}</td>
-                      <td className={`px-2 py-2 text-right font-semibold ${Number(r.net) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      <td className={`px-2 py-2 text-right font-semibold ${Number(r.net) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                         {fmt(r.net)}
                       </td>
                     </tr>
                   ))}
                   {cashflowDaily.length === 0 && (
-                    <tr><td colSpan={4} className="px-2 py-8 text-center text-slate-400">No daily cash flow data for this period</td></tr>
+                    <tr><td colSpan={4} className="px-2 py-8 text-center text-(--ui-text-muted)">No daily cash flow data for this period</td></tr>
                   )}
                 </tbody>
               </table>
@@ -274,28 +274,28 @@ export default function Accounting() {
         <div className="space-y-4">
           {apArSummary && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-white border rounded-xl p-4">
-                <p className="text-xs text-slate-500">Total Payable (AP)</p>
-                <p className="text-xl font-bold text-rose-600 mt-1">{fmt(apArSummary.total_ap)}</p>
+              <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+                <p className="text-xs text-(--ui-text-muted)">Total Payable (AP)</p>
+                <p className="text-xl font-bold text-(--ui-danger-fg) mt-1">{fmt(apArSummary.total_ap)}</p>
               </div>
-              <div className="bg-white border rounded-xl p-4">
-                <p className="text-xs text-slate-500">Total Receivable (AR)</p>
-                <p className="text-xl font-bold text-emerald-600 mt-1">{fmt(apArSummary.total_ar)}</p>
+              <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+                <p className="text-xs text-(--ui-text-muted)">Total Receivable (AR)</p>
+                <p className="text-xl font-bold text-(--ui-success-fg) mt-1">{fmt(apArSummary.total_ar)}</p>
               </div>
-              <div className="bg-white border rounded-xl p-4">
-                <p className="text-xs text-slate-500">Net Position</p>
-                <p className={`text-xl font-bold mt-1 ${Number(apArSummary.net_position) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+                <p className="text-xs text-(--ui-text-muted)">Net Position</p>
+                <p className={`text-xl font-bold mt-1 ${Number(apArSummary.net_position) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                   {fmt(apArSummary.net_position)}
                 </p>
               </div>
             </div>
           )}
           <div className="grid grid-cols-1 gap-4">
-          <div className="bg-white border rounded-xl p-4 overflow-auto">
-            <p className="font-semibold text-slate-700 mb-2">Supplier AP</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4 overflow-auto">
+            <p className="font-semibold text-(--ui-text) mb-2">Supplier AP</p>
             <table className="w-full text-sm min-w-175">
               <thead>
-                <tr className="text-slate-500 text-left">
+                <tr className="text-(--ui-text-muted) text-left">
                   <th className="py-2">Supplier</th><th>Invoice #</th><th>Amount</th><th>Paid</th><th>Outstanding</th><th>Due</th><th>Status</th>
                 </tr>
               </thead>
@@ -314,11 +314,11 @@ export default function Accounting() {
               </tbody>
             </table>
           </div>
-          <div className="bg-white border rounded-xl p-4 overflow-auto">
-            <p className="font-semibold text-slate-700 mb-2">Customer AR</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4 overflow-auto">
+            <p className="font-semibold text-(--ui-text) mb-2">Customer AR</p>
             <table className="w-full text-sm min-w-175">
               <thead>
-                <tr className="text-slate-500 text-left">
+                <tr className="text-(--ui-text-muted) text-left">
                   <th className="py-2">Customer</th><th>Phone</th><th>Credit Balance</th><th>Total Purchases</th><th>Last Purchase</th>
                 </tr>
               </thead>
@@ -342,28 +342,28 @@ export default function Accounting() {
       {/* ── Balance Sheet ── */}
       {tab === "bs" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-3">Assets</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+            <p className="font-semibold text-(--ui-text) mb-3">Assets</p>
             <table className="w-full text-sm">
               <tbody>
-                <tr><td className="py-1 text-slate-600">Inventory (at cost)</td><td className="text-right">{fmt(bs?.assets?.inventory_value)}</td></tr>
-                <tr><td className="py-1 text-slate-600">Cash on Hand (open shifts)</td><td className="text-right">{fmt(bs?.assets?.cash_on_hand)}</td></tr>
+                <tr><td className="py-1 text-(--ui-text-muted)">Inventory (at cost)</td><td className="text-right">{fmt(bs?.assets?.inventory_value)}</td></tr>
+                <tr><td className="py-1 text-(--ui-text-muted)">Cash on Hand (open shifts)</td><td className="text-right">{fmt(bs?.assets?.cash_on_hand)}</td></tr>
                 <tr className="font-semibold border-t"><td className="py-2">Total Assets</td><td className="text-right">{fmt(bs?.assets?.total)}</td></tr>
               </tbody>
             </table>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-3">Liabilities</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+            <p className="font-semibold text-(--ui-text) mb-3">Liabilities</p>
             <table className="w-full text-sm">
               <tbody>
-                <tr><td className="py-1 text-slate-600">Supplier AP (unpaid invoices)</td><td className="text-right">{fmt(bs?.liabilities?.supplier_ap)}</td></tr>
-                <tr><td className="py-1 text-slate-600">Customer Credit Owed</td><td className="text-right">{fmt(bs?.liabilities?.customer_credit)}</td></tr>
+                <tr><td className="py-1 text-(--ui-text-muted)">Supplier AP (unpaid invoices)</td><td className="text-right">{fmt(bs?.liabilities?.supplier_ap)}</td></tr>
+                <tr><td className="py-1 text-(--ui-text-muted)">Customer Credit Owed</td><td className="text-right">{fmt(bs?.liabilities?.customer_credit)}</td></tr>
                 <tr className="font-semibold border-t"><td className="py-2">Total Liabilities</td><td className="text-right">{fmt(bs?.liabilities?.total)}</td></tr>
               </tbody>
             </table>
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-700">Equity (Assets − Liabilities)</span>
-              <span className={`text-lg font-bold ${Number(bs?.equity || 0) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+            <div className="mt-4 rounded-lg bg-(--ui-muted-surface) p-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-(--ui-text)">Equity (Assets − Liabilities)</span>
+              <span className={`text-lg font-bold ${Number(bs?.equity || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                 {fmt(bs?.equity)}
               </span>
             </div>
@@ -373,9 +373,9 @@ export default function Accounting() {
 
       {/* ── Expense Ledger ── */}
       {tab === "expenses" && (
-        <div className="bg-white border rounded-xl p-4">
+        <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
           <div className="flex flex-wrap gap-3 items-center justify-between mb-3">
-            <p className="font-semibold text-slate-700">Expense Ledger ({filteredExpenses.length} entries)</p>
+            <p className="font-semibold text-(--ui-text)">Expense Ledger ({filteredExpenses.length} entries)</p>
             <div className="flex gap-2">
               <select value={expCatFilter} onChange={(e) => setExpCatFilter(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm">
                 <option value="">All categories</option>
@@ -383,14 +383,14 @@ export default function Accounting() {
                   <option key={c.id} value={String(c.id)}>{c.name}</option>
                 ))}
               </select>
-              <button onClick={() => exportCSV(filteredExpenses, "expense-ledger.csv")} className="border rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+              <button onClick={() => exportCSV(filteredExpenses, "expense-ledger.csv")} className="rounded-full bg-(--ui-muted-surface) px-3 py-1.5 text-sm font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)">
                 Export CSV
               </button>
             </div>
           </div>
           <div className="overflow-auto max-h-125">
             <table className="w-full text-sm min-w-175">
-              <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
+              <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left sticky top-0">
                 <tr>
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Category</th>
@@ -412,12 +412,12 @@ export default function Accounting() {
                   </tr>
                 ))}
                 {filteredExpenses.length === 0 && (
-                  <tr><td colSpan={6} className="px-2 py-8 text-center text-slate-400">No expenses found</td></tr>
+                  <tr><td colSpan={6} className="px-2 py-8 text-center text-(--ui-text-muted)">No expenses found</td></tr>
                 )}
               </tbody>
               {filteredExpenses.length > 0 && (
                 <tfoot>
-                  <tr className="border-t font-semibold bg-slate-50">
+                  <tr className="border-t border-(--ui-border) font-semibold bg-(--ui-muted-surface)">
                     <td colSpan={5} className="px-2 py-2">Total</td>
                     <td className="px-2 py-2 text-right">{fmt(filteredExpenses.reduce((s, r) => s + Number(r.amount || 0), 0))}</td>
                   </tr>
@@ -433,12 +433,12 @@ export default function Accounting() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {agingBuckets.map((b) => (
-              <div key={b.key} className="bg-white border rounded-xl p-4">
-                <p className="text-xs text-slate-500">{b.label}</p>
-                <p className={`text-base font-bold mt-1 ${b.key === "over90" ? "text-rose-600" : b.key === "d90" ? "text-orange-500" : "text-slate-800"}`}>
+              <div key={b.key} className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+                <p className="text-xs text-(--ui-text-muted)">{b.label}</p>
+                <p className={`text-base font-bold mt-1 ${b.key === "over90" ? "text-(--ui-danger-fg)" : b.key === "d90" ? "text-(--ui-warning-fg)" : "text-(--ui-text)"}`}>
                   {fmt(aging?.totals?.[b.key] || 0)}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5">{(aging?.buckets?.[b.key] || []).length} invoices</p>
+                <p className="text-xs text-(--ui-text-muted) mt-0.5">{(aging?.buckets?.[b.key] || []).length} invoices</p>
               </div>
             ))}
           </div>
@@ -446,10 +446,10 @@ export default function Accounting() {
             const rows = aging?.buckets?.[b.key] || [];
             if (!rows.length) return null;
             return (
-              <div key={b.key} className="bg-white border rounded-xl p-4 overflow-auto">
-                <p className="font-semibold text-slate-700 mb-2">{b.label}</p>
+              <div key={b.key} className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4 overflow-auto">
+                <p className="font-semibold text-(--ui-text) mb-2">{b.label}</p>
                 <table className="w-full text-sm min-w-175">
-                  <thead className="text-slate-500 text-left">
+                  <thead className="text-(--ui-text-muted) text-left">
                     <tr>
                       <th className="py-2">Supplier</th><th>Invoice #</th><th>Invoice Date</th><th>Due Date</th><th>Days Overdue</th><th className="text-right">Outstanding</th>
                     </tr>
@@ -471,22 +471,22 @@ export default function Accounting() {
             );
           })}
           {!aging?.buckets || Object.values(aging.buckets).every((b) => !b.length) && (
-            <div className="bg-white border rounded-xl p-8 text-center text-slate-400">No outstanding invoices</div>
+            <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-8 text-center text-(--ui-text-muted)">No outstanding invoices</div>
           )}
         </div>
       )}
 
       {/* ── Tax Ledger ── */}
       {tab === "tax" && (
-        <div className="bg-white border rounded-xl p-4">
+        <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-slate-700">Tax Ledger</p>
-            <button onClick={() => exportCSV(taxLedger?.rows || [], "tax-ledger.csv")} className="border rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+            <p className="font-semibold text-(--ui-text)">Tax Ledger</p>
+            <button onClick={() => exportCSV(taxLedger?.rows || [], "tax-ledger.csv")} className="rounded-full bg-(--ui-muted-surface) px-3 py-1.5 text-sm font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)">
               Export CSV
             </button>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-left">
+            <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left">
               <tr>
                 <th className="px-2 py-2">Tax Name</th>
                 <th className="px-2 py-2">Rate</th>
@@ -506,12 +506,12 @@ export default function Accounting() {
                 </tr>
               ))}
               {(taxLedger?.rows || []).length === 0 && (
-                <tr><td colSpan={5} className="px-2 py-8 text-center text-slate-400">No tax data for this period</td></tr>
+                <tr><td colSpan={5} className="px-2 py-8 text-center text-(--ui-text-muted)">No tax data for this period</td></tr>
               )}
             </tbody>
             {(taxLedger?.rows || []).length > 0 && (
               <tfoot>
-                <tr className="border-t font-semibold bg-slate-50">
+                <tr className="border-t border-(--ui-border) font-semibold bg-(--ui-muted-surface)">
                   <td colSpan={4} className="px-2 py-2">Total Tax Collected</td>
                   <td className="px-2 py-2 text-right">{fmt(taxLedger?.total_tax)}</td>
                 </tr>
@@ -523,16 +523,16 @@ export default function Accounting() {
 
       {/* ── Supplier Payments ── */}
       {tab === "suppay" && (
-        <div className="bg-white border rounded-xl p-4">
+        <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-slate-700">Supplier Payment History</p>
-            <button onClick={() => exportCSV(supPay.payments || [], "supplier-payments.csv")} className="border rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+            <p className="font-semibold text-(--ui-text)">Supplier Payment History</p>
+            <button onClick={() => exportCSV(supPay.payments || [], "supplier-payments.csv")} className="rounded-full bg-(--ui-muted-surface) px-3 py-1.5 text-sm font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)">
               Export CSV
             </button>
           </div>
           <div className="overflow-auto max-h-125">
             <table className="w-full text-sm min-w-175">
-              <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
+              <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left sticky top-0">
                 <tr>
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Supplier</th>
@@ -554,12 +554,12 @@ export default function Accounting() {
                   </tr>
                 ))}
                 {(supPay.payments || []).length === 0 && (
-                  <tr><td colSpan={6} className="px-2 py-8 text-center text-slate-400">No payments found</td></tr>
+                  <tr><td colSpan={6} className="px-2 py-8 text-center text-(--ui-text-muted)">No payments found</td></tr>
                 )}
               </tbody>
               {(supPay.payments || []).length > 0 && (
                 <tfoot>
-                  <tr className="border-t font-semibold bg-slate-50">
+                  <tr className="border-t border-(--ui-border) font-semibold bg-(--ui-muted-surface)">
                     <td colSpan={5} className="px-2 py-2">Total Paid</td>
                     <td className="px-2 py-2 text-right">{fmt(supPay.total)}</td>
                   </tr>
@@ -573,53 +573,53 @@ export default function Accounting() {
       {/* ── Accounting Periods ── */}
       {tab === "periods" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-3">Create Period</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+            <p className="font-semibold text-(--ui-text) mb-3">Create Period</p>
             <form className="space-y-3" onSubmit={savePeriod}>
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Period Name</label>
+                <label className="text-xs text-(--ui-text-muted) block mb-1">Period Name</label>
                 <input required value={periodForm.period_name} onChange={(e) => setPeriodForm((p) => ({ ...p, period_name: e.target.value }))}
                   placeholder="e.g. March 2026" className="w-full border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-slate-500 block mb-1">Start Date</label>
+                  <label className="text-xs text-(--ui-text-muted) block mb-1">Start Date</label>
                   <input required type="date" value={periodForm.start_date} onChange={(e) => setPeriodForm((p) => ({ ...p, start_date: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500 block mb-1">End Date</label>
+                  <label className="text-xs text-(--ui-text-muted) block mb-1">End Date</label>
                   <input required type="date" value={periodForm.end_date} onChange={(e) => setPeriodForm((p) => ({ ...p, end_date: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
-              <button type="submit" disabled={savingPeriod} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-50">
+              <button type="submit" disabled={savingPeriod} className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50">
                 {savingPeriod ? "Saving..." : "Create Period"}
               </button>
             </form>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-3">Periods ({periods.length})</p>
+          <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-md) p-4">
+            <p className="font-semibold text-(--ui-text) mb-3">Periods ({periods.length})</p>
             <div className="space-y-2 max-h-100 overflow-auto">
               {periods.map((p) => (
                 <div key={p.id} className="border rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-sm">
                   <div>
-                    <p className="font-medium text-slate-800">{p.period_name}</p>
-                    <p className="text-xs text-slate-500">{p.start_date} → {p.end_date}</p>
+                    <p className="font-medium text-(--ui-text)">{p.period_name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">{p.start_date} → {p.end_date}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "open" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "open" ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
                       {p.status}
                     </span>
                     {p.status === "open" && (
-                      <button onClick={() => closePeriod(p.id)} className="text-xs border rounded px-2 py-0.5 text-slate-600 hover:bg-slate-50">
+                      <button onClick={() => closePeriod(p.id)} className="text-xs border rounded px-2 py-0.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface)">
                         Close
                       </button>
                     )}
                   </div>
                 </div>
               ))}
-              {periods.length === 0 && <p className="text-center text-slate-400 py-6">No periods yet</p>}
+              {periods.length === 0 && <p className="text-center text-(--ui-text-muted) py-6">No periods yet</p>}
             </div>
           </div>
         </div>

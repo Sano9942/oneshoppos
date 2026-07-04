@@ -50,15 +50,15 @@ function ChurnStatsWidget() {
     <div className="flex flex-wrap gap-4 mb-4">
       <div className="border border-(--ui-border) rounded-lg px-4 py-3 bg-(--ui-surface)">
         <p className="text-xs text-(--ui-text-muted) mb-1">Active</p>
-        <p className="text-xl font-bold text-emerald-600">{stats.active_count}</p>
+        <p className="text-xl font-bold text-(--ui-success-fg)">{stats.active_count}</p>
       </div>
       <div className="border border-(--ui-border) rounded-lg px-4 py-3 bg-(--ui-surface)">
         <p className="text-xs text-(--ui-text-muted) mb-1">Churned this month</p>
-        <p className="text-xl font-bold text-red-500">{stats.churned_this_month}</p>
+        <p className="text-xl font-bold text-(--ui-danger-fg)">{stats.churned_this_month}</p>
       </div>
       <div className="border border-(--ui-border) rounded-lg px-4 py-3 bg-(--ui-surface)">
         <p className="text-xs text-(--ui-text-muted) mb-1">Churn rate</p>
-        <p className={`text-xl font-bold ${stats.churn_rate > 5 ? "text-amber-500" : "text-(--ui-text)"}`}>{stats.churn_rate}%</p>
+        <p className={`text-xl font-bold ${stats.churn_rate > 5 ? "text-(--ui-warning-fg)" : "text-(--ui-text)"}`}>{stats.churn_rate}%</p>
       </div>
     </div>
   );
@@ -352,8 +352,8 @@ export default function SubscriptionsRedesign() {
                         <td className="py-2 px-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 justify-end">
                             {s.status === "active" && <button onClick={() => pauseSub(s.id)} title="Pause" className="p-1 rounded hover:bg-(--ui-muted-surface)"><Pause className="w-4 h-4" /></button>}
-                            {s.status === "paused" && <button onClick={() => resumeSub(s.id)} title="Resume" className="p-1 rounded hover:bg-(--ui-muted-surface) text-green-600"><Play className="w-4 h-4" /></button>}
-                            {!["cancelled", "expired"].includes(s.status) && <button onClick={() => setCancellingId(s.id)} title="Cancel" className="p-1 rounded hover:bg-(--ui-muted-surface) text-red-500"><XCircle className="w-4 h-4" /></button>}
+                            {s.status === "paused" && <button onClick={() => resumeSub(s.id)} title="Resume" className="p-1 rounded hover:bg-(--ui-muted-surface) text-(--ui-success-fg)"><Play className="w-4 h-4" /></button>}
+                            {!["cancelled", "expired"].includes(s.status) && <button onClick={() => setCancellingId(s.id)} title="Cancel" className="p-1 rounded hover:bg-(--ui-muted-surface) text-(--ui-danger-fg)"><XCircle className="w-4 h-4" /></button>}
                           </div>
                         </td>
                       </tr>

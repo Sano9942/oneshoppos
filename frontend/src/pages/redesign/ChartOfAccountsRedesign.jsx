@@ -200,13 +200,13 @@ export default function ChartOfAccountsRedesign() {
     return (
       <div key={node.id}>
         <div
-          className={`flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 ${!node.is_active ? "opacity-50" : ""}`}
+          className={`flex items-center gap-2 px-3 py-2 hover:bg-(--ui-muted-surface) border-b border-(--ui-border) ${!node.is_active ? "opacity-50" : ""}`}
           style={{ paddingLeft: `${depth * 24 + 12}px` }}
         >
           {hasChildren ? (
             <button
               onClick={() => toggleExpand(node.id)}
-              className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 shrink-0"
+              className="p-0.5 rounded hover:bg-(--ui-border-strong) shrink-0"
             >
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
@@ -214,11 +214,11 @@ export default function ChartOfAccountsRedesign() {
             <span className="w-5 shrink-0" />
           )}
 
-          <span className="font-mono text-sm text-gray-500 dark:text-gray-400 w-14 shrink-0">{node.code}</span>
+          <span className="font-mono text-sm text-(--ui-text-muted) w-14 shrink-0">{node.code}</span>
           <span className="font-medium text-sm grow">{node.name}</span>
           <Badge color={TYPE_COLORS[node.type]} className="text-xs shrink-0">{node.type}</Badge>
           {node.is_system && (
-            <span className="text-gray-400 dark:text-slate-500 shrink-0" title="System account — protected">
+            <span className="text-(--ui-text-muted) shrink-0" title="System account — protected">
               <Lock size={14} />
             </span>
           )}
@@ -226,7 +226,7 @@ export default function ChartOfAccountsRedesign() {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => openEdit(node)}
-              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-slate-400"
+              className="p-1 rounded hover:bg-(--ui-border-strong) text-(--ui-text-muted)"
               title="Edit"
             >
               <Edit2 size={14} />
@@ -234,7 +234,7 @@ export default function ChartOfAccountsRedesign() {
             {!node.is_system && (
               <button
                 onClick={() => handleDelete(node.id)}
-                className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 dark:text-slate-500 hover:text-red-600"
+                className="p-1 rounded hover:bg-(--ui-danger-bg) text-(--ui-text-muted) hover:text-(--ui-danger-fg)"
                 title="Deactivate"
               >
                 <Trash2 size={14} />
@@ -268,7 +268,7 @@ export default function ChartOfAccountsRedesign() {
       }
     >
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">
+        <div className="mb-4 p-3 bg-(--ui-danger-bg) text-(--ui-danger-fg) rounded-lg text-sm">
           {error}
           <button onClick={() => setError("")} className="ml-2 underline">dismiss</button>
         </div>
@@ -277,7 +277,7 @@ export default function ChartOfAccountsRedesign() {
       <SectionCard>
         <div className="flex items-center gap-3 mb-4">
           <div className="relative grow">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)" />
             <Input
               placeholder="Search by name or code..."
               value={search}
@@ -288,36 +288,36 @@ export default function ChartOfAccountsRedesign() {
         </div>
 
         {loading ? (
-          <p className="text-gray-500 dark:text-slate-400 text-center py-8">Loading accounts...</p>
+          <p className="text-(--ui-text-muted) text-center py-8">Loading accounts...</p>
         ) : !hasAccounts ? (
           <EmptyState
             title="No accounts yet"
-            message="Seed the default Pakistan-standard chart of accounts to get started, or add accounts manually."
+            body="Seed the default Pakistan-standard chart of accounts to get started, or add accounts manually."
           />
         ) : search ? (
           // Flat filtered view when searching
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="border border-(--ui-border) rounded-lg overflow-hidden">
             {TYPE_ORDER.map((type) => {
               const items = filteredByType[type];
               if (!items || !items.length) return null;
               return (
                 <div key={type}>
-                  <div className="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                  <div className="bg-(--ui-muted-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wider">
                     {TYPE_LABELS[type]} ({items.length})
                   </div>
                   {items.map((a) => (
                     <div
                       key={a.id}
-                      className={`flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 ${!a.is_active ? "opacity-50" : ""}`}
+                      className={`flex items-center gap-2 px-3 py-2 hover:bg-(--ui-muted-surface) border-b border-(--ui-border) ${!a.is_active ? "opacity-50" : ""}`}
                     >
-                      <span className="font-mono text-sm text-gray-500 dark:text-gray-400 w-14 shrink-0">{a.code}</span>
+                      <span className="font-mono text-sm text-(--ui-text-muted) w-14 shrink-0">{a.code}</span>
                       <span className="font-medium text-sm grow">{a.name}</span>
                       <Badge color={TYPE_COLORS[a.type]} className="text-xs shrink-0">{a.type}</Badge>
-                      {a.is_system && <Lock size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />}
+                      {a.is_system && <Lock size={14} className="text-(--ui-text-muted) shrink-0" />}
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => openEdit(a)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-slate-400"><Edit2 size={14} /></button>
+                        <button onClick={() => openEdit(a)} className="p-1 rounded hover:bg-(--ui-border-strong) text-(--ui-text-muted)"><Edit2 size={14} /></button>
                         {!a.is_system && (
-                          <button onClick={() => handleDelete(a.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 dark:text-slate-500 hover:text-red-600"><Trash2 size={14} /></button>
+                          <button onClick={() => handleDelete(a.id)} className="p-1 rounded hover:bg-(--ui-danger-bg) text-(--ui-text-muted) hover:text-(--ui-danger-fg)"><Trash2 size={14} /></button>
                         )}
                       </div>
                     </div>
@@ -328,13 +328,13 @@ export default function ChartOfAccountsRedesign() {
           </div>
         ) : (
           // Tree view grouped by type
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="border border-(--ui-border) rounded-lg overflow-hidden">
             {TYPE_ORDER.map((type) => {
               const roots = tree.filter((n) => n.type === type);
               if (!roots.length) return null;
               return (
                 <div key={type}>
-                  <div className="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                  <div className="bg-(--ui-muted-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wider">
                     {TYPE_LABELS[type]}
                   </div>
                   {roots.map((n) => renderNode(n))}
@@ -352,7 +352,7 @@ export default function ChartOfAccountsRedesign() {
         title={
           <>
             {form.id ? "Edit Account" : "Add Account"}
-            {form.is_system && <span className="ml-2 text-sm text-gray-400 dark:text-slate-500">(system — limited editing)</span>}
+            {form.is_system && <span className="ml-2 text-sm text-(--ui-text-muted)">(system — limited editing)</span>}
           </>
         }
         size="md"

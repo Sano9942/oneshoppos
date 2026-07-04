@@ -97,9 +97,9 @@ export default function FBRSettingsRedesign() {
 
   const statusDot =
     connectionStatus === "connected"
-      ? "bg-emerald-500"
+      ? "bg-(--ui-success-fg)"
       : connectionStatus === "failed"
-        ? "bg-red-500"
+        ? "bg-(--ui-danger-fg)"
         : "bg-(--ui-border)";
 
   const statusLabel =

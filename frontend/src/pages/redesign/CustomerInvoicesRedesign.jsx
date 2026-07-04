@@ -185,7 +185,7 @@ export default function CustomerInvoicesRedesign() {
           <input className="w-16 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Qty" value={item.quantity} onChange={(e) => onUpdate(i, "quantity", e.target.value)} />
           <input className="w-24 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Price" value={item.unit_price} onChange={(e) => onUpdate(i, "unit_price", e.target.value)} />
           <input className="w-16 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Tax %" value={item.tax_rate} onChange={(e) => onUpdate(i, "tax_rate", e.target.value)} />
-          <Button tone="plain" size="sm" iconOnly onClick={() => onRemove(i)} aria-label="Remove item" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>
+          <Button tone="plain" size="sm" iconOnly onClick={() => onRemove(i)} aria-label="Remove item" className="text-(--ui-danger-fg)"><Trash2 className="w-4 h-4" /></Button>
         </div>
       ))}
     </div>
@@ -242,7 +242,7 @@ export default function CustomerInvoicesRedesign() {
                           <Button tone="plain" size="sm" iconOnly onClick={() => sendReminder(inv.id)} title="Send reminder" aria-label="Send reminder"><FileText className="w-4 h-4" /></Button>
                           {flags.payment_links && <Button tone="plain" size="sm" iconOnly onClick={() => generatePaymentLink(inv.id)} title="Payment link" aria-label="Payment link"><Link2 className="w-4 h-4" /></Button>}
                         </>}
-                        {inv.status === "draft" && <Button tone="plain" size="sm" iconOnly onClick={() => voidInvoice(inv.id)} title="Void" aria-label="Void" className="text-red-500"><Ban className="w-4 h-4" /></Button>}
+                        {inv.status === "draft" && <Button tone="plain" size="sm" iconOnly onClick={() => voidInvoice(inv.id)} title="Void" aria-label="Void" className="text-(--ui-danger-fg)"><Ban className="w-4 h-4" /></Button>}
                       </div>
                     </td>
                   </tr>

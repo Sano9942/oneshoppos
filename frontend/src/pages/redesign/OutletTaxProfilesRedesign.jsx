@@ -111,7 +111,7 @@ export default function OutletTaxProfilesRedesign() {
                     <span className="text-(--ui-muted) text-xs ml-2">{p.lines?.length || 0} overrides</span>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(p.outlet_id); }} className="p-1 hover:text-red-500"><Trash2 size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(p.outlet_id); }} className="p-1 hover:text-(--ui-danger-fg)"><Trash2 size={14} /></button>
                     {expanded === p.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </div>
                 </div>
@@ -136,10 +136,10 @@ export default function OutletTaxProfilesRedesign() {
                           {taxes.map(t => <option key={t.id} value={t.id}>{t.name} ({Number(t.rate)}%)</option>)}
                         </select>
                         <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-16" type="number" placeholder="Priority" value={line.priority} onChange={e => updateLine(idx, "priority", Number(e.target.value))} />
-                        <button onClick={() => removeLine(idx)} className="text-red-500 p-1"><X size={14} /></button>
+                        <button onClick={() => removeLine(idx)} className="text-(--ui-danger-fg) p-1"><X size={14} /></button>
                       </div>
                     ))}
-                    <button onClick={addLine} className="text-sm text-blue-500 mt-2 hover:underline">+ Add override line</button>
+                    <button onClick={addLine} className="text-sm text-(--ui-link) mt-2 hover:underline">+ Add override line</button>
                     <div className="flex gap-2 justify-end mt-4">
                       <Button tone="plain" size="sm" onClick={() => setExpanded(null)}>Cancel</Button>
                       <Button size="sm" onClick={() => handleSave(p.outlet_id)}>Save</Button>
@@ -167,7 +167,7 @@ export default function OutletTaxProfilesRedesign() {
               const outletId = Number(String(expanded).replace("new-", ""));
               const outlet = outlets.find(o => o.id === outletId);
               return (
-                <div className="border border-blue-300 rounded-lg p-4 mt-2">
+                <div className="border border-(--ui-border-strong) rounded-lg p-4 mt-2">
                   <h3 className="font-medium text-(--ui-text) mb-3">New Tax Profile for {outlet?.name}</h3>
                   <div className="mb-3">
                     <label className="text-sm text-(--ui-muted)">Profile Name</label>
@@ -188,10 +188,10 @@ export default function OutletTaxProfilesRedesign() {
                         {taxes.map(t => <option key={t.id} value={t.id}>{t.name} ({Number(t.rate)}%)</option>)}
                       </select>
                       <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-16" type="number" placeholder="Priority" value={line.priority} onChange={e => updateLine(idx, "priority", Number(e.target.value))} />
-                      <button onClick={() => removeLine(idx)} className="text-red-500 p-1"><X size={14} /></button>
+                      <button onClick={() => removeLine(idx)} className="text-(--ui-danger-fg) p-1"><X size={14} /></button>
                     </div>
                   ))}
-                  <button onClick={addLine} className="text-sm text-blue-500 mt-2 hover:underline">+ Add override line</button>
+                  <button onClick={addLine} className="text-sm text-(--ui-link) mt-2 hover:underline">+ Add override line</button>
                   <div className="flex gap-2 justify-end mt-4">
                     <Button tone="plain" size="sm" onClick={() => setExpanded(null)}>Cancel</Button>
                     <Button size="sm" onClick={() => handleSave(outletId)}>Create Profile</Button>
