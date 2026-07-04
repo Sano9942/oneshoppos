@@ -139,7 +139,7 @@ async function notifyOffer(db, entry, slotInfo, notifyCtx) {
  * Locks the session row so the capacity check can't race a concurrent booking.
  * No-op when the class has no free spot or no waiting entries.
  */
-async function offerNextForClassSession(db, classSessionId, notifyCtx) {
+async function offerNextForClassSession(db, classSessionId, notifyCtx, { entryId } = {}) {
   const result = await db.transaction(async (client) => {
     const { rows: [session] } = await client.query(
       "SELECT * FROM class_sessions WHERE id = $1 FOR UPDATE",
@@ -165,9 +165,10 @@ async function offerNextForClassSession(db, classSessionId, notifyCtx) {
        WHERE id = (
          SELECT id FROM appointment_waitlist_entries
          WHERE class_session_id = $1 AND status = 'waiting'
+           AND ($4::int IS NULL OR id = $4::int)
          ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        ) RETURNING *`,
-      [session.id, OFFER_WINDOW_MINUTES, newClaimToken()]
+      [session.id, OFFER_WINDOW_MINUTES, newClaimToken(), entryId || null]
     );
     if (!entry) return null;
 

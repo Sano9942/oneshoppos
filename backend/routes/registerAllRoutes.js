@@ -667,6 +667,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./restaurant-inbox")(app, deps);
   require("./restaurant-kiosk")(app, deps);
   require("./bookings")(app, deps);
+  require("./classes")(app, deps); // F06 — class sessions timetable + waitlist
   require("./projects")(app, deps);
   require("./contracts")(app, deps);
   require("./service-tickets")(app, deps);

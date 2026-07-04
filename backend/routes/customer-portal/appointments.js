@@ -231,5 +231,113 @@ module.exports = function registerCustomerPortalAppointments(app, deps) {
     }
   );
 
+  // ── F06 classes (portal entry path) ────────────────────────────────
+  // Same single service fn as admin/public; identity comes from the portal JWT.
+
+  async function classFlagEnabled(db) {
+    try {
+      const { rows } = await db.query(
+        "SELECT enabled FROM feature_flags WHERE key = 'phase4_appointments_classes'"
+      );
+      return rows.length ? rows[0].enabled === true : false;
+    } catch { return false; }
+  }
+
+  // GET /me/classes — upcoming sessions with my booking state
+  router.get("/me/classes", authMw, async (req, res) => {
+    try {
+      if (!(await classFlagEnabled(req.db))) return res.status(403).json({ error: "Feature disabled: phase4_appointments_classes" });
+      const { rows } = await req.db.query(
+        `SELECT cs.id, cs.start_at, cs.end_at, cs.max_capacity, cs.price, cs.notes,
+           bs.name AS service_name, e.name AS employee_name,
+           (SELECT COUNT(*)::int FROM class_session_bookings b
+            WHERE b.class_session_id = cs.id AND b.status = 'confirmed') AS confirmed_count,
+           (SELECT json_build_object('id', mb.id, 'status', mb.status)
+            FROM class_session_bookings mb
+            WHERE mb.class_session_id = cs.id AND mb.customer_id = $1
+              AND mb.status <> 'cancelled' LIMIT 1) AS my_booking
+         FROM class_sessions cs
+         JOIN booking_services bs ON bs.id = cs.service_id
+         LEFT JOIN employees e ON e.id = cs.employee_id
+         WHERE cs.status = 'scheduled' AND cs.start_at > NOW()
+         ORDER BY cs.start_at ASC
+         LIMIT 100`,
+        [req.customerId]
+      );
+      res.json({
+        sessions: rows.map((r) => ({
+          ...r,
+          spots_left: Math.max(0, r.max_capacity - r.confirmed_count),
+        })),
+      });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // POST /me/classes/:sessionId/book
+  router.post("/me/classes/:sessionId/book", authMw, async (req, res) => {
+    try {
+      if (!(await classFlagEnabled(req.db))) return res.status(403).json({ error: "Feature disabled: phase4_appointments_classes" });
+      const { bookIntoSession } = require("../../services/class-bookings");
+      const result = await bookIntoSession(req.db, {
+        classSessionId: Number(req.params.sessionId),
+        customerId: req.customerId,
+        bookedVia: "portal",
+      });
+      res.status(201).json(result.booking);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        error: err.message,
+        code: err.code,
+        ...(err.code === "CLASS_FULL" ? { hint: "Join the waitlist to be offered the next free spot" } : {}),
+      });
+    }
+  });
+
+  // PUT /me/classes/bookings/:id/cancel — ownership-checked cancel
+  router.put("/me/classes/bookings/:id/cancel", authMw, async (req, res) => {
+    try {
+      const { rows: [existing] } = await req.db.query(
+        "SELECT id, customer_id FROM class_session_bookings WHERE id = $1",
+        [Number(req.params.id)]
+      );
+      if (!existing || Number(existing.customer_id) !== Number(req.customerId)) {
+        return res.status(404).json({ error: "Class booking not found" });
+      }
+      const { cancelClassBooking } = require("../../services/class-bookings");
+      const booking = await cancelClassBooking(req.db, existing.id, {
+        notifyCtx: {
+          tenantSlug: req.tenant?.slug,
+          tenant: req.tenant,
+          frontendUrl: process.env.FRONTEND_URL,
+        },
+      });
+      res.json(booking);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // POST /me/classes/:sessionId/waitlist — join a full class's waitlist
+  router.post("/me/classes/:sessionId/waitlist", authMw, async (req, res) => {
+    try {
+      const { rows: wl } = await req.db.query(
+        "SELECT enabled FROM feature_flags WHERE key = 'phase4_appointments_waitlists'"
+      );
+      if (!(wl.length && wl[0].enabled === true)) {
+        return res.status(403).json({ error: "Feature disabled: phase4_appointments_waitlists" });
+      }
+      const { joinClassWaitlist } = require("../../services/waitlist");
+      const entry = await joinClassWaitlist(req.db, {
+        classSessionId: Number(req.params.sessionId),
+        customerId: req.customerId,
+      });
+      res.status(201).json(entry);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
   app.use("/api/portal", router);
 };
