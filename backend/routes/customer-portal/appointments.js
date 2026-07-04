@@ -197,7 +197,14 @@ module.exports = function registerCustomerPortalAppointments(app, deps) {
         const cancelled = await cancelAppointment(
           req.db,
           Number(req.params.id),
-          req.body.reason || null
+          req.body.reason || null,
+          {
+            notifyCtx: {
+              tenantSlug: req.tenant?.slug,
+              tenant: req.tenant,
+              frontendUrl: process.env.FRONTEND_URL,
+            },
+          }
         );
 
         const customer = await loadCustomerRow(req.db, req.customerId);

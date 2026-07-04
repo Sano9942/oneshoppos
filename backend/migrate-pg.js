@@ -7426,7 +7426,9 @@ const MIGRATIONS = [
             ADD COLUMN IF NOT EXISTS offered_at TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS offer_expires_at TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS claim_token TEXT,
-            ADD COLUMN IF NOT EXISTS customer_email TEXT
+            ADD COLUMN IF NOT EXISTS customer_email TEXT,
+            ADD COLUMN IF NOT EXISTS offered_start_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS offered_employee_id INTEGER REFERENCES employees(id)
         `);
         await client.query(
           "ALTER TABLE appointment_waitlist_entries DROP CONSTRAINT IF EXISTS appointment_waitlist_entries_status_check"

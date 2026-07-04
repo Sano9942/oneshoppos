@@ -4,7 +4,15 @@ module.exports = function registerBookingRoutes(app, deps) {
   const { validate } = require("../middleware/validate");
   const { createServiceSchema, updateServiceSchema, createAppointmentSchema, rescheduleSchema, cancelSchema } = require("../schemas/bookings");
   const { getAvailableSlots } = require("../services/booking-availability");
-  const { createAppointment, rescheduleAppointment, cancelAppointment } = require("../services/booking-services");
+  const { createAppointment, rescheduleAppointment, cancelAppointment, mapOverlapConstraintError } = require("../services/booking-services");
+
+  // notifyCtx for the waitlist offer flow + F05 notifications (fire-and-forget
+  // downstream; safe when slug is missing — notify() rejects and is caught).
+  const notifyCtxFrom = (req) => ({
+    tenantSlug: req.tenantSlug,
+    tenant: { slug: req.tenantSlug, name: req.company?.company_name },
+    frontendUrl: process.env.FRONTEND_URL,
+  });
 
   const gate = [requireMode("appointments"), requireFeature("phase4_appointments"), requirePerm("manage_bookings")];
 
@@ -161,7 +169,10 @@ module.exports = function registerBookingRoutes(app, deps) {
       if (!appt) return res.status(404).json({ error: "Appointment not found" });
       res.json(appt);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ error: err.message });
+      // employee_id reassignment never ran checkOverlap — the v100 EXCLUDE
+      // constraint is what catches a conflicting move here.
+      const mapped = mapOverlapConstraintError(err);
+      res.status(mapped.statusCode || 500).json({ error: mapped.message });
     }
   });
 
@@ -177,7 +188,7 @@ module.exports = function registerBookingRoutes(app, deps) {
 
   app.post("/api/appointments/:id/cancel", ...gate, validate(cancelSchema), async (req, res) => {
     try {
-      const appt = await cancelAppointment(deps.db, Number(req.params.id), req.body.reason);
+      const appt = await cancelAppointment(deps.db, Number(req.params.id), req.body.reason, { notifyCtx: notifyCtxFrom(req) });
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_cancelled", JSON.stringify({ id: appt.id })]); } catch {}
       res.json(appt);
     } catch (err) {

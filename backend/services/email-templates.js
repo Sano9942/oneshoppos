@@ -989,6 +989,53 @@ function appointmentReminder(data) {
   };
 }
 
+// -- F06: class session cancelled (classes engine) -------------------------
+function classCancelled(data) {
+  const { storeName, customerName, className, classStart, reason } = data || {};
+  let when = classStart;
+  try { if (classStart) when = new Date(classStart).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Cancelled: ${className || "your class"}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Class Cancelled",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We're sorry — the following class at <strong>${storeName || "our store"}</strong> has been cancelled.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         ${className ? `<tr><td style="padding:10px 16px;color:#64748b">Class</td><td style="padding:10px 16px;font-weight:600">${className}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+         ${reason ? `<tr><td style="padding:10px 16px;color:#64748b">Reason</td><td style="padding:10px 16px">${reason}</td></tr>` : ""}
+       </table>
+       <p>Please get in touch to rebook or pick another session.</p>
+       ${footer("This is an automated class-schedule notification.")}`
+    ),
+  };
+}
+
+// -- F06: waitlist offer (spot opened up) -----------------------------------
+function waitlistOffer(data) {
+  const { storeName, customerName, className, classStart, offerExpiresAt, claimUrl } = data || {};
+  let when = classStart;
+  try { if (classStart) when = new Date(classStart).toLocaleString(); } catch { /* leave as-is */ }
+  let expires = offerExpiresAt;
+  try { if (offerExpiresAt) expires = new Date(offerExpiresAt).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `A spot opened up${className ? ` — ${className}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Your Waitlist Spot Is Ready",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Good news — a spot opened up for a session you're waitlisted for at <strong>${storeName || "our store"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+         ${className ? `<tr><td style="padding:10px 16px;color:#64748b">Class</td><td style="padding:10px 16px;font-weight:600">${className}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+         ${expires ? `<tr><td style="padding:10px 16px;color:#64748b">Claim by</td><td style="padding:10px 16px;font-weight:600;color:#dc2626">${expires}</td></tr>` : ""}
+       </table>
+       ${claimUrl ? `<p style="text-align:center;margin:24px 0"><a href="${claimUrl}" style="background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Claim My Spot</a></p>` : ""}
+       <p>If you don't claim it before the deadline, the spot is offered to the next person in line.</p>
+       ${footer("This is an automated waitlist notification.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   // F05 customer notifications (status-change engine)
@@ -997,6 +1044,9 @@ const TEMPLATES = {
   ticket_completed: ticketCompleted,
   ticket_invoiced: ticketInvoiced,
   appointment_reminder: appointmentReminder,
+  // F06 scheduling (classes + waitlist)
+  class_cancelled: classCancelled,
+  waitlist_offer: waitlistOffer,
   campaign_test: campaignTest,
   customer_invoice: customerInvoice,
   customer_statement: customerStatement,

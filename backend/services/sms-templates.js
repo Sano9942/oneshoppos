@@ -41,6 +41,26 @@ const SMS_TEMPLATES = {
       "{{storeName}}: Reminder — your {{serviceName}} appointment is at {{apptTime}}.",
       { ...d, apptTime: d && d.apptTime != null ? d.apptTime : fmtWhen(d && d.apptStart) }
     ),
+
+  // F06 scheduling — class sessions + waitlist offer flow
+  class_cancelled: (d) =>
+    fill(
+      "{{storeName}}: {{className}} on {{classTime}} has been cancelled.{{reasonSuffix}}",
+      {
+        ...d,
+        classTime: d && d.classTime != null ? d.classTime : fmtWhen(d && d.classStart),
+        reasonSuffix: d && d.reason ? ` Reason: ${d.reason}` : "",
+      }
+    ),
+  waitlist_offer: (d) =>
+    fill(
+      "{{storeName}}: A spot opened up for {{className}} at {{classTime}}. Claim it before {{expiresAt}}: {{claimUrl}}",
+      {
+        ...d,
+        classTime: d && d.classTime != null ? d.classTime : fmtWhen(d && d.classStart),
+        expiresAt: d && d.expiresAt != null ? d.expiresAt : fmtWhen(d && d.offerExpiresAt),
+      }
+    ),
 };
 
 /**

@@ -4,6 +4,31 @@
 
 const MIN_NOTICE_MS = 15 * 60 * 1000;
 
+/**
+ * Serialize all bookings for one employee inside the current transaction.
+ * Transaction-scoped advisory lock (pg_advisory_xact_lock) — safe under the
+ * Supavisor transaction pooler precisely BECAUSE it is xact-scoped: the whole
+ * db.transaction runs on one pooled connection and the lock releases at
+ * COMMIT/ROLLBACK. Cross-statement session locks are what the pooler forbids.
+ * Key is schema-qualified so tenants never contend on each other's employee ids.
+ */
+async function lockEmployeeCalendar(client, employeeId) {
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':appt-emp-' || $1::text))",
+    [Number(employeeId)]
+  );
+}
+
+/** Map the v100 EXCLUDE-constraint violation to the same friendly 409 the
+ *  overlap pre-check throws — the constraint is the backstop for writes that
+ *  race past (or never ran) checkOverlap. */
+function mapOverlapConstraintError(err) {
+  if (err && err.code === "23P01" && /excl_appointments_employee_overlap/.test(err.message || "")) {
+    return Object.assign(new Error("Time slot is already booked"), { statusCode: 409 });
+  }
+  return err;
+}
+
 async function createAppointment(db, data, source = "admin", options = {}) {
   const { rows: [service] } = await db.query(
     "SELECT * FROM booking_services WHERE id = $1",
@@ -36,36 +61,49 @@ async function createAppointment(db, data, source = "admin", options = {}) {
     }
   }
 
-  // Check overlap if employee assigned
-  if (data.employee_id) {
-    const { checkOverlap } = require("./booking-availability");
-    const overlaps = await checkOverlap(db, data.employee_id, startAt.toISOString(), endAt.toISOString());
-    if (overlaps) throw Object.assign(new Error("Time slot is already booked"), { statusCode: 409 });
-  }
-
   const status = (source === "public" && service.requires_confirmation) ? "pending" : "confirmed";
 
-  const { rows: [appt] } = await db.query(
-    `INSERT INTO appointments (service_id, variant_id, customer_id, employee_id, outlet_id,
-       status, start_at, end_at, customer_name, customer_phone, customer_email, notes, source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-    [data.service_id, data.variant_id || null, data.customer_id || null,
-     data.employee_id || null, data.outlet_id || service.outlet_id || null,
-     status, startAt.toISOString(), endAt.toISOString(),
-     data.customer_name || null, data.customer_phone || null, data.customer_email || null,
-     data.notes || null, source]
-  );
+  // Concurrency contract (F06): lock → overlap check → insert, ONE transaction.
+  // Two concurrent requests for the same employee serialize on the advisory
+  // lock, so the loser's overlap check sees the winner's committed row and
+  // throws a clean 409 instead of double-booking (completion-03 TOCTOU verdict).
+  let appt;
+  try {
+    appt = await db.transaction(async (client) => {
+      if (data.employee_id) {
+        await lockEmployeeCalendar(client, data.employee_id);
+        const { checkOverlap } = require("./booking-availability");
+        const overlaps = await checkOverlap(client, data.employee_id, startAt.toISOString(), endAt.toISOString());
+        if (overlaps) throw Object.assign(new Error("Time slot is already booked"), { statusCode: 409 });
+      }
 
-  // Schedule reminder
-  if (data.customer_email || data.customer_phone) {
-    const reminderTime = new Date(startAt.getTime() - 60 * 60 * 1000); // 1 hour before
-    if (reminderTime > new Date()) {
-      await db.query(
-        `INSERT INTO appointment_reminders (appointment_id, minutes_before, channel, scheduled_for)
-         VALUES ($1, 60, $2, $3)`,
-        [appt.id, data.customer_email ? "email" : "sms", reminderTime.toISOString()]
+      const { rows: [row] } = await client.query(
+        `INSERT INTO appointments (service_id, variant_id, customer_id, employee_id, outlet_id,
+           status, start_at, end_at, customer_name, customer_phone, customer_email, notes, source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [data.service_id, data.variant_id || null, data.customer_id || null,
+         data.employee_id || null, data.outlet_id || service.outlet_id || null,
+         status, startAt.toISOString(), endAt.toISOString(),
+         data.customer_name || null, data.customer_phone || null, data.customer_email || null,
+         data.notes || null, source]
       );
-    }
+
+      // Schedule reminder (same transaction — an appointment without its
+      // reminder row is worse than a clean retry).
+      if (data.customer_email || data.customer_phone) {
+        const reminderTime = new Date(startAt.getTime() - 60 * 60 * 1000); // 1 hour before
+        if (reminderTime > new Date()) {
+          await client.query(
+            `INSERT INTO appointment_reminders (appointment_id, minutes_before, channel, scheduled_for)
+             VALUES ($1, 60, $2, $3)`,
+            [row.id, data.customer_email ? "email" : "sms", reminderTime.toISOString()]
+          );
+        }
+      }
+      return row;
+    });
+  } catch (err) {
+    throw mapOverlapConstraintError(err);
   }
 
   // Public / portal booking: send confirmation email (non-fatal).
@@ -144,28 +182,53 @@ async function rescheduleAppointment(db, appointmentId, data) {
   const newEnd = new Date(newStart.getTime() + service.duration_minutes * 60 * 1000);
   const employeeId = data.employee_id || appt.employee_id;
 
-  if (employeeId) {
-    const { checkOverlap } = require("./booking-availability");
-    const overlaps = await checkOverlap(db, employeeId, newStart.toISOString(), newEnd.toISOString(), appointmentId);
-    if (overlaps) throw Object.assign(new Error("New time slot is already booked"), { statusCode: 409 });
-  }
+  // Same locked contract as createAppointment — reschedule races are the same
+  // TOCTOU (two reschedules into one slot, or reschedule vs new booking).
+  try {
+    return await db.transaction(async (client) => {
+      if (employeeId) {
+        await lockEmployeeCalendar(client, employeeId);
+        const { checkOverlap } = require("./booking-availability");
+        const overlaps = await checkOverlap(client, employeeId, newStart.toISOString(), newEnd.toISOString(), appointmentId);
+        if (overlaps) throw Object.assign(new Error("New time slot is already booked"), { statusCode: 409 });
+      }
 
-  const { rows: [updated] } = await db.query(
-    `UPDATE appointments SET start_at = $1, end_at = $2, employee_id = $3, updated_at = NOW()
-     WHERE id = $4 RETURNING *`,
-    [newStart.toISOString(), newEnd.toISOString(), employeeId, appointmentId]
-  );
-  return updated;
+      const { rows: [updated] } = await client.query(
+        `UPDATE appointments SET start_at = $1, end_at = $2, employee_id = $3, updated_at = NOW()
+         WHERE id = $4 RETURNING *`,
+        [newStart.toISOString(), newEnd.toISOString(), employeeId, appointmentId]
+      );
+      return updated;
+    });
+  } catch (err) {
+    throw mapOverlapConstraintError(err);
+  }
 }
 
-async function cancelAppointment(db, appointmentId, reason) {
+async function cancelAppointment(db, appointmentId, reason, options = {}) {
   const { rows: [appt] } = await db.query(
     `UPDATE appointments SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = $2, updated_at = NOW()
      WHERE id = $1 AND status NOT IN ('cancelled','completed') RETURNING *`,
     [appointmentId, reason || null]
   );
   if (!appt) throw Object.assign(new Error("Appointment not found or already cancelled"), { statusCode: 404 });
+
+  // Waitlist ripple (F06): every cancel path funnels through here, so this is
+  // the ONE place a freed slot triggers the offer flow. Fire-and-forget — the
+  // cancel must never fail because an offer couldn't be made.
+  if (options.notifyCtx && options.notifyCtx.tenantSlug) {
+    try {
+      const { offerForFreedAppointmentSlot } = require("./waitlist");
+      offerForFreedAppointmentSlot(db, appt, options.notifyCtx).catch(() => {});
+    } catch { /* waitlist module optional at boot */ }
+  }
   return appt;
 }
 
-module.exports = { createAppointment, rescheduleAppointment, cancelAppointment };
+module.exports = {
+  createAppointment,
+  rescheduleAppointment,
+  cancelAppointment,
+  lockEmployeeCalendar,
+  mapOverlapConstraintError,
+};

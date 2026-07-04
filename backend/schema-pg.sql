@@ -3783,6 +3783,10 @@ CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
   offer_expires_at TIMESTAMPTZ,
   claim_token TEXT,
   customer_email TEXT,
+  -- freed appointment slot snapshot (appointment waitlists only — a class
+  -- offer's slot IS the session; an appointment offer must remember the slot).
+  offered_start_at TIMESTAMPTZ,
+  offered_employee_id INTEGER REFERENCES employees(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
