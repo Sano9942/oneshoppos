@@ -257,6 +257,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "all_access", requiredFlag: "multi_company" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
       { name: "Integrations", path: "/settings/integrations", icon: Plug, requiredPerm: "manage_inventory" },
+      { name: "Customer Notifications", path: "/settings/notifications", icon: Bell, requiredPerm: "manage_inventory", requiredFlag: "customer_notifications" },
       { name: "Manufacturer Partners", path: "/settings/manufacturer-partners", icon: Briefcase, requiredPerm: "manage_inventory", requiredFlag: "wholesale_secondary_sales" },
       { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
