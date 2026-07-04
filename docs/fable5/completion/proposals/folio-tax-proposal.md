@@ -1,6 +1,6 @@
 # Folio-tax proposal — rentals / rooms / treatment plans (plan-01 open item 2)
 
-**Status: PROPOSAL ONLY — awaiting approval. Nothing here is applied.** Schema changes and tax-chain changes are both on the pause list; this document is the decision artifact. The decision gates the later vertical-depth steps for rentals (V09), lodging (V10), and clinical (V05).
+**Status: APPROVED 2026-07-04 (schema columns + no-backfill stance + FBR out-of-scope, all three as proposed). Not yet implemented.** Implementation happens in the gated later steps (rentals V09, lodging V10, clinical V05 — plan-01 steps 18/19/20); the migration below is the agreed design for that work.
 
 ## Verified current state (2026-07-04, code-confirmed)
 
