@@ -249,7 +249,7 @@ export default function ImportWizard({ onCancel, onComplete }) {
             ))}
           </select>
           {savedMapping && (
-            <p className="text-xs text-green-600 dark:text-green-400">
+            <p className="text-xs text-(--ui-success-fg)">
               Saved column mapping available for this courier — step 3 will be
               skipped if the uploaded file matches.
             </p>
@@ -340,12 +340,12 @@ export default function ImportWizard({ onCancel, onComplete }) {
               Total remitted: <strong>{fmt(totalAmount)}</strong>
             </div>
             {rows.length > 5000 && (
-              <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              <div className="text-xs text-(--ui-warning-fg) mt-1">
                 Large batch — import may take a minute.
               </div>
             )}
             {hasBadAmounts && (
-              <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+              <div className="text-xs text-(--ui-danger-fg) mt-1">
                 Warning: amount column contains non-numeric values. Fix the
                 mapping or the file before continuing.
               </div>

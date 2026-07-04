@@ -87,7 +87,7 @@ function SupplierLedger({ supplier, fmt, onBack }) {
       }
     >
       {error && (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       )}
@@ -100,7 +100,7 @@ function SupplierLedger({ supplier, fmt, onBack }) {
         </SectionCard>
         <SectionCard className="p-3">
           <p className="text-xs text-(--ui-text-muted)">Closing Balance</p>
-          <p className={`text-2xl font-semibold ${closingBalance > 0 ? "text-rose-600" : closingBalance < 0 ? "text-emerald-600" : "text-(--ui-text)"}`}>
+          <p className={`text-2xl font-semibold ${closingBalance > 0 ? "text-(--ui-danger-fg)" : closingBalance < 0 ? "text-(--ui-success-fg)" : "text-(--ui-text)"}`}>
             {fmt(Math.abs(closingBalance))}
             {closingBalance > 0 ? " owed" : closingBalance < 0 ? " overpaid" : ""}
           </p>
@@ -156,9 +156,9 @@ function SupplierLedger({ supplier, fmt, onBack }) {
                     <Badge tone={TYPE_TONES[e.type] || "default"}>{TYPE_LABELS[e.type] || e.type}</Badge>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{e.reference}</td>
-                  <td className="px-3 py-2 text-right text-rose-600">{e.debit > 0 ? fmt(e.debit) : "-"}</td>
-                  <td className="px-3 py-2 text-right text-emerald-600">{e.credit > 0 ? fmt(e.credit) : "-"}</td>
-                  <td className={`px-3 py-2 text-right font-medium ${e.running_balance > 0 ? "text-rose-600" : "text-(--ui-text)"}`}>
+                  <td className="px-3 py-2 text-right text-(--ui-danger-fg)">{e.debit > 0 ? fmt(e.debit) : "-"}</td>
+                  <td className="px-3 py-2 text-right text-(--ui-success-fg)">{e.credit > 0 ? fmt(e.credit) : "-"}</td>
+                  <td className={`px-3 py-2 text-right font-medium ${e.running_balance > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}>
                     {fmt(Math.abs(e.running_balance))}
                     {e.running_balance < 0 ? " CR" : ""}
                   </td>
@@ -329,7 +329,7 @@ export default function SuppliersRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -349,7 +349,7 @@ export default function SuppliersRedesign() {
         </SectionCard>
         <SectionCard className="p-3">
           <p className="text-xs text-(--ui-text-muted)">Total Outstanding</p>
-          <p className={`text-xl font-semibold ${totalOutstanding > 0 ? "text-rose-600" : "text-(--ui-text)"}`}>
+          <p className={`text-xl font-semibold ${totalOutstanding > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}>
             {fmt(totalOutstanding)}
           </p>
         </SectionCard>
@@ -415,11 +415,11 @@ export default function SuppliersRedesign() {
                     <td className="px-3 py-2 text-right">
                       {balance > 0 ? (
                         <div>
-                          <span className={`font-medium ${overLimit ? "text-rose-600" : "text-(--ui-text)"}`}>
+                          <span className={`font-medium ${overLimit ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}>
                             {fmt(balance)}
                           </span>
                           {overLimit && (
-                            <p className="text-xs text-rose-500">Over limit</p>
+                            <p className="text-xs text-(--ui-danger-fg)">Over limit</p>
                           )}
                         </div>
                       ) : (

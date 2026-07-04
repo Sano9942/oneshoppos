@@ -58,17 +58,17 @@ function StatusBadge({ status }) {
 
 // ── Progress bar ────────────────────────────────────────────────────
 
-function ProgressBar({ current, total, color = "bg-blue-500" }) {
+function ProgressBar({ current, total, color = "bg-(--ui-primary)" }) {
   const pct = total > 0 ? Math.round((current / total) * 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 grow rounded-full bg-gray-200 dark:bg-gray-700">
+      <div className="h-2 grow rounded-full bg-(--ui-muted-surface)">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-gray-500 dark:text-slate-400 tabular-nums">{pct}%</span>
+      <span className="text-xs text-(--ui-text-muted) tabular-nums">{pct}%</span>
     </div>
   );
 }
@@ -125,15 +125,15 @@ export default function FulfillmentRedesign() {
       ) : (
         <>
           {/* Tab bar */}
-          <div className="mb-4 flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+          <div className="mb-4 flex gap-1 rounded-lg bg-(--ui-muted-surface) p-1">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? "bg-white shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-gray-300"
+                    ? "bg-white text-(--ui-text)"
+                    : "text-(--ui-text-muted) hover:text-(--ui-text)"
                 }`}
               >
                 <t.icon className="h-4 w-4" />
@@ -212,7 +212,7 @@ function PickupOrdersTab({ fmt }) {
   return (
     <SectionCard>
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900 dark:text-white">Pickup Orders</h3>
+        <h3 className="font-semibold text-(--ui-text)">Pickup Orders</h3>
         <div className="flex items-center gap-2">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All statuses</option>
@@ -228,9 +228,9 @@ function PickupOrdersTab({ fmt }) {
       </div>
 
       {loading ? (
-        <p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading pickup orders...</p>
+        <p className="py-8 text-center text-(--ui-text-muted)">Loading pickup orders...</p>
       ) : orders.length === 0 ? (
-        <EmptyState icon={User} message="No pickup orders found" />
+        <EmptyState icon={<User size={28} />} title="No pickup orders found" />
       ) : (
         <div className="space-y-3">
           {orders.map((o) => {
@@ -239,24 +239,24 @@ function PickupOrdersTab({ fmt }) {
             return (
               <div
                 key={o.id}
-                className="flex items-start justify-between rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+                className="flex items-start justify-between rounded-lg border border-(--ui-border) p-4"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="font-medium text-(--ui-text)">
                       {o.external_order_number || `#${o.id}`}
                     </span>
                     <Badge tone={cfg.tone}>{cfg.label}</Badge>
                   </div>
-                  <div className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  <div className="mt-1 text-sm text-(--ui-text-muted)">
                     {o.customer_name && <span>{o.customer_name}</span>}
                     {o.customer_phone && <span className="ml-2">{o.customer_phone}</span>}
                   </div>
-                  <div className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  <div className="mt-1 text-sm text-(--ui-text-muted)">
                     {fmt(o.grand_total)}
                     {o.outlet_name && <span className="ml-2">@ {o.outlet_name}</span>}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400 dark:text-slate-500">
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-(--ui-text-muted)">
                     <span>Ordered: {fmtUtcDateTime(o.ordered_at)}</span>
                     {o.pickup_ready_at && <span>Ready: {fmtUtcDateTime(o.pickup_ready_at)}</span>}
                     {o.curbside_arrived_at && <span>Arrived: {fmtUtcDateTime(o.curbside_arrived_at)}</span>}
@@ -348,7 +348,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
   };
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading orders…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading orders…</p></SectionCard>;
   }
 
   if (!orders.length) {
@@ -358,7 +358,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
   return (
     <SectionCard>
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-gray-500 dark:text-slate-400">{orders.length} unfulfilled order(s)</p>
+        <p className="text-sm text-(--ui-text-muted)">{orders.length} unfulfilled order(s)</p>
         <Button
           onClick={createPicklist}
           disabled={!selected.size || creating}
@@ -370,7 +370,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+          <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
             <tr>
               <th className="px-3 py-2">
                 <input
@@ -387,12 +387,12 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
               <th className="px-3 py-2">Ordered</th>
             </tr>
           </thead>
-          <tbody className="divide-y dark:divide-gray-700">
+          <tbody className="divide-y">
             {orders.map((o) => (
               <tr
                 key={o.id}
-                className={`cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                  selected.has(o.id) ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                className={`cursor-pointer transition-colors hover:bg-(--ui-muted-surface) ${
+                  selected.has(o.id) ? "bg-(--ui-muted-surface)" : ""
                 }`}
                 onClick={() => toggle(o.id)}
               >
@@ -409,7 +409,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
                 <td className="px-3 py-2">{o.item_count}</td>
                 <td className="px-3 py-2">{fmt(o.grand_total)}</td>
                 <td className="px-3 py-2"><Badge tone={o.payment_status === "paid" ? "success" : "warning"}>{o.payment_status}</Badge></td>
-                <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{o.ordered_at ? fmtUtcDateTime(o.ordered_at) : "—"}</td>
+                <td className="px-3 py-2 text-(--ui-text-muted)">{o.ordered_at ? fmtUtcDateTime(o.ordered_at) : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -444,7 +444,7 @@ function PicklistsTab({ onOpen }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading picklists…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading picklists…</p></SectionCard>;
   }
 
   return (
@@ -467,7 +467,7 @@ function PicklistsTab({ onOpen }) {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2">Picklist #</th>
                 <th className="px-3 py-2">Status</th>
@@ -479,11 +479,11 @@ function PicklistsTab({ onOpen }) {
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
+            <tbody className="divide-y">
               {picklists.map((pl) => (
                 <tr
                   key={pl.id}
-                  className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="cursor-pointer transition-colors hover:bg-(--ui-muted-surface)"
                   onClick={() => onOpen(pl.id)}
                 >
                   <td className="px-3 py-2 font-medium">{pl.picklist_number}</td>
@@ -494,7 +494,7 @@ function PicklistsTab({ onOpen }) {
                     <ProgressBar current={pl.items_picked} total={pl.item_count} />
                   </td>
                   <td className="px-3 py-2">{pl.outlet_name || "—"}</td>
-                  <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{fmtUtcDateTime(pl.created_at)}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{fmtUtcDateTime(pl.created_at)}</td>
                   <td className="px-3 py-2">
                     <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(pl.id); }}>
                       Open
@@ -593,9 +593,9 @@ function QuickDispatchTab() {
   };
 
   const flashColors = {
-    success: "ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20",
-    error: "ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20",
-    warning: "ring-2 ring-yellow-500 bg-yellow-50 dark:bg-yellow-900/20",
+    success: "ring-2 ring-(--ui-success-fg) bg-(--ui-success-bg)",
+    error: "ring-2 ring-(--ui-danger-fg) bg-(--ui-danger-bg)",
+    warning: "ring-2 ring-(--ui-warning-fg) bg-(--ui-warning-bg)",
   };
 
   return (
@@ -604,19 +604,19 @@ function QuickDispatchTab() {
       <SectionCard className={`mb-4 transition-colors ${flash ? flashColors[flash] || "" : ""}`}>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-yellow-500" />
+            <Zap className="h-5 w-5 text-(--ui-warning-fg)" />
             <h3 className="text-sm font-semibold">Scan & Dispatch</h3>
           </div>
-          <Badge tone="info">{sessionCount} dispatched this session</Badge>
+          <Badge tone="default">{sessionCount} dispatched this session</Badge>
         </div>
 
         <form onSubmit={handleScan} className="flex items-center gap-3">
-          <ScanBarcode className="h-5 w-5 text-gray-400 dark:text-slate-500 shrink-0" />
+          <ScanBarcode className="h-5 w-5 text-(--ui-text-muted) shrink-0" />
           <input
             ref={inputRef}
             type="text"
             placeholder="Scan tracking number, order number, or order ID…"
-            className="grow rounded-md border border-gray-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            className="grow rounded-md border border-(--ui-border-strong) px-4 py-3 text-base focus:border-(--ui-focus) focus:outline-none"
             autoFocus
           />
           <Button type="submit" disabled={scanning}>
@@ -629,32 +629,32 @@ function QuickDispatchTab() {
       {/* Last result card */}
       {lastResult && (
         <SectionCard className={`mb-4 ${
-          lastResult.type === "success" ? "border-l-4 border-l-green-500"
-          : lastResult.type === "warning" ? "border-l-4 border-l-yellow-500"
-          : "border-l-4 border-l-red-500"
+          lastResult.type === "success" ? "border-l-4 border-l-(--ui-success-fg)"
+          : lastResult.type === "warning" ? "border-l-4 border-l-(--ui-warning-fg)"
+          : "border-l-4 border-l-(--ui-danger-fg)"
         }`}>
           <div className="flex items-center gap-3">
-            {lastResult.type === "success" && <CheckCircle className="h-6 w-6 text-green-500 shrink-0" />}
-            {lastResult.type === "warning" && <AlertTriangle className="h-6 w-6 text-yellow-500 shrink-0" />}
-            {lastResult.type === "error" && <X className="h-6 w-6 text-red-500 shrink-0" />}
+            {lastResult.type === "success" && <CheckCircle className="h-6 w-6 text-(--ui-success-fg) shrink-0" />}
+            {lastResult.type === "warning" && <AlertTriangle className="h-6 w-6 text-(--ui-warning-fg) shrink-0" />}
+            {lastResult.type === "error" && <X className="h-6 w-6 text-(--ui-danger-fg) shrink-0" />}
             <div>
               {lastResult.order ? (
                 <>
                   <p className="font-semibold">
                     {lastResult.order.order_number}
                     {lastResult.order.customer_name && (
-                      <span className="ml-2 font-normal text-gray-500 dark:text-slate-400">— {lastResult.order.customer_name}</span>
+                      <span className="ml-2 font-normal text-(--ui-text-muted)">— {lastResult.order.customer_name}</span>
                     )}
                   </p>
                   <p className={`text-sm ${
-                    lastResult.type === "success" ? "text-green-600 dark:text-green-400"
-                    : "text-yellow-600 dark:text-yellow-400"
+                    lastResult.type === "success" ? "text-(--ui-success-fg)"
+                    : "text-(--ui-warning-fg)"
                   }`}>
                     {lastResult.type === "success" ? "Dispatched successfully" : lastResult.message}
                   </p>
                 </>
               ) : (
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">{lastResult.message}</p>
+                <p className="text-sm font-medium text-(--ui-danger-fg)">{lastResult.message}</p>
               )}
             </div>
           </div>
@@ -667,7 +667,7 @@ function QuickDispatchTab() {
           <h3 className="mb-2 text-sm font-semibold">Recent Scans</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+              <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Scanned Value</th>
@@ -676,7 +676,7 @@ function QuickDispatchTab() {
                   <th className="px-3 py-2">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y dark:divide-gray-700">
+              <tbody className="divide-y">
                 {history.map((h, i) => (
                   <tr key={i}>
                     <td className="px-3 py-2">
@@ -687,7 +687,7 @@ function QuickDispatchTab() {
                     <td className="px-3 py-2 font-mono text-xs">{h.scan}</td>
                     <td className="px-3 py-2">{h.order?.order_number || "—"}</td>
                     <td className="px-3 py-2">{h.order?.customer_name || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{h.time.toLocaleTimeString()}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{h.time.toLocaleTimeString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -811,7 +811,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
   };
 
   if (loading || !pl) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading…</p></SectionCard>;
   }
 
   const items = pl.items || [];
@@ -827,12 +827,12 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
     <div>
       {/* Header */}
       <div className="mb-4 flex items-center gap-3">
-        <button onClick={onBack} className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+        <button onClick={onBack} className="rounded-md p-1 hover:bg-(--ui-muted-surface)">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">{pl.picklist_number}</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400">
+          <p className="text-sm text-(--ui-text-muted)">
             {pl.outlet_name} • Created by {pl.created_by_name || "—"} • {fmtUtcDateTime(pl.created_at)}
           </p>
         </div>
@@ -851,16 +851,16 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
             return (
               <div key={s} className="flex items-center gap-2">
                 {idx > 0 && (
-                  <div className={`h-0.5 w-8 ${done || active ? "bg-blue-500" : "bg-gray-200 dark:bg-gray-700"}`} />
+                  <div className={`h-0.5 w-8 ${done || active ? "bg-(--ui-primary)" : "bg-(--ui-muted-surface)"}`} />
                 )}
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                  done ? "bg-green-500 text-white"
-                  : active ? "bg-blue-500 text-white"
-                  : "bg-gray-200 text-gray-500 dark:text-slate-400 dark:bg-gray-700"
+                  done ? "bg-(--ui-success-fg) text-white"
+                  : active ? "bg-(--ui-primary) text-white"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
                 }`}>
                   {done ? <CheckCircle className="h-4 w-4" /> : idx + 1}
                 </div>
-                <span className={`hidden text-xs sm:block ${active ? "font-semibold text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}>
+                <span className={`hidden text-xs sm:block ${active ? "font-semibold text-(--ui-text)" : "text-(--ui-text-muted)"}`}>
                   {STATUS_CONFIG[s].label}
                 </span>
               </div>
@@ -872,17 +872,17 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
       {/* Scan bar */}
       {scannable && (
         <SectionCard className={`mb-4 transition-colors ${
-          flash === "success" ? "ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20"
-          : flash === "error" ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20"
+          flash === "success" ? "ring-2 ring-(--ui-success-fg) bg-(--ui-success-bg)"
+          : flash === "error" ? "ring-2 ring-(--ui-danger-fg) bg-(--ui-danger-bg)"
           : ""
         }`}>
           <form onSubmit={handleScan} className="flex items-center gap-3">
-            <ScanBarcode className="h-5 w-5 text-gray-400 dark:text-slate-500" />
+            <ScanBarcode className="h-5 w-5 text-(--ui-text-muted)" />
             <input
               ref={barcodeRef}
               type="text"
               placeholder={isPicking ? "Scan barcode to pick…" : "Scan barcode to pack…"}
-              className="grow rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+              className="grow rounded-md border border-(--ui-border-strong) px-3 py-2 text-sm focus:border-(--ui-focus) focus:outline-none"
               autoFocus
             />
             <Button type="submit" disabled={scanning}>
@@ -892,15 +892,15 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
           <div className="mt-3 flex gap-6">
             <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Picked</p>
-              <ProgressBar current={pickedQty} total={totalQty} color="bg-blue-500" />
-              <p className="text-xs text-gray-400 dark:text-slate-500">{pickedQty} / {totalQty}</p>
+              <p className="text-xs text-(--ui-text-muted)">Picked</p>
+              <ProgressBar current={pickedQty} total={totalQty} color="bg-(--ui-primary)" />
+              <p className="text-xs text-(--ui-text-muted)">{pickedQty} / {totalQty}</p>
             </div>
             {(isPacking || pl.status === "packed" || pl.status === "dispatched") && (
               <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">Packed</p>
-                <ProgressBar current={packedQty} total={totalQty} color="bg-green-500" />
-                <p className="text-xs text-gray-400 dark:text-slate-500">{packedQty} / {totalQty}</p>
+                <p className="text-xs text-(--ui-text-muted)">Packed</p>
+                <ProgressBar current={packedQty} total={totalQty} color="bg-(--ui-success-fg)" />
+                <p className="text-xs text-(--ui-text-muted)">{packedQty} / {totalQty}</p>
               </div>
             )}
           </div>
@@ -940,7 +940,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
         <h3 className="mb-2 text-sm font-semibold">Items ({items.length})</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2">Product</th>
                 <th className="px-3 py-2">Variant</th>
@@ -952,24 +952,24 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
                 <th className="px-3 py-2">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
+            <tbody className="divide-y">
               {items.map((it) => {
                 const itemDone = it.qty_picked >= it.qty_to_pick;
                 const itemPacked = it.qty_packed >= it.qty_to_pick;
                 return (
-                  <tr key={it.id} className={itemDone ? "bg-green-50/50 dark:bg-green-900/10" : ""}>
+                  <tr key={it.id} className={itemDone ? "bg-(--ui-success-bg)/50" : ""}>
                     <td className="px-3 py-2 font-medium">{it.product_name || "—"}</td>
                     <td className="px-3 py-2">{it.variant_name || "—"}</td>
                     <td className="px-3 py-2">{it.external_order_number || "—"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{it.barcode || it.product_barcode || it.variant_barcode || "—"}</td>
                     <td className="px-3 py-2 text-center">{it.qty_to_pick}</td>
-                    <td className={`px-3 py-2 text-center font-medium ${itemDone ? "text-green-600" : ""}`}>{it.qty_picked}</td>
-                    <td className={`px-3 py-2 text-center font-medium ${itemPacked ? "text-green-600" : ""}`}>{it.qty_packed}</td>
+                    <td className={`px-3 py-2 text-center font-medium ${itemDone ? "text-(--ui-success-fg)" : ""}`}>{it.qty_picked}</td>
+                    <td className={`px-3 py-2 text-center font-medium ${itemPacked ? "text-(--ui-success-fg)" : ""}`}>{it.qty_packed}</td>
                     <td className="px-3 py-2">
                       {itemPacked ? (
                         <Badge tone="success">Packed</Badge>
                       ) : itemDone ? (
-                        <Badge tone="info">Picked</Badge>
+                        <Badge tone="default">Picked</Badge>
                       ) : it.qty_picked > 0 ? (
                         <Badge tone="warning">Partial</Badge>
                       ) : (
@@ -1105,7 +1105,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
   }
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading loadsheets…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading loadsheets…</p></SectionCard>;
   }
 
   return (
@@ -1134,7 +1134,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2">Loadsheet #</th>
                 <th className="px-3 py-2">Status</th>
@@ -1146,13 +1146,13 @@ function LoadsheetsTab({ onOpen, fmt }) {
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
+            <tbody className="divide-y">
               {loadsheets.map((ls) => {
                 const cfg = LS_STATUS_CONFIG[ls.status] || LS_STATUS_CONFIG.draft;
                 return (
                   <tr
                     key={ls.id}
-                    className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                    className="cursor-pointer transition-colors hover:bg-(--ui-muted-surface)"
                     onClick={() => onOpen(ls.id)}
                   >
                     <td className="px-3 py-2 font-medium">{ls.loadsheet_number}</td>
@@ -1161,7 +1161,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
                     <td className="px-3 py-2">{ls.order_count}</td>
                     <td className="px-3 py-2">{fmt(ls.total_cod)}</td>
                     <td className="px-3 py-2">{ls.outlet_name || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{fmtUtcDateTime(ls.created_at)}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{fmtUtcDateTime(ls.created_at)}</td>
                     <td className="px-3 py-2">
                       <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(ls.id); }}>
                         Open
@@ -1236,18 +1236,18 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
   }, {});
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading dispatched orders…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading dispatched orders…</p></SectionCard>;
   }
 
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
-        <button onClick={onBack} className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+        <button onClick={onBack} className="rounded-md p-1 hover:bg-(--ui-muted-surface)">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">New Loadsheet</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400">Select dispatched orders to group into a loadsheet</p>
+          <p className="text-sm text-(--ui-text-muted)">Select dispatched orders to group into a loadsheet</p>
         </div>
         <Button onClick={create} disabled={!selected.size || creating}>
           <FileSpreadsheet className="mr-1.5 h-4 w-4" />
@@ -1261,13 +1261,13 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
         Object.entries(courierGroups).map(([courier, groupOrders]) => (
           <SectionCard key={courier} className="mb-4">
             <div className="mb-2 flex items-center gap-2">
-              <Truck className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+              <Truck className="h-4 w-4 text-(--ui-text-muted)" />
               <h3 className="text-sm font-semibold">{courier}</h3>
-              <span className="text-xs text-gray-400 dark:text-slate-500">({groupOrders.length} orders)</span>
+              <span className="text-xs text-(--ui-text-muted)">({groupOrders.length} orders)</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+                <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
                   <tr>
                     <th className="px-3 py-2">
                       <input
@@ -1290,12 +1290,12 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
                     <th className="px-3 py-2">Shipped</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y dark:divide-gray-700">
+                <tbody className="divide-y">
                   {groupOrders.map((o) => (
                     <tr
                       key={o.id}
-                      className={`cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                        selected.has(o.id) ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                      className={`cursor-pointer transition-colors hover:bg-(--ui-muted-surface) ${
+                        selected.has(o.id) ? "bg-(--ui-muted-surface)" : ""
                       }`}
                       onClick={() => toggle(o.id)}
                     >
@@ -1317,7 +1317,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{o.shipped_at ? fmtUtcDateTime(o.shipped_at) : "—"}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{o.shipped_at ? fmtUtcDateTime(o.shipped_at) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1399,7 +1399,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
   };
 
   if (loading || !ls) {
-    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-(--ui-text-muted)">Loading…</p></SectionCard>;
   }
 
   const orders = ls.orders || [];
@@ -1411,12 +1411,12 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
     <div>
       {/* Header */}
       <div className="mb-4 flex items-center gap-3">
-        <button onClick={onBack} className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+        <button onClick={onBack} className="rounded-md p-1 hover:bg-(--ui-muted-surface)">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">{ls.loadsheet_number}</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400">
+          <p className="text-sm text-(--ui-text-muted)">
             {ls.courier_name || "No courier"} • {ls.outlet_name} • Created by {ls.created_by_name || "—"} • {fmtUtcDateTime(ls.created_at)}
           </p>
         </div>
@@ -1426,19 +1426,19 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
       {/* Summary cards */}
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <SectionCard>
-          <p className="text-xs text-gray-500 dark:text-slate-400">Total Orders</p>
+          <p className="text-xs text-(--ui-text-muted)">Total Orders</p>
           <p className="text-2xl font-bold">{orders.length}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500 dark:text-slate-400">COD Orders</p>
+          <p className="text-xs text-(--ui-text-muted)">COD Orders</p>
           <p className="text-2xl font-bold">{codOrders.length}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500 dark:text-slate-400">Total COD Amount</p>
+          <p className="text-xs text-(--ui-text-muted)">Total COD Amount</p>
           <p className="text-2xl font-bold">{fmt(totalCod)}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500 dark:text-slate-400">Handed Over To</p>
+          <p className="text-xs text-(--ui-text-muted)">Handed Over To</p>
           <p className="text-2xl font-bold">{ls.handed_over_to || "—"}</p>
         </SectionCard>
       </div>
@@ -1488,7 +1488,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
         <h3 className="mb-2 text-sm font-semibold">Orders ({orders.length})</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2">Order #</th>
                 <th className="px-3 py-2">Customer</th>
@@ -1499,19 +1499,19 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
                 <th className="px-3 py-2">Tracking #</th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
+            <tbody className="divide-y">
               {orders.map((o) => (
                 <tr key={o.id}>
                   <td className="px-3 py-2 font-medium">{o.external_order_number || `#${o.web_order_id}`}</td>
                   <td className="px-3 py-2">{o.customer_name || "—"}</td>
-                  <td className="max-w-48 truncate px-3 py-2 text-gray-500 dark:text-slate-400">{o.customer_address || "—"}</td>
+                  <td className="max-w-48 truncate px-3 py-2 text-(--ui-text-muted)">{o.customer_address || "—"}</td>
                   <td className="px-3 py-2">{o.customer_phone || "—"}</td>
                   <td className="px-3 py-2">{fmt(o.grand_total)}</td>
                   <td className="px-3 py-2">
                     {o.is_cod ? (
                       <Badge tone="warning">{fmt(o.cod_amount)}</Badge>
                     ) : (
-                      <span className="text-gray-400 dark:text-slate-500">Prepaid</span>
+                      <span className="text-(--ui-text-muted)">Prepaid</span>
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>

@@ -242,12 +242,12 @@ export default function SupplierPayablesRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
       {notice ? (
-        <SectionCard className="mb-3 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <SectionCard className="mb-3 bg-(--ui-success-bg) p-3 text-sm text-(--ui-success-fg)">
           {notice}
         </SectionCard>
       ) : null}
@@ -339,8 +339,8 @@ export default function SupplierPayablesRedesign() {
                       <td className="px-3 py-2 text-(--ui-text-muted)">{row.phone || "-"}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{row.invoice_count}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{money(row.total_invoiced)}</td>
-                      <td className="px-3 py-2 text-right text-emerald-700">{money(row.total_paid)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-rose-700">
+                      <td className="px-3 py-2 text-right text-(--ui-success-fg)">{money(row.total_paid)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-danger-fg)">
                         {money(row.total_due)}
                       </td>
                       <td className="px-3 py-2 text-right text-(--ui-text-muted)">
@@ -372,8 +372,8 @@ export default function SupplierPayablesRedesign() {
                                       {inv.invoice_number || `#${inv.id}`}
                                     </td>
                                     <td className="py-1.5 text-right text-(--ui-text)">{money(inv.amount)}</td>
-                                    <td className="py-1.5 text-right text-emerald-700">{money(inv.amount_paid)}</td>
-                                    <td className="py-1.5 text-right font-semibold text-rose-700">
+                                    <td className="py-1.5 text-right text-(--ui-success-fg)">{money(inv.amount_paid)}</td>
+                                    <td className="py-1.5 text-right font-semibold text-(--ui-danger-fg)">
                                       {money(calcDue(inv))}
                                     </td>
                                     <td className="py-1.5">
@@ -443,8 +443,8 @@ export default function SupplierPayablesRedesign() {
                       </td>
                       <td className="px-3 py-2 text-(--ui-text)">{inv.supplier_name}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{money(inv.amount)}</td>
-                      <td className="px-3 py-2 text-right text-emerald-700">{money(inv.amount_paid)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(calcDue(inv))}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-success-fg)">{money(inv.amount_paid)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-danger-fg)">{money(calcDue(inv))}</td>
                       <td className="px-3 py-2">
                         <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
                       </td>
@@ -485,7 +485,7 @@ export default function SupplierPayablesRedesign() {
                                 {(invoicePayments[inv.id] || []).map((pmt) => (
                                   <tr key={pmt.id} className={`border-t border-(--ui-border) ${pmt.voided ? "opacity-50" : ""}`}>
                                     <td className="py-1.5 text-(--ui-text-muted)">{pmt.paid_at?.slice(0, 10) || "-"}</td>
-                                    <td className="py-1.5 text-right text-emerald-700 font-medium">{money(pmt.amount)}</td>
+                                    <td className="py-1.5 text-right text-(--ui-success-fg) font-medium">{money(pmt.amount)}</td>
                                     <td className="py-1.5 text-(--ui-text)">{pmt.payment_method || "-"}</td>
                                     <td className="py-1.5 font-mono text-(--ui-text-muted)">{pmt.reference || "-"}</td>
                                     <td className="py-1.5">
@@ -571,7 +571,7 @@ export default function SupplierPayablesRedesign() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-(--ui-text-muted)">Closing Balance</p>
-                  <p className={`text-lg font-bold ${ledger.closing_balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                  <p className={`text-lg font-bold ${ledger.closing_balance > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                     {money(ledger.closing_balance)}
                   </p>
                 </div>
@@ -600,13 +600,13 @@ export default function SupplierPayablesRedesign() {
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{row.reference || "-"}</td>
                         <td className="px-3 py-2 text-(--ui-text-muted)">{row.notes || "-"}</td>
-                        <td className="px-3 py-2 text-right text-rose-700 font-medium">
+                        <td className="px-3 py-2 text-right text-(--ui-danger-fg) font-medium">
                           {row.amount > 0 ? money(row.amount) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-right text-emerald-700 font-medium">
+                        <td className="px-3 py-2 text-right text-(--ui-success-fg) font-medium">
                           {row.payment > 0 ? money(row.payment) : "—"}
                         </td>
-                        <td className={`px-3 py-2 text-right font-semibold ${row.running_balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        <td className={`px-3 py-2 text-right font-semibold ${row.running_balance > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                           {money(row.running_balance)}
                         </td>
                       </tr>
@@ -648,7 +648,7 @@ export default function SupplierPayablesRedesign() {
                 Supplier: <span className="text-(--ui-text)">{payModal.supplier_name}</span>
               </p>
               <p className="text-(--ui-text-muted)">
-                Outstanding: <span className="font-semibold text-rose-700">{money(calcDue(payModal))}</span>
+                Outstanding: <span className="font-semibold text-(--ui-danger-fg)">{money(calcDue(payModal))}</span>
               </p>
             </div>
             <div className="space-y-2">
@@ -714,9 +714,9 @@ export default function SupplierPayablesRedesign() {
         {voidModal ? (
           <>
             <div className="mb-3 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
-              <p className="text-(--ui-text-muted)">Amount: <span className="font-semibold text-rose-700">{money(voidModal.amount)}</span></p>
+              <p className="text-(--ui-text-muted)">Amount: <span className="font-semibold text-(--ui-danger-fg)">{money(voidModal.amount)}</span></p>
               <p className="text-(--ui-text-muted)">Method: <span className="text-(--ui-text)">{voidModal.payment_method}</span></p>
-              <p className="text-xs text-rose-600 mt-1">This will reverse the payment and recalculate the invoice status.</p>
+              <p className="text-xs text-(--ui-danger-fg) mt-1">This will reverse the payment and recalculate the invoice status.</p>
             </div>
             <div>
               <label className="mb-1 block text-xs text-(--ui-text-muted)">Void Reason (optional)</label>

@@ -192,12 +192,12 @@ export default function ImportFromCompetitorRedesign() {
         {preview && (
           <div className="mt-5">
             <div className="mb-4 flex items-center gap-4">
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-(--ui-success-fg)">
                 <CheckCircle2 className="h-4 w-4" />
                 {validCount} valid row{validCount !== 1 ? "s" : ""}
               </span>
               {errorRows.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600">
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-(--ui-danger-fg)">
                   <AlertCircle className="h-4 w-4" />
                   {errorRows.length} error{errorRows.length !== 1 ? "s" : ""}
                 </span>
@@ -237,11 +237,11 @@ export default function ImportFromCompetitorRedesign() {
             )}
 
             {errorRows.length > 0 && (
-              <div className="mt-4 rounded-(--ui-radius-sm) border border-red-200 bg-red-50 p-3 text-sm">
-                <p className="mb-2 font-medium text-red-700">
+              <div className="mt-4 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) p-3 text-sm">
+                <p className="mb-2 font-medium text-(--ui-danger-fg)">
                   {errorRows.length} row{errorRows.length !== 1 ? "s" : ""} will be skipped:
                 </p>
-                <ul className="list-disc pl-5 space-y-0.5 text-red-700 max-h-40 overflow-y-auto">
+                <ul className="list-disc pl-5 space-y-0.5 text-(--ui-danger-fg) max-h-40 overflow-y-auto">
                   {errorRows.slice(0, 20).map((er, i) => (
                     <li key={i}>
                       Row {er.row}: {Array.isArray(er.errors) ? er.errors.join("; ") : "error"}

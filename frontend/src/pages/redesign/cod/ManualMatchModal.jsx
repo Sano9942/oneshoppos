@@ -124,7 +124,7 @@ export default function ManualMatchModal({ open, line, onClose, onMatched }) {
                         <div className="flex items-center justify-end gap-2">
                           {o.is_already_matched && (
                             <span
-                              className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+                              className="flex items-center gap-1 text-[11px] text-(--ui-warning-fg)"
                               title="This order is already matched to another settlement line"
                             >
                               <AlertTriangle size={11} /> matched
