@@ -146,6 +146,19 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: (data?.bookingCount ?? 0) > 0,
       navigate: () => onNavigate("/rooms/bookings"),
     },
+    // M10 — Clinical (dental / veterinary / physiotherapy)
+    chart: {
+      id: "chart",
+      label: "Chart your first patient",
+      done: (data?.chartEntryCount ?? 0) > 0,
+      navigate: () => onNavigate("/treatment-plans"),
+    },
+    plan: {
+      id: "plan",
+      label: "Create your first treatment plan",
+      done: (data?.treatmentPlanCount ?? 0) > 0,
+      navigate: () => onNavigate("/treatment-plans"),
+    },
   };
 
   return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);

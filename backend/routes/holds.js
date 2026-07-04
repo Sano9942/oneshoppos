@@ -14,6 +14,7 @@
 //   GET  /api/holds/by-barcode/:code     → scanner lookup (hold_number)
 //   GET  /api/holds/expiring?days=7      → dashboard widget feed
 const { validate } = require("../middleware/validate");
+const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const {
   CreateHoldSchema,
   AddPaymentSchema,
@@ -335,13 +336,27 @@ module.exports = function registerHoldRoutes(app, deps) {
           );
         }
 
-        // 2. Create the sale row (minimal — layaway pickup is a straight settle,
-        //    no promotion/loyalty/discount at this layer).
+        // 2. Resolve the v83 per-line tax snapshot against the frozen hold
+        //    prices so the settled sale is visible to the tax ledger / GST /
+        //    FBR exactly like a POS sale (shared cascade — tax-snapshot.js).
+        const taxSnapshot = await resolveTaxSnapshot(client, {
+          items: heldItems.map((hi) => ({
+            productId: hi.product_id,
+            price: hi.price_at_hold,
+            quantity: hi.quantity,
+          })),
+          taxMode: (req.company && req.company.tax_mode) || "none",
+          outletId: hold.outlet_id,
+          tenantId: req.tenantId,
+        });
+
+        // Create the sale row (minimal — layaway pickup is a straight settle,
+        // no promotion/loyalty/discount at this layer).
         const { rows: [sale] } = await client.query(
           `INSERT INTO sales (
              employee_id, outlet_id, total_amount, payment_method,
-             customer_id, discount_amount
-           ) VALUES ($1,$2,$3,$4,$5,0)
+             customer_id, discount_amount, subtotal, tax_total, tax_inclusive
+           ) VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8)
            RETURNING *`,
           [
             employeeId,
@@ -349,17 +364,24 @@ module.exports = function registerHoldRoutes(app, deps) {
             hold.total_amount,
             incomingPayments[0]?.method || "Cash",
             hold.customer_id,
+            taxSnapshot.subtotal,
+            taxSnapshot.taxTotal,
+            taxSnapshot.taxInclusive,
           ],
         );
 
         // 3. Sale items (copy from hold_items, with staff attribution left null
         //    since holds don't currently carry per-line staff — set at pickup time
         //    via future enhancement if needed).
-        for (const hi of heldItems) {
+        for (let i = 0; i < heldItems.length; i++) {
+          const hi = heldItems[i];
+          const taxLine = taxSnapshot.lines[i] || { rate: 0, amount: 0, hsCode: null };
           await client.query(
-            `INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale)
-             VALUES ($1,$2,$3,$4,$5)`,
-            [sale.id, hi.product_id, hi.variant_id, hi.quantity, hi.price_at_hold],
+            `INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale,
+               tax_rate_at_sale, tax_amount_at_sale, hs_code_at_sale)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [sale.id, hi.product_id, hi.variant_id, hi.quantity, hi.price_at_hold,
+             Number(taxLine.rate || 0), Number(taxLine.amount || 0), taxLine.hsCode || null],
           );
         }
 

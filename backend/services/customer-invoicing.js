@@ -93,16 +93,23 @@ async function convertQuotationToInvoice(db, quotationId, employeeId) {
     throw Object.assign(new Error("Quotation already converted to invoice"), { statusCode: 400 });
   }
 
+  // quotation_items columns are (quantity, unit_price, tax_rate, line_total)
+  // — tax_rate is a PERCENT (17 = 17%), written by routes/tier4/crm.js. The
+  // table has no product_name/price/effective_tax_rate columns; reading
+  // those produced NaN prices and 0-tax invoices on every conversion.
   const { rows: qItems } = await db.query(
-    "SELECT * FROM quotation_items WHERE quotation_id = $1",
+    `SELECT qi.*, p.name AS product_name
+       FROM quotation_items qi
+       LEFT JOIN products p ON p.id = qi.product_id
+      WHERE qi.quotation_id = $1`,
     [quotationId]
   );
 
   const items = qItems.map((qi) => ({
-    description: qi.product_name || qi.description || "Item",
+    description: qi.product_name || "Item",
     quantity: Number(qi.quantity),
-    unit_price: Number(qi.price),
-    tax_rate: Number(qi.effective_tax_rate || 0) * 100, // quotation stores as decimal
+    unit_price: Number(qi.unit_price),
+    tax_rate: Number(qi.tax_rate || 0),
     product_id: qi.product_id,
     variant_id: qi.variant_id || null,
   }));

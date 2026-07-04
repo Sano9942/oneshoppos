@@ -25,6 +25,8 @@ const {
 
 // Preset tab → feature-flag dependency. Tabs without a flag are always
 // eligible (subject to the preset tab list).
+// `tickets` maps to phase4_workflow_tickets: the only preset with a tickets
+// tab (repair_shop) runs the workflow_tickets mode, not service_projects.
 const TAB_FEATURE_FLAGS = {
   invoices: "customer_invoicing",
   appointments: "phase4_appointments",
@@ -32,21 +34,25 @@ const TAB_FEATURE_FLAGS = {
   contracts: "phase4_rentals",
   stays: "phase4_room_management",
   treatments: "phase4_treatment_plans",
-  tickets: "phase4_service_projects",
+  tickets: "phase4_workflow_tickets",
   orders: null,
   loyalty: null,
   profile: null,
 };
 
+// Flag resolution must match the main app's (middleware/feature-flags.js):
+// DEFAULT_FEATURE_FLAGS merged with DB rows, DB overriding. Reading only DB
+// rows hides tabs whose flag defaults ON but has no row on this tenant
+// (e.g. customer_invoicing on schemas provisioned after v21).
+const { DEFAULT_FEATURE_FLAGS } = require("../../middleware/feature-flags");
+
 async function getFeatureFlagsMap(db) {
+  const map = { ...DEFAULT_FEATURE_FLAGS };
   try {
     const { rows } = await db.query("SELECT key, enabled FROM feature_flags");
-    const map = {};
     for (const r of rows) map[r.key] = r.enabled === true || Number(r.enabled) === 1;
-    return map;
-  } catch {
-    return {};
-  }
+  } catch { /* pre-migration tenant — defaults only */ }
+  return map;
 }
 
 async function loadCompanyBranding(db) {
