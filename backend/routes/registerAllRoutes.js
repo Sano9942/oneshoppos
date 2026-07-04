@@ -675,6 +675,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./treatment-plans")(app, deps);
   require("./treatment-plan-templates")(app, deps);
 
+  // --- F05 customer notifications: per-event channel rules + delivery log ---
+  require("./notification-settings")(app, deps);
+
   // --- Tier 1.1 wholesale: field rep mobile app ---
   require("./field")(app, deps);
 

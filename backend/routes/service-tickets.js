@@ -4,8 +4,34 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
   const { validate } = require("../middleware/validate");
   const { createTicketSchema, updateTicketSchema, addNoteSchema } = require("../schemas/service-tickets");
   const tickets = require("../services/service-tickets");
+  const customerNotify = require("../services/customer-notify");
 
   const gate = [requireMode("workflow_tickets"), requireFeature("phase4_workflow_tickets"), requirePerm("manage_tickets")];
+
+  // F05: repair/service ticket status → customer notification. Fire-and-forget
+  // so a notification failure never breaks the ticket write. The engine gates on
+  // the customer_notifications flag centrally and logs its own truth rows.
+  const NOTIFY_STATUSES = new Set(["approved", "in_progress", "completed", "invoiced"]);
+  function fireTicketNotification(req, ticket, status) {
+    if (!ticket || !ticket.customer_id || !NOTIFY_STATUSES.has(status)) return;
+    const company = req.company || {};
+    customerNotify.notify(deps.db, {
+      event: `ticket.status_changed:${status}`,
+      customerId: ticket.customer_id,
+      entityType: "ticket",
+      entityId: ticket.id,
+      tenantSlug: req.tenantSlug,
+      tenant: { slug: req.tenantSlug, name: company.company_name },
+      data: {
+        storeName: company.trading_name || company.company_name || "our store",
+        storePhone: company.phone || "",
+        ticketNumber: ticket.ticket_number,
+        ticketTitle: ticket.title,
+      },
+    }).catch((err) => {
+      try { req.log?.warn({ err: err.message, ticketId: ticket.id, status }, "ticket notification failed"); } catch {}
+    });
+  }
 
   // List tickets (filterable by status, customer_id, outlet_id, assigned_to, search)
   app.get("/api/service-tickets", ...gate, async (req, res) => {
@@ -43,6 +69,10 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
     try {
       const ticket = await tickets.updateTicket(deps.db, Number(req.params.id), req.body, req.employee.id);
       if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+      // Only notify on a real status transition (not on every field edit).
+      if (req.body.status && ticket.status !== ticket.previous_status) {
+        fireTicketNotification(req, ticket, ticket.status);
+      }
       res.json(ticket);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
@@ -71,6 +101,11 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
             ticket_id: result.ticket_id, invoice_id: result.invoice.id,
           })]
         );
+      } catch {}
+      // generate-invoice transitions the ticket to 'invoiced' — notify the customer.
+      try {
+        const t = await tickets.getTicket(deps.db, result.ticket_id);
+        fireTicketNotification(req, t, "invoiced");
       } catch {}
       res.status(201).json(result);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }

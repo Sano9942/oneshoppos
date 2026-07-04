@@ -110,6 +110,9 @@ async function updateTicket(db, id, data, employeeId) {
       { previous: current.assigned_to, assigned_to: data.assigned_to });
   }
 
+  // Expose the pre-update status so the route can fire a customer notification
+  // only on an actual transition (not on every field edit that re-sends status).
+  ticket.previous_status = current.status;
   return ticket;
 }
 
