@@ -483,7 +483,12 @@ const GROUPS = [
         flag: "reports_inventory_health_plus",
       },
       { id: "forecast-demand", label: "Forecast Demand", icon: TrendingUp },
-      { id: "replenishment-smart", label: "Replenishment Smart", icon: ShoppingCart },
+      {
+        id: "replenishment-smart",
+        label: "Replenishment Smart",
+        icon: ShoppingCart,
+        flag: "reports_inventory_health_plus",
+      },
       { id: "shrinkage", label: "Shrinkage", icon: TrendingDown },
     ],
   },
