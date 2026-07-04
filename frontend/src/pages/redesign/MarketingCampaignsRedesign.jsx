@@ -202,7 +202,7 @@ export default function MarketingCampaignsRedesign() {
                             <Button tone="plain" size="sm" iconOnly onClick={() => openComposer(c)} title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></Button>
                             <Button tone="plain" size="sm" iconOnly onClick={() => sendTestEmail(c.id)} title="Send test" aria-label="Send test"><Eye className="w-4 h-4" /></Button>
                             {/* Intentional green tint — "Send now" is the primary CTA on a draft row. */}
-                            <Button tone="plain" size="sm" iconOnly onClick={() => sendCampaign(c.id)} title="Send now" aria-label="Send now" className="text-green-600"><Send className="w-4 h-4" /></Button>
+                            <Button tone="plain" size="sm" iconOnly onClick={() => sendCampaign(c.id)} title="Send now" aria-label="Send now" className="text-(--ui-success-fg)"><Send className="w-4 h-4" /></Button>
                             <Button tone="plain" size="sm" iconOnly onClick={() => { setScheduleCampaignId(c.id); setScheduleDate(""); setShowScheduleModal(true); }} title="Schedule" aria-label="Schedule"><Clock className="w-4 h-4" /></Button>
                           </>}
                         </div>
@@ -234,7 +234,7 @@ export default function MarketingCampaignsRedesign() {
                       <td className="py-2 px-3 text-right">
                         <div className="flex gap-1 justify-end">
                           <Button tone="plain" size="sm" iconOnly onClick={() => { setEditingTemplate(t); setTemplateForm({ name: t.name, subject: t.subject || "", body_html: t.body_html || "" }); setShowTemplateModal(true); }} title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></Button>
-                          <Button tone="plain" size="sm" iconOnly onClick={() => deleteTemplate(t.id)} title="Delete" aria-label="Delete" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>
+                          <Button tone="plain" size="sm" iconOnly onClick={() => deleteTemplate(t.id)} title="Delete" aria-label="Delete" className="text-(--ui-danger-fg)"><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </td>
                     </tr>
@@ -286,7 +286,7 @@ export default function MarketingCampaignsRedesign() {
                 {!["has_email", "has_mobile"].includes(f.filter_type) && (
                   <input className="border border-(--ui-border) rounded px-2 py-1 bg-(--ui-bg) text-sm grow" value={f.filter_value} onChange={(e) => updateFilter(i, "filter_value", e.target.value)} placeholder="Value" />
                 )}
-                <Button tone="plain" size="sm" iconOnly onClick={() => removeFilter(i)} aria-label="Remove filter" className="text-red-500"><X className="w-4 h-4" /></Button>
+                <Button tone="plain" size="sm" iconOnly onClick={() => removeFilter(i)} aria-label="Remove filter" className="text-(--ui-danger-fg)"><X className="w-4 h-4" /></Button>
               </div>
             ))}
             {audiencePreview && (

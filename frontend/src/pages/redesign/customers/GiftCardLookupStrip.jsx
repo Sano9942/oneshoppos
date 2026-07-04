@@ -49,17 +49,17 @@ export default function GiftCardLookupStrip() {
   };
 
   const statusTone = {
-    active: "bg-emerald-50 border-emerald-200 text-emerald-800",
-    depleted: "bg-rose-50 border-rose-200 text-rose-800",
-    pre_printed: "bg-slate-50 border-slate-200 text-slate-700",
-    issued: "bg-amber-50 border-amber-200 text-amber-800",
+    active: "bg-(--ui-success-bg) border-transparent text-(--ui-success-fg)",
+    depleted: "bg-(--ui-danger-bg) border-transparent text-(--ui-danger-fg)",
+    pre_printed: "bg-(--ui-muted-surface) border-transparent text-(--ui-text-muted)",
+    issued: "bg-(--ui-warning-bg) border-transparent text-(--ui-warning-fg)",
   };
 
   return (
     <SectionCard className="mb-3 p-3">
       <form className="flex items-center gap-2 flex-wrap" onSubmit={lookup}>
         <div className="flex items-center gap-2 text-sm font-semibold text-(--ui-text)">
-          <Gift size={16} className="text-emerald-600" />
+          <Gift size={16} className="text-(--ui-text-muted)" />
           Gift Card Balance
         </div>
         <Input
@@ -92,7 +92,7 @@ export default function GiftCardLookupStrip() {
           </div>
         )}
         {error && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
+          <div className="rounded-md bg-(--ui-danger-bg) px-3 py-1.5 text-xs text-(--ui-danger-fg)">
             {error}
           </div>
         )}

@@ -4,9 +4,9 @@ import { api } from "../../api";
 import { PageShell } from "../../ui/primitives";
 
 const STATUS_COLORS = {
-  open: "bg-amber-100 text-amber-700",
-  acknowledged: "bg-blue-100 text-blue-700",
-  resolved: "bg-emerald-100 text-emerald-700",
+  open: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  acknowledged: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  resolved: "bg-(--ui-success-bg) text-(--ui-success-fg)",
   closed: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
 };
 
@@ -29,8 +29,8 @@ export default function MyTicketsRedesign() {
           <p className="text-sm text-(--ui-text-muted)">Loading tickets...</p>
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="rounded-lg bg-(--ui-danger-bg) p-4">
+          <p className="text-sm text-(--ui-danger-fg)">{error}</p>
         </div>
       ) : tickets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-(--ui-text-muted)">

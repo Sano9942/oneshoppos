@@ -23,7 +23,7 @@ const EMPTY = {
   points_multiplier: "1.0",
   discount_percent: "0",
   benefits: "",
-  color: "#8066FF",
+  color: "#101010",
   sort_order: "",
 };
 
@@ -42,7 +42,7 @@ function TierModal({ open, editing, onClose, onSaved }) {
               points_multiplier: String(editing.points_multiplier ?? "1.0"),
               discount_percent: String(editing.discount_percent ?? "0"),
               benefits: editing.benefits || "",
-              color: editing.color || "#8066FF",
+              color: editing.color || "#101010",
               sort_order: String(editing.sort_order ?? ""),
             }
           : EMPTY,
@@ -138,7 +138,7 @@ function TierModal({ open, editing, onClose, onSaved }) {
               value={form.benefits}
               onChange={(e) => set("benefits", e.target.value)}
               rows={2}
-              className="w-full rounded-lg border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm text-(--ui-text) focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm text-(--ui-text) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
               placeholder="e.g. Free delivery, priority support"
             />
           </div>
@@ -163,7 +163,7 @@ function TierCard({ tier, money, onEdit, onDelete }) {
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-            style={{ backgroundColor: tier.color || "#8066FF", opacity: 0.85 }}
+            style={{ backgroundColor: tier.color || "#101010", opacity: 0.85 }}
           >
             <Award size={20} className="text-white" />
           </div>
@@ -176,7 +176,7 @@ function TierCard({ tier, money, onEdit, onDelete }) {
         </div>
         <div className="flex gap-1">
           <Button tone="plain" size="sm" iconOnly onClick={() => onEdit(tier)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
-          <Button tone="plain" size="sm" iconOnly onClick={() => onDelete(tier)} title="Delete" aria-label="Delete" className="hover:text-red-600"><Trash2 size={14} /></Button>
+          <Button tone="plain" size="sm" iconOnly onClick={() => onDelete(tier)} title="Delete" aria-label="Delete" className="hover:text-(--ui-danger-fg)"><Trash2 size={14} /></Button>
         </div>
       </div>
 
@@ -282,7 +282,7 @@ export default function LoyaltyTiersRedesign() {
                 <div
                   key={t.id}
                   className="h-full transition-all"
-                  style={{ width: `${pct}%`, backgroundColor: t.color || "#8066FF" }}
+                  style={{ width: `${pct}%`, backgroundColor: t.color || "#101010" }}
                   title={`${t.name}: ${t.customer_count}`}
                 />
               );
@@ -291,7 +291,7 @@ export default function LoyaltyTiersRedesign() {
           <div className="flex flex-wrap gap-3 mt-2">
             {tiers.map((t) => (
               <span key={t.id} className="flex items-center gap-1 text-xs text-(--ui-text-muted)">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: t.color || "#8066FF" }} />
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: t.color || "#101010" }} />
                 {t.name} ({t.customer_count || 0})
               </span>
             ))}

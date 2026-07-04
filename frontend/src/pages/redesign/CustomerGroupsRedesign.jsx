@@ -130,7 +130,7 @@ export default function CustomerGroupsRedesign() {
                   <td className="px-4 py-2.5 text-center">
                     {/* Inline text-link to filtered customers view — <Button> would add background/border. */}
                     <button
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-(--ui-link) hover:underline"
                       onClick={() => navigate(`/customers?group=${g.id}`)}
                     >
                       <Users size={12} />
@@ -181,7 +181,7 @@ export default function CustomerGroupsRedesign() {
         size="md"
       >
         <form className="space-y-2" onSubmit={submitForm}>
-          {formError && <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>}
+          {formError && <p className="rounded bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">{formError}</p>}
           <Input
             required
             placeholder="Group name"
