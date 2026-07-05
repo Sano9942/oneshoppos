@@ -252,6 +252,7 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
           gatewayRef: transaction_id,
           eventType: event_type,
           status,
+          amount,
         });
         _logger.info({ entityType, entityId: hit.id, result }, "Deposit webhook handled");
         return { ok: true };

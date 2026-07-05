@@ -103,6 +103,7 @@ const ENTITY_ADAPTERS = {
     statusColumn: "deposit_status",
     authorizedAtColumn: "deposit_authorized_at",
     paidAtColumn: "deposit_paid_at",
+    amountColumn: "deposit_amount", // written on capture so the ticket invoice sees the paid deposit
     captureMode: "charge", // repair deposit is a payment, not a hold
     fetchSql: `SELECT st.*, c.name AS customer_name
                FROM service_tickets st
@@ -189,13 +190,19 @@ async function create(db, { entityType, entityId, amount, returnUrl, cancelUrl }
     cancelUrl: cancelUrl || `${process.env.FRONTEND_URL || ""}${cfg.returnPath(entityId)}`,
   });
 
-  // Persist the pre-auth amount for partial-capture adapters so capture() can
-  // cap against it later.
+  // Persist the deposit amount at pending time: partial-capture adapters need
+  // it so capture() can cap against the hold; charge adapters (tickets) record
+  // it so the paid deposit is known without depending on the webhook payload
+  // carrying an amount (the ticket invoice math gates on deposit_status).
   const sets = [`${cfg.refColumn} = $1`, `${cfg.statusColumn} = 'pending'`, "updated_at = NOW()"];
   const params = [gateway_ref];
   if (cfg.authorizedAmountColumn) {
     params.push(depositAmount);
     sets.push(`${cfg.authorizedAmountColumn} = $${params.length}`);
+  }
+  if (cfg.amountColumn) {
+    params.push(depositAmount);
+    sets.push(`${cfg.amountColumn} = $${params.length}`);
   }
   params.push(entityId);
   await db.query(
@@ -230,7 +237,7 @@ async function findByIntent(db, entityType, gatewayRef) {
  * Stamps the hold-age column when transitioning into 'authorized' and the
  * paid-at column when a charge transitions into 'captured'.
  */
-async function handleWebhook(db, { entityType, gatewayRef, eventType, status }) {
+async function handleWebhook(db, { entityType, gatewayRef, eventType, status, amount }) {
   const cfg = getAdapterConfig(entityType);
   const row = await findByIntent(db, entityType, gatewayRef);
   if (!row) return { ok: false, reason: "Unknown deposit intent" };
@@ -238,6 +245,7 @@ async function handleWebhook(db, { entityType, gatewayRef, eventType, status }) 
   const prev = row[cfg.statusColumn];
   const newStatus = mapWebhookToStatus({ eventType, status }, prev, cfg.captureMode);
 
+  const params = [newStatus];
   const sets = [`${cfg.statusColumn} = $1`, "updated_at = NOW()"];
   if (newStatus === "authorized" && cfg.authorizedAtColumn) {
     // COALESCE preserves the original authorize time across webhook replays.
@@ -246,10 +254,16 @@ async function handleWebhook(db, { entityType, gatewayRef, eventType, status }) 
   if (newStatus === "captured" && cfg.paidAtColumn) {
     sets.push(`${cfg.paidAtColumn} = COALESCE(${cfg.paidAtColumn}, NOW())`);
   }
+  // Charge-mode adapters (tickets): record the paid amount only on capture so
+  // a pending/failed deposit never inflates the entity's invoice math.
+  if (newStatus === "captured" && cfg.amountColumn && Number(amount) > 0) {
+    params.push(Number(amount));
+    sets.push(`${cfg.amountColumn} = $${params.length}`);
+  }
 
   await db.query(
-    `UPDATE ${cfg.table} SET ${sets.join(", ")} WHERE id = $2`,
-    [newStatus, row.id]
+    `UPDATE ${cfg.table} SET ${sets.join(", ")} WHERE id = $${params.length + 1}`,
+    [...params, row.id]
   );
 
   logFor(cfg).info(

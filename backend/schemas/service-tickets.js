@@ -31,4 +31,12 @@ const addNoteSchema = z.object({
   description: z.string().min(1).max(2000),
 });
 
-module.exports = { createTicketSchema, updateTicketSchema, addNoteSchema, STATUSES };
+// F04: gateway deposit checkout. Amount optional — falls back to the ticket's
+// existing deposit_amount when omitted.
+const depositCheckoutSchema = z.object({
+  amount: z.number().min(0).optional(),
+  returnUrl: z.string().max(500).optional(),
+  cancelUrl: z.string().max(500).optional(),
+});
+
+module.exports = { createTicketSchema, updateTicketSchema, addNoteSchema, depositCheckoutSchema, STATUSES };
