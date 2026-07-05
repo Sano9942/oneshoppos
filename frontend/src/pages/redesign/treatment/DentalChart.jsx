@@ -57,10 +57,10 @@ export default function DentalChart({ preset = "dental_adult", entries = [], onT
         data-area-code={code}
         data-condition={entry ? entry.condition_code : ""}
         onClick={() => onToothClick && onToothClick(String(code))}
-        className="relative w-10 h-14 rounded-md border border-slate-300 bg-white hover:bg-slate-50 flex flex-col items-center justify-center text-xs shadow-sm"
+        className="relative w-10 h-14 rounded-md border border-(--ui-border-strong) bg-(--ui-surface) hover:bg-(--ui-muted-surface) flex flex-col items-center justify-center text-xs"
         title={entry ? `${code} — ${entry.condition_code}${entry.severity ? ` (${entry.severity})` : ""}` : String(code)}
       >
-        <span className="font-mono font-semibold text-slate-700">{code}</span>
+        <span className="font-mono font-semibold text-(--ui-text)">{code}</span>
         {color && (
           <span
             className="absolute bottom-1 w-3 h-3 rounded-full border border-white"
@@ -98,7 +98,7 @@ function ChartLegend() {
     ["gingivitis", "Gingivitis"],
   ];
   return (
-    <div className="flex flex-wrap gap-2 justify-center text-[10px] text-slate-600 mt-2">
+    <div className="flex flex-wrap gap-2 justify-center text-[10px] text-(--ui-text-muted) mt-2">
       {items.map(([code, label]) => (
         <span key={code} className="flex items-center gap-1">
           <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: CONDITION_COLOR[code] }} />

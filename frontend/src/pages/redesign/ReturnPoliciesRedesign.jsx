@@ -136,7 +136,7 @@ export default function ReturnPoliciesRedesign() {
                       {r.label}
                       <span className="text-xs text-(--ui-text-muted)">({r.code})</span>
                     </div>
-                    {r.requires_note && <div className="text-xs text-amber-600">Requires note</div>}
+                    {r.requires_note && <div className="text-xs text-(--ui-warning-fg)">Requires note</div>}
                   </div>
                   <div className="text-xs text-(--ui-text-muted)">Order: {r.sort_order}</div>
                 </div>

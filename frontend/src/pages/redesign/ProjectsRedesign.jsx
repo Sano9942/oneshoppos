@@ -29,7 +29,7 @@ function MilestoneProgress({ milestones }) {
   return (
     <div className="flex items-center gap-2">
       <div className="w-24 h-2 bg-(--ui-border) rounded-full overflow-hidden">
-        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-(--ui-success-fg) rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs text-(--ui-text-muted)">{completed}/{milestones.length}</span>
     </div>
@@ -261,7 +261,7 @@ function ProjectDetail({ projectId, onBack }) {
               <div className="space-y-2">
                 {milestones.map(m => (
                   <div key={m.id} className="flex items-center gap-3 p-2 rounded-lg border border-(--ui-border) hover:bg-(--ui-bg-hover)">
-                    <button onClick={() => toggleMilestone(m.id, m.status)} className={`flex-shrink-0 ${m.status === "completed" ? "text-emerald-500" : "text-(--ui-text-muted) hover:text-(--ui-text)"}`}>
+                    <button onClick={() => toggleMilestone(m.id, m.status)} className={`flex-shrink-0 ${m.status === "completed" ? "text-(--ui-success-fg)" : "text-(--ui-text-muted) hover:text-(--ui-text)"}`}>
                       <CheckCircle className="w-5 h-5" />
                     </button>
                     <div className="flex-1 min-w-0">
