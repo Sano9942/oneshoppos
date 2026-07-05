@@ -7511,6 +7511,159 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 101,
+    description:
+      "F02 packages/passes — package_templates + customer_packages credit-ledger + redemptions (appointment/class/sale linked), package↔product POS tile link, subscription_runs dunning columns, packages_passes flag, dunning notification rules",
+    up: async (client) => {
+      // 1. Package entity + credit ledger. A package is a prepaid entitlement of
+      //    N credits, sold once and redeemed over time; credits_used is a running
+      //    total kept in lockstep (FOR UPDATE) with the redemptions ledger. The
+      //    invariant credits_used = Σ redemptions.credits WHERE reversed_at IS NULL
+      //    is enforced in application code + a reconciliation test, not a trigger.
+      try {
+        await client.query("SAVEPOINT v101_packages");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_templates (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            price NUMERIC(12,2) NOT NULL,
+            credits INTEGER NOT NULL CHECK (credits > 0),
+            validity_days INTEGER,
+            service_scope TEXT NOT NULL DEFAULT 'any'
+              CHECK (service_scope IN ('any','listed')),
+            product_id INTEGER REFERENCES products(id),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        // A package template optionally backs a POS product so it rings up as a
+        // sellable tile (mirrors is_gift_card_sku detection). One product ↔ one
+        // template, so the sale-commit lookup by product_id is unambiguous.
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_package_template_product
+             ON package_templates(product_id) WHERE product_id IS NOT NULL`
+        );
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_template_services (
+            package_template_id INTEGER NOT NULL REFERENCES package_templates(id) ON DELETE CASCADE,
+            booking_service_id INTEGER NOT NULL REFERENCES booking_services(id),
+            PRIMARY KEY (package_template_id, booking_service_id)
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS customer_packages (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            package_template_id INTEGER NOT NULL REFERENCES package_templates(id),
+            sale_id INTEGER REFERENCES sales(id),
+            credits_total INTEGER NOT NULL,
+            credits_used INTEGER NOT NULL DEFAULT 0 CHECK (credits_used <= credits_total),
+            expires_at TIMESTAMPTZ,
+            status TEXT NOT NULL DEFAULT 'active'
+              CHECK (status IN ('active','exhausted','expired','refunded')),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_redemptions (
+            id SERIAL PRIMARY KEY,
+            customer_package_id INTEGER NOT NULL REFERENCES customer_packages(id),
+            credits INTEGER NOT NULL DEFAULT 1,
+            appointment_id INTEGER REFERENCES appointments(id),
+            class_session_booking_id INTEGER REFERENCES class_session_bookings(id),
+            sale_id INTEGER REFERENCES sales(id),
+            redeemed_at TIMESTAMPTZ DEFAULT NOW(),
+            reversed_at TIMESTAMPTZ
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_packages_customer
+             ON customer_packages(customer_id, status)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_package_redemptions_pkg
+             ON package_redemptions(customer_package_id) WHERE reversed_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v101_packages");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_packages");
+        console.warn(`[migrate-pg v101] packages tables skipped: ${err.message}`);
+      }
+
+      // 2. Dunning state on subscription_runs. When an auto-charge against a
+      //    saved instrument fails, the run is marked charge_status='failed' and
+      //    scheduled for retries at +1/+3/+7 days from first_failed_at; the
+      //    dunning worker advances dunning_attempts and pauses the subscription
+      //    after the 3rd failure. dunning_done_at closes a run out (paid or paused).
+      try {
+        await client.query("SAVEPOINT v101_dunning");
+        await client.query(
+          `ALTER TABLE subscription_runs
+             ADD COLUMN IF NOT EXISTS dunning_attempts INTEGER NOT NULL DEFAULT 0,
+             ADD COLUMN IF NOT EXISTS first_failed_at TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS next_dunning_at TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS dunning_done_at TIMESTAMPTZ`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_subscription_runs_dunning
+             ON subscription_runs(next_dunning_at)
+             WHERE charge_status = 'failed' AND dunning_done_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v101_dunning");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_dunning");
+        console.warn(`[migrate-pg v101] dunning columns skipped: ${err.message}`);
+      }
+
+      // 3. Flag — packages_passes (default OFF; salon/gym/physio presets flip it
+      //    per V04/V05/V07). Gates the POS sell/redeem blocks and the portal tab.
+      try {
+        await client.query("SAVEPOINT v101_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('packages_passes', false,
+               'F02 — session packs / passes: N-credit prepaid entitlements sold once and redeemed over time')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v101_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_flag");
+        console.warn(`[migrate-pg v101] packages_passes flag skipped: ${err.message}`);
+      }
+
+      // 4. Dunning notification rules (inert until customer_notifications on —
+      //    same F05 pattern as the v100 class/waitlist seeds). The dunning worker
+      //    dispatches these through services/customer-notify.notify().
+      try {
+        await client.query("SAVEPOINT v101_notif_rules");
+        const { rows: nrT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (nrT.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('subscription.payment_failed', 'email', 'subscription_payment_failed', true),
+              ('subscription.payment_failed', 'sms',   'subscription_payment_failed', true),
+              ('subscription.paused',         'email', 'subscription_paused', true),
+              ('subscription.paused',         'sms',   'subscription_paused', true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v101_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_notif_rules");
+        console.warn(`[migrate-pg v101] dunning notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

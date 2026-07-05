@@ -189,6 +189,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/appointments")(app, deps);
   require("./customer-portal/stays")(app, deps);
   require("./customer-portal/treatments")(app, deps);
+  require("./customer-portal/packages")(app, deps);
 
   // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
   // BEFORE tenant middleware; each route resolves tenant via
@@ -546,6 +547,9 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- ROUTES: GIFT CARDS (Phase 2-G Wave 2 — 2-G.2) ---
   require("./gift-cards")(app, deps);
+
+  // --- ROUTES: PACKAGES / SESSION PASSES (F02) ---
+  require("./packages")(app, deps);
 
   // --- ROUTES: DRAFT ORDERS (Phase 2) ---
   require("./draft-orders")(app, deps);

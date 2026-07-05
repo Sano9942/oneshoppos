@@ -4,19 +4,55 @@
 
 const logger = require("./logger").child({ component: "subscriptions" });
 
+// Calendar-anchored intervals. monthly/quarterly/yearly add whole months so a
+// member enrolled on the 15th is billed on the 15th every cycle — NOT every 30
+// days (which drifts ~5 days/year and lands mid-month by month 7, producing
+// phantom "extra" charges owners can't reconcile against a calendar month).
+const INTERVAL_MONTHS = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+// Fallback for any non-calendar interval (e.g. a future 'weekly' plan) — keep
+// the legacy fixed-day step so unknown intervals never throw.
 const INTERVAL_DAYS = {
-  monthly: 30,
-  quarterly: 90,
-  yearly: 365,
+  weekly: 7,
 };
 
 /**
- * Compute next billing period from current end date.
+ * Add `n` calendar months in UTC, clamping the day-of-month so month-end
+ * anchors don't roll over (Jan 31 + 1 month → Feb 28/29, not Mar 3). UTC math
+ * keeps clamping deterministic regardless of the server's TZ.
+ */
+function addMonthsUtc(date, n) {
+  const d = new Date(date);
+  const day = d.getUTCDate();
+  d.setUTCDate(1); // avoid the native rollover before shifting the month
+  d.setUTCMonth(d.getUTCMonth() + n);
+  const lastDayOfTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDayOfTarget));
+  return d;
+}
+
+/**
+ * Compute next billing period from current end date. Calendar-month anchored
+ * for monthly/quarterly/yearly; day-stepped for anything else.
+ *
+ * NOTE: only future computations change — existing stored `next_renewal_at` /
+ * `current_period_end` values are never rewritten by this function.
  */
 function computeNextPeriod(currentPeriodEnd, interval, intervalCount = 1) {
-  const days = (INTERVAL_DAYS[interval] || 30) * intervalCount;
   const start = new Date(currentPeriodEnd);
-  const end = new Date(start.getTime() + days * 86400000);
+  const n = Math.max(1, Math.floor(Number(intervalCount) || 1));
+  const months = INTERVAL_MONTHS[interval];
+  let end;
+  if (months) {
+    end = addMonthsUtc(start, months * n);
+  } else {
+    // Unknown/day-based interval — legacy fixed-day step (default 30).
+    const days = (INTERVAL_DAYS[interval] || 30) * n;
+    end = new Date(start.getTime() + days * 86400000);
+  }
   return { start, end };
 }
 
@@ -138,7 +174,14 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
   if (sub.auto_charge) {
     const paymentGateway = require("./payment-gateway");
     let savedChargeOk = false;
+    // When a card-on-file exists, a decline enters DUNNING (retry the saved
+    // instrument at +1/+3/+7 days via the dunning worker) rather than falling
+    // through to a manual pay-link — the whole point of a saved instrument is
+    // that we keep trying it.
+    let enteredDunning = false;
     if (sub.gateway_token && paymentGateway.isEnabled()) {
+      let chargeFailed = false;
+      let failReason = null;
       try {
         const charge = await paymentGateway.chargeSavedInstrument({
           token: sub.gateway_token,
@@ -156,14 +199,58 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
           );
           logger.info({ subscriptionId, gateway_ref: charge.gateway_ref },
             "Auto-charge succeeded against saved instrument");
+        } else {
+          chargeFailed = true;
+          failReason = charge?.error || `charge status ${charge?.status || "unknown"}`;
         }
       } catch (chargeErr) {
-        logger.warn({ err: chargeErr.message, subscriptionId },
-          "Saved-instrument charge failed, falling back to payment link");
+        chargeFailed = true;
+        failReason = chargeErr.message;
+      }
+
+      if (chargeFailed) {
+        enteredDunning = true;
+        // Mark the run failed and schedule the first dunning retry (+1 day).
+        await db.query(
+          `UPDATE subscription_runs
+             SET charge_status = 'failed', error = $2, first_failed_at = NOW(),
+                 dunning_attempts = 0, next_dunning_at = NOW() + INTERVAL '1 day'
+           WHERE subscription_id = $1 AND period_end = $3`,
+          [subscriptionId, String(failReason).slice(0, 500), nextEnd]
+        );
+        // Notify the member through the F05 dispatch engine (honours the
+        // customer_notifications flag + per-tenant channel rules). Fire-and-
+        // forget — a delivery hiccup must never re-open the renewal.
+        try {
+          const { notify } = require("./customer-notify");
+          const { rows: [cp] } = await db.query(
+            "SELECT company_name FROM company_profile WHERE id = 1",
+          );
+          await notify(db, {
+            event: "subscription.payment_failed",
+            customerId: sub.customer_id,
+            tenantSlug,
+            tenant: { slug: tenantSlug, name: cp?.company_name },
+            data: {
+              storeName: cp?.company_name,
+              planName: sub.plan_name,
+              amount: Number(sub.price),
+              currency: "PKR",
+              attempt: 1,
+              maxAttempts: 3,
+            },
+            entityType: "subscription",
+            entityId: subscriptionId,
+          });
+        } catch (notifyErr) {
+          logger.warn({ err: notifyErr.message, subscriptionId }, "Dunning notify (initial) failed");
+        }
+        logger.warn({ subscriptionId, failReason },
+          "Auto-charge declined — entered dunning (retry +1/+3/+7d)");
       }
     }
 
-    if (!savedChargeOk) try {
+    if (!savedChargeOk && !enteredDunning) try {
       if (paymentGateway.isEnabled()) {
         const crypto = require("crypto");
         const linkToken = crypto.randomBytes(16).toString("hex");

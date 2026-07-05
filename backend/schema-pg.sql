@@ -3027,8 +3027,17 @@ CREATE TABLE IF NOT EXISTS subscription_runs (
   charge_amount NUMERIC(12,2),
   charge_status TEXT,
   error TEXT,
+  -- F02 (v101) dunning state: a failed saved-instrument charge schedules
+  -- retries at +1/+3/+7 days from first_failed_at; the dunning worker advances
+  -- dunning_attempts and pauses the subscription after the 3rd failure.
+  dunning_attempts INTEGER NOT NULL DEFAULT 0,
+  first_failed_at TIMESTAMPTZ,
+  next_dunning_at TIMESTAMPTZ,
+  dunning_done_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_subscription_runs_dunning ON subscription_runs(next_dunning_at)
+  WHERE charge_status = 'failed' AND dunning_done_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_customer ON customer_subscriptions(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_plan ON customer_subscriptions(plan_id);
@@ -3767,6 +3776,60 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_class_booking_active
   WHERE status <> 'cancelled' AND customer_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_class_bookings_session ON class_session_bookings(class_session_id, status);
 
+-- ═══════════════════════════════════════════════════════════════
+-- F02 (v101) — Packages / session passes
+-- N-credit prepaid entitlements sold once and redeemed over time.
+-- customer_packages.credits_used is a running total kept in lockstep
+-- (SELECT ... FOR UPDATE) with the package_redemptions ledger.
+-- Gated by the packages_passes feature flag.
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS package_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  price NUMERIC(12,2) NOT NULL,
+  credits INTEGER NOT NULL CHECK (credits > 0),
+  validity_days INTEGER,
+  service_scope TEXT NOT NULL DEFAULT 'any' CHECK (service_scope IN ('any','listed')),
+  product_id INTEGER REFERENCES products(id),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- One product ↔ one template so the sale-commit lookup by product_id is unambiguous.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_package_template_product
+  ON package_templates(product_id) WHERE product_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS package_template_services (
+  package_template_id INTEGER NOT NULL REFERENCES package_templates(id) ON DELETE CASCADE,
+  booking_service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  PRIMARY KEY (package_template_id, booking_service_id)
+);
+
+CREATE TABLE IF NOT EXISTS customer_packages (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  package_template_id INTEGER NOT NULL REFERENCES package_templates(id),
+  sale_id INTEGER REFERENCES sales(id),
+  credits_total INTEGER NOT NULL,
+  credits_used INTEGER NOT NULL DEFAULT 0 CHECK (credits_used <= credits_total),
+  expires_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','exhausted','expired','refunded')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS package_redemptions (
+  id SERIAL PRIMARY KEY,
+  customer_package_id INTEGER NOT NULL REFERENCES customer_packages(id),
+  credits INTEGER NOT NULL DEFAULT 1,
+  appointment_id INTEGER REFERENCES appointments(id),
+  class_session_booking_id INTEGER REFERENCES class_session_bookings(id),
+  sale_id INTEGER REFERENCES sales(id),
+  redeemed_at TIMESTAMPTZ DEFAULT NOW(),
+  reversed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_customer_packages_customer ON customer_packages(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_package_redemptions_pkg ON package_redemptions(customer_package_id) WHERE reversed_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
   id SERIAL PRIMARY KEY,
   service_id INTEGER NOT NULL REFERENCES booking_services(id),
@@ -4210,6 +4273,14 @@ INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
   ('class_session.cancelled', 'email', 'class_cancelled', true),
   ('waitlist.offer',          'sms',   'waitlist_offer',  true),
   ('waitlist.offer',          'email', 'waitlist_offer',  true)
+ON CONFLICT (event, channel) DO NOTHING;
+
+-- Default F02 membership dunning notification rules (inert until flag on).
+INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+  ('subscription.payment_failed', 'email', 'subscription_payment_failed', true),
+  ('subscription.payment_failed', 'sms',   'subscription_payment_failed', true),
+  ('subscription.paused',         'email', 'subscription_paused', true),
+  ('subscription.paused',         'sms',   'subscription_paused', true)
 ON CONFLICT (event, channel) DO NOTHING;
 
 -- ── M7 Rentals (migration v36) ──────────────────────────────────────

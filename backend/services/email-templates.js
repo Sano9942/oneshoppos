@@ -1036,6 +1036,45 @@ function waitlistOffer(data) {
   };
 }
 
+// -- F02: membership payment failed (dunning retry notice) -----------------
+function subscriptionPaymentFailed(data) {
+  const { storeName, customerName, planName, amount, currency, attempt, maxAttempts, nextAttemptAt, payUrl } = data || {};
+  let nextWhen = nextAttemptAt;
+  try { if (nextAttemptAt) nextWhen = new Date(nextAttemptAt).toLocaleDateString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Payment failed${planName ? ` — ${planName}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Payment Didn't Go Through",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We tried to charge your saved card for your <strong>${planName || "membership"}</strong> at <strong>${storeName || "our store"}</strong>, but the payment didn't go through.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Amount</td><td style="padding:10px 16px;font-weight:600">${currency || "PKR"} ${amount != null ? Number(amount).toLocaleString() : ""}</td></tr>
+         ${attempt ? `<tr><td style="padding:10px 16px;color:#64748b">Attempt</td><td style="padding:10px 16px">${attempt}${maxAttempts ? ` of ${maxAttempts}` : ""}</td></tr>` : ""}
+         ${nextWhen ? `<tr><td style="padding:10px 16px;color:#64748b">Next retry</td><td style="padding:10px 16px;font-weight:600">${nextWhen}</td></tr>` : ""}
+       </table>
+       <p>We'll automatically retry. To avoid any interruption, please make sure your card details are up to date.</p>
+       ${payUrl ? `<p style="text-align:center;margin:24px 0"><a href="${payUrl}" style="background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Update Payment</a></p>` : ""}
+       ${footer("This is an automated billing notification.")}`
+    ),
+  };
+}
+
+// -- F02: membership paused after failed dunning ---------------------------
+function subscriptionPaused(data) {
+  const { storeName, customerName, planName, payUrl } = data || {};
+  return {
+    subject: `Membership paused${planName ? ` — ${planName}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Your Membership Is Paused",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We weren't able to collect payment for your <strong>${planName || "membership"}</strong> at <strong>${storeName || "our store"}</strong> after several attempts, so it's now paused.</p>
+       <p>To reactivate, please update your payment details or get in touch with us.</p>
+       ${payUrl ? `<p style="text-align:center;margin:24px 0"><a href="${payUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Reactivate Membership</a></p>` : ""}
+       ${footer("This is an automated billing notification.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   // F05 customer notifications (status-change engine)
@@ -1047,6 +1086,9 @@ const TEMPLATES = {
   // F06 scheduling (classes + waitlist)
   class_cancelled: classCancelled,
   waitlist_offer: waitlistOffer,
+  // F02 membership dunning
+  subscription_payment_failed: subscriptionPaymentFailed,
+  subscription_paused: subscriptionPaused,
   campaign_test: campaignTest,
   customer_invoice: customerInvoice,
   customer_statement: customerStatement,

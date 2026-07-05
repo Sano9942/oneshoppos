@@ -972,6 +972,10 @@ module.exports = function registerSalesRoutes(app, deps) {
     // doesn't send a phantom code.
     let issuedCards = [];
     let giftCardsFlagOn = false;
+    // F02 packages/passes — populated inside the transaction when a package
+    // product line is sold (soldPackages) so a post-commit hook can react.
+    let soldPackages = [];
+    let packagesFlagOn = false;
     try {
       const { getFeatureFlagsMap } = require("../middleware/feature-flags");
       const flags = await getFeatureFlagsMap(req.tenantId);
@@ -979,6 +983,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       const loyaltyOn = !!flags.phase2g_loyalty;
       loyaltyFlagOn = loyaltyOn;
       giftCardsFlagOn = !!flags.phase2g_gift_cards;
+      packagesFlagOn = !!flags.packages_passes;
       if ((pbOn || loyaltyOn) && customer_id) {
         const pricing = require("../services/pricing");
         const { group, tier } = await pricing.resolveCustomerPricing({
@@ -1282,6 +1287,29 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // Non-inventory product types (services + F02 packages) have no stock
+        // to gate — a package/service line rings up regardless of outlet_stock.
+        // Only the availability guard is skipped; the (no-op) deduction below
+        // is unaffected, so a service that DOES carry stock still behaves as
+        // before.
+        const nonInventoryProductIds = new Set();
+        {
+          const cartProductIds = Array.from(new Set(
+            cartItems
+              .filter((i) => !i.is_bundle && !i.variant_id)
+              .map((i) => Number(i.original_product_id || i.id))
+              .filter((n) => Number.isInteger(n) && n > 0),
+          ));
+          if (cartProductIds.length) {
+            const { rows: niRows } = await client.query(
+              `SELECT id FROM products
+                WHERE id = ANY($1::int[]) AND product_type IN ('service','package')`,
+              [cartProductIds],
+            );
+            for (const r of niRows) nonInventoryProductIds.add(Number(r.id));
+          }
+        }
+
         for (const item of cartItems) {
           if (item.is_bundle) {
             // For bundles: lock and check each component's stock
@@ -1378,6 +1406,9 @@ module.exports = function registerSalesRoutes(app, deps) {
               }
             } else {
               const productId = item.original_product_id || item.id;
+              if (nonInventoryProductIds.has(Number(productId))) {
+                continue; // service / package line — nothing to gate
+              }
               const { rows: [row] } = await client.query(
                 `SELECT COALESCE(quantity, 0) AS available
                  FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
@@ -1534,6 +1565,32 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [newSaleId, months, sr.id],
               );
             }
+          }
+
+          // F02 — redeem-at-checkout. A cart line flagged with
+          // redeem_customer_package_id is "paid with package": the line rings
+          // up at price 0 (client-sent) and a package_redemptions row is
+          // written inside the sale transaction, so a rolled-back sale un-does
+          // the redemption. Scope is validated against the line's service.
+          if (packagesFlagOn && item.redeem_customer_package_id) {
+            if (!customer_id) {
+              throw Object.assign(
+                new Error("Redeeming a package requires a customer on the sale"),
+                { statusCode: 400 },
+              );
+            }
+            const pkgService = require("../services/packages");
+            const redeemProductId = Number(item.original_product_id || item.id);
+            const bookingServiceId =
+              await pkgService.resolveBookingServiceForProduct(client, redeemProductId);
+            await pkgService.redeemPackage(client, {
+              customerPackageId: Number(item.redeem_customer_package_id),
+              customerId: customer_id,
+              credits: 1,
+              saleId: newSaleId,
+              appointmentId: appointment_id ? Number(appointment_id) : null,
+              bookingServiceId,
+            });
           }
 
           // v45: stock columns are NUMERIC(10,3) — deduct the exact sold quantity,
@@ -1887,6 +1944,52 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // F02 — sell-at-POS. For each cart line whose product backs a package
+        // template, issue one customer_packages row per unit at sale commit
+        // (mirrors the gift-card issue hook). Requires a customer — a package
+        // has no owner without one, so an anonymous package line rolls the sale
+        // back rather than silently dropping the entitlement.
+        if (packagesFlagOn && cartItems.length > 0) {
+          const pkgProductIds = Array.from(
+            new Set(
+              cartItems
+                .map((i) => Number(i.original_product_id || i.id))
+                .filter((n) => Number.isInteger(n) && n > 0),
+            ),
+          );
+          if (pkgProductIds.length > 0) {
+            const { rows: tpls } = await client.query(
+              `SELECT id, product_id FROM package_templates
+                WHERE product_id = ANY($1::int[]) AND is_active = true`,
+              [pkgProductIds],
+            );
+            if (tpls.length > 0) {
+              const byProduct = new Map(tpls.map((t) => [t.product_id, t.id]));
+              const pkgService = require("../services/packages");
+              for (const item of cartItems) {
+                const pid = Number(item.original_product_id || item.id);
+                const templateId = byProduct.get(pid);
+                if (!templateId) continue;
+                if (!customer_id) {
+                  throw Object.assign(
+                    new Error("Selling a package requires a customer on the sale"),
+                    { statusCode: 400 },
+                  );
+                }
+                const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+                for (let i = 0; i < qty; i += 1) {
+                  const pkg = await pkgService.sellPackage(client, {
+                    customerId: customer_id,
+                    templateId,
+                    saleId: newSaleId,
+                  });
+                  soldPackages.push(pkg);
+                }
+              }
+            }
+          }
+        }
+
         // Debit wallet for any Wallet payments
         const walletPayments = finalPayments.filter(
           (p) => p.method === "Wallet",
@@ -2088,6 +2191,14 @@ module.exports = function registerSalesRoutes(app, deps) {
           // POS can print them on the receipt + show them in the
           // confirmation modal.
           issuedGiftCards: issuedCards,
+          // F02 — packages issued on this sale (id + remaining) so the POS can
+          // confirm the new pass balance in the receipt/confirmation modal.
+          soldPackages: soldPackages.map((p) => ({
+            id: p.id,
+            credits_total: p.credits_total,
+            credits_remaining: p.credits_total - p.credits_used,
+            expires_at: p.expires_at,
+          })),
           // Tier 0.1 wholesale — non-blocking notice when a Credit-tender sale
           // proceeded past credit_limit under credit_block_mode='warn'.
           creditWarning,

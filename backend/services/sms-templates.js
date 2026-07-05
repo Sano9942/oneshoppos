@@ -61,6 +61,18 @@ const SMS_TEMPLATES = {
         expiresAt: d && d.expiresAt != null ? d.expiresAt : fmtWhen(d && d.offerExpiresAt),
       }
     ),
+
+  // F02 membership dunning
+  subscription_payment_failed: (d) =>
+    fill(
+      "{{storeName}}: We couldn't charge your card for {{planName}} ({{currency}} {{amount}}). We'll retry — please update your payment details.",
+      { ...d, planName: (d && d.planName) || "your membership", currency: (d && d.currency) || "PKR" }
+    ),
+  subscription_paused: (d) =>
+    fill(
+      "{{storeName}}: Your {{planName}} membership is paused after several failed payment attempts. Please update your card to reactivate.",
+      { ...d, planName: (d && d.planName) || "" }
+    ),
 };
 
 /**

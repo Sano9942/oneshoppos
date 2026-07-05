@@ -310,6 +310,13 @@ function startAll(deps) {
           });
         }
 
+        if (String(process.env.SUBSCRIPTION_DUNNING_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("subscription-dunning", async () => {
+            const { registerSubscriptionDunningWorker } = require("../workers/subscription-dunning-worker-boss");
+            await registerSubscriptionDunningWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.RENTAL_OVERDUE_WORKER_ENABLED || "0") === "1") {
           await tryRegister("rental-overdue", async () => {
             const { registerRentalOverdueWorker } = require("../workers/rental-overdue-worker-boss");

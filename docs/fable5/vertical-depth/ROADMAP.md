@@ -55,7 +55,7 @@ Completion (wiring) plans from [../completion/README.md](../completion/README.md
 | **Wave 2 — foundational engines (build once)** | | | | | | |
 | 2.1 | **F05 notifications** | Engine + repair P0 wiring + SMS-reminder truth fix | Opus | S/M | 1.3's SMS triage | Cheapest foundation, unblocks V06 immediately, every later plan consumes it |
 | 2.2 ✅ | **F06 scheduling activation** — **DONE 2026-07-05** (`feat/f06-scheduling`, unmerged) | Classes/waitlist/resources/segments + checkout link + race fix | **Fable** | L | 1.3 | Closes 2 vertical P0s by itself; F02 redemption and three verticals wait on it |
-| 2.3 | **F02 packages + billing hardening** | Packs, dunning, calendar billing | Opus | M | 2.2 (partial) | Dunning is a silent-revenue-leak fix for every subscriptions tenant |
+| 2.3 ✅ | **F02 packages + billing hardening** — **DONE 2026-07-05** (`feat/f02-packages`, off `feat/f06-scheduling`, unmerged) | Packs, dunning, calendar billing | Opus | M | 2.2 (partial) | Dunning is a silent-revenue-leak fix for every subscriptions tenant. v101; package credit-ledger (FOR UPDATE + reconciliation test) + POS sell/redeem + returns guard + portal tab; calendar-month computeNextPeriod (12 unit tests); dunning worker (sandbox 1/3/7d → auto-pause); 46 F02 tests green |
 | 2.4 | **F04 deposit engine** | Unified pre-auth + no-show + rental/ticket deposits | **Fable** | M | — | Parallel-safe with 2.2/2.3 (different files); webhook change needs approval |
 | 2.5 | **F03 form builder** | Forms/waivers/questionnaires | Opus | M | — | Parallel-safe; V05/V06/V07/V08 consume |
 | 2.6 | **F01 kit/BOM engine** | Kits, recipes, production runs | **Fable** | L | 0.1 committed | The big inventory engine; sequenced before F07 because both rewire the sales decrement block |

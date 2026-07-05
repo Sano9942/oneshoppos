@@ -335,11 +335,43 @@ module.exports = function registerReturnsRoutes(app, deps) {
     // threshold before any DB write.
     let perLineRestockEnabled = false;
     let riskControlsEnabled = false;
+    let packagesFlagOn = false;
     try {
       const flags = await getFeatureFlagsMap(req.tenantId);
       perLineRestockEnabled = !!flags.phase2g_per_line_restock;
       riskControlsEnabled = !!flags.phase2g_risk_controls;
+      packagesFlagOn = !!flags.packages_passes;
     } catch { /* flag fetch failure → fall back to legacy behavior */ }
+
+    // F02 — refunding a package sale line. A package can be refunded only while
+    // it is untouched: any redemption means value has been consumed, so we block
+    // the refund with a clear error rather than clawing credits back. The pre-
+    // flight runs BEFORE the transaction so we 400 cleanly instead of rolling a
+    // partially-built return back. The in-tx loop flips the untouched row to
+    // 'refunded'. Matched by (sale_id, package_template.product_id).
+    let refundablePackageRows = []; // [{ id, product_id }]
+    if (packagesFlagOn && original_sale_id && Array.isArray(items) && items.length) {
+      const prodIds = Array.from(new Set(items.map((i) => Number(i.product_id)).filter(Boolean)));
+      if (prodIds.length) {
+        const { rows: pkgRows } = await db.query(
+          `SELECT cp.id, cp.credits_used, pt.product_id
+             FROM customer_packages cp
+             JOIN package_templates pt ON pt.id = cp.package_template_id
+            WHERE cp.sale_id = $1 AND pt.product_id = ANY($2::int[])
+              AND cp.status <> 'refunded'`,
+          [original_sale_id, prodIds],
+        );
+        for (const r of pkgRows) {
+          if (Number(r.credits_used) > 0) {
+            return res.status(400).json({
+              error: "Cannot refund a package that has already been used — reverse the redemptions first",
+              code: "package_partially_used",
+            });
+          }
+          refundablePackageRows.push({ id: r.id, product_id: r.product_id });
+        }
+      }
+    }
 
     // 2-G.17: if risk controls are on AND the refund exceeds the tenant's
     // configured threshold, the caller must supply a valid manager PIN. We
@@ -461,6 +493,19 @@ module.exports = function registerReturnsRoutes(app, deps) {
               effectiveReasonCodeId,
             ],
           );
+
+          // F02 — flip the matching untouched package to 'refunded'. Guarded
+          // in the pre-flight above (zero redemptions), so this only voids the
+          // entitlement; there is no stock to restore for a package line.
+          if (packagesFlagOn && refundablePackageRows.length) {
+            const match = refundablePackageRows.filter((p) => p.product_id === Number(item.product_id));
+            for (const p of match) {
+              await client.query(
+                "UPDATE customer_packages SET status = 'refunded' WHERE id = $1 AND status <> 'refunded'",
+                [p.id],
+              );
+            }
+          }
 
           // 2-G.7: only increment stock counters when restock=true. Scrapped
           // units fall through to shrinkage (captured separately in the
