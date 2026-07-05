@@ -75,6 +75,7 @@ describe("F01 — Kit / BOM engine (Postgres)", () => {
     require("../../routes/returns")(app, deps);
     require("../../routes/inventory")(app, deps);
     require("../../routes/stock-conversions")(app, deps);
+    require("../../routes/reports/recipe-costing")(app, deps);
 
     // Enable the kit_bom_engine flag (gates the stock-conversions routes).
     await db.query(
@@ -273,6 +274,37 @@ describe("F01 — Kit / BOM engine (Postgres)", () => {
       .send({ product_id: kit, outlet_id: 1, quantity_change: 5, reason: "test" });
     expect(a.status).toBe(400);
     expect(a.body.code).toBe("kit_no_stock");
+  });
+
+  it("recipe-costing + recipe-usage reports reconcile to hand math", async () => {
+    // Fresh components with known costs so aggregation is deterministic.
+    const { rows: [cX] } = await db.query(
+      "INSERT INTO products (name, price, cost_price, bom_type, status) VALUES ('CostX', 0, 30, 'standard', 'active') RETURNING id"
+    );
+    const { rows: [cY] } = await db.query(
+      "INSERT INTO products (name, price, cost_price, bom_type, status) VALUES ('CostY', 0, 45, 'standard', 'active') RETURNING id"
+    );
+    await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 100)", [cX.id]);
+    await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 100)", [cY.id]);
+    const kit = await makeKit("Cost Kit", [{ pid: cX.id, qty: 2 }, { pid: cY.id, qty: 0.25 }]); // price 300
+
+    expect((await sale(kit, 3)).status).toBe(200);
+
+    // plate cost = 2*30 + 0.25*45 = 71.25; margin = 300 - 71.25 = 228.75
+    const rep = await request(app).get("/api/reports/recipe-costing").set("x-employee-id", "1");
+    expect(rep.status).toBe(200);
+    const row = rep.body.items.find((i) => i.product_id === kit);
+    expect(row.plate_cost).toBeCloseTo(71.25, 2);
+    expect(Number(row.sell_price)).toBeCloseTo(300, 2);
+    expect(row.margin_per_unit).toBeCloseTo(228.75, 2);
+    expect(row.units_sold).toBe(3);
+    expect(row.theoretical_food_cost).toBeCloseTo(213.75, 2); // 3 * 71.25
+
+    // theoretical usage: cX = 2*3 = 6 units, cost 6*30 = 180
+    const use = await request(app).get("/api/reports/recipe-usage").set("x-employee-id", "1");
+    const uX = use.body.components.find((c) => c.product_id === cX.id);
+    expect(uX.theoretical_qty).toBeCloseTo(6, 4);
+    expect(uX.theoretical_cost).toBeCloseTo(180, 2);
   });
 
   it("CRUD rejects nested kits and self-reference", async () => {
