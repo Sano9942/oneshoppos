@@ -6,8 +6,9 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { usePreset, DEFAULT_UNIT_VOCABULARY, isWeightedUnit } from "../../contexts/PresetContext";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag, Layers } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
@@ -51,6 +52,10 @@ const BLANK_FORM = {
   status: "active",
   has_variants: false,
   is_bundle: false,
+  // F01 kit/BOM: standard (own stock) · kit (decrement components at sale) ·
+  // assembled (own stock, built by production runs). is_bundle stays synced
+  // with bom_type==='kit' for backward compat.
+  bom_type: "standard",
   attribute_set_id: "",
   supplier_id: "",
   // 2-G.8 Inventory Intelligence — per-product overrides (blank = fall back
@@ -78,6 +83,7 @@ export default function ProductFormPage() {
   const taxMode = company?.tax_mode || "none";
   const { flags } = useFeatureFlags(authHeaders);
   const preset = usePreset();
+  const { fmt } = useCurrency();
   const unitOptions = preset.unit_vocabulary || DEFAULT_UNIT_VOCABULARY;
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [outletVisibility, setOutletVisibility] = useState([]);
@@ -130,7 +136,11 @@ export default function ProductFormPage() {
   const addComponent = (product) => {
     setBundleComponents((prev) => [
       ...prev,
-      { product_id: product.id, variant_id: null, quantity: 1, name: product.name, sku: product.sku, price: product.price },
+      {
+        product_id: product.id, variant_id: null, quantity: 1,
+        name: product.name, sku: product.sku, price: product.price,
+        cost: Number(product.cost_price) || 0, unit: product.unit || "",
+      },
     ]);
     setComponentSearch("");
     setComponentResults([]);
@@ -151,7 +161,8 @@ export default function ProductFormPage() {
     if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
     if (form.has_variants && !form.attribute_set_id) { setError("Select an attribute set for variant products."); return; }
     if (form.has_variants && variants.length === 0) { setError("No variants generated. Select an attribute set."); return; }
-    if (form.is_bundle && bundleComponents.length === 0) { setError("Bundle must have at least one component product."); return; }
+    if (form.bom_type !== "standard" && bundleComponents.length === 0) { setError("A kit / assembled product needs at least one component."); return; }
+    if (form.bom_type !== "standard" && bundleComponents.some((c) => !(Number(c.quantity) > 0))) { setError("Every component needs a quantity greater than zero."); return; }
 
     setSaving(true);
     setError("");
@@ -187,7 +198,9 @@ export default function ProductFormPage() {
         supplier_id: resolvedSupplierId || null,
         has_variants: form.has_variants ? 1 : 0,
         attribute_set_id: form.has_variants ? (form.attribute_set_id || null) : null,
-        is_bundle: form.is_bundle ? true : false,
+        // F01: bom_type is authoritative; backend syncs is_bundle from it.
+        bom_type: form.bom_type || "standard",
+        is_bundle: form.bom_type === "kit",
         lead_time_days_override:
           form.lead_time_days_override !== "" ? Number(form.lead_time_days_override) : null,
         safety_stock_days:
@@ -207,11 +220,12 @@ export default function ProductFormPage() {
             : [],
       };
 
-      if (form.is_bundle && bundleComponents.length > 0) {
+      if (form.bom_type !== "standard" && bundleComponents.length > 0) {
         payload.bundle_components = bundleComponents.map((c) => ({
           product_id: c.product_id,
           variant_id: c.variant_id || null,
-          quantity: Number(c.quantity) || 1,
+          quantity: Number(c.quantity) || 1, // decimal recipes supported (0.25 kg)
+          unit: c.unit || null,
         }));
       }
 
@@ -300,6 +314,9 @@ export default function ProductFormPage() {
           api.get(`/api/products/${id}/variants`),
           api.get(`/api/products/${id}/stock`),
           api.get(`/api/products/${id}/reviews`),
+          // F01: rich recipe rows (bom_type + component cost/unit) for the
+          // recipe editor + live plate cost. Best-effort on pre-F01 backends.
+          api.get(`/api/products/${id}/components`).catch(() => ({ bom_type: null, components: [] })),
         ]
       : base;
 
@@ -311,7 +328,7 @@ export default function ProductFormPage() {
       setTaxes(taxD?.taxes || []);
       setCustomerGroups(Array.isArray(cgD?.groups) ? cgD.groups : []);
       if (isEdit) {
-        const [prodD, varD, stockD, reviewsD] = editParts;
+        const [prodD, varD, stockD, reviewsD, compD] = editParts;
         if (Array.isArray(reviewsD)) setReviews(reviewsD);
         const p = prodD.product || prodD;
         if (p?.id) {
@@ -336,6 +353,7 @@ export default function ProductFormPage() {
             status: p.status || "active",
             has_variants: Boolean(p.has_variants),
             is_bundle: Boolean(p.is_bundle),
+            bom_type: p.bom_type || (p.is_bundle ? "kit" : "standard"),
             attribute_set_id: p.attribute_set_id || "",
             supplier_id: p.supplier_id || "",
             avg_rating: p.avg_rating || 0,
@@ -355,7 +373,20 @@ export default function ProductFormPage() {
               ? p.customer_group_ids.map(Number)
               : [],
           });
-          if (p.is_bundle && Array.isArray(p.bundle_components)) {
+          // F01: prefer the rich /components rows (carry cost + unit for the
+          // live plate cost); fall back to the detail's bundle_components.
+          if (Array.isArray(compD?.components) && compD.components.length > 0) {
+            setBundleComponents(compD.components.map((c) => ({
+              product_id: c.component_product_id,
+              variant_id: c.component_variant_id || null,
+              quantity: c.quantity,
+              name: c.component_name,
+              sku: c.component_sku,
+              price: c.component_price,
+              cost: Number(c.component_cost) || 0,
+              unit: c.unit || c.component_unit || "",
+            })));
+          } else if (p.is_bundle && Array.isArray(p.bundle_components)) {
             setBundleComponents(p.bundle_components.map((c) => ({
               product_id: c.component_product_id,
               variant_id: c.component_variant_id || null,
@@ -363,6 +394,8 @@ export default function ProductFormPage() {
               name: c.component_name,
               sku: c.component_sku,
               price: c.component_price,
+              cost: 0,
+              unit: "",
             })));
           }
         }
@@ -527,34 +560,52 @@ export default function ProductFormPage() {
             </div>
           </SectionCard>
 
-          {/* Bundle */}
+          {/* Product type & recipe (F01 kit/BOM) */}
           <SectionCard>
             <div className="p-4 space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Bundle / Kit</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Product Type & Recipe</p>
 
-              {/* Toggle — locked in edit mode, mutually exclusive with variants */}
-              <div
-                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : form.has_variants ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
-                onClick={() => {
-                  if (isEdit || form.has_variants) return;
-                  const next = !form.is_bundle;
-                  upd("is_bundle", next);
-                  if (!next) setBundleComponents([]);
-                }}
-              >
-                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.is_bundle ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"}`}>
-                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.is_bundle ? "translate-x-4" : ""}`} />
-                </div>
-                <span className="text-sm font-medium text-(--ui-text) flex items-center gap-1.5">
-                  <Package size={14} /> This product is a bundle / kit
-                </span>
+              {/* Type selector — kit/assembled are mutually exclusive with variants */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: "standard", label: "Standard", icon: ShoppingBag, hint: "Tracks its own stock" },
+                  { key: "kit", label: "Kit / Bundle", icon: Package, hint: "Uses components at sale" },
+                  { key: "assembled", label: "Assembled", icon: Layers, hint: "Built by production runs" },
+                ].map((opt) => {
+                  const active = form.bom_type === opt.key;
+                  const disabled = form.has_variants && opt.key !== "standard";
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => {
+                        if (disabled) return;
+                        upd("bom_type", opt.key);
+                        upd("is_bundle", opt.key === "kit");
+                        if (opt.key === "standard") setBundleComponents([]);
+                      }}
+                      className={`rounded-(--ui-radius-sm) border px-3 py-2 text-left transition-colors ${active ? "border-(--ui-primary) bg-(--ui-primary)/10" : "border-(--ui-border) hover:border-(--ui-border-strong)"} ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                    >
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-(--ui-text)"><Icon size={14} /> {opt.label}</span>
+                      <span className="block text-xs text-(--ui-text-muted) mt-0.5">{opt.hint}</span>
+                    </button>
+                  );
+                })}
               </div>
-              {form.has_variants && !form.is_bundle && (
-                <p className="text-xs text-(--ui-text-muted)">Bundles cannot have variants.</p>
+              {form.has_variants && (
+                <p className="text-xs text-(--ui-text-muted)">Kits and assembled products can't have variants.</p>
               )}
 
-              {form.is_bundle && (
+              {form.bom_type !== "standard" && (
                 <div className="space-y-3">
+                  {form.bom_type === "assembled" && (
+                    <p className="text-xs text-(--ui-text-muted)">
+                      Stock for this product is created by production runs (Inventory → Production) that consume the recipe below.
+                    </p>
+                  )}
+
                   {/* Component search */}
                   <div className="relative">
                     <div className="flex items-center gap-2">
@@ -562,7 +613,7 @@ export default function ProductFormPage() {
                       <Input
                         value={componentSearch}
                         onChange={(e) => searchComponents(e.target.value)}
-                        placeholder="Search products to add as components…"
+                        placeholder="Search products to add to the recipe…"
                         className="flex-1"
                       />
                     </div>
@@ -586,29 +637,43 @@ export default function ProductFormPage() {
                     )}
                   </div>
 
-                  {/* Component list */}
+                  {/* Recipe table — decimal qty, unit, live component cost */}
                   {bundleComponents.length > 0 && (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs font-semibold uppercase text-(--ui-text-muted) border-b border-(--ui-border)">
                             <th className="pb-2 text-left pr-3">Component</th>
-                            <th className="pb-2 text-left pr-3">SKU</th>
-                            <th className="pb-2 text-right pr-3">Qty per bundle</th>
+                            <th className="pb-2 text-right pr-3">Qty per {form.bom_type === "kit" ? "kit" : "unit"}</th>
+                            <th className="pb-2 text-left pr-3">Unit</th>
+                            <th className="pb-2 text-right pr-3">Line cost</th>
                             <th className="pb-2"></th>
                           </tr>
                         </thead>
                         <tbody>
                           {bundleComponents.map((c) => (
                             <tr key={c.product_id} className="border-b border-(--ui-border) last:border-0">
-                              <td className="py-2 pr-3 font-medium text-(--ui-text)">{c.name}</td>
-                              <td className="py-2 pr-3 text-(--ui-text-muted) text-xs">{c.sku || "—"}</td>
+                              <td className="py-2 pr-3">
+                                <div className="font-medium text-(--ui-text)">{c.name}</div>
+                                <div className="text-(--ui-text-muted) text-xs">{c.sku || "—"}</div>
+                              </td>
                               <td className="py-2 pr-3">
                                 <Input
-                                  type="number" min="1" value={c.quantity}
+                                  type="number" min="0" step="0.0001" value={c.quantity}
                                   onChange={(e) => updComponent(c.product_id, "quantity", e.target.value)}
-                                  className="w-20 text-right"
+                                  className="w-24 text-right"
                                 />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <Input
+                                  value={c.unit || ""}
+                                  onChange={(e) => updComponent(c.product_id, "unit", e.target.value)}
+                                  placeholder="pcs"
+                                  className="w-20"
+                                />
+                              </td>
+                              <td className="py-2 pr-3 text-right text-(--ui-text-muted)">
+                                {fmt((Number(c.cost) || 0) * (Number(c.quantity) || 0))}
                               </td>
                               <td className="py-2 text-center">
                                 <button type="button" onClick={() => removeComponent(c.product_id)}
@@ -619,12 +684,23 @@ export default function ProductFormPage() {
                             </tr>
                           ))}
                         </tbody>
+                        <tfoot>
+                          <tr className="border-t border-(--ui-border)">
+                            <td className="pt-2 pr-3 text-xs font-semibold uppercase text-(--ui-text-muted)" colSpan={3}>
+                              Plate cost per {form.bom_type === "kit" ? "kit" : "unit"}
+                            </td>
+                            <td className="pt-2 pr-3 text-right font-semibold text-(--ui-text)">
+                              {fmt(bundleComponents.reduce((s, c) => s + (Number(c.cost) || 0) * (Number(c.quantity) || 0), 0))}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   )}
 
                   {bundleComponents.length === 0 && (
-                    <p className="text-sm text-(--ui-text-muted) py-2">No components added yet. Search above to add products to this bundle.</p>
+                    <p className="text-sm text-(--ui-text-muted) py-2">No components added yet. Search above to build the recipe.</p>
                   )}
                 </div>
               )}
@@ -632,7 +708,7 @@ export default function ProductFormPage() {
           </SectionCard>
 
           {/* Inventory — only for simple products; variant stock handled in Task 5 */}
-          {!form.has_variants && !form.is_bundle && (
+          {!form.has_variants && form.bom_type === "standard" && (
             <SectionCard>
               <div className="p-4 space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Inventory</p>
@@ -720,9 +796,9 @@ export default function ProductFormPage() {
 
               {/* Toggle — locked in edit mode, mutually exclusive with bundles */}
               <div
-                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : form.is_bundle ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
+                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : form.bom_type !== "standard" ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
                 onClick={() => {
-                  if (isEdit || form.is_bundle) return;
+                  if (isEdit || form.bom_type !== "standard") return;
                   const next = !form.has_variants;
                   upd("has_variants", next);
                   if (!next) {
