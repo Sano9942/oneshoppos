@@ -8,7 +8,7 @@
 
 | # | Plan file | What it delivers | Model | Effort | Size | Hard deps | Closes P0s for |
 |---|---|---|---|---|---|---|---|
-| F01 | [F01-kit-bom-engine](plans/F01-kit-bom-engine.md) | Kits/bundles, recipes + food costing, assembly/disassembly with yield | **Fable** | xhigh | L | completion 01 committed | restaurant (recipe P0); P1s in 4 verticals |
+| F01 ✅ | [F01-kit-bom-engine](plans/F01-kit-bom-engine.md) | Kits/bundles, recipes + food costing, assembly/disassembly with yield | **Fable** | xhigh | L | completion 01 committed | restaurant (recipe P0); P1s in 4 verticals — **BACKEND DONE 2026-07-05** (feat/f01-kit-bom, v99, pushed; consolidated on product_bundles + new bom_type; engine live on POS/holds, kits hard-rejected on web-order/quotation/transfer; costing reports reconcile; 13 tests). **UI (ProductForm recipe tab + Production screen + POS combo modal) deferred to redesign/square** per branch note. |
 | F02 | [F02-packages-passes-membership-billing](plans/F02-packages-passes-membership-billing.md) | Session packs w/ credit ledger; dunning; calendar-month billing | Opus | high | M | F06 (redemption wiring only) | — (P1s in gym/salon/physio; 2 P0-grade billing hardening fixes) |
 | F03 | [F03-form-builder](plans/F03-form-builder.md) | Tenant-defined forms: intake, waivers, questionnaires, signatures | Opus | high | M | — | — (P1s in 4 verticals) |
 | F04 | [F04-deposits-preauth-noshow](plans/F04-deposits-preauth-noshow.md) | One deposit/pre-auth engine; rentals + no-show + ticket consumers | **Fable** | high | M | — | — (P1s in 4 verticals; orphaned-hold hardening) |
