@@ -7139,6 +7139,71 @@ const MIGRATIONS = [
       await enableRlsOnPublicTables(client);
     },
   },
+  {
+    version: 99,
+    description:
+      "F04 unified deposit engine: rental pre-auth (+ partial capture), appointment no-show card-on-file, service-ticket gateway deposit, hold-age tracking on all deposit entities",
+    up: async (client) => {
+      // ── Rentals: gateway pre-auth with partial capture (damage < hold) ──
+      // Rides alongside the existing manual deposit_collected/deposit_method
+      // columns — those stay for cash/manual deposits. The gateway pre-auth
+      // uses its own status machine (adds 'partially_captured' vs the
+      // room/treatment machine) plus authorized/captured amount tracking.
+      await client.query(`
+        ALTER TABLE rental_contracts
+          ADD COLUMN IF NOT EXISTS deposit_status TEXT NOT NULL DEFAULT 'none'
+            CHECK (deposit_status IN ('none','pending','authorized','captured','partially_captured','released','failed')),
+          ADD COLUMN IF NOT EXISTS deposit_payment_intent_id TEXT,
+          ADD COLUMN IF NOT EXISTS deposit_authorized_amount NUMERIC(12,2),
+          ADD COLUMN IF NOT EXISTS deposit_captured_amount   NUMERIC(12,2),
+          ADD COLUMN IF NOT EXISTS deposit_authorized_at     TIMESTAMPTZ
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_rental_contracts_deposit_intent
+          ON rental_contracts(deposit_payment_intent_id) WHERE deposit_payment_intent_id IS NOT NULL
+      `);
+
+      // ── Appointments: no-show protection (card on file) ──
+      // Not a hold lifecycle — the no-show flow tokenizes at booking and
+      // charges the saved instrument on no_show (chargeSavedInstrument), so
+      // appointments is NOT a deposit-engine adapter. Only the no-show + token
+      // columns are needed. (The separate prepaid deposit-intent flow in
+      // public-bookings.js is unchanged.)
+      await client.query(`
+        ALTER TABLE booking_services
+          ADD COLUMN IF NOT EXISTS no_show_fee NUMERIC(12,2) DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS require_card_on_file BOOLEAN DEFAULT FALSE
+      `);
+      await client.query(`
+        ALTER TABLE appointments
+          ADD COLUMN IF NOT EXISTS card_token TEXT,
+          ADD COLUMN IF NOT EXISTS no_show_fee_charged NUMERIC(12,2),
+          ADD COLUMN IF NOT EXISTS no_show_charge_ref TEXT
+      `);
+
+      // ── Service tickets: gateway deposit (charge, not hold) ──
+      // Rides on the existing deposit_amount/deposit_method columns. The
+      // gateway charge sets deposit_status + intent id; a completed webhook
+      // lands straight on 'captured' (charge-mode adapter).
+      await client.query(`
+        ALTER TABLE service_tickets
+          ADD COLUMN IF NOT EXISTS deposit_status TEXT NOT NULL DEFAULT 'none'
+            CHECK (deposit_status IN ('none','pending','authorized','captured','released','failed')),
+          ADD COLUMN IF NOT EXISTS deposit_payment_intent_id TEXT,
+          ADD COLUMN IF NOT EXISTS deposit_authorized_at TIMESTAMPTZ
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_service_tickets_deposit_intent
+          ON service_tickets(deposit_payment_intent_id) WHERE deposit_payment_intent_id IS NOT NULL
+      `);
+
+      // ── Hardening: hold-age tracking on the two EXISTING deposit entities ──
+      // The orphaned-hold sweep needs to know when each pre-auth was
+      // authorized (a hold lapses at the acquirer after ~7 days).
+      await client.query(`ALTER TABLE room_bookings   ADD COLUMN IF NOT EXISTS deposit_authorized_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS deposit_authorized_at TIMESTAMPTZ`);
+    },
+  },
 ];
 
 /**

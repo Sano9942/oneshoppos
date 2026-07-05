@@ -3572,6 +3572,9 @@ CREATE TABLE IF NOT EXISTS booking_services (
   is_active BOOLEAN DEFAULT TRUE,
   requires_confirmation BOOLEAN DEFAULT FALSE,
   max_advance_days INTEGER DEFAULT 90,
+  -- F04 no-show protection: opt-in card-on-file + fee charged on no_show
+  no_show_fee NUMERIC(12,2) DEFAULT 0,
+  require_card_on_file BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -3656,6 +3659,11 @@ CREATE TABLE IF NOT EXISTS appointments (
   source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import','portal')),
   cancelled_at TIMESTAMPTZ,
   cancellation_reason TEXT,
+  -- F04 no-show protection (card on file). Token is write-only — never
+  -- returned via any public GET; only a boolean card_on_file is exposed.
+  card_token TEXT,
+  no_show_fee_charged NUMERIC(12,2),
+  no_show_charge_ref TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -4065,6 +4073,11 @@ CREATE TABLE IF NOT EXISTS service_tickets (
   deposit_amount NUMERIC(12,2) DEFAULT 0,
   deposit_paid_at TIMESTAMPTZ,
   deposit_method TEXT,
+  -- F04 gateway deposit (charge, not hold) — rides on deposit_amount above
+  deposit_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (deposit_status IN ('none','pending','authorized','captured','released','failed')),
+  deposit_payment_intent_id TEXT,
+  deposit_authorized_at TIMESTAMPTZ,
   final_invoice_id INTEGER REFERENCES customer_invoices(id),
   expected_completion DATE,
   actual_completion TIMESTAMPTZ,
@@ -4140,6 +4153,13 @@ CREATE TABLE IF NOT EXISTS rental_contracts (
   deposit_collected NUMERIC(12,2) NOT NULL DEFAULT 0,
   deposit_method TEXT,
   deposit_paid_at TIMESTAMPTZ,
+  -- F04 gateway pre-auth (rides alongside the manual deposit_* columns above)
+  deposit_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (deposit_status IN ('none','pending','authorized','captured','partially_captured','released','failed')),
+  deposit_payment_intent_id TEXT,
+  deposit_authorized_amount NUMERIC(12,2),
+  deposit_captured_amount NUMERIC(12,2),
+  deposit_authorized_at TIMESTAMPTZ,
   payment_policy TEXT NOT NULL DEFAULT 'upfront'
     CHECK (payment_policy IN ('upfront','on_return')),
   rental_fee_total NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -4368,6 +4388,7 @@ CREATE TABLE IF NOT EXISTS room_bookings (
   deposit_payment_intent_id TEXT,
   deposit_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (deposit_status IN ('pending','authorized','captured','released','failed')),
+  deposit_authorized_at TIMESTAMPTZ,  -- F04 hold-age (orphaned-hold sweep)
   notes TEXT,
   cancellation_reason TEXT,
   overdue_email_sent_at TIMESTAMPTZ,
@@ -4470,6 +4491,7 @@ CREATE TABLE IF NOT EXISTS treatment_plans (
   deposit_payment_intent_id TEXT,
   deposit_status TEXT
     CHECK (deposit_status IS NULL OR deposit_status IN ('pending','authorized','captured','released','failed')),
+  deposit_authorized_at TIMESTAMPTZ,  -- F04 hold-age (orphaned-hold sweep)
   final_invoice_id INTEGER REFERENCES customer_invoices(id),
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
