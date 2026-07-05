@@ -192,43 +192,43 @@ export default function POSVariantMatrixModal() {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border) bg-(--ui-muted-surface)">
           <div className="flex items-center gap-2">
-            <Grid3x3 size={16} className="text-[#8066FF]" />
-            <h3 className="font-bold text-slate-800">
+            <Grid3x3 size={16} className="text-(--ui-text)" />
+            <h3 className="font-bold text-(--ui-text)">
               Choose variant{product?.name ? ` — ${product.name}` : ""}
             </h3>
           </div>
-          <button onClick={close} className="text-slate-400 hover:text-slate-600">
+          <button onClick={close} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={18} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
           {loading && (
-            <div className="text-sm text-slate-500 text-center py-6">Loading variants…</div>
+            <div className="text-sm text-(--ui-text-muted) text-center py-6">Loading variants…</div>
           )}
 
           {!loading && error && (
-            <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            <div className="text-xs font-bold text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded-lg px-3 py-2">
               {error}
             </div>
           )}
 
           {!loading && !error && variants.length === 0 && (
-            <div className="text-sm text-slate-500 text-center py-6">
+            <div className="text-sm text-(--ui-text-muted) text-center py-6">
               No variants configured for this product.
             </div>
           )}
 
           {!loading && !error && variants.length > 0 && axis3 && (
-            <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider">
+            <label className="block text-xs font-bold uppercase text-(--ui-text-muted) tracking-wider">
               {axis3}
               <select
                 value={axis2Filter || ""}
                 onChange={(e) => setAxis2Filter(e.target.value)}
-                className="mt-1 w-full border-2 border-slate-200 rounded-lg px-3 py-2 focus:border-[#8066FF] outline-none font-semibold text-slate-800"
+                className="mt-1 w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 focus:border-(--ui-focus) outline-none font-semibold text-(--ui-text)"
               >
                 {(axisValues[axis3] || []).map((val) => (
                   <option key={val} value={val}>
@@ -244,20 +244,20 @@ export default function POSVariantMatrixModal() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
-                    <th className="text-[10px] uppercase tracking-wider text-slate-400 text-left px-2 py-1 font-bold">
+                    <th className="text-[10px] uppercase tracking-wider text-(--ui-text-muted) text-left px-2 py-1 font-bold">
                       {axisRow || ""}
                     </th>
                     {axisCol ? (
                       colValues.map((cv) => (
                         <th
                           key={cv}
-                          className="text-[10px] uppercase tracking-wider text-slate-400 text-center px-2 py-1 font-bold"
+                          className="text-[10px] uppercase tracking-wider text-(--ui-text-muted) text-center px-2 py-1 font-bold"
                         >
                           {cv}
                         </th>
                       ))
                     ) : (
-                      <th className="text-[10px] uppercase tracking-wider text-slate-400 text-center px-2 py-1 font-bold">
+                      <th className="text-[10px] uppercase tracking-wider text-(--ui-text-muted) text-center px-2 py-1 font-bold">
                         Stock
                       </th>
                     )}
@@ -266,35 +266,35 @@ export default function POSVariantMatrixModal() {
                 <tbody>
                   {rowValues.map((rv, rowIdx) => (
                     <tr key={rv}>
-                      <td className="text-sm font-bold text-slate-700 px-2 py-1 whitespace-nowrap">
+                      <td className="text-sm font-bold text-(--ui-text) px-2 py-1 whitespace-nowrap">
                         {rv}
                       </td>
                       {colValues.map((cv, colIdx) => {
                         const v = findVariant(rv, cv);
                         const stock = v ? Number(v.stock_at_outlet ?? v.stock ?? 0) : 0;
                         let cellClass =
-                          "px-2 py-2 text-center border border-slate-100 text-xs font-semibold min-w-[80px]";
+                          "px-2 py-2 text-center border border-(--ui-border) text-xs font-semibold min-w-[80px]";
                         let disabled = false;
                         let title = "";
                         if (!v) {
-                          cellClass += " bg-slate-50 text-slate-300";
+                          cellClass += " bg-(--ui-muted-surface) text-(--ui-text-muted)";
                           disabled = true;
                           title = "No such combination";
                         } else if (stock <= 0) {
-                          cellClass += " bg-slate-100 text-slate-400 line-through";
+                          cellClass += " bg-(--ui-muted-surface) text-(--ui-text-muted) line-through";
                           disabled = true;
                           title = `Out of stock · ${v.sku || ""}`;
                         } else if (stock <= lowThreshold) {
-                          cellClass += " bg-amber-50 text-amber-800 hover:bg-amber-100";
+                          cellClass += " bg-(--ui-warning-bg) text-(--ui-warning-fg) hover:bg-(--ui-warning-bg)";
                           title = `Low stock · ${stock} left · ${v.sku || ""}`;
                         } else {
-                          cellClass += " bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+                          cellClass += " bg-(--ui-success-bg) text-(--ui-success-fg) hover:bg-(--ui-success-bg)";
                           title = `${stock} in stock · ${v.sku || ""}`;
                         }
                         const isFocused =
                           focusedCell.row === rowIdx && focusedCell.col === colIdx;
                         if (isFocused && !disabled) {
-                          cellClass += " ring-2 ring-[#8066FF]";
+                          cellClass += " ring-2 ring-(--ui-focus)";
                         }
                         return (
                           <td key={cv} className="p-0">
@@ -320,9 +320,9 @@ export default function POSVariantMatrixModal() {
             </div>
           )}
 
-          <div className="flex justify-between items-center text-[11px] text-slate-400">
+          <div className="flex justify-between items-center text-[11px] text-(--ui-text-muted)">
             <span>↑ ↓ ← → to move · Enter to add · Esc to cancel</span>
-            <button onClick={close} className="text-slate-500 hover:text-slate-800 font-semibold">
+            <button onClick={close} className="text-(--ui-text-muted) hover:text-(--ui-text) font-semibold">
               Cancel
             </button>
           </div>

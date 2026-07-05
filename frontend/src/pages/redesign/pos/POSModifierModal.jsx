@@ -99,20 +99,20 @@ export default function POSModifierModal() {
 
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+      <div className="w-full max-w-lg rounded-2xl bg-(--ui-surface) shadow-(--ui-shadow-lg) flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-(--ui-border-strong)">
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Customize</div>
-            <div className="text-base font-semibold text-slate-900">{product?.name || "Item"}</div>
+            <div className="text-xs uppercase tracking-wide text-(--ui-text-muted)">Customize</div>
+            <div className="text-base font-semibold text-(--ui-text)">{product?.name || "Item"}</div>
           </div>
-          <button onClick={cancelModifiers} className="p-1 hover:bg-slate-100 rounded">
+          <button onClick={cancelModifiers} className="p-1 hover:bg-(--ui-muted-surface) rounded">
             <X size={18} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {groups.length === 0 && (
-            <div className="text-sm text-slate-500">No modifier options for this item.</div>
+            <div className="text-sm text-(--ui-text-muted)">No modifier options for this item.</div>
           )}
           {groups.map((g) => {
             const picks = picked[g.id] || [];
@@ -125,11 +125,11 @@ export default function POSModifierModal() {
             return (
               <div key={g.id}>
                 <div className="flex items-baseline justify-between mb-2">
-                  <div className="text-sm font-semibold text-slate-900">
+                  <div className="text-sm font-semibold text-(--ui-text)">
                     {g.name}
-                    {req && <span className="text-rose-600 ml-1">*</span>}
+                    {req && <span className="text-(--ui-danger-fg) ml-1">*</span>}
                   </div>
-                  <div className="text-xs text-slate-500">{headerRule}</div>
+                  <div className="text-xs text-(--ui-text-muted)">{headerRule}</div>
                 </div>
                 <div className="space-y-1.5">
                   {(g.options || []).map((o) => {
@@ -142,22 +142,22 @@ export default function POSModifierModal() {
                         onClick={() => toggle(g, o.id)}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition ${
                           active
-                            ? "border-[#8066FF] bg-[#8066FF]/5 text-slate-900"
-                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) hover:border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text)"
                         }`}
                       >
                         <span className="flex items-center gap-2">
                           <span
                             className={`w-4 h-4 rounded-${g.selection_type === "single" ? "full" : "sm"} border flex items-center justify-center ${
-                              active ? "border-[#8066FF] bg-[#8066FF]" : "border-slate-300"
+                              active ? "border-(--ui-primary) bg-(--ui-primary)" : "border-(--ui-border-strong)"
                             }`}
                           >
-                            {active && <span className="w-2 h-2 bg-white rounded-full" />}
+                            {active && <span className="w-2 h-2 bg-(--ui-surface) rounded-full" />}
                           </span>
                           <span>{o.name}</span>
                         </span>
                         {delta !== 0 && (
-                          <span className={`text-xs font-medium ${delta > 0 ? "text-slate-600" : "text-emerald-600"}`}>
+                          <span className={`text-xs font-medium ${delta > 0 ? "text-(--ui-text-muted)" : "text-(--ui-success-fg)"}`}>
                             {delta > 0 ? "+" : ""}{fmt(delta)}
                           </span>
                         )}
@@ -171,25 +171,25 @@ export default function POSModifierModal() {
         </div>
 
         {error && (
-          <div className="px-5 pt-2 text-xs text-rose-600">{error}</div>
+          <div className="px-5 pt-2 text-xs text-(--ui-danger-fg)">{error}</div>
         )}
 
-        <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between gap-3">
-          <div className="text-sm text-slate-600">
+        <div className="px-5 py-3 border-t border-(--ui-border-strong) flex items-center justify-between gap-3">
+          <div className="text-sm text-(--ui-text-muted)">
             {priceDelta !== 0 && (
-              <span>Modifiers: <b className="text-slate-900">{priceDelta > 0 ? "+" : ""}{fmt(priceDelta)}</b></span>
+              <span>Modifiers: <b className="text-(--ui-text)">{priceDelta > 0 ? "+" : ""}{fmt(priceDelta)}</b></span>
             )}
           </div>
           <div className="flex gap-2">
             <button
               onClick={cancelModifiers}
-              className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="px-4 py-2 rounded-lg border border-(--ui-border-strong) text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
             >
               Cancel
             </button>
             <button
               onClick={handleAdd}
-              className="px-4 py-2 rounded-lg bg-[#8066FF] text-white text-sm font-semibold hover:bg-[#6d55e0]"
+              className="px-4 py-2 rounded-lg bg-(--ui-primary) text-white text-sm font-semibold hover:bg-(--ui-primary-strong)"
             >
               Add to cart
             </button>
