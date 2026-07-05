@@ -36,26 +36,26 @@ export default function POSEmailReceiptModal({ saleId, customerEmail, onClose })
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+      <div className="relative bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-sm mx-4 p-6">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-700"
+          className="absolute top-4 right-4 text-(--ui-text-muted) hover:text-(--ui-text)"
         >
           <X size={18} />
         </button>
 
         <div className="flex items-center gap-2 mb-4">
-          <Mail size={20} className="text-blue-600" />
-          <h3 className="font-semibold text-slate-800">Email Receipt</h3>
+          <Mail size={20} className="text-(--ui-text)" />
+          <h3 className="font-semibold text-(--ui-text)">Email Receipt</h3>
         </div>
 
         {sent ? (
-          <p className="text-green-600 font-medium text-sm text-center py-4">
+          <p className="text-(--ui-success-fg) font-medium text-sm text-center py-4">
             Receipt sent successfully!
           </p>
         ) : (
           <>
-            <label className="block text-sm text-slate-600 mb-1">
+            <label className="block text-sm text-(--ui-text-muted) mb-1">
               Send to
             </label>
             <input
@@ -63,17 +63,17 @@ export default function POSEmailReceiptModal({ saleId, customerEmail, onClose })
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="customer@example.com"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus) mb-3"
               disabled={loading}
               autoFocus
             />
             {error && (
-              <p className="text-red-500 text-xs mb-3">{error}</p>
+              <p className="text-(--ui-danger) text-xs mb-3">{error}</p>
             )}
             <button
               onClick={handleSend}
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-2"
+              className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
               {loading ? "Sending…" : "Send Receipt"}
