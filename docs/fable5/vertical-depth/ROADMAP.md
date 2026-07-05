@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|
 | F01 | [F01-kit-bom-engine](plans/F01-kit-bom-engine.md) | Kits/bundles, recipes + food costing, assembly/disassembly with yield | **Fable** | xhigh | L | completion 01 committed | restaurant (recipe P0); P1s in 4 verticals |
 | F02 | [F02-packages-passes-membership-billing](plans/F02-packages-passes-membership-billing.md) | Session packs w/ credit ledger; dunning; calendar-month billing | Opus | high | M | F06 (redemption wiring only) | — (P1s in gym/salon/physio; 2 P0-grade billing hardening fixes) |
-| F03 | [F03-form-builder](plans/F03-form-builder.md) | Tenant-defined forms: intake, waivers, questionnaires, signatures | Opus | high | M | — | — (P1s in 4 verticals) |
+| F03 ✅ | [F03-form-builder](plans/F03-form-builder.md) | Tenant-defined forms: intake, waivers, questionnaires, signatures | Opus | high | M | — | — (P1s in 4 verticals) — **DONE 2026-07-05** (feat/f03-forms, v99, pushed; builder + 3 fill paths live; consent-snapshot verdict = safe) |
 | F04 | [F04-deposits-preauth-noshow](plans/F04-deposits-preauth-noshow.md) | One deposit/pre-auth engine; rentals + no-show + ticket consumers | **Fable** | high | M | — | — (P1s in 4 verticals; orphaned-hold hardening) |
 | F05 | [F05-customer-notification-engine](plans/F05-customer-notification-engine.md) | Event→SMS/email/WhatsApp engine; fixes the lying SMS reminders | Opus (Sonnet viable) | high | S/M | — | **repair (notifications P0)** |
 | F06 | [F06-scheduling-engine-activation](plans/F06-scheduling-engine-activation.md) | Activates 7 dead tables: classes, waitlist, resources, segments; appointment↔sale link; overlap-race fix | **Fable** | high | L | completion 03 | **gym (classes P0), salon (checkout-link P0)** |
