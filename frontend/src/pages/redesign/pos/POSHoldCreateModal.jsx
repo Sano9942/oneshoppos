@@ -106,43 +106,43 @@ export default function POSHoldCreateModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+      <div className="bg-(--ui-surface) rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-(--ui-shadow-lg)">
+        <div className="flex items-center justify-between p-5 border-b border-(--ui-border)">
           <div>
-            <h3 className="text-xl font-black text-slate-900">Place on Hold</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-xl font-black text-(--ui-text)">Place on Hold</h3>
+            <p className="text-xs text-(--ui-text-muted) mt-0.5">
               Reserve stock, take a deposit, customer picks up later.
             </p>
           </div>
-          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-700">
+          <button onClick={resetAndClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={18} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="bg-slate-50 rounded-lg p-3 text-sm">
+          <div className="bg-(--ui-muted-surface) rounded-lg p-3 text-sm">
             <div className="flex justify-between mb-1">
-              <span className="text-slate-500">Items</span>
-              <span className="font-semibold text-slate-900">
+              <span className="text-(--ui-text-muted)">Items</span>
+              <span className="font-semibold text-(--ui-text)">
                 {cart.reduce((s, i) => s + Number(i.quantity || 0), 0)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Total</span>
-              <span className="font-black text-[#8066FF]">{money(total)}</span>
+              <span className="text-(--ui-text-muted)">Total</span>
+              <span className="font-black text-(--ui-text)">{money(total)}</span>
             </div>
           </div>
 
           {!selectedCustomer && (
             <div className="grid grid-cols-2 gap-2">
               <input
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                className="border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                 placeholder="Customer name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
               <input
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                className="border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                 placeholder="Phone *"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -150,27 +150,27 @@ export default function POSHoldCreateModal() {
             </div>
           )}
           {selectedCustomer && (
-            <div className="text-sm text-slate-600 bg-indigo-50 rounded-lg p-2">
-              For: <span className="font-semibold text-[#8066FF]">{selectedCustomer.name}</span>
-              {selectedCustomer.mobile && <span className="text-slate-500"> · {selectedCustomer.mobile}</span>}
+            <div className="text-sm text-(--ui-text-muted) bg-(--ui-muted-surface) rounded-lg p-2">
+              For: <span className="font-semibold text-(--ui-text)">{selectedCustomer.name}</span>
+              {selectedCustomer.mobile && <span className="text-(--ui-text-muted)"> · {selectedCustomer.mobile}</span>}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Deposit amount</label>
+              <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Deposit amount</label>
               <input
                 type="number"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                 placeholder="0.00"
                 value={deposit}
                 onChange={(e) => setDeposit(e.target.value)}
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Deposit method</label>
+              <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Deposit method</label>
               <select
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                 value={depositMethod}
                 onChange={(e) => setDepositMethod(e.target.value)}
               >
@@ -184,10 +184,10 @@ export default function POSHoldCreateModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Hold for (days)</label>
+            <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Hold for (days)</label>
             <input
               type="number"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
               value={holdDays}
               onChange={(e) => setHoldDays(e.target.value)}
               min={1}
@@ -196,10 +196,10 @@ export default function POSHoldCreateModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Notes</label>
+            <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Notes</label>
             <textarea
               rows={2}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
               placeholder="e.g. customer size, color, pickup day"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -207,10 +207,10 @@ export default function POSHoldCreateModal() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 p-5 border-t border-slate-100">
+        <div className="flex justify-end gap-2 p-5 border-t border-(--ui-border)">
           <button
             onClick={resetAndClose}
-            className="px-4 py-2 text-slate-600 text-sm font-semibold hover:bg-slate-100 rounded-lg"
+            className="px-4 py-2 text-(--ui-text-muted) text-sm font-semibold hover:bg-(--ui-muted-surface) rounded-lg"
             disabled={submitting}
           >
             Cancel
@@ -218,7 +218,7 @@ export default function POSHoldCreateModal() {
           <button
             onClick={handleSubmit}
             disabled={submitting || !cart.length}
-            className="px-5 py-2 bg-[#8066FF] text-white text-sm font-bold rounded-lg hover:bg-[#7056ef] disabled:opacity-40"
+            className="px-5 py-2 bg-(--ui-primary) text-white text-sm font-bold rounded-lg hover:bg-(--ui-primary-strong) disabled:opacity-40"
           >
             {submitting ? "Creating…" : "Create Hold"}
           </button>

@@ -80,9 +80,9 @@ function buildAlerts(data) {
 }
 
 const SEVERITY_STYLE = {
-  high: "border-red-200 bg-red-50 text-red-700",
-  medium: "border-amber-200 bg-amber-50 text-amber-700",
-  low: "border-blue-100 bg-blue-50 text-blue-700",
+  high: "border-transparent bg-(--ui-danger-bg) text-(--ui-danger-fg)",
+  medium: "border-transparent bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  low: "border-transparent bg-(--ui-muted-surface) text-(--ui-text-muted)",
 };
 
 export function DashboardAttention({ data, onNavigate }) {
@@ -92,7 +92,7 @@ export function DashboardAttention({ data, onNavigate }) {
   return (
     <SectionCard className="p-4">
       <div className="mb-2 flex items-center gap-2">
-        <AlertTriangle size={14} className="text-amber-500" />
+        <AlertTriangle size={14} className="text-(--ui-warning-fg)" />
         <h3 className="text-sm font-semibold text-(--ui-text)">Needs Attention</h3>
       </div>
       <div className="flex flex-col gap-2">

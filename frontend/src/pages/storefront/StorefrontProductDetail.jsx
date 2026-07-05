@@ -83,12 +83,12 @@ export default function StorefrontProductDetail() {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-pulse grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="aspect-square bg-gray-200 rounded-xl" />
+          <div className="aspect-square bg-(--ui-muted-surface) rounded-xl" />
           <div className="space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-3/4" />
-            <div className="h-6 bg-gray-200 rounded w-1/3" />
-            <div className="h-4 bg-gray-200 rounded w-full" />
-            <div className="h-4 bg-gray-200 rounded w-5/6" />
+            <div className="h-8 bg-(--ui-muted-surface) rounded w-3/4" />
+            <div className="h-6 bg-(--ui-muted-surface) rounded w-1/3" />
+            <div className="h-4 bg-(--ui-muted-surface) rounded w-full" />
+            <div className="h-4 bg-(--ui-muted-surface) rounded w-5/6" />
           </div>
         </div>
       </div>
@@ -98,11 +98,11 @@ export default function StorefrontProductDetail() {
   if (error || !product) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Product Not Found</h2>
-        <p className="text-gray-500 mb-6">{error || "This product does not exist."}</p>
+        <h2 className="text-xl font-bold text-(--ui-text) mb-2">Product Not Found</h2>
+        <p className="text-(--ui-text-muted) mb-6">{error || "This product does not exist."}</p>
         <Link
           to={`/store/${tenantSlug}/products`}
-          className="text-indigo-600 hover:text-indigo-700 font-medium"
+          className="text-(--ui-link) hover:text-(--ui-link) font-medium"
         >
           &larr; Back to products
         </Link>
@@ -127,18 +127,18 @@ export default function StorefrontProductDetail() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link to={`/store/${tenantSlug}`} className="hover:text-indigo-600">Store</Link>
+      <nav className="flex items-center gap-2 text-sm text-(--ui-text-muted) mb-6">
+        <Link to={`/store/${tenantSlug}`} className="hover:text-(--ui-link)">Store</Link>
         <span>/</span>
-        <Link to={`/store/${tenantSlug}/products`} className="hover:text-indigo-600">Products</Link>
+        <Link to={`/store/${tenantSlug}/products`} className="hover:text-(--ui-link)">Products</Link>
         <span>/</span>
-        <span className="text-gray-900 font-medium truncate">{product.name}</span>
+        <span className="text-(--ui-text) font-medium truncate">{product.name}</span>
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Image Gallery */}
         <div>
-          <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden mb-4">
+          <div className="aspect-square bg-(--ui-muted-surface) rounded-xl overflow-hidden mb-4">
             {images.length > 0 ? (
               <img
                 src={images[selectedImage] || images[0]}
@@ -146,7 +146,7 @@ export default function StorefrontProductDetail() {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-300">
+              <div className="w-full h-full flex items-center justify-center text-(--ui-text-muted)">
                 <svg className="h-20 w-20" fill="none" viewBox="0 0 24 24" strokeWidth={0.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
                 </svg>
@@ -160,7 +160,7 @@ export default function StorefrontProductDetail() {
                   key={idx}
                   onClick={() => setSelectedImage(idx)}
                   className={`shrink-0 h-16 w-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                    selectedImage === idx ? "border-indigo-600" : "border-gray-200 hover:border-gray-300"
+                    selectedImage === idx ? "border-(--ui-focus)" : "border-(--ui-border) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   <img src={url} alt="" className="w-full h-full object-cover" />
@@ -172,30 +172,30 @@ export default function StorefrontProductDetail() {
 
         {/* Product Info */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-(--ui-text) mb-4">
             {product.name}
           </h1>
 
           {/* Price */}
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl font-bold text-gray-900">
+            <span className="text-3xl font-bold text-(--ui-text)">
               {currencySymbol} {Number(activePrice).toLocaleString()}
             </span>
             {hasDiscount && (
-              <span className="text-lg text-gray-400 line-through">
+              <span className="text-lg text-(--ui-text-muted) line-through">
                 {currencySymbol} {Number(comparePrice).toLocaleString()}
               </span>
             )}
           </div>
           {moqHint && (
-            <p className="text-sm text-amber-700 mb-6">{moqHint}</p>
+            <p className="text-sm text-(--ui-warning-fg) mb-6">{moqHint}</p>
           )}
           {!moqHint && <div className="mb-6" />}
 
           {/* Variant Selector */}
           {product.variants && product.variants.length > 0 && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Variant</label>
+              <label className="block text-sm font-medium text-(--ui-text) mb-2">Variant</label>
               <div className="flex flex-wrap gap-2">
                 {product.variants.map((v) => (
                   <button
@@ -203,8 +203,8 @@ export default function StorefrontProductDetail() {
                     onClick={() => setSelectedVariant(v)}
                     className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
                       selectedVariant?.id === v.id
-                        ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                        : "border-gray-300 text-gray-700 hover:border-gray-400"
+                        ? "border-(--ui-focus) bg-(--ui-muted-surface) text-(--ui-link)"
+                        : "border-(--ui-border-strong) text-(--ui-text) hover:border-(--ui-border-strong)"
                     }`}
                   >
                     {v.name || v.title || `Variant ${v.id}`}
@@ -217,8 +217,8 @@ export default function StorefrontProductDetail() {
           {/* Description */}
           {product.description && (
             <div className="mb-6">
-              <h2 className="text-sm font-medium text-gray-700 mb-2">Description</h2>
-              <p className="text-gray-600 leading-relaxed whitespace-pre-line">
+              <h2 className="text-sm font-medium text-(--ui-text) mb-2">Description</h2>
+              <p className="text-(--ui-text-muted) leading-relaxed whitespace-pre-line">
                 {product.description}
               </p>
             </div>
@@ -230,32 +230,32 @@ export default function StorefrontProductDetail() {
               type="button"
               onClick={handleAddToCart}
               disabled={adding}
-              className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-8 py-3 bg-(--ui-primary) text-(--ui-on-primary) font-medium rounded-lg hover:bg-(--ui-primary-strong) transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {adding ? "Adding..." : "Add to Cart"}
             </button>
             {addedMessage ? (
-              <p className="text-sm text-emerald-600 font-medium">{addedMessage}</p>
+              <p className="text-sm text-(--ui-success-fg) font-medium">{addedMessage}</p>
             ) : null}
           </div>
 
           {/* Reviews */}
           {product.reviews && product.reviews.length > 0 && (
-            <div className="mt-10 border-t border-gray-200 pt-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">
+            <div className="mt-10 border-t border-(--ui-border) pt-8">
+              <h2 className="text-lg font-bold text-(--ui-text) mb-4">
                 Reviews ({product.reviews.length})
               </h2>
               <div className="space-y-6">
                 {product.reviews.map((review, idx) => (
-                  <div key={idx} className="border-b border-gray-100 pb-4 last:border-0">
+                  <div key={idx} className="border-b border-(--ui-border) pb-4 last:border-0">
                     <div className="flex items-center gap-2 mb-1">
                       <StarRating rating={review.rating} />
                       {review.author && (
-                        <span className="text-sm font-medium text-gray-700">{review.author}</span>
+                        <span className="text-sm font-medium text-(--ui-text)">{review.author}</span>
                       )}
                     </div>
                     {review.text && (
-                      <p className="text-sm text-gray-600 mt-1">{review.text}</p>
+                      <p className="text-sm text-(--ui-text-muted) mt-1">{review.text}</p>
                     )}
                   </div>
                 ))}
@@ -265,30 +265,30 @@ export default function StorefrontProductDetail() {
 
           {/* Pickup Availability */}
           {product.availability && product.availability.length > 0 && (
-            <div className="mt-10 border-t border-gray-200 pt-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Pickup Availability</h2>
+            <div className="mt-10 border-t border-(--ui-border) pt-8">
+              <h2 className="text-lg font-bold text-(--ui-text) mb-4">Pickup Availability</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 font-medium text-gray-700">Location</th>
-                      <th className="text-left py-2 font-medium text-gray-700">Availability</th>
+                    <tr className="border-b border-(--ui-border)">
+                      <th className="text-left py-2 font-medium text-(--ui-text)">Location</th>
+                      <th className="text-left py-2 font-medium text-(--ui-text)">Availability</th>
                     </tr>
                   </thead>
                   <tbody>
                     {product.availability.map((loc, idx) => (
-                      <tr key={idx} className="border-b border-gray-100">
-                        <td className="py-2 text-gray-900">{loc.outlet_name || loc.name}</td>
+                      <tr key={idx} className="border-b border-(--ui-border)">
+                        <td className="py-2 text-(--ui-text)">{loc.outlet_name || loc.name}</td>
                         <td className="py-2">
                           {loc.in_stock ? (
-                            <span className="inline-flex items-center gap-1 text-green-700">
+                            <span className="inline-flex items-center gap-1 text-(--ui-success-fg)">
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                               </svg>
                               In Stock
                             </span>
                           ) : (
-                            <span className="text-gray-400">Out of Stock</span>
+                            <span className="text-(--ui-text-muted)">Out of Stock</span>
                           )}
                         </td>
                       </tr>
@@ -310,7 +310,7 @@ function StarRating({ rating }) {
     stars.push(
       <svg
         key={i}
-        className={`h-4 w-4 ${i <= rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
+        className={`h-4 w-4 ${i <= rating ? "text-(--ui-warning-fg) fill-yellow-400" : "text-(--ui-text-muted)"}`}
         viewBox="0 0 24 24"
         strokeWidth={1.5}
         stroke="currentColor"

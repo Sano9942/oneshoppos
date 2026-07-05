@@ -6,7 +6,7 @@ import ReservationBadge from "./ReservationBadge";
 
 // Phase 2-R.0 Day 2 — Floor grid for /pos/restaurant.
 // Ports the plan loader, 10s polling, and seat modal from
-// RestaurantFloorRedesign. Restyled for the POS shell (#8066FF + slate-*).
+// RestaurantFloorRedesign. Restyled for the POS shell (Square design tokens).
 //
 // Adds the takeaway/delivery/drive-thru sticky entry row. All four entry
 // points (3 takeout buttons + tapping a seated table) flow into the same
@@ -14,12 +14,12 @@ import ReservationBadge from "./ReservationBadge";
 // to transition view -> "check".
 
 const STATUS_TONE = {
-  seated:          "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  ordering:        "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  served:          "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  check_requested: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-  dirty:           "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  closed:          "bg-slate-500/15 text-slate-300 border-slate-500/30",
+  seated:          "bg-(--ui-warning-bg) text-(--ui-warning-fg) border-(--ui-warning-fg)/30",
+  ordering:        "bg-(--ui-warning-bg) text-(--ui-warning-fg) border-(--ui-warning-fg)/30",
+  served:          "bg-(--ui-success-bg) text-(--ui-success-fg) border-(--ui-success-fg)/30",
+  check_requested: "bg-(--ui-danger-bg) text-(--ui-danger-fg) border-(--ui-danger-fg)/30",
+  dirty:           "bg-(--ui-warning-bg) text-(--ui-warning-fg) border-(--ui-warning-fg)/30",
+  closed:          "bg-(--ui-muted-surface) text-(--ui-text-muted) border-(--ui-border-strong)",
 };
 
 export default function RestaurantFloorGrid({ onOpenCheck }) {
@@ -283,9 +283,9 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-[#F8FAFC]">
+    <div className="flex flex-col h-full overflow-y-auto bg-(--ui-bg)">
       {/* Sticky takeout entry strip */}
-      <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+      <div className="sticky top-0 z-30 bg-(--ui-surface) border-b border-(--ui-border-strong) px-6 py-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <EntryButton
             icon={ShoppingBag}
@@ -330,8 +330,8 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
               onClick={() => setActivePlan(p.id)}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
                 activePlan === p.id
-                  ? "bg-[#8066FF] text-white shadow"
-                  : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+                  ? "bg-(--ui-primary) text-white"
+                  : "bg-(--ui-surface) text-(--ui-text-muted) border border-(--ui-border-strong) hover:border-(--ui-border-strong)"
               }`}
             >
               {p.name}
@@ -348,12 +348,12 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
             {Array.from({ length: 12 }).map((_, i) => (
               <div
                 key={i}
-                className="h-28 rounded-2xl border border-slate-200 bg-white shadow-sm animate-pulse"
+                className="h-28 rounded-2xl border border-(--ui-border-strong) bg-(--ui-surface) animate-pulse"
               />
             ))}
           </div>
         ) : tables.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 text-sm">
+          <div className="text-center py-12 text-(--ui-text-muted) text-sm">
             No tables in this floor plan yet. Add tables in <span className="font-semibold">Settings → Restaurant Floor</span>.
           </div>
         ) : (
@@ -377,15 +377,15 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
           current cart still has items. */}
       {pendingOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center px-4"
           onClick={handleCancelPending}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            className="w-full max-w-sm bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-slate-900">Save current check?</h3>
-            <p className="mt-1 text-sm text-slate-600">
+            <h3 className="text-lg font-bold text-(--ui-text)">Save current check?</h3>
+            <p className="mt-1 text-sm text-(--ui-text-muted)">
               {orderContext === "dine_in" && tableSessionId
                 ? `Save the cart for Table ${tableLabel || tableSessionId} before switching?`
                 : "Save the current cart as a draft before switching?"}
@@ -393,21 +393,21 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
             <div className="mt-5 grid grid-cols-3 gap-2">
               <button
                 onClick={handleSavePending}
-                className="py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold text-sm flex flex-col items-center gap-1"
+                className="py-3 rounded-xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold text-sm flex flex-col items-center gap-1"
               >
                 <Save size={16} />
                 Save
               </button>
               <button
                 onClick={handleDiscardPending}
-                className="py-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-sm flex flex-col items-center gap-1"
+                className="py-3 rounded-xl bg-(--ui-danger-bg) hover:bg-(--ui-danger-bg) text-(--ui-danger-fg) border border-(--ui-danger-fg)/30 font-bold text-sm flex flex-col items-center gap-1"
               >
                 <Trash2 size={16} />
                 Discard
               </button>
               <button
                 onClick={handleCancelPending}
-                className="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex flex-col items-center gap-1"
+                className="py-3 rounded-xl bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) font-bold text-sm flex flex-col items-center gap-1"
               >
                 <X size={16} />
                 Cancel
@@ -420,23 +420,23 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
       {/* Seat modal */}
       {seatModalTableId != null && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center px-4"
           onClick={() => setSeatModalTableId(null)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            className="w-full max-w-sm bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Seat Table</h3>
+              <h3 className="text-lg font-bold text-(--ui-text)">Seat Table</h3>
               <button
                 onClick={() => setSeatModalTableId(null)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1 text-(--ui-text-muted) hover:text-(--ui-text)"
               >
                 <X size={18} />
               </button>
             </div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted) mb-2">
               Guests
             </label>
             <input
@@ -444,20 +444,20 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
               min={1}
               value={seatForm.guest_count}
               onChange={(e) => setSeatForm({ guest_count: Number(e.target.value) || 1 })}
-              className="w-full text-2xl font-bold text-center px-3 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF] focus:border-[#8066FF]"
+              className="w-full text-2xl font-bold text-center px-3 py-3 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus) focus:border-(--ui-focus)"
               autoFocus
             />
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setSeatModalTableId(null)}
-                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50"
+                className="flex-1 py-3 rounded-xl border border-(--ui-border-strong) text-(--ui-text) font-semibold hover:bg-(--ui-muted-surface)"
               >
                 Cancel
               </button>
               <button
                 onClick={seatTable}
                 disabled={seatBusy}
-                className="flex-1 py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold disabled:opacity-50"
               >
                 {seatBusy ? "Seating…" : "Seat"}
               </button>
@@ -469,23 +469,23 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
       {/* W18 — Open Tab modal */}
       {tabModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center px-4"
           onClick={() => !tabBusy && setTabModalOpen(false)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            className="w-full max-w-sm bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Open Tab</h3>
+              <h3 className="text-lg font-bold text-(--ui-text)">Open Tab</h3>
               <button
                 onClick={() => !tabBusy && setTabModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1 text-(--ui-text-muted) hover:text-(--ui-text)"
               >
                 <X size={18} />
               </button>
             </div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted) mb-2">
               Tab name
             </label>
             <input
@@ -494,25 +494,25 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
               value={tabName}
               onChange={(e) => setTabName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && tabName.trim()) openBarTab(); }}
-              className="w-full text-lg px-3 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF] focus:border-[#8066FF]"
+              className="w-full text-lg px-3 py-3 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus) focus:border-(--ui-focus)"
               autoFocus
               maxLength={80}
             />
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-(--ui-text-muted)">
               Stays open until you settle. Add items, send to kitchen, pay later.
             </p>
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setTabModalOpen(false)}
                 disabled={tabBusy}
-                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl border border-(--ui-border-strong) text-(--ui-text) font-semibold hover:bg-(--ui-muted-surface) disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={openBarTab}
                 disabled={tabBusy || !tabName.trim()}
-                className="flex-1 py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold disabled:opacity-50"
               >
                 {tabBusy ? "Opening…" : "Open Tab"}
               </button>
@@ -528,7 +528,7 @@ function EntryButton({ icon: Icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center justify-center gap-3 py-5 rounded-2xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold text-base shadow-[0_10px_24px_-12px_rgba(128,102,255,0.6)] transition-all active:scale-[0.99]"
+      className="flex items-center justify-center gap-3 py-5 rounded-2xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold text-base transition-all active:scale-[0.99]"
     >
       <Icon size={22} />
       <span>{label}</span>
@@ -553,18 +553,18 @@ function TableTile({ table, onSeat, onOpen, onClear, reservation }) {
   return (
     <button
       onClick={handleClick}
-      className={`relative text-left rounded-2xl border p-4 transition shadow-sm hover:shadow-md ${
+      className={`relative text-left rounded-2xl border p-4 transition ${
         dirty
-          ? "bg-[#1E1B30] text-white border-violet-500/40 hover:border-violet-400"
+          ? "bg-(--ui-primary) text-white border-(--ui-primary) hover:border-(--ui-text-muted)"
           : seated
-          ? "bg-[#0F172A] text-white border-[#1E293B] hover:border-[#8066FF]"
-          : "bg-white text-slate-900 border-slate-200 hover:border-[#8066FF]"
+          ? "bg-(--ui-primary) text-white border-(--ui-primary) hover:border-(--ui-text-muted)"
+          : "bg-(--ui-surface) text-(--ui-text) border-(--ui-border-strong) hover:border-(--ui-primary)"
       }`}
     >
       {!seated && !dirty && reservation && <ReservationBadge reservation={reservation} />}
       <div className="flex items-baseline justify-between">
         <span className="text-2xl font-black tracking-tight">{table.label}</span>
-        <span className={`text-[10px] uppercase tracking-wider opacity-70 ${(seated || dirty) ? "text-slate-300" : "text-slate-400"}`}>
+        <span className={`text-[10px] uppercase tracking-wider opacity-70 ${(seated || dirty) ? "text-white/70" : "text-(--ui-text-muted)"}`}>
           Cap {table.capacity}
         </span>
       </div>
@@ -578,7 +578,7 @@ function TableTile({ table, onSeat, onOpen, onClear, reservation }) {
             tabIndex={0}
             onClick={(e) => { e.stopPropagation(); onClear?.(); }}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClear?.(); } }}
-            className="block w-full text-center text-xs font-semibold py-1.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white"
+            className="block w-full text-center text-xs font-semibold py-1.5 rounded-md bg-white hover:bg-(--ui-muted-surface) text-(--ui-text)"
           >
             Clear Table
           </span>
@@ -588,16 +588,16 @@ function TableTile({ table, onSeat, onOpen, onClear, reservation }) {
           <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${tone}`}>
             {table.session_status}
           </span>
-          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+          <div className="flex items-center gap-1.5 text-xs text-white/70">
             <Users size={12} />
             <span>{table.guest_count} guests</span>
           </div>
           {table.server_name && (
-            <div className="text-xs text-slate-400 truncate">{table.server_name}</div>
+            <div className="text-xs text-white/60 truncate">{table.server_name}</div>
           )}
         </div>
       ) : (
-        <div className="mt-3 text-xs text-slate-400">Tap to seat</div>
+        <div className="mt-3 text-xs text-(--ui-text-muted)">Tap to seat</div>
       )}
     </button>
   );

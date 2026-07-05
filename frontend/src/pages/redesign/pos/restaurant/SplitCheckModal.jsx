@@ -105,15 +105,15 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
   const previewPerPart = mode === "equal" && parts > 0 ? total / parts : null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-100/20 max-h-[90vh]">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <SplitIcon className="text-[#8066FF]" size={20} /> Split Check
+    <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-(--ui-surface) rounded-3xl shadow-(--ui-shadow-lg) w-full max-w-lg flex flex-col border border-(--ui-border) max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-(--ui-border) flex items-center justify-between bg-(--ui-muted-surface) rounded-t-3xl shrink-0">
+          <h2 className="text-lg font-bold text-(--ui-text) flex items-center gap-2">
+            <SplitIcon className="text-(--ui-text)" size={20} /> Split Check
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200"
+            className="text-(--ui-text-muted) hover:text-(--ui-text) p-1.5 rounded-full hover:bg-(--ui-border-strong)"
           >
             <X size={18} />
           </button>
@@ -122,7 +122,7 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
           {/* Mode picker */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
               Split Mode
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -137,8 +137,8 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
                   onClick={() => setMode(id)}
                   className={`py-2.5 px-3 rounded-xl font-bold text-sm transition border-2 ${
                     mode === id
-                      ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                      : "border-slate-100 bg-white text-slate-600 hover:border-slate-200"
+                      ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                      : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   {label}
@@ -150,7 +150,7 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
           {/* Equal — number of parts */}
           {mode === "equal" && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                 Number of Splits
               </label>
               <input
@@ -159,10 +159,10 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
                 max="20"
                 value={parts}
                 onChange={(e) => setParts(Math.max(2, Number(e.target.value) || 2))}
-                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-lg font-bold"
+                className="w-full px-4 py-3 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-xl focus:border-(--ui-focus) focus:ring-0 outline-none text-lg font-bold"
               />
               {previewPerPart !== null && (
-                <p className="text-xs text-slate-500 mt-1.5">
+                <p className="text-xs text-(--ui-text-muted) mt-1.5">
                   {money(previewPerPart)} per split (approx.)
                 </p>
               )}
@@ -171,7 +171,7 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
 
           {/* By seat — informational only */}
           {mode === "by_seat" && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 text-sm text-slate-600">
+            <div className="rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) p-4 text-sm text-(--ui-text-muted)">
               One new check will be created for each seat that has items
               attached. Items with no seat assignment stay on the source check.
             </div>
@@ -181,44 +181,44 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
           {mode === "by_item" && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                <label className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide">
                   Assign Items
                 </label>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">Parts:</span>
+                  <span className="text-(--ui-text-muted)">Parts:</span>
                   <input
                     type="number"
                     min="2"
                     max="8"
                     value={parts}
                     onChange={(e) => setParts(Math.max(2, Number(e.target.value) || 2))}
-                    className="w-14 px-2 py-1 border border-slate-200 rounded-lg text-sm font-semibold text-center"
+                    className="w-14 px-2 py-1 border border-(--ui-border-strong) rounded-lg text-sm font-semibold text-center"
                   />
                 </div>
               </div>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {cart.length === 0 && (
-                  <p className="text-sm text-slate-400 italic">Cart is empty.</p>
+                  <p className="text-sm text-(--ui-text-muted) italic">Cart is empty.</p>
                 )}
                 {cart.map((item, idx) => {
                   const key = lineKey(item, idx);
                   return (
                     <div
                       key={key}
-                      className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl"
+                      className="flex items-center justify-between gap-2 px-3 py-2 bg-(--ui-muted-surface) border border-(--ui-border) rounded-xl"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">
+                        <p className="text-sm font-semibold text-(--ui-text) truncate">
                           {item.name}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-(--ui-text-muted)">
                           {item.quantity} × {money(item.price)}
                         </p>
                       </div>
                       <select
                         value={assignments[key] ?? 0}
                         onChange={(e) => assignTo(key, Number(e.target.value))}
-                        className="h-8 px-2 border border-slate-200 rounded-lg text-sm font-semibold bg-white"
+                        className="h-8 px-2 border border-(--ui-border-strong) rounded-lg text-sm font-semibold bg-(--ui-surface)"
                       >
                         {Array.from({ length: Math.max(2, parts) }, (_, i) => (
                           <option key={i} value={i}>
@@ -234,11 +234,11 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-3xl shrink-0">
+        <div className="px-6 py-4 border-t border-(--ui-border) flex items-center justify-end gap-2 bg-(--ui-muted-surface) rounded-b-3xl shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200 transition"
+            className="px-4 py-2 rounded-xl font-bold text-sm text-(--ui-text-muted) hover:bg-(--ui-border-strong) transition"
           >
             Cancel
           </button>
@@ -246,7 +246,7 @@ export default function SplitCheckModal({ open, onClose, onSplitComplete }) {
             type="button"
             onClick={submit}
             disabled={busy || cart.length === 0}
-            className="px-6 py-2.5 rounded-xl font-black text-sm text-white bg-[#8066FF] hover:bg-[#7055E6] disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="px-6 py-2.5 rounded-xl font-black text-sm text-white bg-(--ui-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             {busy ? "Splitting…" : "Split"}
           </button>

@@ -74,24 +74,24 @@ export default function ContextSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="ui-focus-ring flex items-center gap-1.5 rounded-md border border-(--ui-border) px-2 py-1.5 text-xs text-(--ui-text) hover:bg-(--ui-muted-surface)"
+        className="ui-focus-ring flex w-full cursor-pointer items-center gap-1.5 rounded-full border border-(--ui-border-strong) bg-white px-3 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
       >
         {ctx.scope_mode === "all_branches" ? (
-          <Building2 size={13} className="text-(--ui-text-muted)" />
+          <Building2 size={13} className="shrink-0 text-(--ui-text-muted)" />
         ) : (
-          <MapPin size={13} className="text-(--ui-text-muted)" />
+          <MapPin size={13} className="shrink-0 text-(--ui-text-muted)" />
         )}
-        <span className="max-w-30 truncate">{label}</span>
-        <ChevronDown size={12} className="text-(--ui-text-muted)" />
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        <ChevronDown size={12} className="shrink-0 text-(--ui-text-muted)" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-md border border-(--ui-border) bg-white shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-white shadow-(--ui-shadow-lg)">
           <div className="p-1.5">
             {isAdmin && (
               <button
                 onClick={switchToAll}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.scope_mode === "all_branches" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-(--ui-text)"}`}
+                className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.scope_mode === "all_branches" ? "bg-(--ui-muted-surface) font-semibold text-(--ui-text)" : "text-(--ui-text)"}`}
               >
                 <Building2 size={12} />
                 All Branches
@@ -101,7 +101,7 @@ export default function ContextSwitcher() {
               <button
                 key={o.id}
                 onClick={() => switchOutlet(o.id)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.active_outlet_id === o.id && ctx.scope_mode !== "all_branches" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-(--ui-text)"}`}
+                className={`flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.active_outlet_id === o.id && ctx.scope_mode !== "all_branches" ? "bg-(--ui-muted-surface) font-semibold text-(--ui-text)" : "text-(--ui-text)"}`}
               >
                 <MapPin size={12} />
                 <span className="truncate">{o.name}</span>
@@ -111,7 +111,7 @@ export default function ContextSwitcher() {
           <div className="border-t border-(--ui-border) p-1.5">
             <button
               onClick={goToContextSelect}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
+              className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
             >
               Change context...
             </button>

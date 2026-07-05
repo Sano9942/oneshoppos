@@ -228,7 +228,7 @@ export default function ReportsPowerUpPanel({ flags }) {
             show={flags.reports_enhanced_filters}
             categories={categories}
           />
-          {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
+          {error ? <p className="mb-2 text-sm text-(--ui-danger-fg)">{error}</p> : null}
           {loading ? (
             <p className="mb-2 text-sm text-(--ui-text-muted)">
               Loading enhanced reports...
@@ -300,7 +300,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                 Discount leakage records: {discountLeakage.length}
                 <Link
                   to={`/reports/sales-detail${query ? `?${query}` : ""}`}
-                  className="ml-2 text-blue-600 underline"
+                  className="ml-2 text-(--ui-link) underline"
                 >
                   Drill down
                 </Link>
@@ -343,7 +343,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                   <div className="text-(--ui-text-muted)">
                     <Link
                       to={`/reports/replenishment${query ? `?${query}` : ""}`}
-                      className="text-blue-600 underline"
+                      className="text-(--ui-link) underline"
                     >
                       Drill to replenishment
                     </Link>
@@ -396,7 +396,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                 Current exception rows: <b>{exceptions.length}</b>
                 <Link
                   to={`/reports/sales-detail${query ? `?${query}` : ""}`}
-                  className="ml-2 text-blue-600 underline"
+                  className="ml-2 text-(--ui-link) underline"
                 >
                   Open detail view
                 </Link>

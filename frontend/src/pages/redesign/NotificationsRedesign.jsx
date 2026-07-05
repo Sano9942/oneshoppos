@@ -78,10 +78,10 @@ export default function NotificationsRedesign() {
                 >
                   <div className={`mt-0.5 shrink-0 rounded-full p-1.5 ${
                     n.type === "warning"
-                      ? "bg-amber-100 text-amber-600"
+                      ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)"
                       : n.type === "success"
-                      ? "bg-emerald-100 text-emerald-600"
-                      : "bg-blue-100 text-blue-600"
+                      ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+                      : "bg-(--ui-muted-surface) text-(--ui-link)"
                   }`}>
                     <Icon size={14} />
                   </div>

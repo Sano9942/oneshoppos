@@ -4,9 +4,9 @@ import { fmtLocalDateTime as fmtDateTime } from "../utils/dates";
 import { api } from '../api';
 
 const STATUS_LABELS = {
-  pending_approval: { label: "Pending", color: "bg-yellow-100 text-yellow-800" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-800" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-800" },
+  pending_approval: { label: "Pending", color: "bg-(--ui-warning-bg) text-(--ui-warning-fg)" },
+  approved: { label: "Approved", color: "bg-(--ui-success-bg) text-(--ui-success-fg)" },
+  rejected: { label: "Rejected", color: "bg-(--ui-danger-bg) text-(--ui-danger-fg)" },
 };
 
 const TYPE_LABELS = {
@@ -86,7 +86,7 @@ export default function Approvals() {
       <div className="flex justify-end">
         <button
           onClick={fetchApprovals}
-          className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+          className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-(--ui-muted-surface)"
         >
           <RefreshCw size={14} /> Refresh
         </button>
@@ -100,8 +100,8 @@ export default function Approvals() {
             onClick={() => setFilterStatus(status)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               filterStatus === status
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "border-(--ui-focus) text-(--ui-link)"
+                : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {label}
@@ -110,25 +110,25 @@ export default function Approvals() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="text-center py-12 text-(--ui-text-muted)">Loading...</div>
       ) : approvals.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-(--ui-text-muted)">
           <Clock size={40} className="mx-auto mb-3 opacity-40" />
           <p>No {STATUS_LABELS[filterStatus]?.label.toLowerCase()} approvals found</p>
         </div>
       ) : (
-        <div className="bg-white border rounded-xl overflow-hidden">
+        <div className="bg-(--ui-surface) border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-(--ui-muted-surface) border-b">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Reference ID</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Requested By</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Notes</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Submitted</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Type</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Reference ID</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Requested By</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Notes</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Submitted</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Status</th>
                 {filterStatus === "pending_approval" && (
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Actions</th>
                 )}
               </tr>
             </thead>
@@ -136,16 +136,16 @@ export default function Approvals() {
               {approvals.map((ap) => {
                 const statusInfo = STATUS_LABELS[ap.status] || STATUS_LABELS.pending_approval;
                 return (
-                  <tr key={ap.id} className="hover:bg-gray-50">
+                  <tr key={ap.id} className="hover:bg-(--ui-muted-surface)">
                     <td className="px-4 py-3 font-medium">
                       {TYPE_LABELS[ap.request_type] || ap.request_type}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">#{ap.reference_id}</td>
-                    <td className="px-4 py-3 text-gray-600">{ap.requested_by || "—"}</td>
-                    <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
+                    <td className="px-4 py-3 text-(--ui-text-muted)">#{ap.reference_id}</td>
+                    <td className="px-4 py-3 text-(--ui-text-muted)">{ap.requested_by || "—"}</td>
+                    <td className="px-4 py-3 text-(--ui-text-muted) max-w-xs truncate">
                       {formatApprovalNotes(ap)}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-(--ui-text-muted)">
                       {fmtDateTime(ap.created_at)}
                     </td>
                     <td className="px-4 py-3">
@@ -158,13 +158,13 @@ export default function Approvals() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => setActionModal({ approval: ap, action: "approved" })}
-                            className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                            className="flex items-center gap-1 px-3 py-1 bg-(--ui-success-fg) text-(--ui-on-primary) rounded text-xs hover:bg-(--ui-success-fg)"
                           >
                             <CheckCircle size={12} /> Approve
                           </button>
                           <button
                             onClick={() => setActionModal({ approval: ap, action: "rejected" })}
-                            className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                            className="flex items-center gap-1 px-3 py-1 bg-(--ui-danger-fg) text-(--ui-on-primary) rounded text-xs hover:bg-(--ui-danger-fg)"
                           >
                             <XCircle size={12} /> Reject
                           </button>
@@ -182,14 +182,14 @@ export default function Approvals() {
       {/* Action confirmation modal */}
       {actionModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-(--ui-surface) rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
             <h2 className="text-lg font-semibold">
               {actionModal.action === "approved" ? "Approve" : "Reject"}{" "}
               {TYPE_LABELS[actionModal.approval.request_type]} #{actionModal.approval.reference_id}
             </h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-(--ui-text) mb-1">
                   Manager / Approver Name
                 </label>
                 <input
@@ -201,8 +201,8 @@ export default function Approvals() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reason / Notes {actionModal.action === "rejected" && <span className="text-red-500">*</span>}
+                <label className="block text-sm font-medium text-(--ui-text) mb-1">
+                  Reason / Notes {actionModal.action === "rejected" && <span className="text-(--ui-danger-fg)">*</span>}
                 </label>
                 <textarea
                   value={actionReason}
@@ -216,17 +216,17 @@ export default function Approvals() {
             <div className="flex gap-3 justify-end pt-2">
               <button
                 onClick={() => { setActionModal(null); setActionBy(""); setActionReason(""); }}
-                className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg text-sm hover:bg-(--ui-muted-surface)"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAction}
                 disabled={submitting || (actionModal.action === "rejected" && !actionReason.trim())}
-                className={`px-4 py-2 rounded-lg text-sm text-white font-medium disabled:opacity-50 ${
+                className={`px-4 py-2 rounded-lg text-sm text-(--ui-on-primary) font-medium disabled:opacity-50 ${
                   actionModal.action === "approved"
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-red-600 hover:bg-red-700"
+                    ? "bg-(--ui-success-fg) hover:bg-(--ui-success-fg)"
+                    : "bg-(--ui-danger-fg) hover:bg-(--ui-danger-fg)"
                 }`}
               >
                 {submitting ? "Processing..." : actionModal.action === "approved" ? "Confirm Approve" : "Confirm Reject"}

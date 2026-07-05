@@ -533,7 +533,7 @@ export default function InventoryRedesign() {
             <Button onClick={lookupGiftCard}>Lookup</Button>
             {gcLookupResult ? (
               gcLookupResult.error ? (
-                <p className="text-sm text-rose-600">{gcLookupResult.error}</p>
+                <p className="text-sm text-(--ui-danger-fg)">{gcLookupResult.error}</p>
               ) : (
                 <div className="text-sm">
                   <span className="font-mono font-medium text-(--ui-text)">{gcLookupResult.code}</span>
@@ -655,7 +655,7 @@ export default function InventoryRedesign() {
         <div className="p-3">
           {selectedCount > 0 ? (
             <BulkActionBar>
-              <span className="text-sm font-semibold text-emerald-800">
+              <span className="text-sm font-semibold text-(--ui-text)">
                 {selectedCount} selected
               </span>
               <Button
@@ -796,7 +796,7 @@ export default function InventoryRedesign() {
                 <tr
                   key={p.id}
                   className={`border-t border-(--ui-border) cursor-pointer ${
-                    selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-(--ui-muted-surface) bg-(--ui-surface)"
+                    selectedIds.has(p.id) ? "bg-(--ui-muted-surface)" : "hover:bg-(--ui-muted-surface) bg-(--ui-surface)"
                   }`}
                   onClick={() => navigate(`/products/${p.id}`)}
                 >
@@ -836,7 +836,7 @@ export default function InventoryRedesign() {
                       {p.outlet_override_count > 0 && (
                         <span
                           title={`Has ${p.outlet_override_count} outlet price override${p.outlet_override_count === 1 ? "" : "s"}`}
-                          className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                          className="inline-flex items-center rounded-full bg-(--ui-muted-surface) px-1.5 py-0.5 text-[10px] font-semibold text-(--ui-text-muted)"
                         >
                           +{p.outlet_override_count}
                         </span>
@@ -943,9 +943,9 @@ export default function InventoryRedesign() {
                     <td className="py-1.5 pr-3 font-mono text-xs text-(--ui-text-muted)">{r.barcode || "-"}</td>
                     <td className="py-1.5">
                       {r.status === "inserted" ? (
-                        <span className="text-emerald-600 font-medium">Inserted</span>
+                        <span className="text-(--ui-success-fg) font-medium">Inserted</span>
                       ) : (
-                        <span className="text-red-600 text-xs">{r.message || "Error"}</span>
+                        <span className="text-(--ui-danger-fg) text-xs">{r.message || "Error"}</span>
                       )}
                     </td>
                   </tr>

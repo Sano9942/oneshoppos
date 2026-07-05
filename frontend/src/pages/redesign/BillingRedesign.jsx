@@ -103,7 +103,7 @@ export default function BillingRedesign() {
   if (paymentProcessing) return (
     <PageShell title="Billing">
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full mb-4" />
+        <div className="animate-spin h-8 w-8 border-4 border-(--ui-primary) border-t-transparent rounded-full mb-4" />
         <p className="text-(--ui-text-muted) font-medium">Verifying your payment...</p>
         <p className="text-sm text-(--ui-text-muted) mt-1">This usually takes a few seconds.</p>
       </div>
@@ -131,11 +131,11 @@ export default function BillingRedesign() {
           <button key={p.cycle} onClick={() => setCycle(p.cycle)}
             className={`relative rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
               isSelected
-                ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/30"
+                ? "border-(--ui-primary) bg-(--ui-muted-surface) ring-1 ring-(--ui-primary)/30"
                 : "border-(--ui-border) bg-(--ui-surface) hover:border-(--ui-border)"
             }`}>
             {isRecommended && (
-              <span className="absolute -top-2.5 right-2 inline-flex items-center gap-0.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide">
+              <span className="absolute -top-2.5 right-2 inline-flex items-center gap-0.5 rounded-full bg-(--ui-primary) px-2 py-0.5 text-[10px] font-bold text-(--ui-on-primary) uppercase tracking-wide">
                 Best Value
               </span>
             )}
@@ -144,13 +144,13 @@ export default function BillingRedesign() {
             <div className="text-xs text-(--ui-text-muted) mt-0.5">PKR {p.monthly_equivalent.toLocaleString()}/mo</div>
             {p.discount_percent > 0 && (
               <div className="mt-2 flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-(--ui-warning-bg) px-1.5 py-0.5 text-[10px] font-bold text-(--ui-warning-fg)">
                   <Tag size={10} /> {p.discount_percent}% OFF
                 </span>
               </div>
             )}
             {p.savings > 0 && (
-              <div className="text-[11px] text-emerald-600 font-medium mt-1">
+              <div className="text-[11px] text-(--ui-success-fg) font-medium mt-1">
                 Save PKR {p.savings.toLocaleString()}
               </div>
             )}
@@ -171,8 +171,8 @@ export default function BillingRedesign() {
     );
   };
 
-  const planColors = { free: "bg-(--ui-muted-surface) text-(--ui-text)", pro: "bg-emerald-100 text-emerald-700" };
-  const statusColors = { active: "text-emerald-600", trial: "text-blue-600", grace: "text-amber-600", expired: "text-red-600", due: "text-amber-600", overdue: "text-red-600" };
+  const planColors = { free: "bg-(--ui-muted-surface) text-(--ui-text)", pro: "bg-(--ui-success-bg) text-(--ui-success-fg)" };
+  const statusColors = { active: "text-(--ui-success-fg)", trial: "text-(--ui-text-muted)", grace: "text-(--ui-warning-fg)", expired: "text-(--ui-danger-fg)", due: "text-(--ui-warning-fg)", overdue: "text-(--ui-danger-fg)" };
 
   const upgradePlans = {};
   (billing?.upgrade_options || []).forEach(o => {
@@ -233,15 +233,15 @@ export default function BillingRedesign() {
       <div className="max-w-3xl space-y-6">
         {/* Trial Banner */}
         {isTrial && billing.trial_days_left != null && (
-          <div className={`rounded-xl border p-5 ${billing.trial_days_left <= 7 ? "border-amber-300 bg-amber-50" : "border-blue-200 bg-blue-50"}`}>
+          <div className={`rounded-xl border p-5 ${billing.trial_days_left <= 7 ? "border-transparent bg-(--ui-warning-bg)" : "border-(--ui-border) bg-(--ui-muted-surface)"}`}>
             <div className="flex items-center gap-2 mb-3">
-              <Clock size={18} className={billing.trial_days_left <= 7 ? "text-amber-600" : "text-blue-600"} />
-              <h2 className={`text-base font-semibold ${billing.trial_days_left <= 7 ? "text-amber-800" : "text-blue-800"}`}>
+              <Clock size={18} className={billing.trial_days_left <= 7 ? "text-(--ui-warning-fg)" : "text-(--ui-text-muted)"} />
+              <h2 className={`text-base font-semibold ${billing.trial_days_left <= 7 ? "text-(--ui-warning-fg)" : "text-(--ui-text)"}`}>
                 Pro Trial — {billing.trial_days_left} {billing.trial_days_left === 1 ? "day" : "days"} remaining
               </h2>
             </div>
             <div className="w-full bg-(--ui-surface)/60 rounded-full h-2.5 mb-3">
-              <div className={`h-2.5 rounded-full ${billing.trial_days_left <= 7 ? "bg-amber-500" : "bg-blue-500"}`}
+              <div className={`h-2.5 rounded-full ${billing.trial_days_left <= 7 ? "bg-(--ui-warning-fg)" : "bg-(--ui-primary)"}`}
                 style={{ width: `${Math.max(2, ((45 - billing.trial_days_left) / 45) * 100)}%` }} />
             </div>
             <p className="text-sm text-(--ui-text-muted) mb-3">
@@ -252,7 +252,7 @@ export default function BillingRedesign() {
             <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled && (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
-                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
+                className="mt-3 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 cursor-pointer">
                 {submitting ? "Redirecting..." : `Subscribe Now — ${priceLabel}`}
               </button>
             )}
@@ -261,21 +261,21 @@ export default function BillingRedesign() {
 
         {/* Grace Period Banner */}
         {isGrace && (
-          <div className="rounded-xl border border-red-300 bg-red-50 p-5">
+          <div className="rounded-xl bg-(--ui-danger-bg) p-5">
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={18} className="text-red-600" />
-              <h2 className="text-base font-semibold text-red-800">
+              <AlertTriangle size={18} className="text-(--ui-danger-fg)" />
+              <h2 className="text-base font-semibold text-(--ui-danger-fg)">
                 Trial Expired — {billing.grace_days_left ?? 0} {(billing.grace_days_left ?? 0) === 1 ? "day" : "days"} left to subscribe
               </h2>
             </div>
-            <p className="text-sm text-red-700">
+            <p className="text-sm text-(--ui-danger-fg)">
               Your account will become read-only after the grace period. Subscribe now to continue selling.
               <strong> Pro plan: {priceLabel} per outlet.</strong>
             </p>
             <div className="mt-3 mb-2"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled && (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
-                className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                className="mt-3 rounded-full bg-(--ui-danger) px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 cursor-pointer">
                 {submitting ? "Redirecting..." : `Pay Now — ${priceLabel}`}
               </button>
             )}
@@ -284,24 +284,24 @@ export default function BillingRedesign() {
 
         {/* Expired Banner */}
         {isExpired && (
-          <div className="rounded-xl border border-red-400 bg-red-50 p-5">
+          <div className="rounded-xl bg-(--ui-danger-bg) p-5">
             <div className="flex items-center gap-2 mb-2">
-              <XCircle size={18} className="text-red-600" />
-              <h2 className="text-base font-semibold text-red-800">Subscription Expired — Account Read-Only</h2>
+              <XCircle size={18} className="text-(--ui-danger-fg)" />
+              <h2 className="text-base font-semibold text-(--ui-danger-fg)">Subscription Expired — Account Read-Only</h2>
             </div>
-            <p className="text-sm text-red-700 mb-3">
+            <p className="text-sm text-(--ui-danger-fg) mb-3">
               You can still view your data and export reports, but cannot make sales or changes.
               Subscribe to restore full access.
             </p>
             <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled ? (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                className="rounded-full bg-(--ui-danger) px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 cursor-pointer">
                 {submitting ? "Redirecting..." : `Pay Now — ${priceLabel}`}
               </button>
             ) : (
               <button onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors cursor-pointer">
+                className="rounded-full bg-(--ui-danger) px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-colors cursor-pointer">
                 {`Subscribe Now — ${priceLabel}`}
               </button>
             )}
@@ -345,17 +345,17 @@ export default function BillingRedesign() {
           const daysUntilExpiry = Math.ceil((new Date(billing.expires_at) - new Date()) / 86400000);
           if (daysUntilExpiry > 7) return null;
           return (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <div className="rounded-xl bg-(--ui-warning-bg) p-5">
               <div className="flex items-center gap-2 mb-2">
-                <Clock size={18} className="text-amber-600" />
-                <h2 className="text-base font-semibold text-amber-800">
+                <Clock size={18} className="text-(--ui-warning-fg)" />
+                <h2 className="text-base font-semibold text-(--ui-warning-fg)">
                   Subscription renews in {daysUntilExpiry} {daysUntilExpiry === 1 ? "day" : "days"}
                 </h2>
               </div>
-              <p className="text-sm text-amber-700">Renew now to avoid any interruption in service.</p>
+              <p className="text-sm text-(--ui-warning-fg)">Renew now to avoid any interruption in service.</p>
               {billing.payment_enabled && (
                 <button onClick={() => handlePayNow(billing.billing_cycle || "monthly")} disabled={submitting}
-                  className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
+                  className="mt-3 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 cursor-pointer">
                   {submitting ? "Redirecting..." : "Renew Now"}
                 </button>
               )}
@@ -369,9 +369,9 @@ export default function BillingRedesign() {
               false → /request-upgrade (manual path, admin records payment)
             Keeps the page useful before xPay merchant contract is signed. */}
         {billing?.plan === "free" && !billing?.pending_request && Object.keys(upgradePlans).length > 0 && (
-          <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/30 p-6 shadow-sm">
+          <div className="rounded-xl border border-(--ui-border) bg-white p-6">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowUpRight size={20} className="text-emerald-600" />
+              <ArrowUpRight size={20} className="text-(--ui-text)" />
               <h2 className="text-lg font-semibold text-(--ui-text)">Upgrade to Pro</h2>
             </div>
             <p className="text-sm text-(--ui-text-muted) mb-4">
@@ -402,12 +402,12 @@ export default function BillingRedesign() {
 
         {/* Pending Request */}
         {billing?.pending_request && (
-          <div className="rounded-xl border border-purple-200 bg-purple-50 p-6">
+          <div className="rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) p-6">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle size={18} className="text-purple-600" />
-              <h2 className="text-base font-semibold text-purple-700">Upgrade Request Pending</h2>
+              <CheckCircle size={18} className="text-(--ui-text-muted)" />
+              <h2 className="text-base font-semibold text-(--ui-text)">Upgrade Request Pending</h2>
             </div>
-            <p className="text-sm text-purple-600">
+            <p className="text-sm text-(--ui-text-muted)">
               You requested <span className="font-semibold capitalize">{billing.pending_request.requested_plan}</span> ({billing.pending_request.requested_cycle}) on {new Date(billing.pending_request.created_at).toLocaleDateString()}.
               We'll be in touch shortly.
             </p>
@@ -427,7 +427,7 @@ export default function BillingRedesign() {
       >
         <p className="text-sm text-(--ui-text-muted) mb-1">{priceLabel} per outlet</p>
         {cycleInfo.discount_percent > 0 && (
-          <p className="text-xs text-emerald-600 font-medium mb-2">
+          <p className="text-xs text-(--ui-success-fg) font-medium mb-2">
             {cycleInfo.discount_percent}% OFF — Save PKR {cycleInfo.savings?.toLocaleString()}
           </p>
         )}
@@ -435,7 +435,7 @@ export default function BillingRedesign() {
         <div className="mb-4">
           <label className="block text-sm font-medium text-(--ui-text-muted) mb-1">Message (optional)</label>
           <textarea value={message} onChange={e => setMessage(e.target.value)}
-            className="w-full border border-(--ui-border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full border border-(--ui-border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20"
             rows={3} placeholder="Any questions or notes..." />
         </div>
         <ModalFooter>

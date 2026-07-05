@@ -38,6 +38,7 @@ const WooCommerceIntegrationRedesign = lazy(() => import("../pages/redesign/WooC
 const IntegrationsHubRedesign = lazy(() => import("../pages/redesign/IntegrationsHubRedesign"));
 const TaxesRoute = lazy(() => import("../pages/TaxesRoute"));
 const TransfersRoute = lazy(() => import("../pages/TransfersRoute"));
+const ProductionRoute = lazy(() => import("../pages/ProductionRoute"));
 const CRMRoute = lazy(() => import("../pages/CRMRoute"));
 const QuotationsRoute = lazy(() => import("../pages/QuotationsRoute"));
 const HRManagementRoute = lazy(() => import("../pages/HRManagementRoute"));
@@ -53,6 +54,7 @@ const ParkedSalesRedesign = lazy(() => import("../pages/redesign/ParkedSalesRede
 const HoldsRoute = lazy(() => import("../pages/HoldsRoute"));
 const RetailRiskRoute = lazy(() => import("../pages/RetailRiskRoute"));
 const ReorderAlertsRedesign = lazy(() => import("../pages/redesign/ReorderAlertsRedesign"));
+const ExpiringSoonRedesign = lazy(() => import("../pages/redesign/ExpiringSoonRedesign"));
 const InventoryIntelligenceRoute = lazy(() => import("../pages/InventoryIntelligenceRoute"));
 const NotificationsRedesign = lazy(() => import("../pages/redesign/NotificationsRedesign"));
 const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
@@ -159,9 +161,11 @@ export const appRoutes = [
     <Route path="/products/new" element={perm("manage_inventory", <ProductFormPage />)} />
     <Route path="/products/:id" element={perm("manage_inventory", <ProductFormPage />)} />
     <Route path="/reorder-alerts" element={perm("manage_inventory", <ReorderAlertsRedesign />)} />
+    <Route path="/inventory/expiring" element={perm("manage_inventory", <ExpiringSoonRedesign />)} />
     <Route path="/inventory-intelligence" element={perm("manage_inventory", <InventoryIntelligenceRoute />)} />
     <Route path="/adjustments" element={perm("manage_inventory", <StockAdjustmentsRoute />)} />
     <Route path="/transfers" element={perm("manage_inventory", <TransfersRoute />)} />
+    <Route path="/production" element={perm("manage_inventory", <ProductionRoute />)} />
     <Route path="/promotions" element={perm("manage_inventory", <PromotionsRoute />)} />
     <Route path="/settings/manufacturer-partners" element={perm("manage_inventory", <ManufacturerPartnersRoute />)} />
     <Route path="/expenses" element={perm("manage_inventory", <ExpensesRoute />)} />

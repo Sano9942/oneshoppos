@@ -145,7 +145,7 @@ export default function POSOmniInput() {
     <div className="relative mb-2">
       <Zap
         size={16}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8066FF] pointer-events-none"
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text) pointer-events-none"
       />
       <input
         ref={inputRef}
@@ -154,7 +154,7 @@ export default function POSOmniInput() {
         spellCheck={false}
         onKeyDown={onKeyDown}
         placeholder="Scan, search, or # to attach customer — press / to focus"
-        className="block w-full pl-9 pr-3 py-2.5 border border-[#8066FF]/30 rounded-xl bg-white font-medium text-sm placeholder-slate-400 focus:outline-none focus:border-[#8066FF] focus:ring-2 focus:ring-[#8066FF]/20 transition shadow-sm"
+        className="block w-full pl-9 pr-3 py-2.5 border border-(--ui-border-strong) rounded-xl bg-(--ui-surface) font-medium text-sm placeholder-(--ui-text-muted) focus:outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus) transition"
       />
     </div>
   );

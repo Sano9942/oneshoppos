@@ -63,11 +63,11 @@ export default function VerifyEmail() {
 
   if (state.status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-          <Mail size={40} className="mx-auto text-emerald-500 mb-3" />
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Verifying your email…</h2>
-          <p className="text-sm text-slate-600">Hang tight while we confirm your address.</p>
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+        <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+          <Mail size={40} className="mx-auto text-(--ui-text) mb-3" />
+          <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Verifying your email…</h2>
+          <p className="text-sm text-(--ui-text-muted)">Hang tight while we confirm your address.</p>
         </div>
       </div>
     );
@@ -75,27 +75,27 @@ export default function VerifyEmail() {
 
   if (state.status === "success" || state.status === "already_set_up") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-          <CheckCircle size={40} className="mx-auto text-emerald-500 mb-3" />
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+        <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+          <CheckCircle size={40} className="mx-auto text-(--ui-text) mb-3" />
+          <h2 className="text-lg font-semibold text-(--ui-text) mb-2">
             {state.status === "already_set_up" ? "Already set up" : "Email verified"}
           </h2>
-          <p className="text-sm text-slate-600">{state.message}</p>
+          <p className="text-sm text-(--ui-text-muted)">{state.message}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-        <XCircle size={40} className="mx-auto text-red-500 mb-3" />
-        <h2 className="text-lg font-semibold text-slate-900 mb-2">Verification failed</h2>
-        <p className="text-sm text-slate-600 mb-4">{state.message}</p>
+    <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+      <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+        <XCircle size={40} className="mx-auto text-(--ui-danger-fg) mb-3" />
+        <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Verification failed</h2>
+        <p className="text-sm text-(--ui-text-muted) mb-4">{state.message}</p>
         <button
           onClick={() => navigate("/signup")}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
+          className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
         >
           Back to signup
         </button>

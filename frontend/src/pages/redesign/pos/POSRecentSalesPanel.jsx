@@ -73,19 +73,19 @@ export default function POSRecentSalesPanel() {
         className="absolute inset-0 bg-black/40"
         onClick={() => setRecentSalesOpen(false)}
       />
-      <div className="relative flex flex-col bg-white w-full max-w-md shadow-2xl h-full overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
-          <h2 className="font-semibold text-slate-800 text-sm">Recent Sales — Today</h2>
-          <button onClick={() => setRecentSalesOpen(false)} className="text-slate-400 hover:text-slate-700">
+      <div className="relative flex flex-col bg-(--ui-surface) w-full max-w-md shadow-(--ui-shadow-lg) h-full overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-(--ui-border-strong) shrink-0">
+          <h2 className="font-semibold text-(--ui-text) text-sm">Recent Sales — Today</h2>
+          <button onClick={() => setRecentSalesOpen(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={16} />
           </button>
         </div>
 
-        <div className="px-3 py-2 border-b border-slate-100 shrink-0">
+        <div className="px-3 py-2 border-b border-(--ui-border) shrink-0">
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+            <Search size={13} className="absolute left-2.5 top-2.5 text-(--ui-text-muted) pointer-events-none" />
             <input
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-300"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-(--ui-border-strong) rounded-md focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
               placeholder="Search invoice # or customer"
               value={recentSalesSearch}
               onChange={(e) => setRecentSalesSearch(e.target.value)}
@@ -95,31 +95,31 @@ export default function POSRecentSalesPanel() {
 
         <div className="flex-1 overflow-y-auto">
           {recentSalesLoading && (
-            <p className="p-6 text-center text-sm text-slate-400">Loading...</p>
+            <p className="p-6 text-center text-sm text-(--ui-text-muted)">Loading...</p>
           )}
           {!recentSalesLoading && filtered.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-400">No sales found for today.</p>
+            <p className="p-6 text-center text-sm text-(--ui-text-muted)">No sales found for today.</p>
           )}
           {!recentSalesLoading && filtered.map((sale) => (
             <div
               key={sale.id}
-              className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 hover:bg-slate-50"
+              className="flex items-center justify-between gap-2 px-4 py-3 border-b border-(--ui-border) hover:bg-(--ui-muted-surface)"
             >
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-800 truncate">
+                <p className="text-sm font-medium text-(--ui-text) truncate">
                   {sale.invoice_number || `#${sale.id}`}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-(--ui-text-muted)">
                   {sale.customer_name || "Walk-in"} · {money(sale.total_amount)}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-(--ui-text-muted)">
                   {fmtTime(sale.timestamp)}
                 </p>
               </div>
               <div className="flex gap-1.5 shrink-0">
                 <button
                   onClick={() => handleReprint(sale)}
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                 >
                   <Printer size={12} /> Reprint
                 </button>
@@ -127,13 +127,13 @@ export default function POSRecentSalesPanel() {
                   onClick={() =>
                     setEmailTarget({ saleId: sale.id, customerEmail: sale.customer_email || "" })
                   }
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium"
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) font-medium"
                 >
                   <Mail size={12} /> Email
                 </button>
                 <button
                   onClick={() => openReturnFromSale(sale)}
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-(--ui-danger-bg) text-(--ui-danger-fg) hover:bg-(--ui-danger-bg)"
                 >
                   <RotateCcw size={12} /> Return
                 </button>

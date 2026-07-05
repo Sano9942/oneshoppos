@@ -150,7 +150,7 @@ export default function SmartCollectionsRedesign() {
                   <td className="py-2 text-right flex gap-1 justify-end">
                     <Button tone="plain" size="sm" iconOnly onClick={() => handleView(c.id)} title="View" aria-label="View"><Eye size={14} /></Button>
                     <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(c)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
-                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(c.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(c.id)} title="Delete" aria-label="Delete" className="hover:text-(--ui-danger-fg)"><Trash2 size={14} /></Button>
                   </td>
                 </tr>
               ))}
@@ -192,7 +192,7 @@ export default function SmartCollectionsRedesign() {
               {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) grow" placeholder="Value" value={rule.value} onChange={e => updateRule(idx, "value", e.target.value)} />
-            {form.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-red-500"><X size={14} /></Button>}
+            {form.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-(--ui-danger-fg)"><X size={14} /></Button>}
           </div>
         ))}
         <Button tone="link" size="sm" onClick={addRule} className="mb-4">+ Add rule</Button>

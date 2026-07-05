@@ -49,21 +49,21 @@ export default function PortalOrders() {
       <h1 className="text-2xl font-semibold">Order history</h1>
 
       {notice && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm">
+        <div className="bg-(--ui-warning-bg) border border-(--ui-warning-bg) text-(--ui-warning-fg) rounded-lg px-4 py-3 text-sm">
           {notice}
         </div>
       )}
 
       {loading ? (
-        <div className="text-slate-500">Loading…</div>
+        <div className="text-(--ui-text-muted)">Loading…</div>
       ) : orders.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-8 text-center text-(--ui-text-muted)">
           No orders yet.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border)">
               <tr>
                 <th className="text-left font-medium px-4 py-3">Order #</th>
                 <th className="text-left font-medium px-4 py-3">Type</th>
@@ -78,14 +78,14 @@ export default function PortalOrders() {
                 const key = `${o.source}:${o.id}`;
                 const busy = reorderingKey === key;
                 return (
-                  <tr key={key} className="border-b border-slate-100 last:border-0">
+                  <tr key={key} className="border-b border-(--ui-border) last:border-0">
                     <td className="px-4 py-3 font-medium">{o.order_number || `#${o.id}`}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           o.source === "web"
-                            ? "bg-indigo-50 text-indigo-700"
-                            : "bg-slate-100 text-slate-700"
+                            ? "bg-(--ui-muted-surface) text-(--ui-link)"
+                            : "bg-(--ui-muted-surface) text-(--ui-text)"
                         }`}
                       >
                         {o.source === "web" ? "Online" : "In-store"}
@@ -93,14 +93,14 @@ export default function PortalOrders() {
                     </td>
                     <td className="px-4 py-3 text-right">{Number(o.item_count) || 0}</td>
                     <td className="px-4 py-3 text-right">{Number(o.total || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3 text-(--ui-text-muted)">
                       {o.ordered_at ? new Date(o.ordered_at).toLocaleDateString() : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleReorder(o)}
                         disabled={!!reorderingKey}
-                        className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex items-center px-3 py-1.5 bg-(--ui-primary) text-(--ui-on-primary) text-xs font-medium rounded hover:bg-(--ui-primary-strong) disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {busy ? "Loading…" : "Reorder"}
                       </button>

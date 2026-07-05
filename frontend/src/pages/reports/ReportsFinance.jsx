@@ -33,16 +33,16 @@ function SummaryGrid({ items }) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+          className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             {item.label}
           </p>
-          <p className={`mt-2 text-2xl font-bold ${item.tone || "text-slate-900"}`}>
+          <p className={`mt-2 text-2xl font-bold ${item.tone || "text-(--ui-text)"}`}>
             {item.value}
           </p>
           {item.note ? (
-            <p className="mt-1 text-xs text-slate-400">{item.note}</p>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">{item.note}</p>
           ) : null}
         </div>
       ))}
@@ -52,9 +52,9 @@ function SummaryGrid({ items }) {
 
 function EmptyFinanceState({ title, body }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-      <h3 className="text-sm font-bold text-slate-700">{title}</h3>
-      <p className="mt-2 text-sm text-slate-500">{body}</p>
+    <div className="rounded-2xl border border-dashed border-(--ui-border-strong) bg-(--ui-surface) p-10 text-center">
+      <h3 className="text-sm font-bold text-(--ui-text)">{title}</h3>
+      <p className="mt-2 text-sm text-(--ui-text-muted)">{body}</p>
     </div>
   );
 }
@@ -91,8 +91,8 @@ export function SettlementOverviewTab({ filters }) {
       <SummaryGrid
         items={[
           { label: "Inflows", value: fmt(summary.total_inflows) },
-          { label: "Outflows", value: fmt(summary.total_outflows), tone: "text-rose-700" },
-          { label: "Net Cashflow", value: fmt(summary.net_cashflow), tone: "text-emerald-700" },
+          { label: "Outflows", value: fmt(summary.total_outflows), tone: "text-(--ui-danger-fg)" },
+          { label: "Net Cashflow", value: fmt(summary.net_cashflow), tone: "text-(--ui-success-fg)" },
           {
             label: "Supplier Outstanding",
             value: fmt(summary.supplier_outstanding),
@@ -137,14 +137,14 @@ export function SettlementOverviewTab({ filters }) {
             empty={!paymentMix.length}
           >
             {paymentMix.map((row) => (
-              <tr key={row.payment_method} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.payment_method} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.payment_method}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {Number(row.sale_count || 0)}
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                   {fmt(row.total)}
                 </td>
               </tr>
@@ -179,18 +179,18 @@ export function SettlementOverviewTab({ filters }) {
             empty={!aging.length}
           >
             {aging.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.supplier_name}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {Number(row.invoice_count || 0)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {fmt(row.total_invoiced)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.total_paid)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.total_paid)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                   {fmt(row.total_due)}
                 </td>
               </tr>
@@ -210,15 +210,15 @@ export function SettlementOverviewTab({ filters }) {
             empty={!outstandingInvoices.length}
           >
             {outstandingInvoices.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
+              <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
                 <td className="px-4 py-3">
-                  <div className="text-sm font-bold text-slate-800">{row.invoice_number}</div>
-                  <div className="text-[11px] text-slate-400">{row.status}</div>
+                  <div className="text-sm font-bold text-(--ui-text)">{row.invoice_number}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.status}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.supplier_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{row.outlet_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(row.due_date)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.supplier_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDate(row.due_date)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                   {fmt(row.outstanding)}
                 </td>
               </tr>
@@ -236,17 +236,17 @@ export function SettlementOverviewTab({ filters }) {
             empty={!recentPayments.length}
           >
             {recentPayments.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-500">
+              <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {fmtDateTime(row.paid_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.supplier_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.outlet_name}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.supplier_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.outlet_name}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.invoice_number}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.payment_method}</td>
-                <td className="px-4 py-3 text-sm font-bold text-emerald-700">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.invoice_number}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.payment_method}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">
                   {fmt(row.amount)}
                 </td>
               </tr>
@@ -331,23 +331,23 @@ export function PayablesReceivablesTab({ filters }) {
           empty={!supplierAp.length}
         >
           {supplierAp.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {row.supplier_name}
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-mono text-slate-800">{row.invoice_number}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-sm font-mono text-(--ui-text)">{row.invoice_number}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {fmtDate(row.invoice_date)} | {Number(row.days_open || 0)} days
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-500">{row.outlet_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.amount)}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.paid_amount)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-rose-700">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.amount)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.paid_amount)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                 {fmt(row.outstanding)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{row.status}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.status}</td>
             </tr>
           ))}
         </TableShell>
@@ -380,16 +380,16 @@ export function PayablesReceivablesTab({ filters }) {
           empty={!customerAr.length}
         >
           {customerAr.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.name}</td>
-              <td className="px-4 py-3 text-sm text-slate-500">{row.mobile || "-"}</td>
-              <td className="px-4 py-3 text-sm font-bold text-amber-700">
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.mobile || "-"}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-warning-fg)">
                 {fmt(row.credit_balance)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmt(row.total_purchases)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-500">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmtDateTime(row.last_purchase)}
               </td>
             </tr>
@@ -437,7 +437,7 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
           {
             label: "Total Due",
             value: fmt(summary.total_due),
-            tone: "text-rose-700",
+            tone: "text-(--ui-danger-fg)",
           },
           {
             label: "Open Invoices",
@@ -446,7 +446,7 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
           {
             label: "Payments In Scope",
             value: fmt(summary.payments_total),
-            tone: "text-emerald-700",
+            tone: "text-(--ui-success-fg)",
           },
         ]}
       />
@@ -462,19 +462,19 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
             empty={!aging.length}
           >
             {aging.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.supplier_name}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-500">{row.phone || "-"}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.phone || "-"}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {Number(row.invoice_count || 0)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {fmt(row.total_invoiced)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.total_paid)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.total_paid)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                   {fmt(row.total_due)}
                 </td>
               </tr>
@@ -492,17 +492,17 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
             empty={!payments.length}
           >
             {payments.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-500">
+              <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {fmtDateTime(row.paid_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.supplier_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.outlet_name}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.supplier_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.outlet_name}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.invoice_number}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.payment_method}</td>
-                <td className="px-4 py-3 text-sm font-bold text-emerald-700">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.invoice_number}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.payment_method}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">
                   {fmt(row.amount)}
                 </td>
               </tr>
@@ -543,23 +543,23 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
           empty={!invoices.length}
         >
           {invoices.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {row.supplier_name}
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-mono text-slate-800">{row.invoice_number}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-sm font-mono text-(--ui-text)">{row.invoice_number}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {fmtDate(row.created_at)} | due {fmtDate(row.due_date)}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-500">{row.outlet_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.amount)}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.amount_paid)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-rose-700">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.amount)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.amount_paid)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                 {fmt(row.amount_due)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{row.status}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.status}</td>
             </tr>
           ))}
         </TableShell>
@@ -611,7 +611,7 @@ export function FinancePaymentMixTab({ filters }) {
           {
             label: "Supplier Payment Outflows",
             value: fmt(summary.total_supplier_outflows),
-            tone: "text-rose-700",
+            tone: "text-(--ui-danger-fg)",
           },
           {
             label: "Primary Tender",
@@ -647,15 +647,15 @@ export function FinancePaymentMixTab({ filters }) {
             empty={!saleMix.length}
           >
             {saleMix.map((row) => (
-              <tr key={row.payment_method} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.payment_method} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.payment_method}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {Number(row.sale_count || 0)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.total)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.total)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                   {Number(row.share_pct || 0).toFixed(2)}%
                 </td>
               </tr>
@@ -673,14 +673,14 @@ export function FinancePaymentMixTab({ filters }) {
             empty={!supplierMix.length}
           >
             {supplierMix.map((row) => (
-              <tr key={row.payment_method} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.payment_method} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.payment_method}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {Number(row.payment_count || 0)}
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
                   {fmt(row.total)}
                 </td>
               </tr>
@@ -699,14 +699,14 @@ export function FinancePaymentMixTab({ filters }) {
           empty={!dailyInflows.length}
         >
           {dailyInflows.map((row) => (
-            <tr key={row.business_date} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={row.business_date} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {fmtDate(row.business_date)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {Number(row.sale_count || 0)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(row.total)}
               </td>
             </tr>
@@ -747,7 +747,7 @@ export function GSTOutputTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 lg:w-fit">
+      <div className="flex w-full gap-1 overflow-x-auto rounded-xl bg-(--ui-muted-surface) p-1 lg:w-fit">
         {[
           ["gst", "GST Only"],
           ["all", "All Tax Types"],
@@ -756,7 +756,7 @@ export function GSTOutputTab({ filters }) {
           <button
             key={value}
             onClick={() => setTaxMode(value)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
           >
             {label}
           </button>
@@ -768,7 +768,7 @@ export function GSTOutputTab({ filters }) {
           { label: "Line Count", value: Number(summary.line_count || 0) },
           { label: "Sales Incl. GST", value: fmt(summary.taxable_inclusive) },
           { label: "Sales Excl. GST", value: fmt(summary.taxable_exclusive) },
-          { label: "Output GST", value: fmt(summary.gst_amount), tone: "text-emerald-700" },
+          { label: "Output GST", value: fmt(summary.gst_amount), tone: "text-(--ui-success-fg)" },
         ]}
       />
 
@@ -802,13 +802,13 @@ export function GSTOutputTab({ filters }) {
             empty={!summaryByTax.length}
           >
             {summaryByTax.map((row) => (
-              <tr key={`${row.tax_name}-${row.tax_rate}`} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.tax_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.tax_rate || 0).toFixed(2)}%</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.line_count || 0)}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.taxable_inclusive)}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.taxable_exclusive)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmt(row.gst_amount)}</td>
+              <tr key={`${row.tax_name}-${row.tax_rate}`} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.tax_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.tax_rate || 0).toFixed(2)}%</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.line_count || 0)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.taxable_inclusive)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.taxable_exclusive)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">{fmt(row.gst_amount)}</td>
               </tr>
             ))}
           </TableShell>
@@ -852,30 +852,30 @@ export function GSTOutputTab({ filters }) {
             emptyIcon={BadgePercent}
           >
             {rows.map((row, index) => (
-              <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-slate-50">
+              <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">#{row.sale_id}</div>
-                  <div className="text-[11px] text-slate-400">{fmtDateTime(row.timestamp)}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">#{row.sale_id}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                  <div className="font-mono text-[11px] text-slate-400">{row.barcode || "No barcode"}</div>
-                  <div className="text-[11px] text-slate-400">{row.category} | {row.brand}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                  <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode || "No barcode"}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.category} | {row.brand}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm text-slate-700">{row.outlet_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.employee_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.supplier}</div>
+                  <div className="text-sm text-(--ui-text)">{row.outlet_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.employee_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.supplier}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.tax_name}</div>
-                  <div className="text-[11px] text-slate-400">{Number(row.tax_rate || 0).toFixed(2)}% | Qty {row.quantity}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.tax_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{Number(row.tax_rate || 0).toFixed(2)}% | Qty {row.quantity}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{fmt(row.line_total_inclusive)}</div>
-                  <div className="text-[11px] text-slate-400">Excl: {fmt(row.line_total_exclusive)}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{fmt(row.line_total_inclusive)}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">Excl: {fmt(row.line_total_exclusive)}</div>
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmt(row.gst_amount)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">{fmt(row.gst_amount)}</td>
               </tr>
             ))}
           </TableShell>
@@ -914,9 +914,9 @@ export function GSTTypeSummaryTab({ filters }) {
       <SummaryGrid
         items={[
           { label: "Sales Incl. GST", value: fmt(summary.sales_inclusive) },
-          { label: "Output GST", value: fmt(summary.output_tax), tone: "text-emerald-700" },
-          { label: "Input GST Received", value: fmt(summary.received_input_tax), tone: "text-amber-700" },
-          { label: "Net GST Position", value: fmt(summary.net_tax_payable), tone: "text-slate-900" },
+          { label: "Output GST", value: fmt(summary.output_tax), tone: "text-(--ui-success-fg)" },
+          { label: "Input GST Received", value: fmt(summary.received_input_tax), tone: "text-(--ui-warning-fg)" },
+          { label: "Net GST Position", value: fmt(summary.net_tax_payable), tone: "text-(--ui-text)" },
         ]}
       />
 
@@ -953,16 +953,16 @@ export function GSTTypeSummaryTab({ filters }) {
             emptyIcon={FileSpreadsheet}
         >
           {rows.map((row) => (
-            <tr key={`${row.tax_name}-${row.tax_rate}`} className="hover:bg-slate-50">
+            <tr key={`${row.tax_name}-${row.tax_rate}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.tax_name}</div>
-                <div className="text-[11px] text-slate-400">Ordered input {fmt(row.ordered_input_tax)}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.tax_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Ordered input {fmt(row.ordered_input_tax)}</div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.tax_rate || 0).toFixed(2)}%</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.sales_inclusive)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmt(row.output_tax)}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-amber-700">{fmt(row.received_input_tax)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.net_tax_payable)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.tax_rate || 0).toFixed(2)}%</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.sales_inclusive)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">{fmt(row.output_tax)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-warning-fg)">{fmt(row.received_input_tax)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.net_tax_payable)}</td>
             </tr>
           ))}
         </TableShell>

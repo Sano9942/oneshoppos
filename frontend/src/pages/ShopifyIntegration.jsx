@@ -58,7 +58,7 @@ function ShopifyIntegrationContent() {
           <button
             onClick={() => loadAll()}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-semibold shadow-sm transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-(--ui-surface) border border-(--ui-border) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             {loading ? "Refreshing..." : "Refresh All"}
@@ -69,7 +69,7 @@ function ShopifyIntegrationContent() {
       {/* Notifications */}
       <div className="space-y-3">
         {error && (
-          <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl text-sm shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-3 bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg) p-4 rounded-2xl text-sm animate-in fade-in slide-in-from-top-2">
             <ShieldAlert size={18} className="mt-0.5 shrink-0" />
             <div className="flex-1">
               <span className="font-bold underline italic block mb-0.5">
@@ -80,7 +80,7 @@ function ShopifyIntegrationContent() {
           </div>
         )}
         {success && (
-          <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-2xl text-sm shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-3 bg-(--ui-success-bg) border border-(--ui-success-bg) text-(--ui-success-fg) p-4 rounded-2xl text-sm animate-in fade-in slide-in-from-top-2">
             <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             <div className="flex-1">
               <span className="font-bold underline italic block mb-0.5">
@@ -93,7 +93,7 @@ function ShopifyIntegrationContent() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-2xl w-fit overflow-x-auto no-scrollbar shadow-inner border border-slate-200/50">
+      <div className="flex gap-1 bg-(--ui-muted-surface) p-1 rounded-2xl w-fit overflow-x-auto no-scrollbar shadow-inner border border-(--ui-border)/50">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -103,8 +103,8 @@ function ShopifyIntegrationContent() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
                 isActive
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                  ? "bg-(--ui-surface) text-(--ui-text)"
+                  : "text-(--ui-text-muted) hover:text-(--ui-text) hover:bg-(--ui-surface)/50"
               }`}
             >
               <Icon size={16} />

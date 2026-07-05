@@ -12,47 +12,47 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 
 const RFM_SEGMENTS = {
   Champions: {
-    color: "bg-emerald-100 text-emerald-800",
+    color: "bg-(--ui-success-bg) text-(--ui-success-fg)",
     desc: "Buy recently, often, and spend the most",
   },
   Loyal: {
-    color: "bg-blue-100 text-blue-800",
+    color: "bg-(--ui-muted-surface) text-(--ui-link)",
     desc: "Buy regularly, responsive to promotions",
   },
   "Potential Loyalist": {
-    color: "bg-indigo-100 text-indigo-800",
+    color: "bg-(--ui-muted-surface) text-(--ui-link)",
     desc: "Recent customers with average frequency",
   },
   "New Customers": {
-    color: "bg-emerald-50 text-emerald-700",
+    color: "bg-(--ui-success-bg) text-(--ui-success-fg)",
     desc: "Bought most recently, but not often",
   },
   Promising: {
-    color: "bg-amber-50 text-amber-700",
+    color: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
     desc: "Recent shoppers, but haven't spent much",
   },
   "Need Attention": {
-    color: "bg-yellow-50 text-yellow-700",
+    color: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
     desc: "Above average recency, frequency and monetary values",
   },
   "About to Sleep": {
-    color: "bg-slate-100 text-slate-700",
+    color: "bg-(--ui-muted-surface) text-(--ui-text)",
     desc: "Below average recency, frequency and monetary values",
   },
   "At Risk": {
-    color: "bg-orange-100 text-orange-800",
+    color: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
     desc: "Spend quite a bit and purchase often, but a long time ago",
   },
   "Can't Lose Them": {
-    color: "bg-rose-100 text-rose-800",
+    color: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
     desc: "Made biggest purchases, and often. But haven't returned for a long time",
   },
   Hibernating: {
-    color: "bg-rose-50 text-rose-700",
+    color: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
     desc: "Last purchase was long ago, low number of orders",
   },
   Lost: {
-    color: "bg-gray-100 text-gray-600",
+    color: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
     desc: "Lowest recency, frequency and monetary scores",
   },
 };
@@ -127,23 +127,23 @@ export function CustomerDetailsTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Customers in View
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalCustomers}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Lifetime Spend
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Repeat Buyers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{repeatCustomers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{repeatCustomers}</p>
         </div>
       </div>
 
@@ -176,22 +176,22 @@ export function CustomerDetailsTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 text-sm">
+            <tr key={`${r.id}-${i}`} className="hover:bg-(--ui-muted-surface) text-sm">
               <td className="px-4 py-3">
-                <div className="font-bold text-slate-800">{r.name}</div>
-                <div className="text-[10px] text-slate-400 font-medium">ID: {r.id}</div>
+                <div className="font-bold text-(--ui-text)">{r.name}</div>
+                <div className="text-[10px] text-(--ui-text-muted) font-medium">ID: {r.id}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-slate-600 font-medium">{r.mobile || "No Phone"}</div>
-                <div className="text-[10px] text-slate-400">{r.email || "-"}</div>
+                <div className="text-(--ui-text-muted) font-medium">{r.mobile || "No Phone"}</div>
+                <div className="text-[10px] text-(--ui-text-muted)">{r.email || "-"}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.order_count}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-500">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmtDate(r.created_at)}
               </td>
-              <td className="px-4 py-3 font-bold text-indigo-600">
+              <td className="px-4 py-3 font-bold text-(--ui-link)">
                 {fmt(r.total_spent)}
               </td>
             </tr>
@@ -243,29 +243,29 @@ export function CustomerWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Ranked Customers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalCustomers}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Order Count
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Total Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Repeat Buyers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{repeatCustomers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{repeatCustomers}</p>
         </div>
       </div>
 
@@ -294,21 +294,21 @@ export function CustomerWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.customer}-${i}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-bold text-slate-800 text-sm">{r.customer}</td>
+            <tr key={`${r.customer}-${i}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 font-bold text-(--ui-text) text-sm">{r.customer}</td>
               <td className="px-4 py-3">
-                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+                <span className="rounded-full bg-(--ui-muted-surface) px-2.5 py-1 text-xs font-bold text-(--ui-link)">
                   {r.order_count} Visits
                 </span>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {fmt(
                   Number(r.order_count || 0) > 0
                     ? Number(r.total_amount || 0) / Number(r.order_count || 1)
                     : 0,
                 )}
               </td>
-              <td className="px-4 py-3 font-bold text-slate-900">
+              <td className="px-4 py-3 font-bold text-(--ui-text)">
                 {fmt(r.total_amount)}
               </td>
             </tr>
@@ -369,7 +369,7 @@ export function CustomerRFMTab({ filters }) {
 
   const ScoreBox = ({ value }) => (
     <span
-      className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold ${value >= 4 ? "bg-emerald-100 text-emerald-800" : value === 3 ? "bg-yellow-100 text-yellow-800" : "bg-rose-100 text-rose-800"}`}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold ${value >= 4 ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : value === 3 ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"}`}
     >
       {value}
     </span>
@@ -378,29 +378,29 @@ export function CustomerRFMTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Customers Scored
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalCustomers}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Champions
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{championCount}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{championCount}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             At Risk
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{atRiskCount}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{atRiskCount}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Avg Spend
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(avgSpend)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(avgSpend)}</p>
         </div>
       </div>
 
@@ -409,9 +409,9 @@ export function CustomerRFMTab({ filters }) {
           <button
             key={seg}
             onClick={() => setFilterSeg(filterSeg === seg ? "" : seg)}
-            className={`p-3 rounded-xl border text-left transition-all ${filterSeg === seg ? "ring-2 ring-blue-500 border-blue-500 bg-white" : "bg-slate-50 border-slate-100 hover:border-slate-200"}`}
+            className={`p-3 rounded-xl border text-left transition-all ${filterSeg === seg ? "ring-2 ring-(--ui-focus) border-(--ui-focus) bg-(--ui-surface)" : "bg-(--ui-muted-surface) border-(--ui-border) hover:border-(--ui-border)"}`}
           >
-            <div className="text-xl font-bold text-slate-800">
+            <div className="text-xl font-bold text-(--ui-text)">
               {segmentCounts[seg] || 0}
             </div>
             <div
@@ -431,7 +431,7 @@ export function CustomerRFMTab({ filters }) {
             {filterSeg && (
               <button
                 onClick={() => setFilterSeg("")}
-                className="text-xs text-rose-600 font-bold hover:underline"
+                className="text-xs text-(--ui-danger-fg) font-bold hover:underline"
               >
                 Clear Filter
               </button>
@@ -461,11 +461,11 @@ export function CustomerRFMTab({ filters }) {
           empty={!filtered.length}
         >
           {filtered.map((c, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{c.name}</td>
-              <td className="p-4 text-slate-500">
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{c.name}</td>
+              <td className="p-4 text-(--ui-text-muted)">
                 {fmtDate(c.last_order_at)}{" "}
-                <span className="text-[10px] text-slate-400 italic">
+                <span className="text-[10px] text-(--ui-text-muted) italic">
                   ({c.recency_days}d ago)
                 </span>
               </td>
@@ -474,8 +474,8 @@ export function CustomerRFMTab({ filters }) {
                 <ScoreBox value={c.f_score} />
               </td>
               <td className="p-4">
-                <div className="font-semibold text-slate-700">{c.order_count} orders</div>
-                <div className="text-[11px] text-slate-400">{fmt(c.total_spent)}</div>
+                <div className="font-semibold text-(--ui-text)">{c.order_count} orders</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmt(c.total_spent)}</div>
               </td>
               <td className="p-4">
                 <span
@@ -533,17 +533,17 @@ export function CustomerRetentionTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Walk-in Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.walk_in?.revenue || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Walk-in Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.walk_in?.revenue || 0)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New Customer Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.new_customer?.revenue || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">New Customer Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.new_customer?.revenue || 0)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Returning Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.returning_customer?.revenue || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Returning Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.returning_customer?.revenue || 0)}</p>
         </div>
       </div>
 
@@ -573,11 +573,11 @@ export function CustomerRetentionTab({ filters }) {
         empty={!rows.length}
       >
         {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm font-medium">
-            <td className="p-4 text-slate-500">{fmtDate(r.sale_date)}</td>
-            <td className="p-4 text-slate-700">{r.customer_type.replaceAll("_", " ")}</td>
-            <td className="p-4 font-semibold text-slate-800">{fmt(r.revenue)}</td>
-            <td className="p-4 text-blue-600 font-bold">{r.orders}</td>
+          <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm font-medium">
+            <td className="p-4 text-(--ui-text-muted)">{fmtDate(r.sale_date)}</td>
+            <td className="p-4 text-(--ui-text)">{r.customer_type.replaceAll("_", " ")}</td>
+            <td className="p-4 font-semibold text-(--ui-text)">{fmt(r.revenue)}</td>
+            <td className="p-4 text-(--ui-link) font-bold">{r.orders}</td>
           </tr>
         ))}
       </TableShell>
@@ -627,17 +627,17 @@ export function CustomerCaptureRateTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profiled Transactions</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalProfiled}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Profiled Transactions</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalProfiled}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Transactions</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalTransactions}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Total Transactions</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalTransactions}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Store Capture Rate</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{avgCapture}%</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Store Capture Rate</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{avgCapture}%</p>
         </div>
       </div>
 
@@ -669,23 +669,23 @@ export function CustomerCaptureRateTab({ filters }) {
         empty={!data.length}
       >
         {data.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-            <td className="p-4 text-slate-500">
+          <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+            <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+            <td className="p-4 text-(--ui-text-muted)">
               {r.profiled_transactions} Profiled / {r.walk_in_transactions} Walk-in
             </td>
             <td className="p-4">
-              <div className="font-bold text-indigo-600">
+              <div className="font-bold text-(--ui-link)">
                 {r.capture_rate_pct}%
               </div>
-              <div className="w-16 bg-slate-100 h-1 rounded-full mt-1">
+              <div className="w-16 bg-(--ui-muted-surface) h-1 rounded-full mt-1">
                 <div
-                  className="bg-indigo-500 h-full rounded-full"
+                  className="bg-(--ui-primary) h-full rounded-full"
                   style={{ width: `${r.capture_rate_pct}%` }}
                 />
               </div>
             </td>
-            <td className="p-4 font-bold text-emerald-600">
+            <td className="p-4 font-bold text-(--ui-success-fg)">
               {fmt(r.profiled_revenue)}
             </td>
           </tr>

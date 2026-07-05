@@ -301,57 +301,57 @@ export default function BarcodeTemplates() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-end gap-3">
-        <button onClick={fetchTemplates} className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
+        <button onClick={fetchTemplates} className="flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-(--ui-muted-surface) text-(--ui-text) rounded-full hover:bg-(--ui-border-strong)">
           <RefreshCw size={14} /> Refresh
         </button>
-        <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50">
+        <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 bg-(--ui-muted-surface) text-(--ui-text) rounded-full text-sm font-semibold hover:bg-(--ui-border-strong)">
           <Printer size={16} /> Print Labels
         </button>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong)">
           <Plus size={16} /> New Template
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="text-center py-12 text-(--ui-text-muted)">Loading...</div>
       ) : (
-        <div className="bg-white border rounded-xl overflow-hidden">
+        <div className="bg-(--ui-surface) border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border)">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Template Name</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Size (mm)</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Shows</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-600">Default</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-600">Actions</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Template Name</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Size (mm)</th>
+                <th className="px-4 py-3 text-left font-medium text-(--ui-text-muted)">Shows</th>
+                <th className="px-4 py-3 text-center font-medium text-(--ui-text-muted)">Default</th>
+                <th className="px-4 py-3 text-center font-medium text-(--ui-text-muted)">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {templates.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-(--ui-text-muted)">
                   <Tag size={36} className="mx-auto mb-2 opacity-30" />
                   No templates yet. Create one to get started.
                 </td></tr>
               ) : templates.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-semibold text-gray-900">{t.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.width_mm} × {t.height_mm} mm</td>
+                <tr key={t.id} className="hover:bg-(--ui-muted-surface)">
+                  <td className="px-4 py-3 font-semibold text-(--ui-text)">{t.name}</td>
+                  <td className="px-4 py-3 text-(--ui-text-muted)">{t.width_mm} × {t.height_mm} mm</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {t.show_name ? <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">Name</span> : null}
-                      {t.show_price ? <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded">Price</span> : null}
-                      {t.show_barcode ? <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">Barcode</span> : null}
-                      {t.show_sku ? <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded">SKU</span> : null}
-                      {t.show_brand ? <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded">Brand</span> : null}
+                      {t.show_name ? <span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full">Name</span> : null}
+                      {t.show_price ? <span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full">Price</span> : null}
+                      {t.show_barcode ? <span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full">Barcode</span> : null}
+                      {t.show_sku ? <span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full">SKU</span> : null}
+                      {t.show_brand ? <span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full">Brand</span> : null}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {t.is_default ? <Check size={18} className="mx-auto text-green-600" /> : <span className="text-gray-300">—</span>}
+                    {t.is_default ? <Check size={18} className="mx-auto text-(--ui-success-fg)" /> : <span className="text-(--ui-text-muted)">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50"><Edit2 size={15} /></button>
-                      <button onClick={() => handleDelete(t.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={15} /></button>
+                      <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg text-(--ui-text-muted) hover:text-(--ui-text) hover:bg-(--ui-muted-surface)"><Edit2 size={15} /></button>
+                      <button onClick={() => handleDelete(t.id)} className="p-1.5 rounded-lg text-(--ui-text-muted) hover:text-(--ui-danger-fg) hover:bg-(--ui-danger-bg)"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -364,41 +364,41 @@ export default function BarcodeTemplates() {
       {/* Add/Edit Template Modal */}
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-(--ui-surface) rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">{modal === "add" ? "New Template" : "Edit Template"}</h2>
-              <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={() => setModal(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={18} /></button>
             </div>
-            {formError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{formError}</p>}
+            {formError && <p className="text-sm text-(--ui-danger-fg) bg-(--ui-danger-bg) px-3 py-2 rounded-(--ui-radius-sm)">{formError}</p>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Template Name *</label>
+                <label className="block text-sm font-medium text-(--ui-text) mb-1">Template Name *</label>
                 <input value={f.name} onChange={(e) => setForm({ ...f, name: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
                   placeholder="e.g. Small Shelf Label" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Width (mm)</label>
+                  <label className="block text-sm font-medium text-(--ui-text) mb-1">Width (mm)</label>
                   <input type="number" min="20" max="200" step="0.5" value={f.width_mm}
                     onChange={(e) => setForm({ ...f, width_mm: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Height (mm)</label>
+                  <label className="block text-sm font-medium text-(--ui-text) mb-1">Height (mm)</label>
                   <input type="number" min="15" max="200" step="0.5" value={f.height_mm}
                     onChange={(e) => setForm({ ...f, height_mm: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Font Size (px)</label>
+                  <label className="block text-sm font-medium text-(--ui-text) mb-1">Font Size (px)</label>
                   <input type="number" min="7" max="18" value={f.font_size}
                     onChange={(e) => setForm({ ...f, font_size: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Show Fields</label>
+                <label className="block text-sm font-medium text-(--ui-text) mb-2">Show Fields</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: "show_name", label: "Product Name" },
@@ -407,7 +407,7 @@ export default function BarcodeTemplates() {
                     { key: "show_sku", label: "SKU" },
                     { key: "show_brand", label: "Brand" },
                   ].map(({ key, label }) => (
-                    <label key={key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <label key={key} className="flex items-center gap-2 text-sm text-(--ui-text) cursor-pointer">
                       <input type="checkbox" checked={!!f[key]}
                         onChange={(e) => setForm({ ...f, [key]: e.target.checked })}
                         className="rounded" />
@@ -416,15 +416,15 @@ export default function BarcodeTemplates() {
                   ))}
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-(--ui-text) cursor-pointer">
                 <input type="checkbox" checked={!!f.is_default}
                   onChange={(e) => setForm({ ...f, is_default: e.target.checked })} className="rounded" />
                 Set as default template
               </label>
               <div className="flex gap-3 justify-end pt-2">
-                <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border rounded-lg text-sm hover:bg-(--ui-muted-surface)">Cancel</button>
                 <button type="submit" disabled={saving}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  className="px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
                   {saving ? "Saving..." : modal === "add" ? "Create Template" : "Save Changes"}
                 </button>
               </div>
@@ -436,16 +436,16 @@ export default function BarcodeTemplates() {
       {/* Print Labels Modal */}
       {printModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-(--ui-surface) rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold flex items-center gap-2"><Printer size={18} /> Print Barcode Labels</h2>
-              <button onClick={() => setPrintModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={() => setPrintModal(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={18} /></button>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Label Template</label>
+              <label className="block text-sm font-medium text-(--ui-text) mb-1">Label Template</label>
               <select value={printTemplate} onChange={(e) => setPrintTemplate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-(--ui-focus)">
                 <option value="">— Select template —</option>
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.width_mm}×{t.height_mm}mm)</option>)}
               </select>
@@ -453,39 +453,39 @@ export default function BarcodeTemplates() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Products</label>
+                <label className="block text-sm font-medium text-(--ui-text) mb-1">Search Products</label>
                 <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
                   placeholder="Name or barcode…" />
                 <div className="border rounded-lg divide-y max-h-56 overflow-y-auto">
                   {filteredProducts.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-gray-400 text-sm">No products found</div>
+                    <div className="px-3 py-4 text-center text-(--ui-text-muted) text-sm">No products found</div>
                   ) : filteredProducts.map((p) => (
                     <button key={p.id} type="button" onClick={() => addToPrintQueue(p)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex justify-between items-center gap-2">
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) flex justify-between items-center gap-2">
                       <span className="truncate font-medium">{p.name}</span>
-                      <span className="text-xs text-gray-400 shrink-0">{p.barcode}</span>
+                      <span className="text-xs text-(--ui-text-muted) shrink-0">{p.barcode}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-(--ui-text) mb-1">
                   Print Queue ({printItems.length} items)
                 </label>
                 <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
                   {printItems.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-gray-400 text-sm">Click products to add</div>
+                    <div className="px-3 py-8 text-center text-(--ui-text-muted) text-sm">Click products to add</div>
                   ) : printItems.map((item) => (
                     <div key={item.product_id} className="flex items-center gap-2 px-3 py-2">
                       <span className="flex-1 text-sm truncate">{item.name}</span>
                       <input type="number" min="1" max="999" value={item.copies}
                         onChange={(e) => updateCopies(item.product_id, e.target.value)}
                         className="w-14 border rounded px-2 py-1 text-xs text-center" />
-                      <span className="text-xs text-gray-400">×</span>
+                      <span className="text-xs text-(--ui-text-muted)">×</span>
                       <button onClick={() => setPrintItems((prev) => prev.filter((i) => i.product_id !== item.product_id))}
-                        className="text-gray-300 hover:text-red-500"><X size={13} /></button>
+                        className="text-(--ui-text-muted) hover:text-(--ui-danger-fg)"><X size={13} /></button>
                     </div>
                   ))}
                 </div>
@@ -493,15 +493,15 @@ export default function BarcodeTemplates() {
             </div>
 
             {printItems.length > 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-(--ui-text-muted)">
                 Total labels: <strong>{printItems.reduce((s, i) => s + i.copies, 0)}</strong>
               </p>
             )}
 
             <div className="flex gap-3 justify-end pt-1">
-              <button type="button" onClick={() => setPrintModal(false)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={() => setPrintModal(false)} className="px-4 py-2 border rounded-lg text-sm hover:bg-(--ui-muted-surface)">Cancel</button>
               <button onClick={handlePrint} disabled={printing || !printItems.length || !printTemplate}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
                 <Printer size={15} /> {printing ? "Opening..." : "Print Labels"}
               </button>
             </div>

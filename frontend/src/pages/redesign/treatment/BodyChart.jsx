@@ -22,7 +22,7 @@ export default function BodyChart({ preset = "body", areas = [], entries = [], o
   }, [entries]);
 
   if (!areas.length) {
-    return <div className="text-sm text-slate-500 py-6 text-center">No body regions loaded</div>;
+    return <div className="text-sm text-(--ui-text-muted) py-6 text-center">No body regions loaded</div>;
   }
 
   return (
@@ -37,7 +37,7 @@ export default function BodyChart({ preset = "body", areas = [], entries = [], o
             data-testid={`region-${a.area_code}`}
             data-area-code={a.area_code}
             onClick={() => onAreaClick && onAreaClick(a.area_code)}
-            className="relative h-16 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-xs flex items-center justify-center p-2 shadow-sm"
+            className="relative h-16 rounded-md border border-(--ui-border-strong) bg-(--ui-surface) hover:bg-(--ui-muted-surface) text-xs flex items-center justify-center p-2"
             title={entry ? `${a.display_name} — ${entry.condition_code}` : a.display_name}
           >
             <span className="truncate">{a.display_name}</span>

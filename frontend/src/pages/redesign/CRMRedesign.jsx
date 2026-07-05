@@ -26,11 +26,11 @@ const ACTIVITY_TYPES = [
 ];
 const ACTIVITY_TYPE_STYLE = {
   note:      "bg-(--ui-muted-surface) text-(--ui-text)",
-  call:      "bg-blue-100 text-blue-700",
-  email:     "bg-purple-100 text-purple-700",
-  meeting:   "bg-green-100 text-green-700",
-  demo:      "bg-orange-100 text-orange-700",
-  follow_up: "bg-amber-100 text-amber-700",
+  call:      "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  email:     "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  meeting:   "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  demo:      "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  follow_up: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
 };
 
 const EMPTY_FORM = {
@@ -155,7 +155,7 @@ export default function CRMRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard>
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard>
       ) : null}
 
       {/* Pipeline summary */}
@@ -225,7 +225,7 @@ export default function CRMRedesign() {
                       </button>
                       {stage !== "converted" && (
                         <button
-                          className="text-xs text-emerald-600 hover:underline"
+                          className="text-xs text-(--ui-link) hover:underline"
                           onClick={() => convertLead(lead.id)}
                         >
                           Convert

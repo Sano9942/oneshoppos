@@ -46,33 +46,33 @@ export default function POSRefundThresholdModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-sm p-6 text-(--ui-text)">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-amber-400" />
+            <ShieldCheck className="h-5 w-5 text-(--ui-warning-fg)" />
             <h3 className="text-lg font-semibold">Manager Approval Required</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="text-sm text-slate-300 mb-4">
+        <p className="text-sm text-(--ui-text-muted) mb-4">
           Refund of{" "}
-          <span className="font-semibold text-white">
+          <span className="font-semibold text-(--ui-text)">
             {currency}
             {Number(refundAmount).toLocaleString()}
           </span>{" "}
           exceeds the tenant threshold
           {threshold != null ? (
-            <> of <span className="font-semibold text-white">{currency}{Number(threshold).toLocaleString()}</span></>
+            <> of <span className="font-semibold text-(--ui-text)">{currency}{Number(threshold).toLocaleString()}</span></>
           ) : null}
           . A manager PIN is required to approve.
         </p>
 
         <form onSubmit={handleSubmit}>
-          <label className="block text-sm text-slate-300 mb-1">Manager PIN</label>
+          <label className="block text-sm text-(--ui-text-muted) mb-1">Manager PIN</label>
           <input
             type="password"
             inputMode="numeric"
@@ -80,10 +80,10 @@ export default function POSRefundThresholdModal({
             onChange={(e) => setPin(e.target.value)}
             placeholder="Enter manager PIN"
             autoFocus
-            className="w-full rounded-lg bg-slate-700 border border-slate-600 px-4 py-3 text-lg text-center tracking-widest placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full rounded-lg bg-(--ui-surface) border border-(--ui-border-strong) px-4 py-3 text-lg text-center tracking-widest placeholder:text-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
           />
           {error && (
-            <div className="mt-2 flex items-center gap-1 text-sm text-rose-400">
+            <div className="mt-2 flex items-center gap-1 text-sm text-(--ui-danger-fg)">
               <ShieldAlert className="h-4 w-4" />
               {error}
             </div>
@@ -91,7 +91,7 @@ export default function POSRefundThresholdModal({
           <button
             type="submit"
             disabled={loading || !pin.trim()}
-            className="mt-4 w-full rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 py-2.5 font-semibold text-slate-900 transition-colors"
+            className="mt-4 w-full rounded-lg bg-(--ui-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 py-2.5 font-semibold text-white transition-colors"
           >
             {loading ? "Verifying…" : "Approve Refund"}
           </button>

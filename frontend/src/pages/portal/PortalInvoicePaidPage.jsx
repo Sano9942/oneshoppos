@@ -51,28 +51,28 @@ export default function PortalInvoicePaidPage() {
   }, [tenantSlug, invoiceId]);
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-8 shadow-sm text-center">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-8 text-center">
       {status === "polling" && (
         <>
-          <div className="text-slate-500">Confirming your payment…</div>
-          <div className="mt-2 text-xs text-slate-400">This usually takes a few seconds.</div>
+          <div className="text-(--ui-text-muted)">Confirming your payment…</div>
+          <div className="mt-2 text-xs text-(--ui-text-muted)">This usually takes a few seconds.</div>
         </>
       )}
       {status === "paid" && invoice && (
         <>
           <div className="text-4xl mb-2">✅</div>
           <h1 className="text-2xl font-semibold">Payment received</h1>
-          <p className="text-slate-600 mt-2">
+          <p className="text-(--ui-text-muted) mt-2">
             Invoice {invoice.invoice_number} is now marked as paid.
           </p>
           <div className="mt-6 flex flex-col gap-2">
             <Link
               to={`/portal/${tenantSlug}/invoices/${invoice.id}`}
-              className="text-emerald-700 hover:underline"
+              className="text-(--ui-success-fg) hover:underline"
             >
               View receipt
             </Link>
-            <Link to={`/portal/${tenantSlug}`} className="text-slate-500 hover:text-slate-800">
+            <Link to={`/portal/${tenantSlug}`} className="text-(--ui-text-muted) hover:text-(--ui-text)">
               Back to dashboard
             </Link>
           </div>
@@ -82,20 +82,20 @@ export default function PortalInvoicePaidPage() {
         <>
           <div className="text-4xl mb-2">⏳</div>
           <h1 className="text-xl font-semibold">Still processing</h1>
-          <p className="text-slate-600 mt-2">
+          <p className="text-(--ui-text-muted) mt-2">
             Your bank is taking a little longer to confirm. Refresh the invoice in a moment.
           </p>
           {invoiceId && (
             <Link
               to={`/portal/${tenantSlug}/invoices/${invoiceId}`}
-              className="mt-4 inline-block text-emerald-700 hover:underline"
+              className="mt-4 inline-block text-(--ui-success-fg) hover:underline"
             >
               View invoice
             </Link>
           )}
         </>
       )}
-      {status === "error" && <div className="text-red-600">Missing invoice reference.</div>}
+      {status === "error" && <div className="text-(--ui-danger-fg)">Missing invoice reference.</div>}
     </div>
   );
 }

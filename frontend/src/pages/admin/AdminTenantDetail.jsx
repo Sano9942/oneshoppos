@@ -29,9 +29,9 @@ function usagePct(used, max) {
 }
 
 function usageColor(pct) {
-  if (pct >= 90) return "bg-red-500";
-  if (pct >= 70) return "bg-amber-500";
-  return "bg-emerald-500";
+  if (pct >= 90) return "bg-(--ui-danger)";
+  if (pct >= 70) return "bg-(--ui-warning-fg)";
+  return "bg-(--ui-success-fg)";
 }
 
 export default function AdminTenantDetail() {
@@ -211,13 +211,13 @@ export default function AdminTenantDetail() {
   };
 
   if (loading) {
-    return <p className="py-8 text-center text-sm text-slate-500">Loading...</p>;
+    return <p className="py-8 text-center text-sm text-(--ui-text-muted)">Loading...</p>;
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-        <p className="text-sm text-red-600">{error}</p>
+      <div className="rounded-(--ui-radius-sm) border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+        <p className="text-sm text-(--ui-danger-fg)">{error}</p>
       </div>
     );
   }
@@ -226,23 +226,23 @@ export default function AdminTenantDetail() {
     <div>
       <button
         onClick={() => navigate("/admin/tenants")}
-        className="mb-4 flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700"
+        className="mb-4 flex items-center gap-1 text-sm font-medium text-(--ui-text-muted) hover:text-(--ui-text)"
       >
         <ArrowLeft size={14} /> Back to Tenants
       </button>
 
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{tenant.name}</h1>
-          <p className="text-sm text-slate-500">{tenant.slug}</p>
+          <h1 className="text-2xl font-bold text-(--ui-text)">{tenant.name}</h1>
+          <p className="text-sm text-(--ui-text-muted)">{tenant.slug}</p>
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            tenant.status === "active" ? "bg-emerald-100 text-emerald-700" :
-            tenant.status === "suspended" ? "bg-amber-100 text-amber-700" :
-            "bg-red-100 text-red-700"
+            tenant.status === "active" ? "bg-(--ui-success-bg) text-(--ui-success-fg)" :
+            tenant.status === "suspended" ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" :
+            "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
           }`}>{tenant.status}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          <span className="rounded-full bg-(--ui-muted-surface) px-3 py-1 text-xs font-semibold text-(--ui-text)">
             {tenant.plan}
           </span>
         </div>
@@ -252,19 +252,19 @@ export default function AdminTenantDetail() {
         {/* Left: Info + Edit */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tenant details */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Details</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Details</h2>
               {!editMode ? (
-                <button onClick={() => setEditMode(true)} className="text-xs font-medium text-violet-600 hover:text-violet-500">
+                <button onClick={() => setEditMode(true)} className="text-xs font-medium text-(--ui-link) hover:underline">
                   Edit
                 </button>
               ) : (
                 <div className="flex gap-2">
-                  <button onClick={() => setEditMode(false)} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                  <button onClick={() => setEditMode(false)} className="text-xs font-medium text-(--ui-text-muted) hover:text-(--ui-text)">
                     Cancel
                   </button>
-                  <button onClick={handleSave} disabled={actionLoading === "save"} className="text-xs font-semibold text-violet-600 hover:text-violet-500">
+                  <button onClick={handleSave} disabled={actionLoading === "save"} className="text-xs font-semibold text-(--ui-link) hover:underline">
                     {actionLoading === "save" ? "Saving..." : "Save"}
                   </button>
                 </div>
@@ -274,52 +274,52 @@ export default function AdminTenantDetail() {
               {editMode ? (
                 <>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Name</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Name</span>
                     <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Email</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Email</span>
                     <input value={form.owner_email} onChange={(e) => setForm({ ...form, owner_email: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Plan</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Plan</span>
                     <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none">
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)">
                       <option value="free">Free</option>
                       <option value="pro">Pro</option>
                     </select>
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Timezone</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Timezone</span>
                     <input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Max Employees</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Max Employees</span>
                     <input type="number" value={form.max_employees} onChange={(e) => setForm({ ...form, max_employees: Number(e.target.value) })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Max Products</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Max Products</span>
                     <input type="number" value={form.max_products} onChange={(e) => setForm({ ...form, max_products: Number(e.target.value) })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold uppercase text-slate-400">Max Outlets</span>
+                    <span className="text-xs font-bold uppercase text-(--ui-text-muted)">Max Outlets</span>
                     <input type="number" value={form.max_outlets} onChange={(e) => setForm({ ...form, max_outlets: Number(e.target.value) })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none" />
+                      className="mt-1 w-full ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)" />
                   </label>
                 </>
               ) : (
                 <>
-                  <div><p className="text-xs text-slate-400">Owner Email</p><p className="font-medium text-slate-700">{tenant.owner_email}</p></div>
-                  <div><p className="text-xs text-slate-400">Timezone</p><p className="font-medium text-slate-700">{tenant.timezone}</p></div>
-                  <div><p className="text-xs text-slate-400">Max Employees</p><p className="font-medium text-slate-700">{tenant.max_employees}</p></div>
-                  <div><p className="text-xs text-slate-400">Max Products</p><p className="font-medium text-slate-700">{tenant.max_products}</p></div>
-                  <div><p className="text-xs text-slate-400">Max Outlets</p><p className="font-medium text-slate-700">{tenant.max_outlets}</p></div>
-                  <div><p className="text-xs text-slate-400">Created</p><p className="font-medium text-slate-700">{safeDateParse(tenant.created_at)?.toLocaleString() ?? "\u2014"}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Owner Email</p><p className="font-medium text-(--ui-text)">{tenant.owner_email}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Timezone</p><p className="font-medium text-(--ui-text)">{tenant.timezone}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Max Employees</p><p className="font-medium text-(--ui-text)">{tenant.max_employees}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Max Products</p><p className="font-medium text-(--ui-text)">{tenant.max_products}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Max Outlets</p><p className="font-medium text-(--ui-text)">{tenant.max_outlets}</p></div>
+                  <div><p className="text-xs text-(--ui-text-muted)">Created</p><p className="font-medium text-(--ui-text)">{safeDateParse(tenant.created_at)?.toLocaleString() ?? "\u2014"}</p></div>
                 </>
               )}
             </div>
@@ -327,24 +327,24 @@ export default function AdminTenantDetail() {
 
           {/* Setup Status */}
           {setupInfo && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Setup Status</h2>
+            <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Setup Status</h2>
               {setupInfo.setup_complete ? (
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Setup Complete</span>
+                <span className="rounded-full bg-(--ui-success-bg) px-3 py-1 text-xs font-semibold text-(--ui-success-fg)">Setup Complete</span>
               ) : (
                 <div className="space-y-3">
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Pending Setup</span>
+                  <span className="rounded-full bg-(--ui-warning-bg) px-3 py-1 text-xs font-semibold text-(--ui-warning-fg)">Pending Setup</span>
                   {setupInfo.setup_url && (
-                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="mt-2 flex items-center gap-2 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-3">
                       <input
                         readOnly
                         value={setupInfo.setup_url}
-                        className="flex-1 bg-transparent text-xs text-slate-600 outline-none"
+                        className="flex-1 bg-transparent text-xs text-(--ui-text) outline-none"
                         onClick={(e) => e.target.select()}
                       />
                       <button
                         onClick={() => navigator.clipboard.writeText(setupInfo.setup_url)}
-                        className="shrink-0 rounded bg-violet-600 px-2 py-1 text-xs font-semibold text-white hover:bg-violet-500"
+                        className="shrink-0 rounded-full bg-(--ui-primary) px-2 py-1 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
                       >
                         Copy
                       </button>
@@ -358,7 +358,7 @@ export default function AdminTenantDetail() {
                         setSetupInfo({ setup_complete: false, ...data });
                       }
                     }}
-                    className="text-xs font-medium text-violet-600 hover:text-violet-500"
+                    className="text-xs font-medium text-(--ui-link) hover:underline"
                   >
                     Regenerate Token
                   </button>
@@ -368,14 +368,14 @@ export default function AdminTenantDetail() {
           )}
 
           {/* Actions */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Actions</h2>
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Actions</h2>
             <div className="flex flex-wrap gap-2">
               {tenant.status === "active" ? (
                 <button
                   onClick={() => { if (confirm("Suspend this tenant?")) doAction("/suspend"); }}
                   disabled={!!actionLoading}
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-(--ui-warning-bg) px-3 py-2 text-xs font-semibold text-(--ui-warning-fg) hover:opacity-80 disabled:opacity-50"
                 >
                   <Pause size={14} /> {actionLoading === "/suspend" ? "Suspending..." : "Suspend"}
                 </button>
@@ -383,7 +383,7 @@ export default function AdminTenantDetail() {
                 <button
                   onClick={() => doAction("/activate")}
                   disabled={!!actionLoading}
-                  className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full bg-(--ui-success-bg) px-3 py-2 text-xs font-semibold text-(--ui-success-fg) hover:opacity-80 disabled:opacity-50"
                 >
                   <Play size={14} /> {actionLoading === "/activate" ? "Activating..." : "Activate"}
                 </button>
@@ -392,7 +392,7 @@ export default function AdminTenantDetail() {
               <button
                 onClick={() => doAction("/migrate")}
                 disabled={!!actionLoading || tenant.status !== "active"}
-                className="flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-3 py-2 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-border-strong) disabled:opacity-50"
               >
                 <Database size={14} /> {actionLoading === "/migrate" ? "Migrating..." : "Run Migrations"}
               </button>
@@ -400,7 +400,7 @@ export default function AdminTenantDetail() {
               <button
                 onClick={() => { if (confirm("Reset admin PIN to 0000?")) doAction("/reset-pin"); }}
                 disabled={!!actionLoading || tenant.status !== "active"}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-3 py-2 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-border-strong) disabled:opacity-50"
               >
                 <RotateCcw size={14} /> {actionLoading === "/reset-pin" ? "Resetting..." : "Reset PIN"}
               </button>
@@ -427,7 +427,7 @@ export default function AdminTenantDetail() {
                   }
                 }}
                 disabled={!!actionLoading || tenant.status !== "active"}
-                className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-3 py-2 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-border-strong) disabled:opacity-50"
               >
                 <Eye size={14} /> {actionLoading === "impersonate" ? "Opening..." : "Log in as Tenant"}
               </button>
@@ -435,7 +435,7 @@ export default function AdminTenantDetail() {
               <button
                 onClick={() => { if (confirm("Soft-delete this tenant? This cannot be easily undone.")) doAction("", "DELETE"); }}
                 disabled={!!actionLoading}
-                className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-full bg-(--ui-danger-bg) px-3 py-2 text-xs font-semibold text-(--ui-danger-fg) hover:opacity-80 disabled:opacity-50"
               >
                 <Trash2 size={14} /> Delete
               </button>
@@ -443,16 +443,16 @@ export default function AdminTenantDetail() {
           </div>
 
           {/* Billing */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Billing</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Billing</h2>
               <button
                 onClick={() => {
                   const match = planPricing.find(p => p.plan === paymentForm.plan && p.cycle === paymentForm.cycle);
                   setPaymentForm(f => ({ ...f, amount: match ? String(match.price) : "" }));
                   setShowPaymentModal(true);
                 }}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                className="rounded-full bg-(--ui-primary) px-3 py-1.5 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) transition-colors"
               >
                 Record Payment
               </button>
@@ -460,43 +460,43 @@ export default function AdminTenantDetail() {
 
             <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
               <div>
-                <p className="text-slate-500">Plan</p>
-                <p className="font-semibold text-slate-800 capitalize">{tenant?.plan || "free"}</p>
+                <p className="text-(--ui-text-muted)">Plan</p>
+                <p className="font-semibold text-(--ui-text) capitalize">{tenant?.plan || "free"}</p>
               </div>
               <div>
-                <p className="text-slate-500">Billing Cycle</p>
-                <p className="font-semibold text-slate-800 capitalize">{tenant?.billing_cycle || "\u2014"}</p>
+                <p className="text-(--ui-text-muted)">Billing Cycle</p>
+                <p className="font-semibold text-(--ui-text) capitalize">{tenant?.billing_cycle || "\u2014"}</p>
               </div>
               <div>
-                <p className="text-slate-500">Expires</p>
-                <p className="font-semibold text-slate-800">{tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).toLocaleDateString() : "\u2014"}</p>
+                <p className="text-(--ui-text-muted)">Expires</p>
+                <p className="font-semibold text-(--ui-text)">{tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).toLocaleDateString() : "\u2014"}</p>
               </div>
               <div>
-                <p className="text-slate-500">Payment Status</p>
+                <p className="text-(--ui-text-muted)">Payment Status</p>
                 <p className={`font-semibold capitalize ${
-                  tenant?.payment_status === "active" ? "text-emerald-600" :
-                  tenant?.payment_status === "overdue" ? "text-red-600" :
-                  "text-slate-800"
+                  tenant?.payment_status === "active" ? "text-(--ui-success-fg)" :
+                  tenant?.payment_status === "overdue" ? "text-(--ui-danger-fg)" :
+                  "text-(--ui-text)"
                 }`}>{tenant?.payment_status || "active"}</p>
               </div>
             </div>
 
             {/* Pending Upgrade Requests */}
             {upgradeReqs.length > 0 && (
-              <div className="mb-4 rounded-lg bg-purple-50 border border-purple-200 p-3">
-                <p className="text-sm font-semibold text-purple-700 mb-2">Pending Upgrade Requests</p>
+              <div className="mb-4 rounded-(--ui-radius-sm) bg-(--ui-muted-surface) border border-(--ui-border) p-3">
+                <p className="text-sm font-semibold text-(--ui-text) mb-2">Pending Upgrade Requests</p>
                 {upgradeReqs.map(r => (
                   <div key={r.id} className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-purple-600">{"\u2192"} {r.requested_plan} ({r.requested_cycle}){r.message ? `: "${r.message}"` : ""}</span>
+                    <span className="text-(--ui-text)">{"\u2192"} {r.requested_plan} ({r.requested_cycle}){r.message ? `: "${r.message}"` : ""}</span>
                     <div className="flex gap-2">
                       <button onClick={async () => {
                         await adminFetch(`/api/admin/upgrade-requests/${r.id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ status: "approved" }) });
                         setUpgradeReqs(prev => prev.filter(x => x.id !== r.id));
-                      }} className="text-xs font-semibold text-emerald-600 hover:underline">Approve</button>
+                      }} className="text-xs font-semibold text-(--ui-success-fg) hover:underline">Approve</button>
                       <button onClick={async () => {
                         await adminFetch(`/api/admin/upgrade-requests/${r.id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ status: "dismissed" }) });
                         setUpgradeReqs(prev => prev.filter(x => x.id !== r.id));
-                      }} className="text-xs font-semibold text-red-600 hover:underline">Dismiss</button>
+                      }} className="text-xs font-semibold text-(--ui-danger-fg) hover:underline">Dismiss</button>
                     </div>
                   </div>
                 ))}
@@ -507,7 +507,7 @@ export default function AdminTenantDetail() {
             {payments.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold uppercase text-slate-400">Payment History</p>
+                  <p className="text-xs font-semibold uppercase text-(--ui-text-muted)">Payment History</p>
                   <button
                     onClick={() => {
                       const headers = [
@@ -519,14 +519,14 @@ export default function AdminTenantDetail() {
                       ];
                       downloadCsv(headers, payments, "tenant-payments.csv");
                     }}
-                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                    className="flex items-center gap-1 rounded-full bg-(--ui-muted-surface) px-2 py-1 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)"
                   >
                     <Download size={12} /> Export
                   </button>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-slate-500 border-b">
+                    <tr className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
                       <th className="pb-1">Date</th>
                       <th className="pb-1">Amount</th>
                       <th className="pb-1">Plan</th>
@@ -536,12 +536,12 @@ export default function AdminTenantDetail() {
                   </thead>
                   <tbody>
                     {payments.map(p => (
-                      <tr key={p.id} className="border-b border-slate-100">
+                      <tr key={p.id} className="border-b border-(--ui-border)">
                         <td className="py-1.5">{new Date(p.recorded_at).toLocaleDateString()}</td>
                         <td className="py-1.5 font-semibold">PKR {Number(p.amount).toLocaleString()}</td>
                         <td className="py-1.5 capitalize">{p.plan}/{p.cycle}</td>
                         <td className="py-1.5 capitalize">{(p.payment_method || "").replace(/_/g, " ")}</td>
-                        <td className="py-1.5 text-slate-500">{p.reference_note || "\u2014"}</td>
+                        <td className="py-1.5 text-(--ui-text-muted)">{p.reference_note || "\u2014"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -552,14 +552,14 @@ export default function AdminTenantDetail() {
 
           {/* Feature Flags */}
           {featureFlags.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Feature Flags</h2>
+            <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Feature Flags</h2>
               <div className="space-y-3">
                 {featureFlags.map(flag => (
                   <div key={flag.key} className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{flag.key.replace(/_/g, " ")}</p>
-                      {flag.description && <p className="text-xs text-slate-400">{flag.description}</p>}
+                      <p className="text-sm font-medium text-(--ui-text)">{flag.key.replace(/_/g, " ")}</p>
+                      {flag.description && <p className="text-xs text-(--ui-text-muted)">{flag.description}</p>}
                     </div>
                     <button
                       onClick={() => toggleFlag(flag.key, flag.enabled)}
@@ -568,9 +568,9 @@ export default function AdminTenantDetail() {
                       title={flag.enabled ? "Disable" : "Enable"}
                     >
                       {flag.enabled ? (
-                        <ToggleRight size={28} className="text-emerald-500" />
+                        <ToggleRight size={28} className="text-(--ui-primary)" />
                       ) : (
-                        <ToggleLeft size={28} className="text-slate-300" />
+                        <ToggleLeft size={28} className="text-(--ui-border-strong)" />
                       )}
                     </button>
                   </div>
@@ -580,8 +580,8 @@ export default function AdminTenantDetail() {
           )}
 
           {/* Tenant Notes */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">
               <MessageSquare size={14} /> Notes
             </h2>
             <div className="flex gap-2 mb-4">
@@ -590,12 +590,12 @@ export default function AdminTenantDetail() {
                 onChange={(e) => setNewNote(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addNote()}
                 placeholder="Add a note..."
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none"
+                className="flex-1 ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)"
               />
               <button
                 onClick={addNote}
                 disabled={notesLoading || !newNote.trim()}
-                className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+                className="shrink-0 rounded-full bg-(--ui-primary) px-3 py-1.5 text-xs font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
               >
                 {notesLoading ? "Adding..." : "Add Note"}
               </button>
@@ -603,16 +603,16 @@ export default function AdminTenantDetail() {
             {notes.length > 0 ? (
               <div className="max-h-60 space-y-2 overflow-y-auto">
                 {notes.map(n => (
-                  <div key={n.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 p-3">
+                  <div key={n.id} className="flex items-start justify-between gap-2 rounded-(--ui-radius-sm) bg-(--ui-muted-surface) p-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{n.note}</p>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="text-sm text-(--ui-text) whitespace-pre-wrap">{n.note}</p>
+                      <p className="mt-1 text-xs text-(--ui-text-muted)">
                         {n.admin_email} — {safeDateParse(n.created_at)?.toLocaleString() ?? "—"}
                       </p>
                     </div>
                     <button
                       onClick={() => deleteNote(n.id)}
-                      className="shrink-0 text-slate-400 hover:text-red-500"
+                      className="shrink-0 text-(--ui-text-muted) hover:text-(--ui-danger)"
                       title="Delete note"
                     >
                       <X size={14} />
@@ -621,38 +621,38 @@ export default function AdminTenantDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-400">No notes yet.</p>
+              <p className="text-sm text-(--ui-text-muted)">No notes yet.</p>
             )}
           </div>
 
           {/* Plan Pricing Editor */}
           {planPricing.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Plan Pricing</h2>
+            <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Plan Pricing</h2>
               <div className="space-y-3">
                 {planPricing.map(p => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
+                  <div key={p.id} className="flex items-center justify-between rounded-(--ui-radius-sm) bg-(--ui-muted-surface) p-3">
                     {editingPricing?.id === p.id ? (
                       <div className="flex flex-1 items-center gap-3">
-                        <span className="text-sm font-medium capitalize text-slate-700">{p.plan} / {p.cycle}</span>
+                        <span className="text-sm font-medium capitalize text-(--ui-text)">{p.plan} / {p.cycle}</span>
                         <input
                           type="number"
                           value={editingPricing.price}
                           onChange={(e) => setEditingPricing({ ...editingPricing, price: e.target.value })}
-                          className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
+                          className="w-28 ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-2 py-1 text-sm text-(--ui-text)"
                         />
-                        <button onClick={savePricing} className="text-xs font-semibold text-emerald-600 hover:text-emerald-500">Save</button>
-                        <button onClick={() => setEditingPricing(null)} className="text-xs font-medium text-slate-500 hover:text-slate-700">Cancel</button>
+                        <button onClick={savePricing} className="text-xs font-semibold text-(--ui-success-fg) hover:text-(--ui-success-fg)">Save</button>
+                        <button onClick={() => setEditingPricing(null)} className="text-xs font-medium text-(--ui-text-muted) hover:text-(--ui-text)">Cancel</button>
                       </div>
                     ) : (
                       <>
                         <div>
-                          <p className="text-sm font-medium capitalize text-slate-700">{p.plan} / {p.cycle}</p>
-                          <p className="text-xs text-slate-400">PKR {Number(p.price).toLocaleString()}</p>
+                          <p className="text-sm font-medium capitalize text-(--ui-text)">{p.plan} / {p.cycle}</p>
+                          <p className="text-xs text-(--ui-text-muted)">PKR {Number(p.price).toLocaleString()}</p>
                         </div>
                         <button
                           onClick={() => setEditingPricing({ id: p.id, price: String(p.price), cycle: p.cycle, plan: p.plan })}
-                          className="shrink-0 text-slate-400 hover:text-violet-600"
+                          className="shrink-0 text-(--ui-text-muted) hover:text-(--ui-text)"
                           title="Edit pricing"
                         >
                           <Pencil size={14} />
@@ -667,16 +667,16 @@ export default function AdminTenantDetail() {
 
           {/* Audit log */}
           {auditLog.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Audit Log</h2>
+            <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Audit Log</h2>
               <div className="max-h-60 space-y-2 overflow-y-auto">
                 {auditLog.map((entry, i) => (
-                  <div key={i} className="flex items-center justify-between border-b border-slate-50 py-1.5 last:border-0">
+                  <div key={i} className="flex items-center justify-between border-b border-(--ui-border) py-1.5 last:border-0">
                     <div>
-                      <span className="text-sm font-medium text-slate-700">{entry.action}</span>
-                      {entry.actor && <span className="ml-2 text-xs text-slate-400">by {entry.actor}</span>}
+                      <span className="text-sm font-medium text-(--ui-text)">{entry.action}</span>
+                      {entry.actor && <span className="ml-2 text-xs text-(--ui-text-muted)">by {entry.actor}</span>}
                     </div>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-(--ui-text-muted)">
                       {safeDateParse(entry.created_at)?.toLocaleString() ?? "\u2014"}
                     </span>
                   </div>
@@ -688,28 +688,28 @@ export default function AdminTenantDetail() {
 
         {/* Right: Health Dashboard */}
         <div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Health Dashboard</h2>
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Health Dashboard</h2>
             {stats && !stats.message ? (
               <div className="space-y-6">
                 {/* Activity */}
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Activity</h3>
+                  <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Activity</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Last Login</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Last Login</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_login)}</p>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Last Sale</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Last Sale</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_sale)}</p>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Last Shift</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Last Shift</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_shift_opened)}</p>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Active Staff (7d / 30d)</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Active Staff (7d / 30d)</p>
                       <p className="text-sm font-semibold">{stats.active_employees_7d} / {stats.active_employees_30d}</p>
                     </div>
                   </div>
@@ -719,10 +719,10 @@ export default function AdminTenantDetail() {
                       { label: "This Week", sales: stats.sales_this_week, rev: stats.revenue_this_week },
                       { label: "This Month", sales: stats.sales_this_month, rev: stats.revenue_this_month },
                     ].map((p) => (
-                      <div key={p.label} className="bg-slate-50 rounded-lg p-3">
-                        <p className="text-xs text-slate-500">{p.label}</p>
+                      <div key={p.label} className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                        <p className="text-xs text-(--ui-text-muted)">{p.label}</p>
                         <p className="text-sm font-bold">{p.sales} sales</p>
-                        <p className="text-xs text-slate-400">{p.rev?.toLocaleString()}</p>
+                        <p className="text-xs text-(--ui-text-muted)">{p.rev?.toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
@@ -730,7 +730,7 @@ export default function AdminTenantDetail() {
 
                 {/* Plan Usage */}
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Plan Usage</h3>
+                  <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Plan Usage</h3>
                   {[
                     { label: "Employees", used: stats.employees, max: stats.max_employees },
                     { label: "Products", used: stats.products, max: stats.max_products },
@@ -740,10 +740,10 @@ export default function AdminTenantDetail() {
                     return (
                       <div key={d.label} className="mb-3">
                         <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-600">{d.label}</span>
+                          <span className="text-(--ui-text)">{d.label}</span>
                           <span className="font-semibold">{d.used} / {d.max || "\u221E"} ({pct}%)</span>
                         </div>
-                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-2 bg-(--ui-muted-surface) rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${usageColor(pct)} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
                         </div>
                       </div>
@@ -753,18 +753,18 @@ export default function AdminTenantDetail() {
 
                 {/* Storage & Totals */}
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Storage & Totals</h3>
+                  <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Storage & Totals</h3>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Schema Size</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Schema Size</p>
                       <p className="text-sm font-bold">{stats.schema_size_mb} MB</p>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Total Sales</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Total Sales</p>
                       <p className="text-sm font-bold">{stats.total_sales?.toLocaleString()}</p>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500">Customers</p>
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
+                      <p className="text-xs text-(--ui-text-muted)">Customers</p>
                       <p className="text-sm font-bold">{stats.customers?.toLocaleString()}</p>
                     </div>
                   </div>
@@ -773,18 +773,18 @@ export default function AdminTenantDetail() {
                 {/* Feature Usage */}
                 {featureUsage?.last_30_days?.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Feature Usage (30d)</h3>
+                    <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Feature Usage (30d)</h3>
                     <div className="space-y-2">
                       {featureUsage.last_30_days.map(item => {
                         const maxVal = featureUsage.last_30_days[0]?.total || 1;
                         return (
                           <div key={item.action_type}>
                             <div className="flex justify-between text-xs mb-0.5">
-                              <span className="text-slate-600">{item.action_type.replace(/_/g, " ")}</span>
-                              <span className="font-semibold text-slate-700">{item.total}</span>
+                              <span className="text-(--ui-text)">{item.action_type.replace(/_/g, " ")}</span>
+                              <span className="font-semibold text-(--ui-text)">{item.total}</span>
                             </div>
-                            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${Math.round((item.total / maxVal) * 100)}%` }} />
+                            <div className="h-2 bg-(--ui-muted-surface) rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-(--ui-primary) transition-all" style={{ width: `${Math.round((item.total / maxVal) * 100)}%` }} />
                             </div>
                           </div>
                         );
@@ -792,10 +792,10 @@ export default function AdminTenantDetail() {
                     </div>
                     {featureUsage.top_users?.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-xs text-slate-500 mb-1.5">Top Users (30d)</p>
+                        <p className="text-xs text-(--ui-text-muted) mb-1.5">Top Users (30d)</p>
                         <div className="flex flex-wrap gap-1.5">
                           {featureUsage.top_users.map(u => (
-                            <span key={u.user_name} className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">
+                            <span key={u.user_name} className="inline-flex items-center gap-1 bg-(--ui-muted-surface) text-(--ui-text) text-xs px-2 py-0.5 rounded-full">
                               {u.user_name} <span className="font-semibold">{u.total}</span>
                             </span>
                           ))}
@@ -806,7 +806,7 @@ export default function AdminTenantDetail() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-slate-400">{stats?.message || "Stats unavailable"}</p>
+              <p className="text-sm text-(--ui-text-muted)">{stats?.message || "Stats unavailable"}</p>
             )}
           </div>
         </div>
@@ -814,40 +814,40 @@ export default function AdminTenantDetail() {
 
           {/* Record Payment Modal */}
           {showPaymentModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Record Payment</h3>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+              <div className="bg-(--ui-surface) rounded-(--ui-radius-lg) shadow-(--ui-shadow-lg) w-full max-w-md p-6">
+                <h3 className="text-lg font-semibold text-(--ui-text) mb-4">Record Payment</h3>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Plan</label>
+                    <label className="block text-sm font-medium text-(--ui-text) mb-1">Plan</label>
                     <select value={paymentForm.plan} onChange={e => {
                       const plan = e.target.value;
                       const match = planPricing.find(p => p.plan === plan && p.cycle === paymentForm.cycle);
                       setPaymentForm(f => ({ ...f, plan, amount: match ? String(match.price) : f.amount }));
-                    }} className="w-full border rounded-lg px-3 py-2 text-sm">
+                    }} className="ui-focus-ring w-full border border-(--ui-border-strong) bg-(--ui-surface) rounded-(--ui-radius-sm) px-3 py-2 text-sm text-(--ui-text)">
                       <option value="pro">Pro</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Billing Cycle</label>
+                    <label className="block text-sm font-medium text-(--ui-text) mb-1">Billing Cycle</label>
                     <select value={paymentForm.cycle} onChange={e => {
                       const cycle = e.target.value;
                       const match = planPricing.find(p => p.plan === paymentForm.plan && p.cycle === cycle);
                       setPaymentForm(f => ({ ...f, cycle, amount: match ? String(match.price) : f.amount }));
-                    }} className="w-full border rounded-lg px-3 py-2 text-sm">
+                    }} className="ui-focus-ring w-full border border-(--ui-border-strong) bg-(--ui-surface) rounded-(--ui-radius-sm) px-3 py-2 text-sm text-(--ui-text)">
                       <option value="monthly">Monthly</option>
                       <option value="annual">Annual</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Amount (PKR)</label>
+                    <label className="block text-sm font-medium text-(--ui-text) mb-1">Amount (PKR)</label>
                     <input type="number" value={paymentForm.amount} onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="3000" />
+                      className="ui-focus-ring w-full border border-(--ui-border-strong) bg-(--ui-surface) rounded-(--ui-radius-sm) px-3 py-2 text-sm text-(--ui-text)" placeholder="3000" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Payment Method</label>
+                    <label className="block text-sm font-medium text-(--ui-text) mb-1">Payment Method</label>
                     <select value={paymentForm.payment_method} onChange={e => setPaymentForm(f => ({ ...f, payment_method: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm">
+                      className="ui-focus-ring w-full border border-(--ui-border-strong) bg-(--ui-surface) rounded-(--ui-radius-sm) px-3 py-2 text-sm text-(--ui-text)">
                       <option value="bank_transfer">Bank Transfer</option>
                       <option value="jazzcash">JazzCash</option>
                       <option value="cash">Cash</option>
@@ -855,13 +855,13 @@ export default function AdminTenantDetail() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Reference Note</label>
+                    <label className="block text-sm font-medium text-(--ui-text) mb-1">Reference Note</label>
                     <input type="text" value={paymentForm.reference_note} onChange={e => setPaymentForm(f => ({ ...f, reference_note: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Receipt #, transaction ID, etc." />
+                      className="ui-focus-ring w-full border border-(--ui-border-strong) bg-(--ui-surface) rounded-(--ui-radius-sm) px-3 py-2 text-sm text-(--ui-text)" placeholder="Receipt #, transaction ID, etc." />
                   </div>
                 </div>
                 <div className="flex justify-end gap-3 mt-5">
-                  <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+                  <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm text-(--ui-text) hover:text-(--ui-text)">Cancel</button>
                   <button onClick={async () => {
                     try {
                       const r = await adminFetch(`/api/admin/tenants/${id}/record-payment`, {
@@ -875,7 +875,7 @@ export default function AdminTenantDetail() {
                         adminFetch(`/api/admin/tenants/${id}/payments`).then(r => r.json()).then(setPayments).catch(() => {});
                       }
                     } catch {}
-                  }} className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                  }} className="px-4 py-2 text-sm font-semibold bg-(--ui-primary) text-(--ui-on-primary) rounded-full hover:bg-(--ui-primary-strong)">
                     Record Payment
                   </button>
                 </div>

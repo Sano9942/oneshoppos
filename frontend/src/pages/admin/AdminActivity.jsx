@@ -131,13 +131,13 @@ export default function AdminActivity() {
     <div>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Activity Log</h1>
+        <h1 className="text-2xl font-bold text-(--ui-text)">Activity Log</h1>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Auto-refresh 30s</span>
+          <span className="text-[10px] font-medium text-(--ui-text-muted) uppercase tracking-wider">Auto-refresh 30s</span>
           <button
             onClick={exportCsv}
             disabled={!data.length}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            className="ui-focus-ring flex items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-4 py-1.5 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong) disabled:opacity-50"
           >
             <Download size={14} />
             CSV
@@ -151,10 +151,10 @@ export default function AdminActivity() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`ui-focus-ring rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
               tab === t.key
-                ? "bg-slate-800 text-white"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                : "bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong) hover:text-(--ui-text)"
             }`}
           >
             {t.label}
@@ -168,7 +168,7 @@ export default function AdminActivity() {
           <select
             value={filter}
             onChange={(e) => { setFilter(e.target.value); setOffset(0); }}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+            className="ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-1.5 text-sm text-(--ui-text)"
           >
             <option value="">All actions</option>
             {ACTION_TYPES.filter(Boolean).map((a) => (
@@ -182,7 +182,7 @@ export default function AdminActivity() {
           <select
             value={filter}
             onChange={(e) => { setFilter(e.target.value); setOffset(0); }}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+            className="ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-1.5 text-sm text-(--ui-text)"
           >
             <option value="">All events</option>
             {SECURITY_TYPES.filter(Boolean).map((s) => (
@@ -194,25 +194,25 @@ export default function AdminActivity() {
 
       {/* Error */}
       {error && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="mb-3 rounded-(--ui-radius-md) border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3">
+          <p className="text-sm text-(--ui-danger-fg)">{error}</p>
         </div>
       )}
 
       {/* Content */}
       {loading ? (
-        <p className="text-sm text-slate-400">Loading...</p>
+        <p className="text-sm text-(--ui-text-muted)">Loading...</p>
       ) : data.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm font-medium text-slate-400">No records found</p>
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-8 text-center">
+          <p className="text-sm font-medium text-(--ui-text-muted)">No records found</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface)">
           <div className="overflow-x-auto">
             {tab === "admin" && (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                  <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs text-(--ui-text-muted)">
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Admin</th>
                     <th className="px-4 py-3 font-medium">Action</th>
@@ -223,19 +223,19 @@ export default function AdminActivity() {
                 </thead>
                 <tbody>
                   {data.map((r, i) => (
-                    <tr key={r.id || i} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    <tr key={r.id || i} className="border-b border-(--ui-border) last:border-0">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) whitespace-nowrap">
                         {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{r.admin_email || r.admin_name || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{r.admin_email || r.admin_name || ""}</td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        <span className="rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-semibold text-(--ui-text-muted)">
                           {r.action}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{r.target_type || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{r.target_id || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400 max-w-xs" title={r.details ? JSON.stringify(r.details) : ""}>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{r.target_type || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted)">{r.target_id || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) max-w-xs" title={r.details ? JSON.stringify(r.details) : ""}>
                         {formatDetails(r.details)}
                       </td>
                     </tr>
@@ -247,7 +247,7 @@ export default function AdminActivity() {
             {tab === "tenant" && (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                  <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs text-(--ui-text-muted)">
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Tenant</th>
                     <th className="px-4 py-3 font-medium">Action</th>
@@ -258,28 +258,28 @@ export default function AdminActivity() {
                 </thead>
                 <tbody>
                   {data.map((r, i) => (
-                    <tr key={r.id || i} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    <tr key={r.id || i} className="border-b border-(--ui-border) last:border-0">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) whitespace-nowrap">
                         {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                       </td>
                       <td className="px-4 py-3">
                         {r.tenant_name ? (
                           <>
-                            <span className="font-medium text-slate-700">{r.tenant_name}</span>
-                            <span className="ml-1 text-xs text-slate-400">({r.tenant_slug})</span>
+                            <span className="font-medium text-(--ui-text)">{r.tenant_name}</span>
+                            <span className="ml-1 text-xs text-(--ui-text-muted)">({r.tenant_slug})</span>
                           </>
                         ) : (
-                          <span className="text-xs text-slate-400">{r.tenant_slug || ""}</span>
+                          <span className="text-xs text-(--ui-text-muted)">{r.tenant_slug || ""}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        <span className="rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-semibold text-(--ui-text)">
                           {r.action}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{r.entity_type || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{r.entity_id || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{r.performed_by || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{r.entity_type || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted)">{r.entity_id || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{r.performed_by || ""}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -289,7 +289,7 @@ export default function AdminActivity() {
             {tab === "security" && (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                  <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs text-(--ui-text-muted)">
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Event</th>
                     <th className="px-4 py-3 font-medium">Email</th>
@@ -299,24 +299,24 @@ export default function AdminActivity() {
                 </thead>
                 <tbody>
                   {data.map((r, i) => (
-                    <tr key={r.id || i} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    <tr key={r.id || i} className="border-b border-(--ui-border) last:border-0">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) whitespace-nowrap">
                         {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           r.event_type === "login_success"
-                            ? "bg-emerald-100 text-emerald-700"
+                            ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
                             : r.event_type === "login_failed"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-slate-100 text-slate-600"
+                              ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                              : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
                         }`}>
                           {(r.event_type || "").replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{r.email || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500 font-mono">{r.ip_address || ""}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400 max-w-xs" title={r.user_agent || ""}>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{r.email || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) font-mono">{r.ip_address || ""}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) max-w-xs" title={r.user_agent || ""}>
                         {truncate(r.user_agent, 60)}
                       </td>
                     </tr>
@@ -334,15 +334,15 @@ export default function AdminActivity() {
           <button
             disabled={offset === 0}
             onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-40"
+            className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-1.5 text-xs font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong) disabled:opacity-40"
           >
             Previous
           </button>
-          <span className="text-xs text-slate-400">Page {page}</span>
+          <span className="text-xs text-(--ui-text-muted)">Page {page}</span>
           <button
             disabled={data.length < LIMIT}
             onClick={() => setOffset((o) => o + LIMIT)}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-40"
+            className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-1.5 text-xs font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong) disabled:opacity-40"
           >
             Next
           </button>

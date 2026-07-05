@@ -226,7 +226,7 @@ export default function HRManagementRedesign() {
   return (
     <PageShell title="HR Management" subtitle="Leave requests, payroll, balances and attendance summary.">
       {error && (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard>
+        <SectionCard className="mb-3 border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard>
       )}
 
       {/* Tab bar */}
@@ -313,7 +313,7 @@ export default function HRManagementRedesign() {
                       <td className="px-2 py-2">
                         <Badge tone={LEAVE_STATUS_TONE[r.status] || "default"} className="capitalize">{r.status}</Badge>
                         {r.rejection_note && (
-                          <p className="mt-0.5 text-xs text-rose-500 italic">{r.rejection_note}</p>
+                          <p className="mt-0.5 text-xs text-(--ui-danger-fg) italic">{r.rejection_note}</p>
                         )}
                       </td>
                       <td className="px-2 py-2 text-right">
@@ -355,10 +355,10 @@ export default function HRManagementRedesign() {
                 {leaveBalances.map((emp) => {
                   const remaining = Number(emp.remaining || 0);
                   const remainingColor = remaining === 0
-                    ? "text-rose-600"
+                    ? "text-(--ui-danger-fg)"
                     : remaining <= 2
-                    ? "text-amber-500"
-                    : "text-emerald-600";
+                    ? "text-(--ui-warning-fg)"
+                    : "text-(--ui-success-fg)";
                   return (
                     <tr key={emp.employee_id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                       <td className="px-3 py-2 font-medium text-(--ui-text)">{emp.name}</td>
@@ -493,8 +493,8 @@ export default function HRManagementRedesign() {
                       <td className="px-3 py-2 text-right text-(--ui-text-muted)">{l.total_days ?? "—"}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text-muted)">{l.leave_days ?? "—"}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{money(l.gross_pay)}</td>
-                      <td className="px-3 py-2 text-right text-rose-600">{money(l.deductions)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-emerald-600">{money(l.net_pay)}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-danger-fg)">{money(l.deductions)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-success-fg)">{money(l.net_pay)}</td>
                       <td className="px-3 py-2 text-xs text-(--ui-text-muted) max-w-48">{l.notes || "—"}</td>
                     </tr>
                   ))}

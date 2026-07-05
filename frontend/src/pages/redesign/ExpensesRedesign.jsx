@@ -254,12 +254,12 @@ export default function ExpensesRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
       {notice ? (
-        <SectionCard className="mb-3 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <SectionCard className="mb-3 bg-(--ui-success-bg) p-3 text-sm text-(--ui-success-fg)">
           {notice}
         </SectionCard>
       ) : null}
@@ -443,7 +443,7 @@ export default function ExpensesRedesign() {
         size="lg"
       >
         {formError ? (
-          <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+          <div className="mb-3 rounded bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">
             {formError}
           </div>
         ) : null}

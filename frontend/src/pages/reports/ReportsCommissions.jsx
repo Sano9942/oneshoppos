@@ -53,11 +53,11 @@ export default function CommissionSummaryTab({ filters }) {
       <div className="flex gap-4 flex-wrap">
         <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
           <p className="text-xs text-(--ui-muted)">Pending</p>
-          <p className="font-semibold text-yellow-600">{fmt(Number(summary.pending_total || 0))}</p>
+          <p className="font-semibold text-(--ui-warning-fg)">{fmt(Number(summary.pending_total || 0))}</p>
         </div>
         <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
           <p className="text-xs text-(--ui-muted)">Approved</p>
-          <p className="font-semibold text-green-600">{fmt(Number(summary.approved_total || 0))}</p>
+          <p className="font-semibold text-(--ui-success-fg)">{fmt(Number(summary.approved_total || 0))}</p>
         </div>
         <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
           <p className="text-xs text-(--ui-muted)">Paid</p>
@@ -69,7 +69,7 @@ export default function CommissionSummaryTab({ filters }) {
         </div>
         <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
           <p className="text-xs text-(--ui-muted)">Tips</p>
-          <p className="font-semibold text-emerald-600">{fmt(Number(summary.tip_total || 0))}</p>
+          <p className="font-semibold text-(--ui-success-fg)">{fmt(Number(summary.tip_total || 0))}</p>
         </div>
         <div className="ml-auto flex gap-2 items-center">
           <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text)" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
@@ -84,7 +84,7 @@ export default function CommissionSummaryTab({ filters }) {
             <option value="paid">Paid</option>
             <option value="reversed">Reversed</option>
           </select>
-          <button onClick={handleExport} className="flex items-center gap-1 text-sm text-blue-500 hover:underline">
+          <button onClick={handleExport} className="flex items-center gap-1 text-sm text-(--ui-link) hover:underline">
             <Download size={14} /> Export CSV
           </button>
         </div>

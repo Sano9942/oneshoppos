@@ -745,7 +745,7 @@ export default function CustomersRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -796,7 +796,7 @@ export default function CustomersRedesign() {
                     <tr
                       key={r.id}
                       className={`border-t border-(--ui-border) ${
-                        detail?.id === r.id ? "bg-emerald-50" : ""
+                        detail?.id === r.id ? "bg-(--ui-muted-surface)" : ""
                       }`}
                     >
                       <td className="px-3 py-2">
@@ -804,7 +804,7 @@ export default function CustomersRedesign() {
                           className="flex items-center gap-2 text-left"
                           onClick={() => loadDetail(r)}
                         >
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-(--ui-muted-surface) text-(--ui-text-muted)">
                             <UserRound size={12} />
                           </span>
                           <span className="font-medium text-(--ui-text)">{r.name}</span>
@@ -814,12 +814,12 @@ export default function CustomersRedesign() {
                             </span>
                           )}
                           {r.group_name && (
-                            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-(--ui-muted-surface) px-1.5 py-0.5 text-[10px] font-medium text-(--ui-text-muted)">
                               {r.group_name}
                             </span>
                           )}
                           {r.is_blacklisted && (
-                            <span className="ml-1.5 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                            <span className="ml-1.5 inline-flex items-center rounded-full bg-(--ui-danger-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-danger-fg)">
                               Blacklisted
                             </span>
                           )}
@@ -842,7 +842,7 @@ export default function CustomersRedesign() {
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         {r.portal_enabled_at ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-(--ui-success-bg) text-(--ui-success-fg)">
                             Active
                           </span>
                         ) : (
@@ -920,7 +920,7 @@ export default function CustomersRedesign() {
                     key={key}
                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                       detailTab === key
-                        ? "border-emerald-600 text-emerald-700"
+                        ? "border-(--ui-primary) text-(--ui-primary)"
                         : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
                     }`}
                     onClick={() => {
@@ -938,13 +938,13 @@ export default function CustomersRedesign() {
               {detailTab === "profile" && (
                 <>
                   {detail.is_blacklisted && (
-                    <div className="rounded-md border border-red-300 bg-red-50 p-2.5">
-                      <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                    <div className="rounded-md bg-(--ui-danger-bg) p-2.5">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-(--ui-danger-fg)">
                         <Ban size={13} /> Blacklisted
                       </p>
-                      <p className="mt-1 text-xs text-red-600">{detail.blacklist_reason}</p>
+                      <p className="mt-1 text-xs text-(--ui-danger-fg)">{detail.blacklist_reason}</p>
                       {detail.blacklisted_at && (
-                        <p className="mt-0.5 text-[10px] text-red-400">Since {fmtDate(detail.blacklisted_at)}</p>
+                        <p className="mt-0.5 text-[10px] text-(--ui-danger-fg)">Since {fmtDate(detail.blacklisted_at)}</p>
                       )}
                     </div>
                   )}
@@ -952,7 +952,7 @@ export default function CustomersRedesign() {
                   <div className="flex gap-2">
                     {detail.is_blacklisted ? (
                       <Button size="sm" onClick={unblacklistCustomer} disabled={busy}>
-                        <ShieldCheck size={13} className="mr-1 inline text-emerald-600" />
+                        <ShieldCheck size={13} className="mr-1 inline text-(--ui-success-fg)" />
                         Unblacklist
                       </Button>
                     ) : (
@@ -1015,10 +1015,10 @@ export default function CustomersRedesign() {
                     const pct = creditStatus.utilization_pct != null ? Number(creditStatus.utilization_pct) : 0;
                     const overLimit = limit > 0 && outstanding > limit;
                     const barColor = overLimit
-                      ? "bg-red-500"
+                      ? "bg-(--ui-danger-fg)"
                       : pct >= 75
-                      ? "bg-amber-500"
-                      : "bg-emerald-500";
+                      ? "bg-(--ui-warning-fg)"
+                      : "bg-(--ui-success-fg)";
                     const modeLabel = creditStatus.credit_block_mode === "hard"
                       ? "Hard block"
                       : creditStatus.credit_block_mode === "off"
@@ -1029,7 +1029,7 @@ export default function CustomersRedesign() {
                         <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Credit & A/R</p>
                         <div className="flex items-baseline justify-between text-xs mb-1.5">
                           <span className="text-(--ui-text-muted)">Outstanding</span>
-                          <span className={`font-semibold ${overLimit ? "text-red-600" : "text-(--ui-text)"}`}>
+                          <span className={`font-semibold ${overLimit ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}>
                             {money(outstanding)}{limit > 0 ? ` / ${money(limit)}` : " (no limit)"}
                           </span>
                         </div>
@@ -1071,8 +1071,8 @@ export default function CustomersRedesign() {
                       {!detail.email_consent && !detail.sms_consent && !detail.whatsapp_consent && <span className="text-xs text-(--ui-text-muted)">No communication consent</span>}
                     </div>
                     <div className="flex gap-2">
-                      <a href={`/customer-invoices?customer_id=${detail.id}`} className="text-xs text-blue-600 hover:underline">View Invoices</a>
-                      <a href={`/messaging/inbox`} className="text-xs text-blue-600 hover:underline">View Messages</a>
+                      <a href={`/customer-invoices?customer_id=${detail.id}`} className="text-xs text-(--ui-link) hover:underline">View Invoices</a>
+                      <a href={`/messaging/inbox`} className="text-xs text-(--ui-link) hover:underline">View Messages</a>
                     </div>
                   </SectionCard>
 
@@ -1083,7 +1083,7 @@ export default function CustomersRedesign() {
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                         {detail.blood_group && <><span className="text-(--ui-text-muted)">Blood Group</span><span className="text-(--ui-text) font-medium">{detail.blood_group}</span></>}
                         {detail.insurance_id && <><span className="text-(--ui-text-muted)">Insurance ID</span><span className="text-(--ui-text)">{detail.insurance_id}</span></>}
-                        {detail.allergies && <><span className="text-(--ui-text-muted)">Allergies</span><span className="text-red-600 font-medium">{detail.allergies}</span></>}
+                        {detail.allergies && <><span className="text-(--ui-text-muted)">Allergies</span><span className="text-(--ui-danger-fg) font-medium">{detail.allergies}</span></>}
                         {detail.emergency_contact_name && <><span className="text-(--ui-text-muted)">Emergency Contact</span><span className="text-(--ui-text)">{detail.emergency_contact_name}{detail.emergency_contact_phone ? ` · ${detail.emergency_contact_phone}` : ""}</span></>}
                       </div>
                       {detail.medical_notes && <p className="mt-1 text-xs text-(--ui-text-muted) italic">{detail.medical_notes}</p>}
@@ -1100,7 +1100,7 @@ export default function CustomersRedesign() {
                         <button
                           type="button"
                           onClick={openSubjectCreate}
-                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                          className="inline-flex items-center gap-1 text-xs text-(--ui-link) hover:underline"
                           data-testid="subject-add"
                         >
                           <Plus size={12} /> Add
@@ -1135,7 +1135,7 @@ export default function CustomersRedesign() {
                                 <button
                                   type="button"
                                   onClick={() => deleteSubject(s)}
-                                  className="p-1 rounded hover:bg-rose-50 text-(--ui-text-muted) hover:text-rose-600"
+                                  className="p-1 rounded hover:bg-(--ui-danger-bg) text-(--ui-text-muted) hover:text-(--ui-danger-fg)"
                                   aria-label={`Remove ${s.name}`}
                                   data-testid={`subject-delete-${s.id}`}
                                 >
@@ -1183,9 +1183,9 @@ export default function CustomersRedesign() {
                     </p>
                     <div className="flex flex-wrap gap-1 mb-2">
                       {(detail.tags || []).map((tag) => (
-                        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[11px] font-medium text-(--ui-text-muted)">
                           {tag}
-                          <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-600 transition-colors">
+                          <button type="button" onClick={() => removeTag(tag)} className="hover:text-(--ui-danger-fg) transition-colors">
                             <X size={10} />
                           </button>
                         </span>
@@ -1236,7 +1236,7 @@ export default function CustomersRedesign() {
                       <SectionCard className="p-2">
                         <div className="flex items-center gap-2 mb-2">
                           {current ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: (current.color || "#8066FF") + "33", color: current.color || "#8066FF" }}>
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: (current.color || "#101010") + "33", color: current.color || "#101010" }}>
                               <Award size={12} />{current.name}
                               {Number(current.points_multiplier) > 1 && <span className="opacity-70 text-[10px]">{current.points_multiplier}x pts</span>}
                               {Number(current.discount_percent) > 0 && <span className="opacity-70 text-[10px]">· {current.discount_percent}% off</span>}
@@ -1248,10 +1248,10 @@ export default function CustomersRedesign() {
                         {next && (
                           <>
                             <div className="h-1.5 rounded-full bg-(--ui-bg-elevated) overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${progressTo}%`, backgroundColor: next.color || "#8066FF" }} />
+                              <div className="h-full rounded-full transition-all" style={{ width: `${progressTo}%`, backgroundColor: next.color || "#101010" }} />
                             </div>
                             <p className="text-[10px] text-(--ui-text-muted) mt-1">
-                              {money(remaining)} more to reach <span className="font-semibold" style={{ color: next.color || "#8066FF" }}>{next.name}</span>
+                              {money(remaining)} more to reach <span className="font-semibold" style={{ color: next.color || "#101010" }}>{next.name}</span>
                             </p>
                           </>
                         )}
@@ -1283,7 +1283,7 @@ export default function CustomersRedesign() {
 
                   <SectionCard className="p-2">
                     <div className="flex items-center gap-1.5 mb-2">
-                      <Wallet size={13} className="text-emerald-600" />
+                      <Wallet size={13} className="text-(--ui-success-fg)" />
                       <p className="text-xs font-semibold text-(--ui-text)">
                         Wallet · {money(walletBalance)}
                       </p>
@@ -1321,8 +1321,8 @@ export default function CustomersRedesign() {
                                 <p
                                   className={`font-semibold truncate ${
                                     entry.type === "credit"
-                                      ? "text-emerald-700"
-                                      : "text-rose-600"
+                                      ? "text-(--ui-success-fg)"
+                                      : "text-(--ui-danger-fg)"
                                   }`}
                                 >
                                   {entry.type === "credit" ? "+" : "-"}
@@ -1404,7 +1404,7 @@ export default function CustomersRedesign() {
                         );
                         toast.success("Invite link copied!");
                       }}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-xs font-medium text-(--ui-link) hover:underline"
                     >
                       Copy portal invite link
                     </button>
@@ -1450,12 +1450,12 @@ export default function CustomersRedesign() {
                           ledger.map((entry, i) => {
                             const isCredit = entry.amount > 0;
                             const typeColors = {
-                              sale: "text-emerald-700 bg-emerald-50",
-                              return: "text-rose-700 bg-rose-50",
-                              wallet_credit: "text-blue-700 bg-blue-50",
-                              wallet_debit: "text-blue-700 bg-blue-50",
-                              points_earned: "text-amber-700 bg-amber-50",
-                              points_redeemed: "text-amber-700 bg-amber-50",
+                              sale: "text-(--ui-success-fg) bg-(--ui-success-bg)",
+                              return: "text-(--ui-danger-fg) bg-(--ui-danger-bg)",
+                              wallet_credit: "text-(--ui-text-muted) bg-(--ui-muted-surface)",
+                              wallet_debit: "text-(--ui-text-muted) bg-(--ui-muted-surface)",
+                              points_earned: "text-(--ui-warning-fg) bg-(--ui-warning-bg)",
+                              points_redeemed: "text-(--ui-warning-fg) bg-(--ui-warning-bg)",
                             };
                             const typeLabels = {
                               sale: "Sale",
@@ -1474,10 +1474,10 @@ export default function CustomersRedesign() {
                                   </span>
                                 </td>
                                 <td className="px-2 py-1.5 text-(--ui-text-muted) truncate max-w-24">{entry.reference || "-"}</td>
-                                <td className="px-2 py-1.5 text-right text-rose-600 font-medium">
+                                <td className="px-2 py-1.5 text-right text-(--ui-danger-fg) font-medium">
                                   {!isCredit ? money(Math.abs(entry.amount)) : ""}
                                 </td>
-                                <td className="px-2 py-1.5 text-right text-emerald-700 font-medium">
+                                <td className="px-2 py-1.5 text-right text-(--ui-success-fg) font-medium">
                                   {isCredit ? money(entry.amount) : ""}
                                 </td>
                                 <td className="px-2 py-1.5 text-right font-semibold text-(--ui-text)">{money(entry.running_balance)}</td>
@@ -1510,18 +1510,18 @@ export default function CustomersRedesign() {
                 const channelBadge = (ch) => {
                   const map = {
                     pos: "bg-(--ui-muted-surface) text-(--ui-text)",
-                    storefront: "bg-blue-100 text-blue-700",
-                    shopify: "bg-green-100 text-green-700",
-                    daraz: "bg-orange-100 text-orange-700",
-                    facebook: "bg-blue-100 text-blue-600",
-                    instagram: "bg-pink-100 text-pink-700",
-                    whatsapp: "bg-green-100 text-green-600",
+                    storefront: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+                    shopify: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+                    daraz: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+                    facebook: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+                    instagram: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+                    whatsapp: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
                   };
                   return map[ch] || "bg-(--ui-muted-surface) text-(--ui-text-muted)";
                 };
                 const statusColor = (s) => {
-                  if (s === "completed" || s === "closed") return "text-emerald-700";
-                  if (s === "open") return "text-amber-600";
+                  if (s === "completed" || s === "closed") return "text-(--ui-success-fg)";
+                  if (s === "open") return "text-(--ui-warning-fg)";
                   return "text-(--ui-text-muted)";
                 };
                 return (
@@ -1592,7 +1592,7 @@ export default function CustomersRedesign() {
       >
         <form className="space-y-3" onSubmit={submitForm}>
               {formError ? (
-                <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>
+                <p className="rounded bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">{formError}</p>
               ) : null}
 
               {/* Basic Info */}
@@ -1781,7 +1781,7 @@ export default function CustomersRedesign() {
             </p>
             <form className="space-y-3" onSubmit={submitSubject}>
               {subjectError ? (
-                <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{subjectError}</p>
+                <p className="rounded bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">{subjectError}</p>
               ) : null}
 
               <div>
@@ -1989,7 +1989,7 @@ export default function CustomersRedesign() {
                 </p>
               )}
               {transferPoints && Number(transferPoints) > (detail.loyalty_points || 0) && (
-                <p className="text-xs text-red-600">Exceeds available points</p>
+                <p className="text-xs text-(--ui-danger-fg)">Exceeds available points</p>
               )}
 
               <label className="text-xs font-medium text-(--ui-text-muted)">Reason (optional)</label>
@@ -2038,7 +2038,7 @@ export default function CustomersRedesign() {
                 <label className="text-xs font-medium text-(--ui-text-muted)">Recipient Email</label>
                 <Input type="email" value={statementEmail} onChange={(e) => setStatementEmail(e.target.value)} placeholder="buyer@example.com" />
                 {!detail.email && (
-                  <p className="mt-1 text-xs text-amber-600">This customer has no email on file — enter one above to send.</p>
+                  <p className="mt-1 text-xs text-(--ui-warning-fg)">This customer has no email on file — enter one above to send.</p>
                 )}
               </div>
             </div>
@@ -2074,7 +2074,7 @@ export default function CustomersRedesign() {
                           <td className="py-1">{e.date_label}</td>
                           <td className="py-1">{e.label}</td>
                           <td className="py-1 text-right">{Number(e.debit) > 0 ? money(e.debit) : ""}</td>
-                          <td className="py-1 text-right text-emerald-600">{Number(e.credit) > 0 ? money(e.credit) : ""}</td>
+                          <td className="py-1 text-right text-(--ui-success-fg)">{Number(e.credit) > 0 ? money(e.credit) : ""}</td>
                           <td className="py-1 text-right font-medium">{money(e.running_balance)}</td>
                         </tr>
                       ))}

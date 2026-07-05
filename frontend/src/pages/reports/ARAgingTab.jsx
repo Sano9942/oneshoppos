@@ -88,20 +88,20 @@ export default function ARAgingTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">As of</label>
+          <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">As of</label>
           <input
             type="date"
             value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm"
           />
         </div>
         <button
           onClick={load}
           disabled={loading || !asOf}
-          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-(--ui-primary) px-4 py-2 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           <Search size={16} />
           {loading ? "Loading…" : "Refresh"}
@@ -109,27 +109,27 @@ export default function ARAgingTab({ filters }) {
         <button
           onClick={exportCsv}
           disabled={!rows.length}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) px-4 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) disabled:opacity-50"
         >
           <Download size={16} />
           Export CSV
         </button>
-        <div className="ml-auto text-xs text-slate-500">
+        <div className="ml-auto text-xs text-(--ui-text-muted)">
           Buckets: {bucketLabels.join(" / ")} days overdue
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="rounded-xl border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4 text-sm text-(--ui-danger-fg)">
           {error}
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface)">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3 text-right">{bucketLabels[0]}</th>
                 <th className="px-4 py-3 text-right">{bucketLabels[1]}</th>
@@ -141,27 +141,27 @@ export default function ARAgingTab({ filters }) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-(--ui-text-muted)">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-(--ui-text-muted)">
                     No outstanding receivables as of {asOf}.
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.customer_id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{r.name}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{fmt(Number(r.b0 || 0))}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{fmt(Number(r.b1 || 0))}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{fmt(Number(r.b2 || 0))}</td>
-                    <td className="px-4 py-3 text-right font-medium text-rose-700">
+                  <tr key={r.customer_id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 font-medium text-(--ui-text)">{r.name}</td>
+                    <td className="px-4 py-3 text-right text-(--ui-text)">{fmt(Number(r.b0 || 0))}</td>
+                    <td className="px-4 py-3 text-right text-(--ui-text)">{fmt(Number(r.b1 || 0))}</td>
+                    <td className="px-4 py-3 text-right text-(--ui-text)">{fmt(Number(r.b2 || 0))}</td>
+                    <td className="px-4 py-3 text-right font-medium text-(--ui-danger-fg)">
                       {fmt(Number(r.b3_plus || 0))}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-(--ui-text)">
                       {fmt(Number(r.total || 0))}
                     </td>
                   </tr>
@@ -170,12 +170,12 @@ export default function ARAgingTab({ filters }) {
             </tbody>
             {rows.length ? (
               <tfoot>
-                <tr className="bg-slate-50 text-sm font-bold text-slate-900">
+                <tr className="bg-(--ui-muted-surface) text-sm font-bold text-(--ui-text)">
                   <td className="px-4 py-3">Total</td>
                   <td className="px-4 py-3 text-right">{fmt(Number(totals.b0 || 0))}</td>
                   <td className="px-4 py-3 text-right">{fmt(Number(totals.b1 || 0))}</td>
                   <td className="px-4 py-3 text-right">{fmt(Number(totals.b2 || 0))}</td>
-                  <td className="px-4 py-3 text-right text-rose-700">
+                  <td className="px-4 py-3 text-right text-(--ui-danger-fg)">
                     {fmt(Number(totals.b3_plus || 0))}
                   </td>
                   <td className="px-4 py-3 text-right">{fmt(Number(totals.total || 0))}</td>

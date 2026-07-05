@@ -152,23 +152,23 @@ export default function RestaurantChecksRedesign() {
                       <div className="flex gap-1 justify-end">
                         {c.next_course && (
                           <button onClick={() => fireCourse(c.id, c.next_course)} title={`Fire course ${c.next_course}`} className="p-1 rounded hover:bg-(--ui-bg-hover)">
-                            <Flame className="w-4 h-4 text-orange-500" />
+                            <Flame className="w-4 h-4 text-(--ui-warning-fg)" />
                           </button>
                         )}
                         <button onClick={() => holdCourse(c.id)} title="Hold a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
-                          <Clock className="w-4 h-4 text-blue-500" />
+                          <Clock className="w-4 h-4 text-(--ui-link)" />
                         </button>
                         <button onClick={() => expediteCourse(c.id)} title="Expedite a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
-                          <Zap className="w-4 h-4 text-red-500" />
+                          <Zap className="w-4 h-4 text-(--ui-danger-fg)" />
                         </button>
                         <button onClick={() => { setShowSplit(c); setSplitMode("equal"); setSplitCount(2); }} title="Split check" className="p-1 rounded hover:bg-(--ui-bg-hover)">
                           <Split className="w-4 h-4" />
                         </button>
                         {/* W23 — pay this check via POS check view */}
-                        <button onClick={() => payCheck(c)} title="Pay this check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-emerald-600">
+                        <button onClick={() => payCheck(c)} title="Pay this check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-(--ui-success-fg)">
                           <CreditCard className="w-4 h-4" />
                         </button>
-                        <button onClick={() => closeCheck(c.id)} title="Close check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500">
+                        <button onClick={() => closeCheck(c.id)} title="Close check" className="p-1 rounded hover:bg-(--ui-bg-hover) text-(--ui-danger-fg)">
                           <X className="w-4 h-4" />
                         </button>
                       </div>

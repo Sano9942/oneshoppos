@@ -233,14 +233,14 @@ export default function PostdatedChequesRedesign() {
     >
       {/* Upcoming Alert */}
       {upcoming.length > 0 && (
-        <div className="mb-4 p-4 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+        <div className="mb-4 p-4 rounded-lg bg-(--ui-warning-bg)">
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            <h3 className="font-semibold text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-5 h-5 text-(--ui-warning-fg)" />
+            <h3 className="font-semibold text-(--ui-warning-fg)">
               Upcoming Cheques ({upcoming.length})
             </h3>
           </div>
-          <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">
+          <p className="text-sm text-(--ui-warning-fg) mb-2">
             These cheques mature within the next 7 days
           </p>
           <div className="space-y-1">
@@ -250,7 +250,7 @@ export default function PostdatedChequesRedesign() {
                 <div key={c.id} className="flex items-center justify-between text-sm">
                   <span>
                     <span className="font-mono text-xs">{c.cheque_number}</span>
-                    <span className="mx-2 text-gray-500 dark:text-slate-400">—</span>
+                    <span className="mx-2 text-(--ui-text-muted)">—</span>
                     {c.party_name}
                   </span>
                   <span className="flex items-center gap-3">
@@ -260,7 +260,7 @@ export default function PostdatedChequesRedesign() {
                     </Badge>
                     <button
                       onClick={() => setConfirm({ action: "deposit", cheque: c })}
-                      className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                      className="text-xs text-(--ui-link) hover:underline"
                     >
                       Deposit
                     </button>
@@ -283,7 +283,7 @@ export default function PostdatedChequesRedesign() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm"
+          className="rounded-md border border-(--ui-border-strong) bg-white px-3 py-1.5 text-sm"
         >
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
@@ -295,7 +295,7 @@ export default function PostdatedChequesRedesign() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm"
+          className="rounded-md border border-(--ui-border-strong) bg-white px-3 py-1.5 text-sm"
         >
           <option value="">All Types</option>
           <option value="receivable">Receivable</option>
@@ -304,7 +304,7 @@ export default function PostdatedChequesRedesign() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
+        <div className="mb-4 p-3 bg-(--ui-danger-bg) text-(--ui-danger-fg) rounded-lg text-sm">
           {error}
           <button className="ml-2 underline" onClick={() => setError("")}>dismiss</button>
         </div>
@@ -312,17 +312,17 @@ export default function PostdatedChequesRedesign() {
 
       <SectionCard>
         {loading ? (
-          <p className="text-center py-8 text-gray-500 dark:text-slate-400">Loading...</p>
+          <p className="text-center py-8 text-(--ui-text-muted)">Loading...</p>
         ) : !filtered.length ? (
           <EmptyState
             title="No cheques found"
-            description="Create your first post-dated cheque to get started."
+            body="Create your first post-dated cheque to get started."
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
+                <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                   <th className="pb-2 font-medium">Cheque #</th>
                   <th className="pb-2 font-medium">Type</th>
                   <th className="pb-2 font-medium">Party</th>
@@ -337,19 +337,19 @@ export default function PostdatedChequesRedesign() {
                 {filtered.map((c) => {
                   const days = c.status === "pending" ? daysUntil(c.maturity_date?.slice(0, 10)) : null;
                   return (
-                    <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={c.id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
                       <td className="py-2.5 font-mono text-xs">{c.cheque_number}</td>
                       <td className="py-2.5 capitalize">{c.type}</td>
                       <td className="py-2.5">
                         <span>{c.party_name || "—"}</span>
-                        <span className="text-xs text-gray-400 dark:text-slate-500 ml-1">({c.party_type})</span>
+                        <span className="text-xs text-(--ui-text-muted) ml-1">({c.party_type})</span>
                       </td>
-                      <td className="py-2.5 text-gray-600 dark:text-gray-400 dark:text-slate-500">{c.bank_name || "—"}</td>
+                      <td className="py-2.5 text-(--ui-text-muted)">{c.bank_name || "—"}</td>
                       <td className="py-2.5 text-right font-medium">{money(c.amount)}</td>
                       <td className="py-2.5">
                         <span>{fmtLocalDate(c.maturity_date)}</span>
                         {days !== null && (
-                          <span className={`ml-1 text-xs ${days < 0 ? "text-red-500" : days <= 3 ? "text-amber-500" : "text-gray-400 dark:text-slate-500"}`}>
+                          <span className={`ml-1 text-xs ${days < 0 ? "text-(--ui-danger-fg)" : days <= 3 ? "text-(--ui-warning-fg)" : "text-(--ui-text-muted)"}`}>
                             {days === 0 ? "(today)" : days < 0 ? `(${Math.abs(days)}d overdue)` : `(in ${days}d)`}
                           </span>
                         )}
@@ -361,23 +361,23 @@ export default function PostdatedChequesRedesign() {
                         <div className="flex gap-1 justify-end">
                           {c.status === "pending" && (
                             <>
-                              <button onClick={() => openEdit(c)} className="p-1 text-gray-500 dark:text-slate-400 hover:text-blue-600" title="Edit">
+                              <button onClick={() => openEdit(c)} className="p-1 text-(--ui-text-muted) hover:text-(--ui-link)" title="Edit">
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setConfirm({ action: "deposit", cheque: c })} className="p-1 text-gray-500 dark:text-slate-400 hover:text-blue-600" title="Deposit">
+                              <button onClick={() => setConfirm({ action: "deposit", cheque: c })} className="p-1 text-(--ui-text-muted) hover:text-(--ui-link)" title="Deposit">
                                 <ArrowDown className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setConfirm({ action: "cancel", cheque: c })} className="p-1 text-gray-500 dark:text-slate-400 hover:text-red-600" title="Cancel">
+                              <button onClick={() => setConfirm({ action: "cancel", cheque: c })} className="p-1 text-(--ui-text-muted) hover:text-(--ui-danger-fg)" title="Cancel">
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </>
                           )}
                           {c.status === "deposited" && (
                             <>
-                              <button onClick={() => setConfirm({ action: "clear", cheque: c })} className="p-1 text-gray-500 dark:text-slate-400 hover:text-green-600" title="Clear">
+                              <button onClick={() => setConfirm({ action: "clear", cheque: c })} className="p-1 text-(--ui-text-muted) hover:text-(--ui-success-fg)" title="Clear">
                                 <CheckCircle className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setConfirm({ action: "bounce", cheque: c })} className="p-1 text-gray-500 dark:text-slate-400 hover:text-red-600" title="Bounce">
+                              <button onClick={() => setConfirm({ action: "bounce", cheque: c })} className="p-1 text-(--ui-text-muted) hover:text-(--ui-danger-fg)" title="Bounce">
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </>
@@ -425,7 +425,7 @@ export default function PostdatedChequesRedesign() {
                       });
                     }}
                     disabled={modal === "edit"}
-                    className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm"
                   >
                     <option value="receivable">Receivable</option>
                     <option value="payable">Payable</option>
@@ -437,7 +437,7 @@ export default function PostdatedChequesRedesign() {
                     value={form.party_type}
                     onChange={(e) => setForm({ ...form, party_type: e.target.value, party_id: "" })}
                     disabled={modal === "edit"}
-                    className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm"
                   >
                     <option value="customer">Customer</option>
                     <option value="supplier">Supplier</option>
@@ -459,7 +459,7 @@ export default function PostdatedChequesRedesign() {
                 <select
                   value={form.party_id}
                   onChange={(e) => setForm({ ...form, party_id: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm"
                   size={4}
                 >
                   <option value="">— Select —</option>
@@ -517,7 +517,7 @@ export default function PostdatedChequesRedesign() {
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-none"
+                  className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm resize-none"
                 />
               </div>
         </div>
@@ -542,21 +542,21 @@ export default function PostdatedChequesRedesign() {
       >
         {confirm ? (
           <>
-            <p className="text-sm text-gray-600 dark:text-gray-400 dark:text-slate-500 mb-1">
+            <p className="text-sm text-(--ui-text-muted) mb-1">
               {confirm.cheque.cheque_number} — {money(confirm.cheque.amount)}
             </p>
             {confirm.action === "clear" && (
-              <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
+              <p className="text-xs text-(--ui-text-muted) mb-4">
                 This will adjust the {confirm.cheque.party_type === "customer" ? "customer" : "supplier"} balance.
               </p>
             )}
             {confirm.action === "bounce" && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
+              <p className="text-xs text-(--ui-warning-fg) mb-4">
                 The cheque will be marked as bounced. No balance changes.
               </p>
             )}
             {confirm.action === "cancel" && (
-              <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
+              <p className="text-xs text-(--ui-text-muted) mb-4">
                 This cheque will be permanently cancelled.
               </p>
             )}

@@ -151,39 +151,39 @@ export default function POSSerialEntryModal() {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border) bg-(--ui-muted-surface)">
           <div className="flex items-center gap-2">
-            <Barcode size={16} className="text-[#8066FF]" />
-            <h3 className="font-bold text-slate-800">
+            <Barcode size={16} className="text-(--ui-text)" />
+            <h3 className="font-bold text-(--ui-text)">
               Scan serial{quantity > 1 ? "s" : ""}
               {product?.name ? ` — ${product.name}` : ""}
             </h3>
           </div>
-          <button onClick={close} className="text-slate-400 hover:text-slate-600">
+          <button onClick={close} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={18} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
           {loading && (
-            <div className="text-sm text-slate-500 text-center py-6">Loading available serials…</div>
+            <div className="text-sm text-(--ui-text-muted) text-center py-6">Loading available serials…</div>
           )}
 
           {!loading && error && (
-            <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            <div className="text-xs font-bold text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded-lg px-3 py-2">
               {error}
             </div>
           )}
 
           {!loading && availableSerials.length < quantity && (
-            <div className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            <div className="text-xs font-bold text-(--ui-warning-fg) bg-(--ui-warning-bg) border border-(--ui-warning-bg) rounded-lg px-3 py-2">
               Only {availableSerials.length} serial(s) available for this product — cannot sell {quantity} unit(s).
             </div>
           )}
 
           {!loading && availableSerials.length >= quantity && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-(--ui-text-muted)">
               {availableSerials.length} available · scan or type exactly {quantity} serial{quantity > 1 ? "s" : ""}
             </div>
           )}
@@ -191,7 +191,7 @@ export default function POSSerialEntryModal() {
           {!loading &&
             slots.map((slot, idx) => (
               <label key={idx} className="block">
-                <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                <span className="text-[10px] font-bold uppercase text-(--ui-text-muted) tracking-wider">
                   Unit {idx + 1}
                 </span>
                 <input
@@ -210,16 +210,16 @@ export default function POSSerialEntryModal() {
                     }
                   }}
                   placeholder="Scan or type serial / IMEI"
-                  className={`mt-1 w-full border-2 rounded-lg px-3 py-2.5 outline-none font-semibold text-slate-800 ${
+                  className={`mt-1 w-full border rounded-lg px-3 py-2.5 outline-none font-semibold text-(--ui-text) ${
                     slot.input && !slot.matchedId
-                      ? "border-rose-300 focus:border-rose-500"
+                      ? "border-(--ui-danger) focus:border-(--ui-danger)"
                       : slot.matchedId
-                      ? "border-emerald-400 focus:border-emerald-500"
-                      : "border-slate-200 focus:border-[#8066FF]"
+                      ? "border-(--ui-success-fg) focus:border-(--ui-success-fg)"
+                      : "border-(--ui-border-strong) focus:border-(--ui-focus)"
                   }`}
                 />
                 {slot.input && !slot.matchedId && (
-                  <p className="text-[11px] font-bold text-rose-600 mt-0.5">
+                  <p className="text-[11px] font-bold text-(--ui-danger-fg) mt-0.5">
                     Not a known available serial for this product
                   </p>
                 )}
@@ -229,14 +229,14 @@ export default function POSSerialEntryModal() {
           <div className="flex gap-2">
             <button
               onClick={close}
-              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg transition"
+              className="flex-1 bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) font-bold py-2.5 rounded-lg transition"
             >
               Cancel
             </button>
             <button
               onClick={commit}
               disabled={!allFilled}
-              className="flex-1 bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-40"
+              className="flex-1 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold py-2.5 rounded-lg transition disabled:opacity-40"
             >
               Add to cart
             </button>

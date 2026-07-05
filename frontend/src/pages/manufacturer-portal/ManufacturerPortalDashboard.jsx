@@ -19,10 +19,10 @@ function fmtQty(n) {
 
 function StatCard({ title, value, sub }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="text-sm text-slate-500">{title}</div>
-      <div className="text-2xl font-bold text-slate-900 mt-1">{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+    <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
+      <div className="text-sm text-(--ui-text-muted)">{title}</div>
+      <div className="text-2xl font-bold text-(--ui-text) mt-1">{value}</div>
+      {sub && <div className="text-xs text-(--ui-text-muted) mt-1">{sub}</div>}
     </div>
   );
 }
@@ -30,25 +30,25 @@ function StatCard({ title, value, sub }) {
 function WindowCard({ label, data }) {
   if (!data) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="text-sm font-medium text-slate-700 mb-3">{label}</div>
+    <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
+      <div className="text-sm font-medium text-(--ui-text) mb-3">{label}</div>
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-slate-500">Qty</span>
+          <span className="text-xs text-(--ui-text-muted)">Qty</span>
           <span className="font-semibold">{fmtQty(data.qty)}</span>
         </div>
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-slate-500">Gross</span>
+          <span className="text-xs text-(--ui-text-muted)">Gross</span>
           <span className="font-semibold">{fmtCurrency(data.gross_revenue)}</span>
         </div>
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-slate-500">Scheme discount</span>
-          <span className="font-semibold text-emerald-700">
+          <span className="text-xs text-(--ui-text-muted)">Scheme discount</span>
+          <span className="font-semibold text-(--ui-success-fg)">
             {fmtCurrency(data.scheme_discount)}
           </span>
         </div>
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-slate-500">Sales</span>
+          <span className="text-xs text-(--ui-text-muted)">Sales</span>
           <span className="font-semibold">{data.sales_count}</span>
         </div>
       </div>
@@ -88,11 +88,11 @@ export default function ManufacturerPortalDashboard() {
   }, [tenantSlug]);
 
   if (loading) {
-    return <div className="text-slate-500">Loading dashboard…</div>;
+    return <div className="text-(--ui-text-muted)">Loading dashboard…</div>;
   }
   if (err) {
     return (
-      <div className="text-red-600 bg-red-50 border border-red-200 rounded px-4 py-3">
+      <div className="text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded px-4 py-3">
         {err}
       </div>
     );
@@ -104,10 +104,10 @@ export default function ManufacturerPortalDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-(--ui-text)">
           Welcome, {auth.partner?.name || me?.partner?.name || "there"}
         </h1>
-        <p className="text-slate-600 mt-1">
+        <p className="text-(--ui-text-muted) mt-1">
           Real-time secondary sales of{" "}
           <strong>
             {brands.length
@@ -117,7 +117,7 @@ export default function ManufacturerPortalDashboard() {
           through {tenantSlug}.
         </p>
         {window && (
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-(--ui-text-muted) mt-1">
             Showing {window.from} → {window.to} ({window.timezone})
           </p>
         )}
@@ -129,25 +129,25 @@ export default function ManufacturerPortalDashboard() {
         <WindowCard label="Last 30 days" data={summary?.last_30d} />
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-medium text-slate-700">
+          <div className="text-sm font-medium text-(--ui-text)">
             Top SKUs (last 30 days)
           </div>
           <Link
             to={`/manufacturer-portal/${tenantSlug}/sales`}
-            className="text-xs text-indigo-600 hover:text-indigo-800"
+            className="text-xs text-(--ui-link) hover:text-(--ui-link)"
           >
             View all →
           </Link>
         </div>
         {(!summary?.top_skus || summary.top_skus.length === 0) ? (
-          <div className="text-sm text-slate-500 py-4">
+          <div className="text-sm text-(--ui-text-muted) py-4">
             No sales recorded for your brands in this window.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="text-xs text-slate-500 uppercase border-b border-slate-200">
+            <thead className="text-xs text-(--ui-text-muted) uppercase border-b border-(--ui-border)">
               <tr>
                 <th className="text-left py-2 font-medium">Product</th>
                 <th className="text-left py-2 font-medium">Brand</th>
@@ -157,9 +157,9 @@ export default function ManufacturerPortalDashboard() {
             </thead>
             <tbody>
               {summary.top_skus.map((row) => (
-                <tr key={row.product_id} className="border-b border-slate-100">
+                <tr key={row.product_id} className="border-b border-(--ui-border)">
                   <td className="py-2">{row.product_name}</td>
-                  <td className="py-2 text-slate-600">{row.brand_name || "—"}</td>
+                  <td className="py-2 text-(--ui-text-muted)">{row.brand_name || "—"}</td>
                   <td className="py-2 text-right font-medium">{fmtQty(row.qty)}</td>
                   <td className="py-2 text-right font-medium">
                     {fmtCurrency(row.gross_revenue)}

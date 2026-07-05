@@ -336,7 +336,7 @@ export default function TipPoolsRedesign() {
             </div>
             <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
               <p className="text-xs text-(--ui-muted)">Unpaid</p>
-              <p className="font-semibold text-yellow-600">{fmt(Number(payoutSummary.unpaid_amount || 0))}</p>
+              <p className="font-semibold text-(--ui-warning-fg)">{fmt(Number(payoutSummary.unpaid_amount || 0))}</p>
             </div>
             <div className="ml-auto">
               <Button onClick={handlePayoutExport} tone="default">Export CSV</Button>

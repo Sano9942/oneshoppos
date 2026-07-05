@@ -1156,7 +1156,7 @@ function DocumentsPanel({ planId, documents, onReload }) {
           {documents.map((d) => (
             <li key={d.id} className="py-2 text-sm flex justify-between items-center">
               <div>
-                <a href={d.file_url} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">{d.title}</a>
+                <a href={d.file_url} target="_blank" rel="noreferrer" className="font-medium text-(--ui-link) hover:underline">{d.title}</a>
                 <span className="text-xs text-(--ui-text-muted) ml-2">[{d.document_type}] {(d.file_size_bytes || 0) > 0 ? `${(d.file_size_bytes / 1024).toFixed(0)} KB` : ""}</span>
               </div>
               <Badge tone={d.shared_with_patient ? "success" : "default"}>
@@ -1260,12 +1260,12 @@ function CalendarTab() {
     <SectionCard>
       <h3 className="font-semibold mb-3">Upcoming Sessions</h3>
       <div className="text-sm text-(--ui-text-muted)">
-        Upcoming sessions are scheduled through each plan's Sessions tab and flow into the main Appointments calendar at <Link to="/appointments/calendar" className="text-blue-600">/appointments/calendar</Link>.
+        Upcoming sessions are scheduled through each plan's Sessions tab and flow into the main Appointments calendar at <Link to="/appointments/calendar" className="text-(--ui-link)">/appointments/calendar</Link>.
       </div>
       <div className="mt-4 space-y-1 text-sm">
         {plans.map((p) => (
           <div key={p.id} className="flex justify-between border-b py-1">
-            <span><Link to={`/treatment-plans/${p.id}`} className="text-blue-600">{p.plan_number}</Link> — {p.customer_name}</span>
+            <span><Link to={`/treatment-plans/${p.id}`} className="text-(--ui-link)">{p.plan_number}</Link> — {p.customer_name}</span>
             <span className="text-(--ui-text-muted)">{p.sessions_completed}/{p.total_sessions_planned}</span>
           </div>
         ))}

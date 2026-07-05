@@ -152,45 +152,45 @@ export default function ShopifySettings() {
   };
 
   const statusClass = (value) => {
-    if (value === "success") return "bg-emerald-100 text-emerald-700";
-    if (value === "failed") return "bg-rose-100 text-rose-700";
-    if (value === "running") return "bg-blue-100 text-blue-700";
-    return "bg-slate-100 text-slate-700";
+    if (value === "success") return "bg-(--ui-success-bg) text-(--ui-success-fg)";
+    if (value === "failed") return "bg-(--ui-danger-bg) text-(--ui-danger-fg)";
+    if (value === "running") return "bg-(--ui-muted-surface) text-(--ui-link)";
+    return "bg-(--ui-muted-surface) text-(--ui-text)";
   };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <div className="xl:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">
+      <div className="xl:col-span-2 bg-(--ui-surface) border border-(--ui-border) rounded-xl p-5">
+        <h3 className="text-lg font-semibold text-(--ui-text) mb-4">
           Connection Settings
         </h3>
         <form onSubmit={saveConfig} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-500">Shop Domain</label>
+              <label className="text-xs text-(--ui-text-muted)">Shop Domain</label>
               <input
                 value={config.shop_domain}
                 onChange={(e) =>
                   setConfig((p) => ({ ...p, shop_domain: e.target.value }))
                 }
                 placeholder="your-store.myshopify.com"
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
                 required
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500">API Version</label>
+              <label className="text-xs text-(--ui-text-muted)">API Version</label>
               <input
                 value={config.api_version}
                 onChange={(e) =>
                   setConfig((p) => ({ ...p, api_version: e.target.value }))
                 }
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
                 required
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500">
+              <label className="text-xs text-(--ui-text-muted)">
                 Admin Access Token
               </label>
               <input
@@ -202,12 +202,12 @@ export default function ShopifySettings() {
                 placeholder={
                   config.connected ? "Enter new token to rotate" : "shpat_..."
                 }
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
                 required={!config.connected}
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500">
+              <label className="text-xs text-(--ui-text-muted)">
                 Webhook Secret (optional)
               </label>
               <input
@@ -217,11 +217,11 @@ export default function ShopifySettings() {
                   setConfig((p) => ({ ...p, webhook_secret: e.target.value }))
                 }
                 placeholder="whsec_..."
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500">
+              <label className="text-xs text-(--ui-text-muted)">
                 Default Shopify Location ID
               </label>
               <input
@@ -233,7 +233,7 @@ export default function ShopifySettings() {
                   }))
                 }
                 placeholder="Location ID"
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
               />
             </div>
           </div>
@@ -241,7 +241,7 @@ export default function ShopifySettings() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
             >
               <Link2 size={14} />
               {saving ? "Saving..." : "Save Connection"}
@@ -249,7 +249,7 @@ export default function ShopifySettings() {
             <button
               type="button"
               onClick={disconnect}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-semibold"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold"
             >
               <Unplug size={14} />
               Disconnect
@@ -258,7 +258,7 @@ export default function ShopifySettings() {
               type="button"
               onClick={verify}
               disabled={verifying}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-semibold disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
             >
               <CheckCircle2 size={14} />
               {verifying ? "Verifying..." : "Verify Connection"}
@@ -267,7 +267,7 @@ export default function ShopifySettings() {
               type="button"
               onClick={runLiveValidation}
               disabled={runningLiveValidation}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-semibold disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
             >
               <ShieldAlert size={14} />
               {runningLiveValidation ? "Validating..." : "Run Live Validation"}
@@ -276,16 +276,16 @@ export default function ShopifySettings() {
         </form>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-        <h3 className="text-lg font-semibold text-slate-800">Manual Sync</h3>
-        <p className="text-xs text-slate-500">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-5 space-y-3">
+        <h3 className="text-lg font-semibold text-(--ui-text)">Manual Sync</h3>
+        <p className="text-xs text-(--ui-text-muted)">
           Use these controls to validate connector plumbing before live API
           automation.
         </p>
         <button
           onClick={runPush}
           disabled={syncingPush}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-success-fg) hover:bg-(--ui-success-fg) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
         >
           <Upload size={14} />
           {syncingPush ? "Running..." : "Push Inventory (Dry Run)"}
@@ -293,7 +293,7 @@ export default function ShopifySettings() {
         <button
           onClick={runPull}
           disabled={syncingPull}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
         >
           <Download size={14} />
           {syncingPull ? "Running..." : "Pull Orders (Dry Run)"}
@@ -301,7 +301,7 @@ export default function ShopifySettings() {
         <button
           onClick={processPending}
           disabled={processingQueue}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
         >
           <RefreshCw size={14} />
           {processingQueue ? "Running..." : "Process Pending Queue"}
@@ -309,12 +309,12 @@ export default function ShopifySettings() {
         <button
           onClick={retryFailed}
           disabled={retryingFailed}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-semibold disabled:opacity-60"
+          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
         >
           <RefreshCw size={14} />
           {retryingFailed ? "Running..." : "Retry Failed Events"}
         </button>
-        <div className="text-xs text-slate-500 border-t border-slate-100 pt-3">
+        <div className="text-xs text-(--ui-text-muted) border-t border-(--ui-border) pt-3">
           Last run:{" "}
           {status?.last_run?.finished_at || status?.last_run?.started_at || "-"}
           <span

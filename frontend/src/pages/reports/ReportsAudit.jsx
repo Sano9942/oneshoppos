@@ -12,9 +12,9 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 
 function FeatureState({ title, body }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-      <h3 className="text-sm font-bold text-slate-700">{title}</h3>
-      <p className="mt-2 text-sm text-slate-500">{body}</p>
+    <div className="rounded-2xl border border-dashed border-(--ui-border-strong) bg-(--ui-surface) p-10 text-center">
+      <h3 className="text-sm font-bold text-(--ui-text)">{title}</h3>
+      <p className="mt-2 text-sm text-(--ui-text-muted)">{body}</p>
     </div>
   );
 }
@@ -101,17 +101,17 @@ export function DiscountLeakageTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Discount Leakage</p>
-          <p className="mt-2 text-2xl font-bold text-amber-600">{fmt(summary.total_discount)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Discount Leakage</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-warning-fg)">{fmt(summary.total_discount)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sales In Scope</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.total_sales)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Sales In Scope</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.total_sales)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leakage Rate</p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">{leakagePct}%</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Leakage Rate</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">{leakagePct}%</p>
         </div>
       </div>
 
@@ -145,13 +145,13 @@ export function DiscountLeakageTab({ filters }) {
           emptyIcon={AlertTriangle}
         >
           {rows.map((row) => (
-            <tr key={row.sale_id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-500">{fmtDateTime(row.timestamp)}</td>
-              <td className="px-4 py-3 text-sm font-mono text-slate-800">#{row.sale_id}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{row.outlet_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{row.employee_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.total_amount)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-amber-700">{fmt(row.total_discount)}</td>
+            <tr key={row.sale_id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</td>
+              <td className="px-4 py-3 text-sm font-mono text-(--ui-text)">#{row.sale_id}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.employee_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.total_amount)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-warning-fg)">{fmt(row.total_discount)}</td>
             </tr>
           ))}
         </TableShell>
@@ -269,13 +269,13 @@ export function ExceptionsTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exception Type</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Exception Type</p>
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="mt-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+            className="mt-2 rounded-xl border border-(--ui-border) px-3 py-2 text-sm font-medium text-(--ui-text)"
           >
             <option value="negative_margin_sales">Negative Margin Sales</option>
             <option value="high_discount_orders">High Discount Orders</option>
@@ -283,9 +283,9 @@ export function ExceptionsTab({ filters }) {
             <option value="frequent_returns_by_product">Frequent Returns By Product</option>
           </select>
         </div>
-        <div className="ml-auto rounded-xl bg-slate-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metricLabel}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{rows.length}</p>
+        <div className="ml-auto rounded-xl bg-(--ui-muted-surface) px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">{metricLabel}</p>
+          <p className="mt-1 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
       </div>
 
@@ -312,16 +312,16 @@ export function ExceptionsTab({ filters }) {
             emptyIcon={ShieldAlert}
           >
             {rows.map((row, index) => (
-              <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-500">{fmtDateTime(row.timestamp)}</td>
-                <td className="px-4 py-3 text-sm font-mono text-slate-800">#{row.sale_id}</td>
+              <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</td>
+                <td className="px-4 py-3 text-sm font-mono text-(--ui-text)">#{row.sale_id}</td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.barcode || "-"}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.barcode || "-"}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.outlet_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">{fmt(row.unit_margin)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">{fmt(row.unit_margin)}</td>
               </tr>
             ))}
           </TableShell>
@@ -335,13 +335,13 @@ export function ExceptionsTab({ filters }) {
             emptyIcon={ShieldAlert}
           >
             {rows.map((row) => (
-              <tr key={row.sale_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-500">{fmtDateTime(row.timestamp)}</td>
-                <td className="px-4 py-3 text-sm font-mono text-slate-800">#{row.sale_id}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.outlet_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm font-bold text-amber-700">{fmt(row.total_discount)}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.discount_pct || 0).toFixed(2)}%</td>
+              <tr key={row.sale_id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</td>
+                <td className="px-4 py-3 text-sm font-mono text-(--ui-text)">#{row.sale_id}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.outlet_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-warning-fg)">{fmt(row.total_discount)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.discount_pct || 0).toFixed(2)}%</td>
               </tr>
             ))}
           </TableShell>
@@ -355,10 +355,10 @@ export function ExceptionsTab({ filters }) {
             emptyIcon={ShieldAlert}
           >
             {rows.map((row, index) => (
-              <tr key={`${row.employee_id}-${index}`} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.void_count || 0)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">{fmt(row.void_value)}</td>
+              <tr key={`${row.employee_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.void_count || 0)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">{fmt(row.void_value)}</td>
               </tr>
             ))}
           </TableShell>
@@ -372,12 +372,12 @@ export function ExceptionsTab({ filters }) {
             emptyIcon={ShieldAlert}
           >
             {rows.map((row) => (
-              <tr key={row.product_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.product_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{row.barcode || "-"}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.return_lines || 0)}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.returned_qty || 0).toFixed(2)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.returned_value)}</td>
+              <tr key={row.product_id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.product_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.barcode || "-"}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.return_lines || 0)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.returned_qty || 0).toFixed(2)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.returned_value)}</td>
               </tr>
             ))}
           </TableShell>

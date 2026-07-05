@@ -31,36 +31,36 @@ function ChannelCard({ channel, fmt }) {
   const color = CHANNEL_COLORS[channel.channel] || "#64748b";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-5">
       <div className="flex items-center gap-3 mb-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}15` }}>
           <Icon size={20} style={{ color }} />
         </div>
         <div>
-          <div className="text-sm font-bold text-slate-900">{channel.channel}</div>
-          <div className="text-xs text-slate-400">{channel.order_count} orders</div>
+          <div className="text-sm font-bold text-(--ui-text)">{channel.channel}</div>
+          <div className="text-xs text-(--ui-text-muted)">{channel.order_count} orders</div>
         </div>
       </div>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-500">Net Revenue</span>
-          <span className="font-bold text-slate-900">{fmt(channel.net_revenue)}</span>
+          <span className="text-(--ui-text-muted)">Net Revenue</span>
+          <span className="font-bold text-(--ui-text)">{fmt(channel.net_revenue)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Gross Revenue</span>
-          <span className="font-medium text-slate-700">{fmt(channel.gross_revenue)}</span>
+          <span className="text-(--ui-text-muted)">Gross Revenue</span>
+          <span className="font-medium text-(--ui-text)">{fmt(channel.gross_revenue)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Discounts</span>
-          <span className="font-medium text-red-500">-{fmt(channel.discount_total)}</span>
+          <span className="text-(--ui-text-muted)">Discounts</span>
+          <span className="font-medium text-(--ui-danger-fg)">-{fmt(channel.discount_total)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Tax</span>
-          <span className="font-medium text-slate-600">{fmt(channel.tax_total)}</span>
+          <span className="text-(--ui-text-muted)">Tax</span>
+          <span className="font-medium text-(--ui-text-muted)">{fmt(channel.tax_total)}</span>
         </div>
-        <div className="flex justify-between border-t border-slate-100 pt-2">
-          <span className="text-slate-500">Avg Order</span>
-          <span className="font-bold text-slate-800">{fmt(channel.average_order_value)}</span>
+        <div className="flex justify-between border-t border-(--ui-border) pt-2">
+          <span className="text-(--ui-text-muted)">Avg Order</span>
+          <span className="font-bold text-(--ui-text)">{fmt(channel.average_order_value)}</span>
         </div>
       </div>
     </div>
@@ -69,32 +69,32 @@ function ChannelCard({ channel, fmt }) {
 
 function GrandTotalCard({ grand, fmt }) {
   return (
-    <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/50 p-5 shadow-sm">
+    <div className="rounded-2xl border-2 border-(--ui-focus) bg-(--ui-muted-surface)/50 p-5">
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-          <Globe size={20} className="text-blue-600" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--ui-muted-surface)">
+          <Globe size={20} className="text-(--ui-link)" />
         </div>
         <div>
-          <div className="text-sm font-bold text-slate-900">All Channels</div>
-          <div className="text-xs text-slate-400">{grand.order_count} total orders</div>
+          <div className="text-sm font-bold text-(--ui-text)">All Channels</div>
+          <div className="text-xs text-(--ui-text-muted)">{grand.order_count} total orders</div>
         </div>
       </div>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-500">Net Revenue</span>
-          <span className="font-bold text-lg text-blue-700">{fmt(grand.net_revenue)}</span>
+          <span className="text-(--ui-text-muted)">Net Revenue</span>
+          <span className="font-bold text-lg text-(--ui-link)">{fmt(grand.net_revenue)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Gross Revenue</span>
-          <span className="font-medium text-slate-700">{fmt(grand.gross_revenue)}</span>
+          <span className="text-(--ui-text-muted)">Gross Revenue</span>
+          <span className="font-medium text-(--ui-text)">{fmt(grand.gross_revenue)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Total Discounts</span>
-          <span className="font-medium text-red-500">-{fmt(grand.discount_total)}</span>
+          <span className="text-(--ui-text-muted)">Total Discounts</span>
+          <span className="font-medium text-(--ui-danger-fg)">-{fmt(grand.discount_total)}</span>
         </div>
-        <div className="flex justify-between border-t border-slate-100 pt-2">
-          <span className="text-slate-500">Avg Order</span>
-          <span className="font-bold text-slate-800">{fmt(grand.average_order_value)}</span>
+        <div className="flex justify-between border-t border-(--ui-border) pt-2">
+          <span className="text-(--ui-text-muted)">Avg Order</span>
+          <span className="font-bold text-(--ui-text)">{fmt(grand.average_order_value)}</span>
         </div>
       </div>
     </div>
@@ -109,15 +109,15 @@ function RevenuePieChart({ channels, fmt }) {
 
   if (!data.length) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+      <div className="flex h-64 items-center justify-center text-sm text-(--ui-text-muted)">
         No revenue data to chart
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-3 text-sm font-bold text-slate-900 uppercase tracking-tight">Revenue Share by Channel</h3>
+    <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-5">
+      <h3 className="mb-3 text-sm font-bold text-(--ui-text) uppercase tracking-tight">Revenue Share by Channel</h3>
       <ResponsiveContainer width="100%" height={280}>
         <PieChart>
           <Pie
@@ -165,9 +165,9 @@ function DailyTrendsSection({ filters, fmt }) {
   const cols = ["Date", "POS Revenue", "POS Orders", "Shopify Revenue", "Shopify Orders", "WooCommerce Revenue", "WC Orders", "Total Revenue"];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Daily Trends</h3>
+    <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) overflow-hidden">
+      <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-3">
+        <h3 className="text-sm font-bold text-(--ui-text) uppercase tracking-tight">Daily Trends</h3>
         <ExportButton onClick={() => exportCSV("multichannel-daily.csv", [
           { header: "Date", key: "date" },
           { header: "POS Revenue", key: "pos_revenue" },
@@ -181,15 +181,15 @@ function DailyTrendsSection({ filters, fmt }) {
       </div>
       <TableShell cols={cols} loading={loading} empty={!days.length}>
         {days.map((d) => (
-          <tr key={d.date} className="hover:bg-slate-50">
-            <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 whitespace-nowrap">{d.date}</td>
-            <td className="px-4 py-2.5 text-xs font-medium text-blue-600">{fmt(d.pos_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs text-slate-500">{d.pos_orders}</td>
-            <td className="px-4 py-2.5 text-xs font-medium text-emerald-600">{fmt(d.shopify_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs text-slate-500">{d.shopify_orders}</td>
-            <td className="px-4 py-2.5 text-xs font-medium text-purple-600">{fmt(d.woocommerce_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs text-slate-500">{d.woocommerce_orders}</td>
-            <td className="px-4 py-2.5 text-xs font-bold text-slate-900">{fmt(d.total_revenue)}</td>
+          <tr key={d.date} className="hover:bg-(--ui-muted-surface)">
+            <td className="px-4 py-2.5 text-xs font-semibold text-(--ui-text) whitespace-nowrap">{d.date}</td>
+            <td className="px-4 py-2.5 text-xs font-medium text-(--ui-link)">{fmt(d.pos_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-text-muted)">{d.pos_orders}</td>
+            <td className="px-4 py-2.5 text-xs font-medium text-(--ui-success-fg)">{fmt(d.shopify_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-text-muted)">{d.shopify_orders}</td>
+            <td className="px-4 py-2.5 text-xs font-medium text-(--ui-text-muted)">{fmt(d.woocommerce_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-text-muted)">{d.woocommerce_orders}</td>
+            <td className="px-4 py-2.5 text-xs font-bold text-(--ui-text)">{fmt(d.total_revenue)}</td>
           </tr>
         ))}
       </TableShell>
@@ -220,9 +220,9 @@ function TopProductsSection({ filters, fmt }) {
   const cols = ["Product", "POS Qty", "Shopify Qty", "WC Qty", "Total Qty", "POS Rev", "Shopify Rev", "WC Rev", "Total Revenue"];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Top Products Across Channels</h3>
+    <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) overflow-hidden">
+      <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-3">
+        <h3 className="text-sm font-bold text-(--ui-text) uppercase tracking-tight">Top Products Across Channels</h3>
         <ExportButton onClick={() => exportCSV("multichannel-products.csv", [
           { header: "Product", key: "product_name" },
           { header: "POS Qty", key: "pos_qty" },
@@ -237,16 +237,16 @@ function TopProductsSection({ filters, fmt }) {
       </div>
       <TableShell cols={cols} loading={loading} empty={!products.length}>
         {products.map((p, i) => (
-          <tr key={p.product_id || i} className="hover:bg-slate-50">
-            <td className="px-4 py-2.5 text-xs font-semibold text-slate-800 max-w-48 truncate">{p.product_name}</td>
-            <td className="px-4 py-2.5 text-xs text-blue-600">{p.pos_qty}</td>
-            <td className="px-4 py-2.5 text-xs text-emerald-600">{p.shopify_qty}</td>
-            <td className="px-4 py-2.5 text-xs text-purple-600">{p.woocommerce_qty}</td>
-            <td className="px-4 py-2.5 text-xs font-bold text-slate-900">{p.total_qty}</td>
-            <td className="px-4 py-2.5 text-xs text-blue-600">{fmt(p.pos_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs text-emerald-600">{fmt(p.shopify_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs text-purple-600">{fmt(p.woocommerce_revenue)}</td>
-            <td className="px-4 py-2.5 text-xs font-bold text-slate-900">{fmt(p.total_revenue)}</td>
+          <tr key={p.product_id || i} className="hover:bg-(--ui-muted-surface)">
+            <td className="px-4 py-2.5 text-xs font-semibold text-(--ui-text) max-w-48 truncate">{p.product_name}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-link)">{p.pos_qty}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-success-fg)">{p.shopify_qty}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-text-muted)">{p.woocommerce_qty}</td>
+            <td className="px-4 py-2.5 text-xs font-bold text-(--ui-text)">{p.total_qty}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-link)">{fmt(p.pos_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-success-fg)">{fmt(p.shopify_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs text-(--ui-text-muted)">{fmt(p.woocommerce_revenue)}</td>
+            <td className="px-4 py-2.5 text-xs font-bold text-(--ui-text)">{fmt(p.total_revenue)}</td>
           </tr>
         ))}
       </TableShell>
@@ -276,11 +276,11 @@ export default function MultichannelTab({ filters }) {
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-400 font-medium">Loading multi-channel report...</div>;
+    return <div className="p-8 text-center text-(--ui-text-muted) font-medium">Loading multi-channel report...</div>;
   }
 
   if (!summary) {
-    return <div className="p-8 text-center text-slate-400">Failed to load multi-channel data</div>;
+    return <div className="p-8 text-center text-(--ui-text-muted)">Failed to load multi-channel data</div>;
   }
 
   const { channels, grand } = summary;
@@ -289,8 +289,8 @@ export default function MultichannelTab({ filters }) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <Globe size={16} className="text-blue-500" />
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Multi-Channel Overview</h2>
+        <Globe size={16} className="text-(--ui-link)" />
+        <h2 className="text-sm font-bold text-(--ui-text) uppercase tracking-tight">Multi-Channel Overview</h2>
       </div>
 
       {/* Summary Cards */}

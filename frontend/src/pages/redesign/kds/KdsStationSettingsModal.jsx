@@ -67,12 +67,12 @@ export default function KdsStationSettingsModal({ open, onClose, station, onSave
     <Modal open={open} onClose={onClose} title="Station Settings" size="md">
       <ModalBody>
         <label className="block text-sm">
-          <span className="text-slate-600">Name</span>
+          <span className="text-(--ui-text-muted)">Name</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1" />
         </label>
 
         <label className="block text-sm">
-          <span className="text-slate-600">Load-balance strategy</span>
+          <span className="text-(--ui-text-muted)">Load-balance strategy</span>
           <Select
             value={balanceStrategy}
             onChange={(e) => setBalanceStrategy(e.target.value)}
@@ -82,13 +82,13 @@ export default function KdsStationSettingsModal({ open, onClose, station, onSave
             <option value="round_robin">Round robin (rotate across peers)</option>
             <option value="least_loaded">Least loaded (fewest open tickets; 30s cooldown)</option>
           </Select>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             Applies when multiple routes match an item at equal priority.
           </p>
         </label>
 
         <label className="block text-sm">
-          <span className="text-slate-600">Target prep time (seconds)</span>
+          <span className="text-(--ui-text-muted)">Target prep time (seconds)</span>
           <Input
             type="number"
             min="1"
@@ -100,7 +100,7 @@ export default function KdsStationSettingsModal({ open, onClose, station, onSave
         </label>
 
         <label className="block text-sm">
-          <span className="text-slate-600">Fire-chit printer</span>
+          <span className="text-(--ui-text-muted)">Fire-chit printer</span>
           <Select
             value={printerId ?? ""}
             onChange={(e) => setPrinterId(e.target.value)}

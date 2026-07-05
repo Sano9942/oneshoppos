@@ -15,15 +15,15 @@ function elapsedMinutes(createdAt) {
 }
 
 function timeColor(minutes) {
-  if (minutes < 5) return "text-green-600";
-  if (minutes <= 10) return "text-yellow-600";
-  return "text-red-600";
+  if (minutes < 5) return "text-(--ui-success-fg)";
+  if (minutes <= 10) return "text-(--ui-warning-fg)";
+  return "text-(--ui-danger-fg)";
 }
 
 function timeBorder(minutes) {
-  if (minutes < 5) return "border-green-400";
-  if (minutes <= 10) return "border-yellow-400";
-  return "border-red-500";
+  if (minutes < 5) return "border-(--ui-success-bg)";
+  if (minutes <= 10) return "border-(--ui-warning-bg)";
+  return "border-(--ui-danger-bg)";
 }
 
 export default function KDSRedesign() {
@@ -343,7 +343,7 @@ export default function KDSRedesign() {
                       <td>{routeLabel(r)}</td>
                       <td>{r.station_role_filter || "—"}</td>
                       <td className="text-right">
-                        <button onClick={() => deleteRoute(r.id)} aria-label="Delete rule" className="text-red-600 hover:opacity-80">
+                        <button onClick={() => deleteRoute(r.id)} aria-label="Delete rule" className="text-(--ui-danger-fg) hover:opacity-80">
                           <Trash2 className="w-4 h-4 inline" />
                         </button>
                       </td>
@@ -397,7 +397,7 @@ export default function KDSRedesign() {
         <div className="flex gap-2 mb-4">
           {stations.map(s => (
             <button key={s.id} onClick={() => setActiveStation(s.id)}
-              className={`px-3 py-1 rounded text-sm ${activeStation === s.id ? "bg-(--ui-primary) text-white" : "bg-(--ui-bg-hover) text-(--ui-text)"}`}>
+              className={`px-3 py-1 rounded text-sm ${activeStation === s.id ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-bg-hover) text-(--ui-text)"}`}>
               <ChefHat className="w-3 h-3 inline mr-1" />{s.name}
             </button>
           ))}
@@ -418,9 +418,9 @@ export default function KDSRedesign() {
             // orders by priority DESC, so expedited tickets render first.
             const isExpedited = Number(ticket.priority || 0) >= 100;
             return (
-              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-red-500" : timeBorder(mins)} rounded-lg bg-(--ui-surface) text-(--ui-text) overflow-hidden`}>
+              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-(--ui-danger-bg)" : timeBorder(mins)} rounded-lg bg-(--ui-surface) text-(--ui-text) overflow-hidden`}>
                 {isExpedited && (
-                  <div className="px-3 py-1 bg-red-500 text-white text-xs font-semibold uppercase tracking-wide">
+                  <div className="px-3 py-1 bg-(--ui-danger-fg) text-(--ui-on-primary) text-xs font-semibold uppercase tracking-wide">
                     Expedite
                   </div>
                 )}
@@ -450,7 +450,7 @@ export default function KDSRedesign() {
                           <span>
                             <span className="font-medium">{item.quantity}x</span>{" "}
                             {item.seat_number != null && (
-                              <span className="inline-block bg-indigo-100 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-semibold mr-1">
+                              <span className="inline-block bg-(--ui-muted-surface) text-(--ui-link) rounded px-1.5 py-0.5 text-xs font-semibold mr-1">
                                 S{item.seat_number}
                               </span>
                             )}
@@ -463,7 +463,7 @@ export default function KDSRedesign() {
                     );
                   })}
                   {ticket.special_instructions && (
-                    <p className="text-xs italic text-orange-600 mt-1">{ticket.special_instructions}</p>
+                    <p className="text-xs italic text-(--ui-warning-fg) mt-1">{ticket.special_instructions}</p>
                   )}
                 </div>
 

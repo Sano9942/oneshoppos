@@ -60,18 +60,18 @@ export default function StorefrontLayout() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full" />
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface)">
+        <div className="animate-spin h-8 w-8 border-4 border-(--ui-focus) border-t-transparent rounded-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface)">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Store Not Found</h1>
-          <p className="text-gray-500">{error}</p>
+          <h1 className="text-2xl font-bold text-(--ui-text) mb-2">Store Not Found</h1>
+          <p className="text-(--ui-text-muted)">{error}</p>
         </div>
       </div>
     );
@@ -84,9 +84,9 @@ export default function StorefrontLayout() {
     <StorefrontContext.Provider
       value={{ config, categories, tenantSlug, cartItemCount, setCartItemCount, incrementCart, cart }}
     >
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-(--ui-muted-surface) flex flex-col">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <header className="bg-(--ui-surface) border-b border-(--ui-border) sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               {/* Logo + Store Name */}
@@ -101,11 +101,11 @@ export default function StorefrontLayout() {
                     className="h-8 w-8 rounded object-cover"
                   />
                 ) : (
-                  <div className="h-8 w-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="h-8 w-8 rounded bg-(--ui-primary) flex items-center justify-center text-(--ui-on-primary) font-bold text-sm">
                     {storeName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-lg font-semibold text-gray-900 hidden sm:block">
+                <span className="text-lg font-semibold text-(--ui-text) hidden sm:block">
                   {storeName}
                 </span>
               </Link>
@@ -114,7 +114,7 @@ export default function StorefrontLayout() {
               <nav className="hidden md:flex items-center gap-6">
                 <Link
                   to={`/store/${tenantSlug}/products`}
-                  className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+                  className="text-sm font-medium text-(--ui-text) hover:text-(--ui-link) transition-colors"
                 >
                   All Products
                 </Link>
@@ -122,7 +122,7 @@ export default function StorefrontLayout() {
                   <Link
                     key={cat.id}
                     to={`/store/${tenantSlug}/products?category=${cat.id}`}
-                    className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+                    className="text-sm font-medium text-(--ui-text) hover:text-(--ui-link) transition-colors"
                   >
                     {cat.name}
                   </Link>
@@ -134,7 +134,7 @@ export default function StorefrontLayout() {
                 {/* My Account */}
                 <Link
                   to={`/portal/${tenantSlug}/login`}
-                  className="p-2 text-gray-700 hover:text-indigo-600 transition-colors"
+                  className="p-2 text-(--ui-text) hover:text-(--ui-link) transition-colors"
                   aria-label="My Account"
                 >
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -145,14 +145,14 @@ export default function StorefrontLayout() {
                 {/* Cart icon */}
                 <Link
                   to={`/store/${tenantSlug}/cart`}
-                  className="relative p-2 text-gray-700 hover:text-indigo-600 transition-colors"
+                  className="relative p-2 text-(--ui-text) hover:text-(--ui-link) transition-colors"
                   aria-label="Cart"
                 >
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
                   </svg>
                   {cartItemCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 bg-(--ui-primary) text-(--ui-on-primary) text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                       {cartItemCount > 99 ? "99+" : cartItemCount}
                     </span>
                   )}
@@ -160,7 +160,7 @@ export default function StorefrontLayout() {
 
                 {/* Mobile hamburger */}
                 <button
-                  className="md:hidden p-2 text-gray-700 hover:text-indigo-600"
+                  className="md:hidden p-2 text-(--ui-text) hover:text-(--ui-link)"
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   aria-label="Toggle menu"
                 >
@@ -180,11 +180,11 @@ export default function StorefrontLayout() {
 
           {/* Mobile menu */}
           {mobileMenuOpen && (
-            <div className="md:hidden border-t border-gray-200 bg-white">
+            <div className="md:hidden border-t border-(--ui-border) bg-(--ui-surface)">
               <div className="px-4 py-3 space-y-2">
                 <Link
                   to={`/store/${tenantSlug}/products`}
-                  className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                  className="block px-3 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-md"
                 >
                   All Products
                 </Link>
@@ -192,14 +192,14 @@ export default function StorefrontLayout() {
                   <Link
                     key={cat.id}
                     to={`/store/${tenantSlug}/products?category=${cat.id}`}
-                    className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                    className="block px-3 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-md"
                   >
                     {cat.name}
                   </Link>
                 ))}
                 <Link
                   to={`/portal/${tenantSlug}/login`}
-                  className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md border-t border-gray-200 mt-2 pt-3"
+                  className="block px-3 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-md border-t border-(--ui-border) mt-2 pt-3"
                 >
                   My Account
                 </Link>
@@ -214,20 +214,20 @@ export default function StorefrontLayout() {
         </main>
 
         {/* Footer */}
-        <footer className="bg-white border-t border-gray-200 mt-auto">
+        <footer className="bg-(--ui-surface) border-t border-(--ui-border) mt-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-(--ui-text-muted)">
                 {storeName}
               </p>
               <div className="flex items-center gap-4">
                 <Link
                   to={`/portal/${tenantSlug}/login`}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-xs text-(--ui-text-muted) hover:text-(--ui-text-muted) transition-colors"
                 >
                   My Account
                 </Link>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-(--ui-text-muted)">
                   Powered by SanoPOS
                 </p>
               </div>

@@ -175,8 +175,8 @@ export default function CompanySettingsRedesign() {
         <SectionCard
           className={`mb-4 flex items-center gap-2 p-3 text-sm ${
             msg.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700"
+              ? "border-(--ui-success-bg) bg-(--ui-success-bg) text-(--ui-success-fg)"
+              : "border-(--ui-danger-bg) bg-(--ui-danger-bg) text-(--ui-danger-fg)"
           }`}
         >
           {msg.type === "success" ? <CheckCircle size={14} /> : <X size={14} />}
@@ -273,24 +273,24 @@ export default function CompanySettingsRedesign() {
               tax_mode from 'none' → on. Deep-links to /inventory so the
               merchant can set GST rates on existing products. */}
           {showTaxFlipBanner && (
-            <div className="mb-4 flex items-start justify-between rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="mb-4 flex items-start justify-between rounded-md border border-(--ui-warning-bg) bg-(--ui-warning-bg) p-3 text-sm text-(--ui-warning-fg)">
               <div>
                 <p className="font-medium">Tax is now on for this store.</p>
-                <p className="mt-1 text-amber-700">
+                <p className="mt-1 text-(--ui-warning-fg)">
                   Next: set GST rates on your products so the cart math is correct.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <a
                   href="/inventory"
-                  className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                  className="rounded-md border border-(--ui-warning-bg) bg-(--ui-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-warning-fg) hover:bg-(--ui-warning-bg)"
                 >
                   Set Now
                 </a>
                 <button
                   type="button"
                   onClick={() => setShowTaxFlipBanner(false)}
-                  className="text-amber-600 hover:text-amber-900"
+                  className="text-(--ui-warning-fg) hover:text-(--ui-warning-fg)"
                   aria-label="Dismiss"
                 >
                   <X size={16} />
@@ -311,7 +311,7 @@ export default function CompanySettingsRedesign() {
                 onClick={() => upd("tax_mode", "none")}
                 className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
                   form.tax_mode === "none"
-                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    ? "border-(--ui-focus) bg-(--ui-muted-surface) text-(--ui-link)"
                     : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
                 }`}
               >
@@ -322,7 +322,7 @@ export default function CompanySettingsRedesign() {
                 onClick={() => upd("tax_mode", "inclusive")}
                 className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
                   form.tax_mode === "inclusive"
-                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    ? "border-(--ui-focus) bg-(--ui-muted-surface) text-(--ui-link)"
                     : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
                 }`}
               >
@@ -333,7 +333,7 @@ export default function CompanySettingsRedesign() {
                 onClick={() => upd("tax_mode", "exclusive")}
                 className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
                   form.tax_mode === "exclusive"
-                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    ? "border-(--ui-focus) bg-(--ui-muted-surface) text-(--ui-link)"
                     : "border-(--ui-border) bg-(--ui-surface) text-(--ui-text-muted)"
                 }`}
               >
@@ -392,22 +392,22 @@ export default function CompanySettingsRedesign() {
               {denoms
                 .sort((a, b) => b - a)
                 .map((d) => (
-                  <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
+                  <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-(--ui-muted-surface) text-(--ui-link) rounded-full text-sm">
                     {d}
-                    <button type="button" onClick={() => removeDenom(d)} className="text-blue-400 hover:text-red-500">&times;</button>
+                    <button type="button" onClick={() => removeDenom(d)} className="text-(--ui-link) hover:text-(--ui-danger-fg)">&times;</button>
                   </span>
                 ))}
             </div>
             <div className="flex gap-2 mt-2">
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
                 placeholder="Add denomination"
                 value={denomInput}
                 onChange={(e) => setDenomInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDenomination(); } }}
               />
-              <button type="button" onClick={addDenomination} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add</button>
+              <button type="button" onClick={addDenomination} className="px-3 py-1 bg-(--ui-primary) text-(--ui-on-primary) rounded text-sm">Add</button>
             </div>
           </div>
 
@@ -459,10 +459,10 @@ export default function CompanySettingsRedesign() {
                 placeholder="Search timezones..."
                 value={tzSearch}
                 onChange={(e) => setTzSearch(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
               />
               <select
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
                 value={form.timezone || ""}
                 onChange={(e) => upd("timezone", e.target.value)}
               >

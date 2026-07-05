@@ -14,12 +14,12 @@ import {
 
 function InventoryHealthStat({ label, value, hint }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+      <p className="mt-2 text-2xl font-bold text-(--ui-text)">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-(--ui-text-muted)">{hint}</p> : null}
     </div>
   );
 }
@@ -126,7 +126,7 @@ export function ReplenishmentTab({ filters }) {
     <div className="space-y-4">
       {draftResult && (
         <div
-          className={`p-4 rounded-xl border ${draftResult.success ? "bg-emerald-50 border-emerald-100 text-emerald-800" : "bg-rose-50 border-rose-100 text-rose-800"}`}
+          className={`p-4 rounded-xl border ${draftResult.success ? "bg-(--ui-success-bg) border-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-danger-bg) border-(--ui-danger-bg) text-(--ui-danger-fg)"}`}
         >
           <div className="flex items-center gap-2 font-bold mb-1">
             {draftResult.success ? "Success!" : "Drafting Incomplete"}
@@ -140,23 +140,23 @@ export function ReplenishmentTab({ filters }) {
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Items Below Min
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rowsWithSuggestion.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rowsWithSuggestion.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Suggested Units
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalSuggested}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalSuggested}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Suppliers Impacted
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{suppliersWithItems}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{suppliersWithItems}</p>
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export function ReplenishmentTab({ filters }) {
               <button
                 onClick={handleCreateDraftPOs}
                 disabled={drafting}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:bg-slate-300 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-(--ui-primary) text-(--ui-on-primary) rounded-lg text-xs font-bold hover:bg-(--ui-primary-strong) disabled:bg-(--ui-muted-surface) transition-colors"
               >
                 <ShoppingCart size={14} />
                 {drafting
@@ -203,34 +203,34 @@ export function ReplenishmentTab({ filters }) {
           empty={!rows.length}
         >
           {rowsWithSuggestion.map((r, i) => (
-            <tr key={`${r.outlet_id}-${r.product_id}-${i}`} className="hover:bg-slate-50 transition-colors">
+            <tr key={`${r.outlet_id}-${r.product_id}-${i}`} className="hover:bg-(--ui-muted-surface) transition-colors">
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-slate-800">{r.product_name}</div>
-                <div className="text-[10px] font-mono text-slate-400">
+                <div className="text-sm font-bold text-(--ui-text)">{r.product_name}</div>
+                <div className="text-[10px] font-mono text-(--ui-text-muted)">
                   {r.barcode}
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">
+                <div className="text-[10px] text-(--ui-text-muted) font-medium">
                   Supplier: {r.supplier_name || "Generic"}
                 </div>
               </td>
               <td className="px-4 py-3">
                 <div
-                  className={`text-sm font-bold ${r.quantity <= r.min_qty ? "text-rose-600" : "text-slate-900"}`}
+                  className={`text-sm font-bold ${r.quantity <= r.min_qty ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}
                 >
                   {r.quantity}
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium leading-none mt-1">
+                <div className="text-[10px] text-(--ui-text-muted) font-medium leading-none mt-1">
                   {r.outlet_name}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm font-medium text-slate-600">
+              <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
                 {r.min_qty} units
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-blue-700">
+                <div className="text-sm font-bold text-(--ui-link)">
                   +{r.suggested_order}
                 </div>
-                <div className="text-[10px] text-blue-500/70 font-bold uppercase tracking-tighter">
+                <div className="text-[10px] text-(--ui-link)/70 font-bold uppercase tracking-tighter">
                   Required
                 </div>
               </td>
@@ -285,9 +285,9 @@ export function StockoutRiskTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Lookback Days</span>
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Lookback Days</span>
           <input
             type="number"
             min="7"
@@ -341,24 +341,24 @@ export function StockoutRiskTab({ filters }) {
           {rows.map((row, i) => {
             const riskTone =
               row.risk_level === "high"
-                ? "bg-rose-50 text-rose-700"
+                ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
                 : row.risk_level === "medium"
-                  ? "bg-amber-50 text-amber-700"
-                  : "bg-slate-100 text-slate-700";
+                  ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text)";
             return (
-              <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-slate-50">
+              <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-(--ui-muted-surface)">
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                  <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                  <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-900">{row.outlet_name}</div>
-                  <div className="text-[11px] text-slate-400">{row.category}</div>
-                  <div className="text-[11px] text-slate-400">{row.brand} | {row.supplier}</div>
+                  <div className="text-sm font-semibold text-(--ui-text)">{row.outlet_name}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.category}</div>
+                  <div className="text-[11px] text-(--ui-text-muted)">{row.brand} | {row.supplier}</div>
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.stock_qty}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{Number(row.avg_daily_units || 0).toFixed(2)} / day</td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{row.stock_qty}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.avg_daily_units || 0).toFixed(2)} / day</td>
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {row.days_of_cover == null ? "N/A" : row.days_of_cover}
                 </td>
                 <td className="px-4 py-3">
@@ -418,9 +418,9 @@ export function ForecastDemandTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Lookback Days</span>
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Lookback Days</span>
           <input
             type="number"
             min="7"
@@ -474,25 +474,25 @@ export function ForecastDemandTab({ filters }) {
           emptyIcon={TrendingUp}
         >
           {rows.map((row, i) => (
-            <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-slate-50">
+            <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-900">{row.outlet_name}</div>
-                <div className="text-[11px] text-slate-400">{row.category}</div>
-                <div className="text-[11px] text-slate-400">{row.brand} | {row.supplier}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.outlet_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.brand} | {row.supplier}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {Number(row.avg_daily_units || 0).toFixed(2)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.on_hand_qty}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{row.on_hand_qty}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 <div>7D: {Number(row.forecast_7d_units || 0).toFixed(2)}</div>
-                <div className="text-[11px] text-slate-400">14D: {Number(row.forecast_14d_units || 0).toFixed(2)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">14D: {Number(row.forecast_14d_units || 0).toFixed(2)}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {row.days_of_cover == null ? "N/A" : row.days_of_cover}
               </td>
             </tr>
@@ -549,9 +549,9 @@ export function ReplenishmentSmartTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Lookback</span>
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Lookback</span>
           <input
             type="number"
             min="7"
@@ -561,8 +561,8 @@ export function ReplenishmentSmartTab({ filters }) {
             className="w-16 border-none bg-transparent p-0 text-sm font-semibold focus:ring-0"
           />
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Forecast</span>
+        <div className="flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Forecast</span>
           <input
             type="number"
             min="7"
@@ -615,26 +615,26 @@ export function ReplenishmentSmartTab({ filters }) {
           emptyIcon={ShoppingCart}
         >
           {reorderRows.map((row, i) => (
-            <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-slate-50">
+            <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-900">{row.outlet_name}</div>
-                <div className="text-[11px] text-slate-400">{row.category}</div>
-                <div className="text-[11px] text-slate-400">{row.brand} | {row.supplier}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.outlet_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.brand} | {row.supplier}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {Number(row.avg_daily_units || 0).toFixed(2)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.on_hand_qty}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{row.on_hand_qty}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 <div>{Number(row.target_cover_units || 0).toFixed(2)} units</div>
-                <div className="text-[11px] text-slate-400">{row.days_of_cover ?? "N/A"} days cover</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.days_of_cover ?? "N/A"} days cover</div>
               </td>
               <td className="px-4 py-3">
-                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+                <span className="rounded-full bg-(--ui-muted-surface) px-2 py-1 text-xs font-bold text-(--ui-link)">
                   +{row.suggested_reorder_qty}
                 </span>
               </td>

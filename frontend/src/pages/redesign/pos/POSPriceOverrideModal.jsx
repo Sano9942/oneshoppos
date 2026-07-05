@@ -103,32 +103,32 @@ export default function POSPriceOverrideModal() {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border) bg-(--ui-muted-surface)">
           <div className="flex items-center gap-2">
-            <ShieldAlert size={16} className="text-[#8066FF]" />
-            <h3 className="font-bold text-slate-800">Override price</h3>
+            <ShieldAlert size={16} className="text-(--ui-text)" />
+            <h3 className="font-bold text-(--ui-text)">Override price</h3>
           </div>
           <button
             onClick={close}
-            className="text-slate-400 hover:text-slate-600"
+            className="text-(--ui-text-muted) hover:text-(--ui-text)"
           >
             <X size={18} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="text-xs text-slate-500">
-            <div className="font-bold text-slate-800 text-sm">{line.name}</div>
+          <div className="text-xs text-(--ui-text-muted)">
+            <div className="font-bold text-(--ui-text) text-sm">{line.name}</div>
             <div className="mt-0.5">
               Current price:{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-(--ui-text)">
                 {originalPrice.toFixed(2)}
               </span>
             </div>
           </div>
 
-          <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider">
+          <label className="block text-xs font-bold uppercase text-(--ui-text-muted) tracking-wider">
             New price
             <input
               type="number"
@@ -137,26 +137,26 @@ export default function POSPriceOverrideModal() {
               value={newPrice}
               onChange={(e) => setNewPrice(e.target.value)}
               autoFocus
-              className="mt-1 w-full border-2 border-slate-200 rounded-lg px-4 py-2.5 focus:border-[#8066FF] outline-none font-bold text-slate-800"
+              className="mt-1 w-full border border-(--ui-border-strong) rounded-lg px-4 py-2.5 focus:border-(--ui-focus) outline-none font-bold text-(--ui-text)"
             />
           </label>
 
           {Number.isFinite(nextPrice) && nextPrice !== originalPrice && (
             <div
               className={`text-xs font-bold ${
-                delta < 0 ? "text-emerald-600" : "text-amber-600"
+                delta < 0 ? "text-(--ui-success-fg)" : "text-(--ui-warning-fg)"
               }`}
             >
               {delta < 0 ? "Discount" : "Markup"}: {Math.abs(delta).toFixed(2)}
             </div>
           )}
 
-          <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider">
+          <label className="block text-xs font-bold uppercase text-(--ui-text-muted) tracking-wider">
             Reason
             <select
               value={reasonId}
               onChange={(e) => setReasonId(e.target.value)}
-              className="mt-1 w-full border-2 border-slate-200 rounded-lg px-3 py-2.5 focus:border-[#8066FF] outline-none font-semibold text-slate-800"
+              className="mt-1 w-full border border-(--ui-border-strong) rounded-lg px-3 py-2.5 focus:border-(--ui-focus) outline-none font-semibold text-(--ui-text)"
             >
               {reasons.length === 0 && <option value="">No reasons configured</option>}
               {reasons.map((r) => (
@@ -167,7 +167,7 @@ export default function POSPriceOverrideModal() {
             </select>
           </label>
 
-          <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider">
+          <label className="block text-xs font-bold uppercase text-(--ui-text-muted) tracking-wider">
             Manager PIN
             <input
               type="password"
@@ -176,13 +176,13 @@ export default function POSPriceOverrideModal() {
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
               maxLength={8}
-              className="mt-1 w-full border-2 border-slate-200 rounded-lg px-4 py-2.5 focus:border-[#8066FF] outline-none font-bold text-slate-800 tracking-widest"
+              className="mt-1 w-full border border-(--ui-border-strong) rounded-lg px-4 py-2.5 focus:border-(--ui-focus) outline-none font-bold text-(--ui-text) tracking-widest"
               placeholder="••••"
             />
           </label>
 
           {error && (
-            <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            <div className="text-xs font-bold text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -191,14 +191,14 @@ export default function POSPriceOverrideModal() {
             <button
               onClick={close}
               disabled={submitting}
-              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg transition disabled:opacity-60"
+              className="flex-1 bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) font-bold py-2.5 rounded-lg transition disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               onClick={submit}
               disabled={submitting}
-              className="flex-1 bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold py-2.5 rounded-lg transition disabled:opacity-60"
+              className="flex-1 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold py-2.5 rounded-lg transition disabled:opacity-60"
             >
               {submitting ? "Approving…" : "Approve override"}
             </button>

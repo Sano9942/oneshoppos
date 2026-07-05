@@ -19,13 +19,13 @@ import { fmtUtcDate } from "../../utils/dates";
 // Gated by wholesale_secondary_sales feature flag + manage_inventory perm.
 
 const STATUS_TONES = {
-  invited: "bg-amber-50 text-amber-700 border-amber-200",
-  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  suspended: "bg-rose-50 text-rose-700 border-rose-200",
+  invited: "bg-(--ui-warning-bg) text-(--ui-warning-fg) border-(--ui-warning-bg)",
+  active: "bg-(--ui-success-bg) text-(--ui-success-fg) border-(--ui-success-bg)",
+  suspended: "bg-(--ui-danger-bg) text-(--ui-danger-fg) border-(--ui-danger-bg)",
 };
 
 function StatusBadge({ status }) {
-  const cls = STATUS_TONES[status] || "bg-slate-50 text-slate-600 border-slate-200";
+  const cls = STATUS_TONES[status] || "bg-(--ui-muted-surface) text-(--ui-text-muted) border-(--ui-border)";
   return (
     <span className={`inline-block px-2 py-0.5 text-xs font-medium border rounded ${cls}`}>
       {status}

@@ -13,11 +13,11 @@ const TAB_FILTERS = {
 };
 
 const MATCH_PILL = {
-  matched: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-  short: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  over: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  unmatched: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  duplicate: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  matched: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+  short: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
+  over: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  unmatched: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  duplicate: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
 };
 
 export default function LineTable({ lines, readOnly, onResolveNote, onManualMatch }) {
@@ -101,9 +101,9 @@ export default function LineTable({ lines, readOnly, onResolveNote, onManualMatc
               const diff = Number(line.difference || 0);
               const diffColor =
                 diff < 0
-                  ? "text-red-600 dark:text-red-400"
+                  ? "text-(--ui-danger-fg)"
                   : diff > 0
-                  ? "text-blue-600 dark:text-blue-400"
+                  ? "text-(--ui-text)"
                   : "text-(--text-muted)";
               return (
                 <tr key={line.id} className="hover:bg-(--bg-subtle)/40">

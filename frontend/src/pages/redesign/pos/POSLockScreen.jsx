@@ -14,13 +14,13 @@ export default function POSLockScreen() {
   } = usePOS();
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-900">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl flex flex-col items-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+    <div className="flex h-screen w-full items-center justify-center bg-(--ui-muted-surface)">
+      <div className="w-full max-w-sm rounded-2xl bg-(--ui-surface) p-8 shadow-(--ui-shadow-lg) flex flex-col items-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-(--ui-muted-surface) text-(--ui-text)">
           <Lock size={32} />
         </div>
-        <h1 className="mb-1 text-2xl font-bold text-slate-800">POS Terminal</h1>
-        <p className="mb-6 text-center text-sm text-slate-500">
+        <h1 className="mb-1 text-2xl font-bold text-(--ui-text)">POS Terminal</h1>
+        <p className="mb-6 text-center text-sm text-(--ui-text-muted)">
           Enter your PIN to unlock
         </p>
         <form onSubmit={handleUnlock} className="flex w-full flex-col gap-4">
@@ -33,18 +33,18 @@ export default function POSLockScreen() {
               setLockPin(e.target.value);
               setLockError("");
             }}
-            className="w-full rounded-xl border border-slate-300 py-3 px-4 text-center font-mono text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-(--ui-border-strong) py-3 px-4 text-center font-mono text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             placeholder="••••"
           />
           {lockError && (
-            <p className="text-center text-sm font-medium text-red-500">
+            <p className="text-center text-sm font-medium text-(--ui-danger)">
               {lockError}
             </p>
           )}
           <button
             type="submit"
             disabled={!lockPin}
-            className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="w-full rounded-xl bg-(--ui-primary) py-3 font-bold text-white hover:bg-(--ui-primary-strong) disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             Unlock Register
           </button>
@@ -54,7 +54,7 @@ export default function POSLockScreen() {
               await logout();
               navigate("/login", { replace: true });
             }}
-            className="text-center text-sm text-slate-400 hover:text-slate-700"
+            className="text-center text-sm text-(--ui-text-muted) hover:text-(--ui-text)"
           >
             Sign out completely
           </button>

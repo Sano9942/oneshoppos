@@ -163,7 +163,7 @@ export default function SchedulingRedesign() {
       {/* Overtime alerts */}
       {overtimeAlerts.length > 0 && (
         <SectionCard className="mb-4">
-          <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+          <div className="flex items-center gap-2 text-sm text-(--ui-warning-fg)">
             <AlertTriangle className="h-4 w-4" />
             <span>
               {overtimeAlerts.filter(a => a.exceeded).length} employee(s) exceed {overtimeAlerts[0]?.threshold}h/week,{" "}
@@ -203,7 +203,7 @@ export default function SchedulingRedesign() {
                         <div className="flex items-center gap-1">
                           {emp?.name || `#${empId}`}
                           {overtimeSet.has(empId) && (
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" title="Overtime exceeded" />
+                            <AlertTriangle className="h-3.5 w-3.5 text-(--ui-warning-fg)" title="Overtime exceeded" />
                           )}
                         </div>
                       </td>
@@ -217,8 +217,8 @@ export default function SchedulingRedesign() {
                                 onClick={() => { if (s.status === "draft") { setEditShift(s); setShowModal(true); } }}
                                 className={`mb-1 rounded px-1.5 py-1 text-xs cursor-pointer transition-colors ${
                                   s.status === "draft"
-                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 opacity-70"
-                                    : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                    ? "bg-(--ui-warning-bg) text-(--ui-warning-fg) opacity-70"
+                                    : "bg-(--ui-muted-surface) text-(--ui-link)"
                                 }`}
                               >
                                 <div className="font-medium">{fmtTime(s.start_time)}-{fmtTime(s.end_time)}</div>

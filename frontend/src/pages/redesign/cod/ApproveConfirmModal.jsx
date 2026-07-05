@@ -23,7 +23,7 @@ export default function ApproveConfirmModal({ open, batch, busy, onCancel, onCon
         <>
           <div className="space-y-4">
             {showWarning && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-700 dark:text-amber-300">
+              <div className="flex items-start gap-2 rounded-lg bg-(--ui-warning-bg) p-3 text-xs text-(--ui-warning-fg)">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <div>
                   This batch has <strong>{fmt(shortAmount)}</strong> in shortfall

@@ -55,7 +55,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
                     className={`rounded-lg p-2 text-white text-center text-xs font-medium hover:opacity-80 transition ${
                       tile.size === "2x1" ? "col-span-2" : ""
                     }`}
-                    style={{ backgroundColor: tile.color || "#8066FF" }}
+                    style={{ backgroundColor: tile.color || "var(--ui-primary)" }}
                     onClick={() => {
                       if (tile.type === "product" && tile.product_id) {
                         addToCart({ id: tile.product_id, name: tile.label });
@@ -69,7 +69,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
             ) : posLayout === null && posFlags?.phase2_pos_layouts ? (
               <div className="grid grid-cols-4 gap-2" aria-label="Loading menu">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="h-14 rounded-lg bg-slate-200/60 animate-pulse" />
+                  <div key={i} className="h-14 rounded-lg bg-(--ui-muted-surface) animate-pulse" />
                 ))}
               </div>
             ) : null}
@@ -80,10 +80,10 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
                   <button
                     key={s.product_id}
                     onClick={() => addToCart({ id: s.product_id, name: s.name, price: Number(s.price) })}
-                    className="shrink-0 bg-slate-700 hover:bg-slate-600 rounded-lg p-2 text-xs text-white text-center w-28"
+                    className="shrink-0 bg-(--ui-primary) hover:bg-(--ui-primary-strong) rounded-lg p-2 text-xs text-white text-center w-28"
                   >
                     <div className="truncate font-medium">{s.name}</div>
-                    <div className="text-slate-300 mt-0.5">{Number(s.price).toFixed(2)}</div>
+                    <div className="text-white/70 mt-0.5">{Number(s.price).toFixed(2)}</div>
                   </button>
                 ))}
               </div>
@@ -91,10 +91,10 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
           </div>
 
           {/* Cart column — fixed width on desktop, full-width capped height on portrait */}
-          <div className={`${isPortrait ? "w-full max-h-[45vh]" : "w-[420px] shrink-0"} flex flex-col rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden`}>
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-sm font-black text-slate-900 uppercase tracking-wider">Check</span>
-              <span className="text-xs text-slate-500">Total: <span className="font-bold text-slate-900">{money(total)}</span></span>
+          <div className={`${isPortrait ? "w-full max-h-[45vh]" : "w-[420px] shrink-0"} flex flex-col rounded-2xl bg-(--ui-surface) border border-(--ui-border-strong) overflow-hidden`}>
+            <div className="px-4 py-3 border-b border-(--ui-border-strong) flex items-center justify-between">
+              <span className="text-sm font-black text-(--ui-text) uppercase tracking-wider">Check</span>
+              <span className="text-xs text-(--ui-text-muted)">Total: <span className="font-bold text-(--ui-text)">{money(total)}</span></span>
             </div>
             <RestaurantCartGrouped />
           </div>

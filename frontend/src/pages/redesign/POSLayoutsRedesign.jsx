@@ -136,7 +136,7 @@ export default function POSLayoutsRedesign() {
                   <td className="py-2"><Badge tone={l.is_active ? "success" : "default"}>{l.is_active ? "Active" : "Inactive"}</Badge></td>
                   <td className="py-2 text-right flex gap-1 justify-end">
                     <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(l)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
-                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(l.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(l.id)} title="Delete" aria-label="Delete" className="hover:text-(--ui-danger-fg)"><Trash2 size={14} /></Button>
                   </td>
                 </tr>
               ))}
@@ -233,7 +233,7 @@ export default function POSLayoutsRedesign() {
                   <option value="1x1">1x1</option>
                   <option value="2x1">2x1</option>
                 </select>
-                <Button tone="plain" size="sm" iconOnly onClick={() => removeTile(idx)} aria-label="Remove tile" className="text-red-500"><X size={14} /></Button>
+                <Button tone="plain" size="sm" iconOnly onClick={() => removeTile(idx)} aria-label="Remove tile" className="text-(--ui-danger-fg)"><X size={14} /></Button>
               </div>
             ))}
             <Button tone="link" size="sm" onClick={addTile} className="mb-4">+ Add tile</Button>

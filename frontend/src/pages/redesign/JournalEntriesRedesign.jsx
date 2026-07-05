@@ -317,7 +317,7 @@ export default function JournalEntriesRedesign() {
       </div>
 
       {error && (
-        <div className="mb-3 rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+        <div className="mb-3 rounded-md bg-(--ui-danger-bg) px-4 py-2 text-sm text-(--ui-danger-fg)">
           {error}
           <button className="ml-2 underline" onClick={() => setError("")}>dismiss</button>
         </div>
@@ -429,7 +429,7 @@ function EntriesTab({
       {loading ? (
         <p className="py-12 text-center text-sm text-(--ui-text-muted)">Loading...</p>
       ) : entries.length === 0 ? (
-        <EmptyState message="No journal entries found" />
+        <EmptyState title="No journal entries found" />
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -476,7 +476,7 @@ function EntriesTab({
                             </button>
                             <button
                               onClick={() => handlePost(e)}
-                              className="rounded p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+                              className="rounded p-1 text-(--ui-success-fg) hover:bg-(--ui-success-bg)"
                               title="Post"
                             >
                               <CheckCircle className="h-4 w-4" />
@@ -486,7 +486,7 @@ function EntriesTab({
                         {e.status === "posted" && (
                           <button
                             onClick={() => handleVoid(e)}
-                            className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            className="rounded p-1 text-(--ui-danger-fg) hover:bg-(--ui-danger-bg)"
                             title="Void"
                           >
                             <XCircle className="h-4 w-4" />
@@ -535,7 +535,7 @@ function TrialBalanceTab({
       {loading ? (
         <p className="py-12 text-center text-sm text-(--ui-text-muted)">Loading...</p>
       ) : accounts.length === 0 ? (
-        <EmptyState message="No posted journal entries found" />
+        <EmptyState title="No posted journal entries found" />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -557,7 +557,7 @@ function TrialBalanceTab({
                   <td className="py-2 pr-4 capitalize text-(--ui-text-muted)">{a.type}</td>
                   <td className="py-2 pr-4 text-right font-mono">{money(a.total_debit)}</td>
                   <td className="py-2 pr-4 text-right font-mono">{money(a.total_credit)}</td>
-                  <td className={`py-2 text-right font-mono font-semibold ${a.balance < 0 ? "text-red-500" : ""}`}>
+                  <td className={`py-2 text-right font-mono font-semibold ${a.balance < 0 ? "text-(--ui-danger-fg)" : ""}`}>
                     {money(Math.abs(a.balance))}{a.balance < 0 ? " CR" : ""}
                   </td>
                 </tr>
@@ -568,7 +568,7 @@ function TrialBalanceTab({
                 <td colSpan={3} className="py-2 pr-4">Grand Total</td>
                 <td className="py-2 pr-4 text-right font-mono">{money(grandDebit)}</td>
                 <td className="py-2 pr-4 text-right font-mono">{money(grandCredit)}</td>
-                <td className={`py-2 text-right font-mono ${Math.abs(grandDebit - grandCredit) > 0.005 ? "text-red-500" : "text-green-600"}`}>
+                <td className={`py-2 text-right font-mono ${Math.abs(grandDebit - grandCredit) > 0.005 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                   {Math.abs(grandDebit - grandCredit) < 0.005 ? "Balanced" : money(Math.abs(grandDebit - grandCredit))}
                 </td>
               </tr>
@@ -705,7 +705,7 @@ function EntryModal({
                             onClick={() => removeLine(i)}
                             title="Remove line"
                             aria-label="Remove line"
-                            className="hover:text-red-500"
+                            className="hover:text-(--ui-danger-fg)"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -728,8 +728,8 @@ function EntryModal({
             {/* Balance indicator */}
             <div className={`mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
               lineTotals.diff < 0.005
-                ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+                ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+                : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
             }`}>
               {lineTotals.diff < 0.005 ? (
                 <><CheckCircle className="h-4 w-4" /> Entry is balanced</>

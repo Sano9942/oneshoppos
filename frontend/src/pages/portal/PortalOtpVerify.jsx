@@ -52,9 +52,9 @@ export default function PortalOtpVerify() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
       <h1 className="text-xl font-semibold mb-1">Enter your code</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-(--ui-text-muted) mb-6">
         We sent a 6-digit code to <strong>{email || "your email"}</strong>. It expires in 15 minutes.
       </p>
       <form onSubmit={submit}>
@@ -65,14 +65,14 @@ export default function PortalOtpVerify() {
           required
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          className="w-full border border-slate-300 rounded px-3 py-3 text-center text-2xl tracking-[0.5em] mb-4"
+          className="w-full border border-(--ui-border-strong) rounded px-3 py-3 text-center text-2xl tracking-[0.5em] mb-4"
         />
-        {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
-        {resendNotice && <div className="text-sm text-emerald-700 mb-3">{resendNotice}</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg) mb-3">{error}</div>}
+        {resendNotice && <div className="text-sm text-(--ui-success-fg) mb-3">{resendNotice}</div>}
         <button
           type="submit"
           disabled={sending || code.length !== 6}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-medium disabled:opacity-50"
+          className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) py-2 rounded font-medium disabled:opacity-50"
         >
           {sending ? "Verifying…" : "Verify"}
         </button>
@@ -80,7 +80,7 @@ export default function PortalOtpVerify() {
       <button
         type="button"
         onClick={resend}
-        className="w-full mt-4 text-sm text-slate-600 hover:text-slate-900"
+        className="w-full mt-4 text-sm text-(--ui-text-muted) hover:text-(--ui-text)"
       >
         Resend code
       </button>

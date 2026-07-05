@@ -75,12 +75,12 @@ export default function ReservationBookingPage() {
 
   if (confirmation) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-violet-50 to-indigo-100 flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="mx-auto h-16 w-16 rounded-full bg-[#8066FF] flex items-center justify-center mb-4 text-white text-3xl">✓</div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Reservation requested</h1>
-          <p className="text-slate-600 mb-4">We'll confirm shortly by text or email.</p>
-          <div className="bg-slate-50 rounded-lg p-4 text-left text-sm">
+      <div className="min-h-screen bg-gradient-to-br from-(--ui-primary) to-(--ui-primary-strong) flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-(--ui-surface) rounded-2xl shadow-lg p-8 text-center">
+          <div className="mx-auto h-16 w-16 rounded-full bg-(--ui-primary) flex items-center justify-center mb-4 text-(--ui-on-primary) text-3xl">✓</div>
+          <h1 className="text-2xl font-bold text-(--ui-text) mb-2">Reservation requested</h1>
+          <p className="text-(--ui-text-muted) mb-4">We'll confirm shortly by text or email.</p>
+          <div className="bg-(--ui-muted-surface) rounded-lg p-4 text-left text-sm">
             <Row label="Date" value={new Date(confirmation.reservation_start).toLocaleString()} />
             <Row label="Party" value={`${confirmation.party_size}`} />
             <Row label="Status" value={confirmation.status} />
@@ -92,15 +92,15 @@ export default function ReservationBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div className="min-h-screen bg-(--ui-muted-surface)">
+      <header className="bg-(--ui-surface) border-b border-(--ui-border) sticky top-0 z-30">
         <div className="max-w-xl mx-auto px-4 h-14 flex items-center">
-          <h1 className="text-lg font-bold text-slate-900">Book a table</h1>
+          <h1 className="text-lg font-bold text-(--ui-text)">Book a table</h1>
         </div>
       </header>
 
       <main className="max-w-xl mx-auto px-4 py-6 pb-32">
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
+        <div className="bg-(--ui-surface) rounded-2xl border border-(--ui-border) p-4 mb-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Date">
               <input
@@ -108,14 +108,14 @@ export default function ReservationBookingPage() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 min={todayStr()}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               />
             </Field>
             <Field label="Party size">
               <select
                 value={partySize}
                 onChange={(e) => setPartySize(Number(e.target.value))}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
                   <option key={n} value={n}>{n} {n === 1 ? "guest" : "guests"}</option>
@@ -125,12 +125,12 @@ export default function ReservationBookingPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
-          <div className="text-sm font-semibold text-slate-800 mb-3">Available times</div>
+        <div className="bg-(--ui-surface) rounded-2xl border border-(--ui-border) p-4 mb-4">
+          <div className="text-sm font-semibold text-(--ui-text) mb-3">Available times</div>
           {slotsLoading ? (
-            <div className="text-sm text-slate-500">Checking availability…</div>
+            <div className="text-sm text-(--ui-text-muted)">Checking availability…</div>
           ) : slots.length === 0 ? (
-            <div className="text-sm text-slate-500 italic">No times to show.</div>
+            <div className="text-sm text-(--ui-text-muted) italic">No times to show.</div>
           ) : (
             <div className="grid grid-cols-4 gap-2">
               {slots.map((s) => {
@@ -143,10 +143,10 @@ export default function ReservationBookingPage() {
                     onClick={() => setSelectedSlot(s)}
                     className={`h-10 rounded-lg text-xs font-semibold transition ${
                       active
-                        ? "bg-[#8066FF] text-white"
+                        ? "bg-(--ui-primary) text-(--ui-on-primary)"
                         : s.available
-                          ? "bg-slate-100 text-slate-800 hover:bg-slate-200"
-                          : "bg-slate-50 text-slate-300 cursor-not-allowed"
+                          ? "bg-(--ui-muted-surface) text-(--ui-text) hover:bg-(--ui-muted-surface)"
+                          : "bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
                     }`}
                   >
                     {s.time}
@@ -158,12 +158,12 @@ export default function ReservationBookingPage() {
         </div>
 
         {selectedSlot && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div className="bg-(--ui-surface) rounded-2xl border border-(--ui-border) p-4 space-y-3">
             <Field label="Your name">
               <input
                 value={form.customer_name}
                 onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 required
               />
             </Field>
@@ -172,7 +172,7 @@ export default function ReservationBookingPage() {
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="03001234567"
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               />
             </Field>
             <Field label="Email (optional)">
@@ -180,7 +180,7 @@ export default function ReservationBookingPage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               />
             </Field>
             <Field label="Notes (optional)">
@@ -189,20 +189,20 @@ export default function ReservationBookingPage() {
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 placeholder="Allergies, special occasions, etc."
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-(--ui-border) text-sm"
               />
             </Field>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p className="text-sm text-(--ui-danger-fg)">{error}</p>}
           </div>
         )}
       </main>
 
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 px-4 py-3">
+      <div className="fixed bottom-0 inset-x-0 bg-(--ui-surface) border-t border-(--ui-border) px-4 py-3">
         <div className="max-w-xl mx-auto">
           <button
             onClick={submit}
             disabled={submitting || !selectedSlot || !form.customer_name}
-            className="w-full h-12 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold text-base shadow-[0_10px_20px_-10px_rgba(128,102,255,0.6)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="w-full h-12 rounded-xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) font-bold text-base shadow-[0_10px_20px_-10px_rgba(128,102,255,0.6)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {submitting ? "Submitting…" : selectedSlot
               ? `Request ${selectedSlot.time}`
@@ -217,7 +217,7 @@ export default function ReservationBookingPage() {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-slate-600 mb-1 block">{label}</span>
+      <span className="text-xs font-semibold text-(--ui-text-muted) mb-1 block">{label}</span>
       {children}
     </label>
   );
@@ -226,8 +226,8 @@ function Field({ label, children }) {
 function Row({ label, value }) {
   return (
     <div className="flex justify-between py-1">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-semibold text-slate-800">{value}</span>
+      <span className="text-(--ui-text-muted)">{label}</span>
+      <span className="font-semibold text-(--ui-text)">{value}</span>
     </div>
   );
 }

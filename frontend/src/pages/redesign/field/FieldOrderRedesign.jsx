@@ -367,7 +367,7 @@ export default function FieldOrderRedesign() {
   if (!customer) {
     return (
       <div className="min-h-screen bg-(--ui-bg) p-4">
-        <div className="rounded-xl bg-red-50 border border-red-200 text-red-800 p-4">
+        <div className="rounded-xl bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg) p-4">
           Customer not found on today's route.
         </div>
       </div>
@@ -451,7 +451,7 @@ export default function FieldOrderRedesign() {
                 <div className="text-xs text-(--ui-text-muted)">
                   {fmt(Number(p.price || 0))}
                   {moqHint && (
-                    <span className="ml-2 text-amber-700 font-medium">({moqHint})</span>
+                    <span className="ml-2 text-(--ui-warning-fg) font-medium">({moqHint})</span>
                   )}
                 </div>
               </div>
@@ -470,7 +470,7 @@ export default function FieldOrderRedesign() {
                   <button
                     type="button"
                     onClick={() => addToCart(p)}
-                    className="h-9 w-9 rounded-full bg-(--ui-primary) text-white inline-flex items-center justify-center"
+                    className="h-9 w-9 rounded-full bg-(--ui-primary) text-(--ui-on-primary) inline-flex items-center justify-center"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
@@ -479,7 +479,7 @@ export default function FieldOrderRedesign() {
                 <button
                   type="button"
                   onClick={() => addToCart(p)}
-                  className="rounded-lg bg-(--ui-primary) text-white px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1"
+                  className="rounded-lg bg-(--ui-primary) text-(--ui-on-primary) px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1"
                 >
                   <Plus className="h-4 w-4" /> Add
                 </button>
@@ -505,7 +505,7 @@ export default function FieldOrderRedesign() {
                 <button
                   type="button"
                   onClick={() => removeFromCart(it.id)}
-                  className="ml-2 text-(--ui-text-muted) hover:text-red-600"
+                  className="ml-2 text-(--ui-text-muted) hover:text-(--ui-danger-fg)"
                   aria-label="Remove"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -521,7 +521,7 @@ export default function FieldOrderRedesign() {
             onClick={() => setPaymentMethod("credit")}
             className={`rounded-lg py-2 text-sm font-medium border ${
               paymentMethod === "credit"
-                ? "bg-(--ui-primary) text-white border-(--ui-primary)"
+                ? "bg-(--ui-primary) text-(--ui-on-primary) border-(--ui-primary)"
                 : "bg-(--ui-surface) text-(--ui-text) border-(--ui-border)"
             }`}
           >
@@ -532,7 +532,7 @@ export default function FieldOrderRedesign() {
             onClick={() => setPaymentMethod("Cash")}
             className={`rounded-lg py-2 text-sm font-medium border ${
               paymentMethod === "Cash"
-                ? "bg-(--ui-primary) text-white border-(--ui-primary)"
+                ? "bg-(--ui-primary) text-(--ui-on-primary) border-(--ui-primary)"
                 : "bg-(--ui-surface) text-(--ui-text) border-(--ui-border)"
             }`}
           >
@@ -541,12 +541,12 @@ export default function FieldOrderRedesign() {
         </div>
 
         {appliedPromotions.length > 0 && (
-          <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
-            <div className="flex items-center justify-between font-medium text-emerald-800">
+          <div className="text-xs bg-(--ui-success-bg) border border-(--ui-success-bg) rounded-lg px-3 py-2 space-y-1">
+            <div className="flex items-center justify-between font-medium text-(--ui-success-fg)">
               <span>Scheme discount</span>
               <span className="tabular-nums">-{fmt(promoDiscount)}</span>
             </div>
-            <div className="text-emerald-700">
+            <div className="text-(--ui-success-fg)">
               {appliedPromotions
                 .map((ap) => ap.name + (ap.qty_qualifying ? ` (${ap.qty_qualifying} qty)` : ""))
                 .join(", ")}
@@ -555,7 +555,7 @@ export default function FieldOrderRedesign() {
         )}
 
         {creditWarning && (
-          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-(--ui-warning-fg) bg-(--ui-warning-bg) border border-(--ui-warning-bg) rounded-lg px-3 py-2">
             {creditWarning}
           </div>
         )}
@@ -564,7 +564,7 @@ export default function FieldOrderRedesign() {
           type="button"
           disabled={submitting || cartItems.length === 0}
           onClick={submit}
-          className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+          className="w-full rounded-lg bg-(--ui-success-fg) hover:bg-(--ui-success-fg) text-(--ui-on-primary) font-semibold py-3 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
         >
           <Check className="h-4 w-4" />
           Confirm order · {fmt(Math.max(0, cartTotal - promoDiscount))}

@@ -165,39 +165,39 @@ export default function ManufacturerPortalSales() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Sales</h1>
-        <p className="text-slate-600 mt-1">
+        <h1 className="text-2xl font-bold text-(--ui-text)">Sales</h1>
+        <p className="text-(--ui-text-muted) mt-1">
           Aggregate sales of your brands through {tenantSlug}. Retailer identity
           is never exposed.
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">From</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">From</label>
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">To</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">To</label>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Group by</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">Group by</label>
             <select
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm bg-white"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm bg-(--ui-surface)"
             >
               <option value="day">Day</option>
               <option value="sku">SKU</option>
@@ -206,11 +206,11 @@ export default function ManufacturerPortalSales() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Brand</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">Brand</label>
             <select
               value={brandFilter}
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm bg-white"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm bg-(--ui-surface)"
             >
               <option value="">All your brands</option>
               {brands.map((b) => (
@@ -221,7 +221,7 @@ export default function ManufacturerPortalSales() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Region</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">Region</label>
             <div className="flex gap-1">
               <input
                 type="text"
@@ -231,12 +231,12 @@ export default function ManufacturerPortalSales() {
                   if (e.key === "Enter") applyRegion();
                 }}
                 placeholder="e.g. Karachi"
-                className="flex-1 px-3 py-2 border border-slate-300 rounded text-sm"
+                className="flex-1 px-3 py-2 border border-(--ui-border-strong) rounded text-sm"
               />
               <button
                 type="button"
                 onClick={applyRegion}
-                className="px-3 py-2 border border-slate-300 rounded text-sm hover:bg-slate-50"
+                className="px-3 py-2 border border-(--ui-border-strong) rounded text-sm hover:bg-(--ui-muted-surface)"
               >
                 Go
               </button>
@@ -247,7 +247,7 @@ export default function ManufacturerPortalSales() {
           <button
             type="button"
             onClick={clearFilters}
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-(--ui-text-muted) hover:text-(--ui-text)"
           >
             Clear filters
           </button>
@@ -255,39 +255,39 @@ export default function ManufacturerPortalSales() {
             type="button"
             onClick={onDownloadCsv}
             disabled={downloading || loading}
-            className="text-sm bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-700 disabled:opacity-50"
+            className="text-sm bg-(--ui-primary) text-(--ui-on-primary) px-4 py-2 rounded hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             {downloading ? "Downloading…" : "Download CSV"}
           </button>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-700">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg">
+        <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between">
+          <div className="text-sm font-medium text-(--ui-text)">
             {loading ? "Loading…" : `${rows.length} row${rows.length === 1 ? "" : "s"}`}
           </div>
           {reportWindow && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-(--ui-text-muted)">
               {reportWindow.from} → {reportWindow.to} · {reportWindow.timezone}
             </div>
           )}
         </div>
 
         {err && (
-          <div className="px-4 py-3 text-sm text-red-600 bg-red-50 border-b border-red-200">
+          <div className="px-4 py-3 text-sm text-(--ui-danger-fg) bg-(--ui-danger-bg) border-b border-(--ui-danger-bg)">
             {err}
           </div>
         )}
 
         {!loading && rows.length === 0 && !err ? (
-          <div className="px-4 py-12 text-center text-sm text-slate-500">
+          <div className="px-4 py-12 text-center text-sm text-(--ui-text-muted)">
             No sales recorded for your brands in this window.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500 uppercase border-b border-slate-200 bg-slate-50">
+              <thead className="text-xs text-(--ui-text-muted) uppercase border-b border-(--ui-border) bg-(--ui-muted-surface)">
                 <tr>
                   {columns.map((c) => (
                     <th key={c.key} className="text-left px-4 py-2 font-medium">
@@ -300,7 +300,7 @@ export default function ManufacturerPortalSales() {
               </thead>
               <tbody>
                 {rows.map((r, idx) => (
-                  <tr key={idx} className="border-b border-slate-100">
+                  <tr key={idx} className="border-b border-(--ui-border)">
                     {columns.map((c) => (
                       <td key={c.key} className="px-4 py-2">
                         {r[c.key] ?? "—"}
@@ -315,8 +315,8 @@ export default function ManufacturerPortalSales() {
                   </tr>
                 ))}
                 {rows.length > 0 && (
-                  <tr className="bg-slate-50 font-semibold">
-                    <td colSpan={columns.length} className="px-4 py-2 text-right text-slate-600">
+                  <tr className="bg-(--ui-muted-surface) font-semibold">
+                    <td colSpan={columns.length} className="px-4 py-2 text-right text-(--ui-text-muted)">
                       Total
                     </td>
                     <td className="px-4 py-2 text-right">{fmtQty(totals.qty)}</td>

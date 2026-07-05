@@ -100,16 +100,16 @@ export default function PayAtTableQRModal({
   const mmss = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-md mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border-strong)">
           <div className="flex items-center gap-2">
-            <QrCode size={20} className="text-[#8066FF]" />
-            <h2 className="text-lg font-bold text-slate-900">Request QR Payment</h2>
+            <QrCode size={20} className="text-(--ui-text)" />
+            <h2 className="text-lg font-bold text-(--ui-text)">Request QR Payment</h2>
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-lg text-slate-500 hover:bg-slate-100 flex items-center justify-center"
+            className="h-8 w-8 rounded-lg text-(--ui-text-muted) hover:bg-(--ui-muted-surface) flex items-center justify-center"
           >
             <X size={18} />
           </button>
@@ -117,53 +117,53 @@ export default function PayAtTableQRModal({
 
         <div className="p-6">
           {tableLabel && (
-            <p className="text-sm text-slate-500 mb-3 text-center">
-              Table <span className="font-semibold text-slate-800">{tableLabel}</span>
+            <p className="text-sm text-(--ui-text-muted) mb-3 text-center">
+              Table <span className="font-semibold text-(--ui-text)">{tableLabel}</span>
             </p>
           )}
 
           {status === "paid" ? (
             <div className="text-center py-6">
-              <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
-                <CheckCircle2 size={40} className="text-emerald-600" />
+              <div className="mx-auto h-16 w-16 rounded-full bg-(--ui-success-bg) flex items-center justify-center mb-3">
+                <CheckCircle2 size={40} className="text-(--ui-success-fg)" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1">Payment received</h3>
-              <p className="text-sm text-slate-600">Table is cleared for busser.</p>
+              <h3 className="text-xl font-bold text-(--ui-text) mb-1">Payment received</h3>
+              <p className="text-sm text-(--ui-text-muted)">Table is cleared for busser.</p>
             </div>
           ) : status === "error" ? (
             <div className="text-center py-6">
-              <div className="mx-auto h-16 w-16 rounded-full bg-rose-100 flex items-center justify-center mb-3 text-rose-600 text-2xl font-bold">!</div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1">Couldn't start</h3>
-              <p className="text-sm text-slate-600">{error}</p>
+              <div className="mx-auto h-16 w-16 rounded-full bg-(--ui-danger-bg) flex items-center justify-center mb-3 text-(--ui-danger-fg) text-2xl font-bold">!</div>
+              <h3 className="text-xl font-bold text-(--ui-text) mb-1">Couldn't start</h3>
+              <p className="text-sm text-(--ui-text-muted)">{error}</p>
             </div>
           ) : status === "expired" || status === "failed" ? (
             <div className="text-center py-6">
-              <div className="mx-auto h-16 w-16 rounded-full bg-amber-100 flex items-center justify-center mb-3 text-amber-600 text-2xl">
+              <div className="mx-auto h-16 w-16 rounded-full bg-(--ui-warning-bg) flex items-center justify-center mb-3 text-(--ui-warning-fg) text-2xl">
                 <Clock />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1">
+              <h3 className="text-xl font-bold text-(--ui-text) mb-1">
                 {status === "expired" ? "Session expired" : "Payment failed"}
               </h3>
-              <p className="text-sm text-slate-600">Try again or take payment at the terminal.</p>
+              <p className="text-sm text-(--ui-text-muted)">Try again or take payment at the terminal.</p>
             </div>
           ) : (
             <>
               {qrSrc ? (
                 <div className="flex flex-col items-center">
-                  <div className="p-3 bg-white border border-slate-200 rounded-xl">
+                  <div className="p-3 bg-(--ui-surface) border border-(--ui-border-strong) rounded-xl">
                     <img src={qrSrc} alt="Scan to pay" className="h-52 w-52" />
                   </div>
-                  <p className="mt-4 text-sm text-slate-700 text-center">
+                  <p className="mt-4 text-sm text-(--ui-text) text-center">
                     Ask the guest to scan this code with their phone camera.
                   </p>
                   {session?.amount != null && (
-                    <p className="mt-2 text-lg font-bold text-slate-900">
+                    <p className="mt-2 text-lg font-bold text-(--ui-text)">
                       {money(Number(session.amount) + Number(session.tip_amount || 0))}
                     </p>
                   )}
-                  <div className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
-                    <div className="h-2 w-2 rounded-full bg-[#8066FF] animate-pulse" />
-                    <span className="text-xs font-semibold text-slate-700">
+                  <div className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-(--ui-muted-surface) rounded-full">
+                    <div className="h-2 w-2 rounded-full bg-(--ui-primary) animate-pulse" />
+                    <span className="text-xs font-semibold text-(--ui-text)">
                       Waiting for guest · expires in {mmss}
                     </span>
                   </div>
@@ -172,23 +172,23 @@ export default function PayAtTableQRModal({
                       href={payUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-3 text-[11px] text-slate-400 hover:text-[#8066FF] break-all text-center"
+                      className="mt-3 text-[11px] text-(--ui-text-muted) hover:text-(--ui-link) break-all text-center"
                     >
                       {payUrl}
                     </a>
                   )}
                 </div>
               ) : (
-                <div className="text-center py-10 text-sm text-slate-500">Generating code…</div>
+                <div className="text-center py-10 text-sm text-(--ui-text-muted)">Generating code…</div>
               )}
             </>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+        <div className="px-5 py-3 border-t border-(--ui-border) bg-(--ui-muted-surface) flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 h-10 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            className="px-4 h-10 rounded-lg text-sm font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)"
           >
             {status === "paid" ? "Done" : "Cancel"}
           </button>

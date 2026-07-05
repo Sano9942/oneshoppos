@@ -136,10 +136,10 @@ export default function MessagingInboxRedesign() {
                 {messages.map((m) => (
                   <div key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                      m.direction === "outbound" ? "bg-blue-600 text-white" : "bg-(--ui-bg-hover) text-(--ui-text)"
+                      m.direction === "outbound" ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-bg-hover) text-(--ui-text)"
                     }`}>
                       <p>{m.content}</p>
-                      <p className={`text-xs mt-1 ${m.direction === "outbound" ? "text-blue-200" : "text-(--ui-text-muted)"}`}>
+                      <p className={`text-xs mt-1 ${m.direction === "outbound" ? "text-(--ui-on-primary) opacity-70" : "text-(--ui-text-muted)"}`}>
                         {fmtUtcDateTime(m.created_at)}
                       </p>
                     </div>

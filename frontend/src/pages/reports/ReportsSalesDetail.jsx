@@ -50,25 +50,25 @@ export function SalesDetailTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Sales in View
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{uniqueSales}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{uniqueSales}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Line Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalRevenue)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Products Touched
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{uniqueProducts}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{uniqueProducts}</p>
         </div>
       </div>
 
@@ -102,35 +102,35 @@ export function SalesDetailTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.sale_id}-${r.barcode}-${i}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">
-                <div className="font-medium text-slate-700">
+            <tr key={`${r.sale_id}-${r.barcode}-${i}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
+                <div className="font-medium text-(--ui-text)">
                   {fmtDateTime(r.timestamp)}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-mono text-xs font-bold text-slate-800">
+                <div className="font-mono text-xs font-bold text-(--ui-text)">
                   #{r.sale_id}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.customer_name}
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">
+                <div className="text-sm font-semibold text-(--ui-text)">
                   {r.product_name}
                 </div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">
                   {r.barcode}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.quantity}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmt(r.price_at_sale)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.line_total)}
               </td>
             </tr>
@@ -183,23 +183,23 @@ export function OrderWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Orders in View
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(grossSales)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(grossSales)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Discounted Orders
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{discountedOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{discountedOrders}</p>
         </div>
       </div>
 
@@ -232,26 +232,26 @@ export function OrderWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 transition-colors">
-              <td className="px-4 py-3 text-sm text-slate-600">
+            <tr key={`${r.id}-${i}`} className="hover:bg-(--ui-muted-surface) transition-colors">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmtDateTime(r.timestamp)}
               </td>
               <td className="px-4 py-3">
-                <div className="font-mono text-xs font-bold text-slate-800">
+                <div className="font-mono text-xs font-bold text-(--ui-text)">
                   #{r.id}
                 </div>
                 {Number(r.discount_amount || 0) > 0 ? (
-                  <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                  <div className="mt-1 inline-flex rounded-full bg-(--ui-warning-bg) px-2 py-0.5 text-[10px] font-bold uppercase text-(--ui-warning-fg)">
                     Discounted
                   </div>
                 ) : null}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.customer_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
-              <td className="px-4 py-3 text-sm font-medium text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.customer_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
                 {r.payment_method || "N/A"}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.total_amount)}
               </td>
             </tr>
@@ -318,23 +318,23 @@ export function ItemWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Units Sold
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalUnits}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Profit
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalGrossProfit)}
           </p>
         </div>
@@ -368,20 +368,20 @@ export function ItemWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={`${r.id}-${i}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.product_name}
               </td>
-              <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+              <td className="px-4 py-3 font-mono text-[11px] text-(--ui-text-muted)">
                 {r.barcode}
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.units_sold}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.revenue)}
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-success-fg)">
                 {fmt(r.gross_profit)}
               </td>
             </tr>

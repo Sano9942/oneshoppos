@@ -150,7 +150,7 @@ export default function TransfersRedesign() {
         </div>
       }
     >
-      {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}
+      {error ? <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard> : null}
 
       <SectionCard>
         <TableToolbar

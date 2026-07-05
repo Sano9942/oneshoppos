@@ -53,15 +53,15 @@ export default function ManufacturerPortalSetup() {
   }
 
   return (
-    <div className="max-w-sm mx-auto bg-white border border-slate-200 rounded-lg p-6 mt-4">
+    <div className="max-w-sm mx-auto bg-(--ui-surface) border border-(--ui-border) rounded-lg p-6 mt-4">
       <h1 className="text-xl font-semibold mb-1">Set your password</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-(--ui-text-muted) mb-6">
         Choose a new password to access your manufacturer portal account.
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
         {!tokenFromUrl && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-(--ui-text) mb-1">
               Invite token
             </label>
             <input
@@ -69,13 +69,13 @@ export default function ManufacturerPortalSetup() {
               required
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded focus:outline-none focus:ring-2 focus:ring-(--ui-focus) font-mono text-sm"
               placeholder="Paste the token from your invite email"
             />
           </div>
         )}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-(--ui-text) mb-1">
             New password
           </label>
           <input
@@ -83,12 +83,12 @@ export default function ManufacturerPortalSetup() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full px-3 py-2 border border-(--ui-border-strong) rounded focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             placeholder="At least 8 characters"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-(--ui-text) mb-1">
             Confirm password
           </label>
           <input
@@ -96,18 +96,18 @@ export default function ManufacturerPortalSetup() {
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full px-3 py-2 border border-(--ui-border-strong) rounded focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
           />
         </div>
         {err && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <div className="text-sm text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded px-3 py-2">
             {err}
           </div>
         )}
         <button
           type="submit"
           disabled={busy || !token}
-          className="w-full bg-indigo-600 text-white py-2 rounded font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="w-full bg-(--ui-primary) text-(--ui-on-primary) py-2 rounded font-medium hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           {busy ? "Setting up…" : "Activate account"}
         </button>

@@ -29,18 +29,18 @@ export default function POSReceiptModal() {
   if (!slipOpen || !slip) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm flex flex-col border border-slate-100/20 max-h-[92vh]">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
+    <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-(--ui-surface) rounded-3xl shadow-(--ui-shadow-lg) w-full max-w-sm flex flex-col border border-(--ui-border) max-h-[92vh]">
+        <div className="px-5 py-4 border-b border-(--ui-border) flex items-center justify-between bg-(--ui-muted-surface) rounded-t-3xl shrink-0">
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} className="text-emerald-500" />
-            <h2 className="text-base font-bold text-slate-800">
+            <CheckCircle2 size={18} className="text-(--ui-success-fg)" />
+            <h2 className="text-base font-bold text-(--ui-text)">
               Sale Complete
             </h2>
           </div>
           <button
             onClick={() => setSlipOpen(false)}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200 transition"
+            className="text-(--ui-text-muted) hover:text-(--ui-text) p-1.5 rounded-full hover:bg-(--ui-border-strong) transition"
           >
             <X size={17} />
           </button>
@@ -51,26 +51,26 @@ export default function POSReceiptModal() {
             <p className="font-bold text-base">
               {sections.storeName}
             </p>
-            <p className="text-xs text-slate-500">{slip.timestamp}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-(--ui-text-muted)">{slip.timestamp}</p>
+            <p className="text-xs text-(--ui-text-muted)">
               Invoice:{" "}
-              <span className="font-bold text-slate-700">
+              <span className="font-bold text-(--ui-text)">
                 {slip.invoiceNumber}
               </span>
             </p>
             {slip.returnedFrom && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-(--ui-text-muted)">
                 Exchange for:{" "}
-                <span className="font-bold text-slate-700">{slip.returnedFrom}</span>
+                <span className="font-bold text-(--ui-text)">{slip.returnedFrom}</span>
               </p>
             )}
             {slip.employee && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-(--ui-text-muted)">
                 Staff: {slip.employee.name}
               </p>
             )}
             {slip.customer && (
-              <p className="text-xs text-emerald-700 font-semibold">
+              <p className="text-xs text-(--ui-success-fg) font-semibold">
                 {presetLabels?.customer || "Customer"}: {slip.customer.name}
                 {slip.customer.mobile ? ` · ${slip.customer.mobile}` : ""}
               </p>
@@ -80,11 +80,11 @@ export default function POSReceiptModal() {
           {/* Returned items section — only shown on exchange receipts */}
           {slip.returnedItems?.length > 0 && (
             <>
-              <div className="border-t border-dashed border-slate-300" />
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Returned</p>
+              <div className="border-t border-dashed border-(--ui-border-strong)" />
+              <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide">Returned</p>
               <div className="space-y-1">
                 {slip.returnedItems.map((item, i) => (
-                  <div key={i} className="flex justify-between text-xs text-rose-600">
+                  <div key={i} className="flex justify-between text-xs text-(--ui-danger-fg)">
                     <span className="flex-1 truncate">
                       {item.name} x{item.quantity}
                     </span>
@@ -95,9 +95,9 @@ export default function POSReceiptModal() {
             </>
           )}
 
-          <div className="border-t border-dashed border-slate-300" />
+          <div className="border-t border-dashed border-(--ui-border-strong)" />
           {slip.returnedItems?.length > 0 && (
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Items</p>
+            <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide">New Items</p>
           )}
           <div className="space-y-1">
             {slip.cart.map((item, i) => (
@@ -112,7 +112,7 @@ export default function POSReceiptModal() {
             ))}
           </div>
 
-          <div className="border-t border-dashed border-slate-300" />
+          <div className="border-t border-dashed border-(--ui-border-strong)" />
           <div className="space-y-1 text-xs">
             <div className="flex justify-between">
               <span>Subtotal</span>
@@ -121,43 +121,43 @@ export default function POSReceiptModal() {
               </span>
             </div>
             {slip.taxAmount > 0 && (
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-(--ui-text-muted)">
                 <span>GST (incl.)</span>
                 <span>{money(slip.taxAmount)}</span>
               </div>
             )}
             {/* Exchange receipt: show return credit instead of generic discount */}
             {slip.exchangeCredit > 0 ? (
-              <div className="flex justify-between text-rose-500">
+              <div className="flex justify-between text-(--ui-danger-fg)">
                 <span>Return Credit</span>
                 <span>− {money(slip.exchangeCredit)}</span>
               </div>
             ) : slip.discountAmount > 0 && (
-              <div className="flex justify-between text-red-500">
+              <div className="flex justify-between text-(--ui-danger-fg)">
                 <span>{slip.discountType === "percent" ? `Discount (${slip.discountInput}%)` : "Discount"}</span>
                 <span>− {money(slip.discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-black text-sm pt-1 border-t border-slate-200">
+            <div className="flex justify-between font-black text-sm pt-1 border-t border-(--ui-border-strong)">
               <span>{slip.returnedItems?.length > 0 ? "Balance Due" : "Total"}</span>
               <span>{money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total)}</span>
             </div>
             {slip.payments
               .filter((p) => p.method !== "Return Credit")
               .map((p, i) => (
-                <div key={i} className="flex justify-between text-slate-600">
+                <div key={i} className="flex justify-between text-(--ui-text-muted)">
                   <span>{formatPaymentMethodLabel(p.method)}</span>
                   <span>{money(p.amount)}</span>
                 </div>
               ))}
             {slip.refundNote && (
-              <div className="flex justify-between text-rose-500 font-medium">
+              <div className="flex justify-between text-(--ui-danger-fg) font-medium">
                 <span>Refund to Customer</span>
                 <span>{money(Math.abs(slip.balanceDue || 0))}</span>
               </div>
             )}
             {slip.change > 0 && (
-              <div className="flex justify-between font-bold text-emerald-600">
+              <div className="flex justify-between font-bold text-(--ui-success-fg)">
                 <span>Change</span>
                 <span>{money(slip.change)}</span>
               </div>
@@ -166,26 +166,26 @@ export default function POSReceiptModal() {
           {/* Phase 2-G Wave 2 (2-G.2) — codes generated on this sale. */}
           {Array.isArray(slip.issuedGiftCards) && slip.issuedGiftCards.length > 0 && (
             <>
-              <div className="border-t border-dashed border-slate-300" />
-              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">
+              <div className="border-t border-dashed border-(--ui-border-strong)" />
+              <p className="text-xs font-bold text-(--ui-success-fg) uppercase tracking-wide">
                 Gift Cards Issued
               </p>
               <div className="space-y-1">
                 {slip.issuedGiftCards.map((gc) => (
                   <div
                     key={gc.id || gc.code}
-                    className="flex justify-between items-center text-xs bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1.5"
+                    className="flex justify-between items-center text-xs bg-(--ui-success-bg) border border-(--ui-success-fg)/30 rounded-md px-2 py-1.5"
                   >
-                    <span className="font-mono font-bold tracking-widest text-emerald-900">
+                    <span className="font-mono font-bold tracking-widest text-(--ui-success-fg)">
                       {gc.code}
                     </span>
-                    <span className="font-semibold text-emerald-800">
+                    <span className="font-semibold text-(--ui-success-fg)">
                       {money(gc.initial_value)}
                     </span>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-500 text-center">
+              <p className="text-[10px] text-(--ui-text-muted) text-center">
                 Keep the code safe — it's required at checkout to redeem.
               </p>
             </>
@@ -195,20 +195,20 @@ export default function POSReceiptModal() {
               knows their reference and when payment is due. */}
           {slip.arInvoice && (
             <>
-              <div className="border-t border-dashed border-slate-300" />
-              <div className="bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-2 space-y-1">
-                <p className="text-[10px] font-bold text-violet-700 uppercase tracking-wide">
+              <div className="border-t border-dashed border-(--ui-border-strong)" />
+              <div className="bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-lg px-2.5 py-2 space-y-1">
+                <p className="text-[10px] font-bold text-(--ui-text) uppercase tracking-wide">
                   On Account
                 </p>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">A/R Invoice</span>
-                  <span className="font-mono font-bold text-violet-900">
+                  <span className="text-(--ui-text-muted)">A/R Invoice</span>
+                  <span className="font-mono font-bold text-(--ui-text)">
                     {slip.arInvoice.invoice_number}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">Due Date</span>
-                  <span className="font-semibold text-slate-800">
+                  <span className="text-(--ui-text-muted)">Due Date</span>
+                  <span className="font-semibold text-(--ui-text)">
                     {slip.arInvoice.due_date
                       ? new Date(slip.arInvoice.due_date).toLocaleDateString(undefined, {
                           year: "numeric",
@@ -217,7 +217,7 @@ export default function POSReceiptModal() {
                         })
                       : "—"}
                     {slip.arInvoice.payment_terms_days > 0 && (
-                      <span className="text-slate-500 ml-1">
+                      <span className="text-(--ui-text-muted) ml-1">
                         (Net {slip.arInvoice.payment_terms_days})
                       </span>
                     )}
@@ -228,46 +228,46 @@ export default function POSReceiptModal() {
           )}
           {slip.orderNote && (
             <>
-              <div className="border-t border-dashed border-slate-300" />
-              <p className="text-center text-xs text-slate-500 italic">Note: {slip.orderNote}</p>
+              <div className="border-t border-dashed border-(--ui-border-strong)" />
+              <p className="text-center text-xs text-(--ui-text-muted) italic">Note: {slip.orderNote}</p>
             </>
           )}
           {sections.showBarcode && (
             <>
-              <div className="border-t border-dashed border-slate-300" />
-              <p className="text-center text-xs tracking-widest text-slate-400 font-mono">
+              <div className="border-t border-dashed border-(--ui-border-strong)" />
+              <p className="text-center text-xs tracking-widest text-(--ui-text-muted) font-mono">
                 {sections.invoiceNumber}
               </p>
             </>
           )}
-          <div className="border-t border-dashed border-slate-300" />
-          <p className="text-center text-xs text-slate-400">
+          <div className="border-t border-dashed border-(--ui-border-strong)" />
+          <p className="text-center text-xs text-(--ui-text-muted)">
             {sections.footerText}
           </p>
         </div>
 
-        <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+        <div className="p-4 border-t border-(--ui-border) flex gap-3 shrink-0">
           <button
             onClick={() => setSlipOpen(false)}
-            className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition"
+            className="flex-1 py-2.5 border-2 border-(--ui-border-strong) rounded-xl text-sm font-bold text-(--ui-text-muted) hover:bg-(--ui-muted-surface) transition"
           >
             Close
           </button>
           <button
             onClick={() => setShowEmailModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) text-sm font-medium"
           >
             <Mail size={14} /> Email
           </button>
           <button
             onClick={shareWhatsApp}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) text-sm font-medium"
           >
             <MessageCircle size={14} /> WhatsApp
           </button>
           <button
             onClick={() => printSlip(slip)}
-            className="flex-1 py-2.5 bg-[#8066FF] hover:bg-[#7055E6] text-white rounded-xl text-sm font-bold shadow transition"
+            className="flex-1 py-2.5 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white rounded-xl text-sm font-bold transition"
           >
             Print
           </button>

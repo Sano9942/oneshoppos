@@ -179,7 +179,7 @@ export default function CommissionPlansRedesign() {
                     <td className="py-2 text-right flex gap-1 justify-end">
                       <Button tone="plain" size="sm" iconOnly onClick={() => openAssign(p)} title="Assign employees" aria-label="Assign employees"><Users size={14} /></Button>
                       <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(p)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
-                      <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(p.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
+                      <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(p.id)} title="Delete" aria-label="Delete" className="hover:text-(--ui-danger-fg)"><Trash2 size={14} /></Button>
                     </td>
                   </tr>
                 ))}
@@ -194,11 +194,11 @@ export default function CommissionPlansRedesign() {
           <div className="flex gap-4 mb-4 flex-wrap">
             <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
               <p className="text-xs text-(--ui-muted)">Pending</p>
-              <p className="font-semibold text-yellow-600">{fmt(Number(summary.pending_total || 0))}</p>
+              <p className="font-semibold text-(--ui-warning-fg)">{fmt(Number(summary.pending_total || 0))}</p>
             </div>
             <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
               <p className="text-xs text-(--ui-muted)">Approved</p>
-              <p className="font-semibold text-green-600">{fmt(Number(summary.approved_total || 0))}</p>
+              <p className="font-semibold text-(--ui-success-fg)">{fmt(Number(summary.approved_total || 0))}</p>
             </div>
             <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
               <p className="text-xs text-(--ui-muted)">Paid</p>
@@ -296,7 +296,7 @@ export default function CommissionPlansRedesign() {
             <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" step="0.01" placeholder={planForm.type === "tiered" ? "Rate %" : "Rate"} value={rule.rate} onChange={e => updateRule(idx, "rate", Number(e.target.value))} />
             {planForm.type !== "tiered" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Min" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />}
             <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Cap" value={rule.max_cap || ""} onChange={e => updateRule(idx, "max_cap", e.target.value ? Number(e.target.value) : null)} />
-            {planForm.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-red-500"><X size={14} /></Button>}
+            {planForm.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-(--ui-danger-fg)"><X size={14} /></Button>}
           </div>
         ))}
         <Button tone="link" size="sm" onClick={addRule} className="mb-4">

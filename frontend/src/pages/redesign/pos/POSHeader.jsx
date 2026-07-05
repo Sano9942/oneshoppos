@@ -52,15 +52,15 @@ export default function POSHeader() {
   }, [refreshStuck, offlineQueueCount, offlineSyncing]);
 
   return (
-    <div className="bg-white border-b border-slate-200 px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between shrink-0 shadow-sm z-20">
+    <div className="bg-(--ui-surface) border-b border-(--ui-border) px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between shrink-0 z-20">
       <div className="flex items-center gap-2">
-        <Store size={18} className="text-[#8066FF]" />
-        <span className="text-sm md:text-base font-bold text-slate-800">
+        <Store size={18} className="text-(--ui-text)" />
+        <span className="text-sm md:text-base font-bold text-(--ui-text)">
           POS
         </span>
       </div>
       <div className="flex items-center gap-2 md:gap-5 text-sm overflow-x-auto">
-        <span className="font-medium text-slate-600 hidden sm:block">
+        <span className="font-medium text-(--ui-text-muted) hidden sm:block">
           {employee?.name || "Employee"}
         </span>
         {outlets.length > 0 && canSwitchOutlet && (
@@ -68,7 +68,7 @@ export default function POSHeader() {
             value={selectedOutletId}
             onChange={(e) => setSelectedOutletId(e.target.value)}
             aria-label="Select branch"
-            className="text-sm font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer border-none"
+            className="text-sm font-bold text-(--ui-text) bg-transparent focus:outline-none cursor-pointer border-none"
           >
             <option value="">Select Branch</option>
             {outlets.map((o) => (
@@ -79,20 +79,20 @@ export default function POSHeader() {
           </select>
         )}
         {outlets.length > 0 && !canSwitchOutlet && (
-          <span className="text-sm font-bold text-slate-700">
+          <span className="text-sm font-bold text-(--ui-text)">
             {outlets.find((o) => String(o.id) === String(selectedOutletId))?.name || "Assigned Branch"}
           </span>
         )}
         <Link
           to="/dashboard"
-          className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-medium transition"
+          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
         >
           <ArrowLeft size={14} /> <span className="hidden sm:inline">Dashboard</span>
         </Link>
         {slip && (
           <button
             onClick={() => setSlipOpen(true)}
-            className="flex items-center gap-1 text-violet-500 hover:text-violet-700 font-medium transition text-sm"
+            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
           >
             <FileText size={14} /> <span className="hidden sm:inline">Last Receipt</span>
           </button>
@@ -100,7 +100,7 @@ export default function POSHeader() {
         {selectedOutletId && (
           <button
             onClick={() => { loadRecentSales(); setRecentSalesOpen(true); }}
-            className="flex items-center gap-1 text-slate-500 hover:text-violet-700 font-medium transition text-sm"
+            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
           >
             <History size={14} /> <span className="hidden sm:inline">Recent Sales</span>
           </button>
@@ -108,7 +108,7 @@ export default function POSHeader() {
         {selectedOutletId && (
           <button
             onClick={() => { setReturnSourceSale(null); setReturnModalOpen(true); }}
-            className="flex items-center gap-1 text-slate-500 hover:text-rose-600 font-medium transition text-sm"
+            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-danger) font-medium transition text-sm"
           >
             <RotateCcw size={14} /> <span className="hidden sm:inline">Return</span>
           </button>
@@ -123,14 +123,14 @@ export default function POSHeader() {
           }}
           disabled={!activeShift?.id}
           title={activeShift?.id ? "Open customer-facing display in a new window" : "Open a shift to enable the customer-facing display"}
-          className="flex items-center gap-1 font-medium transition text-sm disabled:cursor-not-allowed disabled:text-slate-300 text-slate-500 hover:text-[#8066FF]"
+          className="flex items-center gap-1 font-medium transition text-sm disabled:cursor-not-allowed disabled:text-(--ui-border-strong) text-(--ui-text-muted) hover:text-(--ui-text)"
         >
           <Monitor size={14} /> <span className="hidden sm:inline">Customer Display</span>
         </button>
         {isAdmin && stuckCount > 0 && (
           <button
             onClick={() => setStuckOpen(true)}
-            className="flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold transition text-sm bg-amber-50 px-2 py-1 rounded-lg"
+            className="flex items-center gap-1 text-(--ui-warning-fg) hover:text-(--ui-warning-fg) font-bold transition text-sm bg-(--ui-warning-bg) px-2 py-1 rounded-lg"
             title="Stuck offline sales"
           >
             <AlertTriangle size={14} /> <span>Stuck ({stuckCount})</span>
@@ -139,27 +139,27 @@ export default function POSHeader() {
         {activeShift && canOpenShift && (
           <button
             onClick={() => setCloseShiftOpen(true)}
-            className="flex items-center gap-1 text-rose-600 hover:text-rose-700 font-medium transition"
+            className="flex items-center gap-1 text-(--ui-danger) hover:text-(--ui-danger) font-medium transition"
           >
             <Lock size={14} /> <span className="hidden sm:inline">Close Shift</span>
           </button>
         )}
         <button
           onClick={() => setShowShortcutsOverlay(true)}
-          className="flex items-center gap-1 text-slate-500 hover:text-violet-600 font-medium transition"
+          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
           title="Keyboard shortcuts (F1)"
         >
           <HelpCircle size={14} /> <span className="hidden sm:inline">Help</span>
         </button>
         <button
           onClick={handleLock}
-          className="flex items-center gap-1 text-slate-500 hover:text-red-600 font-medium transition"
+          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-danger) font-medium transition"
         >
           <Lock size={14} /> <span className="hidden sm:inline">Lock</span>
         </button>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1 text-slate-500 hover:text-slate-900 font-medium transition"
+          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
         >
           <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
         </button>

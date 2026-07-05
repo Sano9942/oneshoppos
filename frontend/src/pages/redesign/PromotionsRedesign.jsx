@@ -429,12 +429,12 @@ export default function PromotionsRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
       {notice ? (
-        <SectionCard className="mb-3 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <SectionCard className="mb-3 bg-(--ui-success-bg) p-3 text-sm text-(--ui-success-fg)">
           {notice}
         </SectionCard>
       ) : null}
@@ -633,9 +633,9 @@ export default function PromotionsRedesign() {
             </div>
             {quoteResult ? (
               <div className="mt-3 space-y-2 text-sm">
-                <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
-                  <p className="text-xs text-emerald-700">Total Promotion Discount</p>
-                  <p className="text-base font-semibold text-emerald-800">
+                <div className="rounded-(--ui-radius-sm) bg-(--ui-success-bg) p-2">
+                  <p className="text-xs text-(--ui-success-fg)">Total Promotion Discount</p>
+                  <p className="text-base font-semibold text-(--ui-success-fg)">
                     {fmt(quoteResult.total_promotion_discount)}
                   </p>
                 </div>
@@ -679,7 +679,7 @@ export default function PromotionsRedesign() {
         size="xl"
       >
         {formError ? (
-          <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+          <div className="mb-3 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">
             {formError}
           </div>
         ) : null}

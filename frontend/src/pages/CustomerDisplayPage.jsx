@@ -72,20 +72,20 @@ export default function CustomerDisplayPage() {
 
   const statusColor =
     data.status === "paid"
-      ? "text-emerald-400"
+      ? "text-(--ui-success-fg)"
       : data.status === "active"
-        ? "text-sky-400"
-        : "text-slate-500";
+        ? "text-(--ui-link)"
+        : "text-(--ui-text-muted)";
 
   if (!shiftId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-bg) text-(--ui-text)">
         <div className="text-center">
           <h1 className="mb-4 text-3xl font-bold">Customer Display</h1>
-          <p className="text-lg text-slate-400">
+          <p className="text-lg text-(--ui-text-muted)">
             Missing shift_id parameter. Open this page with:
           </p>
-          <code className="mt-2 block rounded bg-slate-800 px-4 py-2 text-sm text-sky-400">
+          <code className="mt-2 block rounded bg-(--ui-muted-surface) px-4 py-2 text-sm text-(--ui-text)">
             /customer-display?shift_id=YOUR_SHIFT_ID
           </code>
         </div>
@@ -94,14 +94,14 @@ export default function CustomerDisplayPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-900 text-white">
+    <div className="flex min-h-screen flex-col bg-(--ui-bg) text-(--ui-text)">
       {/* Header */}
-      <div className="shrink-0 border-b border-slate-700 bg-slate-800 px-8 py-5">
+      <div className="shrink-0 border-b border-(--ui-border) bg-(--ui-surface) px-8 py-5">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-wide">{storeName}</h1>
           <div className={`text-lg font-semibold ${statusColor}`}>
             {data.status === "paid" && (
-              <span className="mr-2 inline-block animate-bounce text-emerald-400">
+              <span className="mr-2 inline-block animate-bounce text-(--ui-success-fg)">
                 &#10003;
               </span>
             )}
@@ -116,7 +116,7 @@ export default function CustomerDisplayPage() {
         <div className="grow overflow-y-auto px-8 py-6">
           {data.items.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <p className="text-2xl text-slate-600">
+              <p className="text-2xl text-(--ui-text-muted)">
                 {data.status === "idle"
                   ? "Welcome! Your items will appear here."
                   : "No items yet"}
@@ -125,7 +125,7 @@ export default function CustomerDisplayPage() {
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-700 text-left text-sm uppercase tracking-wider text-slate-500">
+                <tr className="border-b border-(--ui-border-strong) text-left text-sm uppercase tracking-wider text-(--ui-text-muted)">
                   <th className="pb-3 pl-2">#</th>
                   <th className="pb-3">Item</th>
                   <th className="pb-3 text-center">Qty</th>
@@ -137,13 +137,13 @@ export default function CustomerDisplayPage() {
                 {data.items.map((item, idx) => (
                   <tr
                     key={idx}
-                    className={`border-b border-slate-800 transition-all duration-500 ${
+                    className={`border-b border-(--ui-border) transition-all duration-500 ${
                       idx === animateIdx
-                        ? "bg-sky-900/40 scale-[1.01]"
-                        : "hover:bg-slate-800/50"
+                        ? "bg-(--ui-muted-surface) scale-[1.01]"
+                        : "hover:bg-(--ui-muted-surface)"
                     }`}
                   >
-                    <td className="py-4 pl-2 text-lg text-slate-500">
+                    <td className="py-4 pl-2 text-lg text-(--ui-text-muted)">
                       {idx + 1}
                     </td>
                     <td className="py-4 text-xl font-medium">{item.name}</td>
@@ -162,10 +162,10 @@ export default function CustomerDisplayPage() {
         </div>
 
         {/* Totals bar */}
-        <div className="shrink-0 border-t border-slate-700 bg-slate-800 px-8 py-6">
+        <div className="shrink-0 border-t border-(--ui-border) bg-(--ui-muted-surface) px-8 py-6">
           <div className="grid grid-cols-3 gap-6">
             <div>
-              <p className="text-sm uppercase tracking-wider text-slate-500">
+              <p className="text-sm uppercase tracking-wider text-(--ui-text-muted)">
                 Subtotal
               </p>
               <p className="text-2xl font-semibold tabular-nums">
@@ -173,7 +173,7 @@ export default function CustomerDisplayPage() {
               </p>
             </div>
             <div>
-              <p className="text-sm uppercase tracking-wider text-slate-500">
+              <p className="text-sm uppercase tracking-wider text-(--ui-text-muted)">
                 Tax
               </p>
               <p className="text-2xl font-semibold tabular-nums">
@@ -181,10 +181,10 @@ export default function CustomerDisplayPage() {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm uppercase tracking-wider text-slate-500">
+              <p className="text-sm uppercase tracking-wider text-(--ui-text-muted)">
                 Total
               </p>
-              <p className="text-4xl font-bold tabular-nums text-emerald-400">
+              <p className="text-4xl font-bold tabular-nums text-(--ui-text)">
                 {money(data.total)}
               </p>
             </div>

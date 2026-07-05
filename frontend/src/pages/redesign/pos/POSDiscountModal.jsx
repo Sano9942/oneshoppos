@@ -16,26 +16,26 @@ export default function POSDiscountModal() {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
-          <h3 className="font-bold text-slate-800">Add Discount</h3>
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border) bg-(--ui-muted-surface)">
+          <h3 className="font-bold text-(--ui-text)">Add Discount</h3>
           <button
             onClick={() => setShowDiscountModal(false)}
-            className="text-slate-400 hover:text-slate-600"
+            className="text-(--ui-text-muted) hover:text-(--ui-text)"
           >
             <X size={18} />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
+          <div className="flex gap-1 p-1 bg-(--ui-muted-surface) rounded-lg">
             {["percent", "fixed"].map((t) => (
               <button
                 key={t}
                 onClick={() => setDiscountType(t)}
                 className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${
                   discountType === t
-                    ? "bg-white shadow-sm text-slate-800"
-                    : "text-slate-500 hover:bg-slate-200"
+                    ? "bg-(--ui-surface) shadow-sm text-(--ui-text)"
+                    : "text-(--ui-text-muted) hover:bg-(--ui-border-strong)"
                 }`}
               >
                 {t === "percent" ? "Percentage (%)" : "Fixed Amount"}
@@ -49,12 +49,12 @@ export default function POSDiscountModal() {
             value={discountInput}
             onChange={(e) => setDiscountInput(e.target.value)}
             autoFocus
-            className="w-full border-2 border-slate-200 rounded-lg px-4 py-2.5 focus:border-[#8066FF] outline-none font-bold text-slate-800"
+            className="w-full border border-(--ui-border-strong) rounded-lg px-4 py-2.5 focus:border-(--ui-focus) outline-none font-bold text-(--ui-text)"
             placeholder={discountType === "percent" ? "10" : "50.00"}
           />
           <button
             onClick={() => setShowDiscountModal(false)}
-            className="w-full bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold py-2.5 rounded-lg transition"
+            className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-bold py-2.5 rounded-lg transition"
           >
             Apply Discount
           </button>

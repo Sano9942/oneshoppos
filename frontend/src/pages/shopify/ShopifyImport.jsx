@@ -86,11 +86,11 @@ export default function ShopifyImport() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-      <h3 className="text-lg font-semibold text-slate-800">
+    <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-5 space-y-4">
+      <h3 className="text-lg font-semibold text-(--ui-text)">
         Import from Shopify
       </h3>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-(--ui-text-muted)">
         Pull products and inventory levels directly from Shopify into POS.
         Products are matched by barcode and created or updated automatically.
       </p>
@@ -100,7 +100,7 @@ export default function ShopifyImport() {
           <button
             onClick={importProductsFromShopify}
             disabled={importingProducts || !config.connected}
-            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-primary) hover:bg-(--ui-primary) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
           >
             <Download size={14} />
             {importingProducts
@@ -110,7 +110,7 @@ export default function ShopifyImport() {
           <button
             onClick={syncInventoryFromShopify}
             disabled={importingInventory || !config.connected}
-            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-success-fg) hover:bg-(--ui-success-fg) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
           >
             <RefreshCw size={14} />
             {importingInventory
@@ -118,17 +118,17 @@ export default function ShopifyImport() {
               : "Sync Inventory Levels from Shopify"}
           </button>
 
-          <div className="pt-4 border-t border-slate-100">
+          <div className="pt-4 border-t border-(--ui-border)">
             <button
               onClick={deleteShopifyImportedProducts}
               disabled={deletingImport}
-              className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-rose-300 text-rose-600 hover:bg-rose-50 rounded-lg text-sm font-semibold disabled:opacity-60"
+              className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-(--ui-danger-bg) text-(--ui-danger-fg) hover:bg-(--ui-danger-bg) rounded-lg text-sm font-semibold disabled:opacity-60"
             >
               {deletingImport
                 ? "Deleting..."
                 : "Delete All Shopify-Imported Products"}
             </button>
-            <p className="text-xs text-rose-400 mt-2">
+            <p className="text-xs text-(--ui-danger-fg) mt-2">
               Removes all products that were imported from Shopify and clears
               their stock + mappings.
             </p>
@@ -137,26 +137,26 @@ export default function ShopifyImport() {
 
         <div className="space-y-3">
           {importResult && (
-            <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg text-sm space-y-1">
-              <div className="font-semibold text-violet-800 underline mb-1">
+            <div className="p-3 bg-(--ui-muted-surface) border border-(--ui-border) rounded-lg text-sm space-y-1">
+              <div className="font-semibold text-(--ui-text-muted) underline mb-1">
                 Last Product Import
               </div>
-              <div className="grid grid-cols-3 gap-2 text-slate-700">
+              <div className="grid grid-cols-3 gap-2 text-(--ui-text)">
                 <div className="flex flex-col">
-                  <span className="text-xs text-slate-400">Created</span>
+                  <span className="text-xs text-(--ui-text-muted)">Created</span>
                   <strong>{importResult.created}</strong>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs text-slate-400">Updated</span>
+                  <span className="text-xs text-(--ui-text-muted)">Updated</span>
                   <strong>{importResult.updated}</strong>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs text-slate-400">Skipped</span>
+                  <span className="text-xs text-(--ui-text-muted)">Skipped</span>
                   <strong>{importResult.skipped}</strong>
                 </div>
               </div>
               {importResult.errors?.length > 0 && (
-                <div className="text-rose-600 text-xs mt-2 p-1 bg-white rounded border border-rose-100">
+                <div className="text-(--ui-danger-fg) text-xs mt-2 p-1 bg-(--ui-surface) rounded border border-(--ui-danger-bg)">
                   {importResult.errors.length} error(s). e.g.,{" "}
                   {importResult.errors[0]?.error}
                 </div>
@@ -165,22 +165,22 @@ export default function ShopifyImport() {
           )}
 
           {inventorySyncResult && (
-            <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg text-sm space-y-1">
-              <div className="font-semibold text-teal-800 underline mb-1">
+            <div className="p-3 bg-(--ui-success-bg) border border-(--ui-success-bg) rounded-lg text-sm space-y-1">
+              <div className="font-semibold text-(--ui-success-fg) underline mb-1">
                 Last Inventory Sync
               </div>
-              <div className="grid grid-cols-2 gap-2 text-slate-700">
+              <div className="grid grid-cols-2 gap-2 text-(--ui-text)">
                 <div className="flex flex-col">
-                  <span className="text-xs text-slate-400">Synced</span>
+                  <span className="text-xs text-(--ui-text-muted)">Synced</span>
                   <strong>{inventorySyncResult.synced}</strong>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs text-slate-400">Failed</span>
+                  <span className="text-xs text-(--ui-text-muted)">Failed</span>
                   <strong>{inventorySyncResult.failed}</strong>
                 </div>
               </div>
               {inventorySyncResult.errors?.length > 0 && (
-                <div className="text-rose-600 text-xs mt-2 p-1 bg-white rounded border border-rose-100">
+                <div className="text-(--ui-danger-fg) text-xs mt-2 p-1 bg-(--ui-surface) rounded border border-(--ui-danger-bg)">
                   {inventorySyncResult.errors.length} error(s). e.g.,{" "}
                   {inventorySyncResult.errors[0]?.error}
                 </div>
@@ -189,7 +189,7 @@ export default function ShopifyImport() {
           )}
 
           {!importResult && !inventorySyncResult && (
-            <div className="h-full flex items-center justify-center p-8 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-slate-400 text-sm">
+            <div className="h-full flex items-center justify-center p-8 bg-(--ui-muted-surface) border border-dashed border-(--ui-border) rounded-lg text-(--ui-text-muted) text-sm">
               No recent import activity
             </div>
           )}

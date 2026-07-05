@@ -31,10 +31,10 @@ function ReceiptPreview({ template, symbol }) {
   const showQr = template.show_qr !== false;
   return (
     <div
-      className="bg-white border border-slate-200 rounded-xl p-4 font-mono text-xs text-slate-800 shadow-sm"
+      className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-4 font-mono text-xs text-(--ui-text)"
       style={{ width: `${width}px` }}
     >
-      <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-3">
+      <div className="text-center border-b border-dashed border-(--ui-border-strong) pb-3 mb-3">
         {template.logo_url && (
           <img
             src={template.logo_url}
@@ -43,38 +43,38 @@ function ReceiptPreview({ template, symbol }) {
           />
         )}
         <div className="font-bold text-sm">{template.header_text || "Store Name"}</div>
-        <div className="text-slate-500 text-[11px] mt-1">Receipt #1042</div>
+        <div className="text-(--ui-text-muted) text-[11px] mt-1">Receipt #1042</div>
       </div>
       <div className="space-y-1 mb-3">
         <div className="flex justify-between"><span>2x Sample Item</span><span>{s} 40.00</span></div>
         <div className="flex justify-between"><span>1x Another Item</span><span>{s} 15.00</span></div>
       </div>
-      <div className="border-t border-dashed border-slate-300 pt-2 mb-3 space-y-1">
-        <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{s} 55.00</span></div>
+      <div className="border-t border-dashed border-(--ui-border-strong) pt-2 mb-3 space-y-1">
+        <div className="flex justify-between text-(--ui-text-muted)"><span>Subtotal</span><span>{s} 55.00</span></div>
         {showTax && (
-          <div className="flex justify-between text-slate-500"><span>Tax</span><span>{s} 2.75</span></div>
+          <div className="flex justify-between text-(--ui-text-muted)"><span>Tax</span><span>{s} 2.75</span></div>
         )}
         <div className="flex justify-between font-bold"><span>TOTAL</span><span>{s} 57.75</span></div>
-        <div className="flex justify-between text-slate-500"><span>Cash</span><span>{s} 60.00</span></div>
+        <div className="flex justify-between text-(--ui-text-muted)"><span>Cash</span><span>{s} 60.00</span></div>
         <div className="flex justify-between font-bold"><span>CHANGE</span><span>{s} 2.25</span></div>
       </div>
       {template.show_barcode && (
-        <div className="border-t border-dashed border-slate-300 pt-2 mb-2 text-center">
-          <div className="text-[10px] tracking-widest text-slate-400">▌▌▌▌▌▌▌▌▌▌▌▌</div>
-          <div className="text-[10px] text-slate-400">1042</div>
+        <div className="border-t border-dashed border-(--ui-border-strong) pt-2 mb-2 text-center">
+          <div className="text-[10px] tracking-widest text-(--ui-text-muted)">▌▌▌▌▌▌▌▌▌▌▌▌</div>
+          <div className="text-[10px] text-(--ui-text-muted)">1042</div>
         </div>
       )}
       {(showFbr || showQr) && (
-        <div className="border-t border-dashed border-slate-300 pt-2 mb-2 text-center">
-          {showFbr && <div className="text-[10px] text-slate-500">FBR Ref: (sample)</div>}
+        <div className="border-t border-dashed border-(--ui-border-strong) pt-2 mb-2 text-center">
+          {showFbr && <div className="text-[10px] text-(--ui-text-muted)">FBR Ref: (sample)</div>}
           {showQr && (
-            <div className="mx-auto mt-1 h-10 w-10 bg-slate-200 text-[8px] text-slate-500 flex items-center justify-center border border-slate-300">
+            <div className="mx-auto mt-1 h-10 w-10 bg-(--ui-muted-surface) text-[8px] text-(--ui-text-muted) flex items-center justify-center border border-(--ui-border-strong)">
               QR
             </div>
           )}
         </div>
       )}
-      <div className="border-t border-dashed border-slate-300 pt-2 text-center text-[11px] text-slate-500">
+      <div className="border-t border-dashed border-(--ui-border-strong) pt-2 text-center text-[11px] text-(--ui-text-muted)">
         {template.footer_text || ""}
       </div>
     </div>
@@ -193,7 +193,7 @@ export default function ReceiptTemplates() {
       <div className="flex justify-end">
         <button
           onClick={openCreate}
-          className="bg-[#8066FF] hover:bg-[#7055E6] text-white px-5 py-2.5 rounded-lg font-bold shadow-md shadow-indigo-200 transition-all flex items-center gap-2"
+          className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) px-5 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2"
         >
           <Plus size={18} /> New Template
         </button>
@@ -202,15 +202,15 @@ export default function ReceiptTemplates() {
       {/* Template Cards */}
       <div className="flex-1">
         {isLoading ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
+          <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-8 text-center text-(--ui-text-muted)">
             Loading templates…
           </div>
         ) : error ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-red-500">{error}</div>
+          <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-8 text-center text-(--ui-danger-fg)">{error}</div>
         ) : templates.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center text-slate-400 flex flex-col items-center">
+          <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-16 text-center text-(--ui-text-muted) flex flex-col items-center">
             <FileText size={48} className="mb-4 opacity-20" />
-            <h3 className="text-lg font-bold text-slate-700 mb-1">No Templates</h3>
+            <h3 className="text-lg font-bold text-(--ui-text) mb-1">No Templates</h3>
             <p className="text-sm">Create a receipt template to customize your printed receipts.</p>
           </div>
         ) : (
@@ -218,22 +218,22 @@ export default function ReceiptTemplates() {
             {templates.map((t) => (
               <div
                 key={t.id}
-                className={`bg-white rounded-xl border shadow-sm flex flex-col overflow-hidden ${
-                  t.is_active ? "border-[#8066FF] ring-2 ring-[#8066FF]/20" : "border-slate-200"
+                className={`bg-(--ui-surface) rounded-xl border flex flex-col overflow-hidden ${
+                  t.is_active ? "border-(--ui-primary) ring-2 ring-(--ui-primary)/20" : "border-(--ui-border)"
                 }`}
               >
                 {/* Card header */}
-                <div className="flex justify-between items-start p-4 border-b border-slate-100">
+                <div className="flex justify-between items-start p-4 border-b border-(--ui-border)">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800">{t.name}</span>
+                      <span className="font-bold text-(--ui-text)">{t.name}</span>
                       {t.is_active && (
-                        <span className="bg-[#8066FF] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="bg-(--ui-primary) text-(--ui-on-primary) text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                           <CheckCircle2 size={10} /> ACTIVE
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1 space-x-2">
+                    <div className="text-xs text-(--ui-text-muted) mt-1 space-x-2">
                       {t.show_barcode ? <span>Barcode ✓</span> : null}
                     </div>
                   </div>
@@ -241,7 +241,7 @@ export default function ReceiptTemplates() {
                     {!t.is_active && (
                       <button
                         onClick={() => handleSetActive(t)}
-                        className="p-1.5 text-slate-400 hover:text-[#8066FF] hover:bg-indigo-50 rounded transition-colors"
+                        className="p-1.5 text-(--ui-text-muted) hover:text-(--ui-primary) hover:bg-(--ui-muted-surface) rounded transition-colors"
                         title="Set as active"
                       >
                         <Star size={15} />
@@ -249,14 +249,14 @@ export default function ReceiptTemplates() {
                     )}
                     <button
                       onClick={() => openEdit(t)}
-                      className="p-1.5 text-slate-400 hover:text-[#8066FF] hover:bg-indigo-50 rounded transition-colors"
+                      className="p-1.5 text-(--ui-text-muted) hover:text-(--ui-primary) hover:bg-(--ui-muted-surface) rounded transition-colors"
                       title="Edit"
                     >
                       <Edit2 size={15} />
                     </button>
                     <button
                       onClick={() => handleDelete(t.id, t.name)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      className="p-1.5 text-(--ui-text-muted) hover:text-(--ui-danger-fg) hover:bg-(--ui-danger-bg) rounded transition-colors"
                       title="Delete"
                     >
                       <Trash2 size={15} />
@@ -265,7 +265,7 @@ export default function ReceiptTemplates() {
                 </div>
 
                 {/* Mini receipt preview */}
-                <div className="p-4 flex justify-center bg-slate-50 flex-1">
+                <div className="p-4 flex justify-center bg-(--ui-muted-surface) flex-1">
                   <ReceiptPreview template={t} symbol={symbol} />
                 </div>
               </div>
@@ -278,21 +278,21 @@ export default function ReceiptTemplates() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
+            className="absolute inset-0 bg-(--ui-primary)/20 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           />
-          <div className="relative w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-slide-in-right">
+          <div className="relative w-full max-w-2xl bg-(--ui-surface) h-full shadow-2xl flex flex-col border-l border-(--ui-border) animate-slide-in-right">
             {/* Modal header */}
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <div className="p-6 border-b border-(--ui-border) flex justify-between items-center bg-(--ui-muted-surface) shrink-0">
+              <h2 className="text-xl font-bold text-(--ui-text) flex items-center gap-2">
                 {editingTemplate
-                  ? <><Edit2 size={20} className="text-[#8066FF]" /> Edit Template</>
-                  : <><Plus size={20} className="text-[#8066FF]" /> New Template</>
+                  ? <><Edit2 size={20} className="text-(--ui-primary)" /> Edit Template</>
+                  : <><Plus size={20} className="text-(--ui-primary)" /> New Template</>
                 }
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 bg-slate-200/50 rounded-full"
+                className="text-(--ui-text-muted) hover:text-(--ui-text-muted) p-1 bg-(--ui-muted-surface)/50 rounded-full"
               >
                 <X size={18} />
               </button>
@@ -304,50 +304,50 @@ export default function ReceiptTemplates() {
               <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-y-auto min-h-0">
                 <div className="p-6 space-y-5 flex-1">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Template Name *
                     </label>
                     <input
                       type="text"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF] text-sm font-medium"
+                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm font-medium"
                       placeholder="e.g. Standard Receipt"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Header Text
                     </label>
                     <input
                       type="text"
                       value={form.header_text}
                       onChange={(e) => setForm({ ...form, header_text: e.target.value })}
-                      className="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF] text-sm"
+                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm"
                       placeholder="Store name or tagline"
                     />
-                    <p className="text-xs text-slate-400 mt-1">Appears at the top of the receipt</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Appears at the top of the receipt</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Footer Text
                     </label>
                     <textarea
                       value={form.footer_text}
                       onChange={(e) => setForm({ ...form, footer_text: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF] text-sm resize-none"
+                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm resize-none"
                       placeholder="Thank you message, return policy, website…"
                     />
-                    <p className="text-xs text-slate-400 mt-1">Appears at the bottom of the receipt</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Appears at the bottom of the receipt</p>
                   </div>
 
                   {/* Bucket F: logo upload */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Logo
                     </label>
                     <div className="flex items-center gap-3">
@@ -355,10 +355,10 @@ export default function ReceiptTemplates() {
                         <img
                           src={form.logo_url}
                           alt=""
-                          className="h-14 w-14 rounded-lg border border-slate-200 bg-white object-contain p-1"
+                          className="h-14 w-14 rounded-lg border border-(--ui-border) bg-(--ui-surface) object-contain p-1"
                         />
                       ) : (
-                        <div className="h-14 w-14 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400">
+                        <div className="h-14 w-14 rounded-lg border-2 border-dashed border-(--ui-border) bg-(--ui-muted-surface) flex items-center justify-center text-(--ui-text-muted)">
                           <FileText size={18} />
                         </div>
                       )}
@@ -373,7 +373,7 @@ export default function ReceiptTemplates() {
                         type="button"
                         onClick={() => logoInputRef.current?.click()}
                         disabled={isUploading}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border-2 border-slate-200 rounded-xl hover:border-[#8066FF] disabled:opacity-60"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-(--ui-text) bg-(--ui-surface) border-2 border-(--ui-border) rounded-xl hover:border-(--ui-primary) disabled:opacity-60"
                       >
                         <Upload size={14} />
                         {isUploading ? "Uploading…" : form.logo_url ? "Replace" : "Upload"}
@@ -382,34 +382,34 @@ export default function ReceiptTemplates() {
                         <button
                           type="button"
                           onClick={() => setForm({ ...form, logo_url: "" })}
-                          className="text-xs text-slate-500 hover:text-red-600"
+                          className="text-xs text-(--ui-text-muted) hover:text-(--ui-danger-fg)"
                         >
                           Remove
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">PNG/JPG/WebP up to 10MB. Resized to 300×100.</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">PNG/JPG/WebP up to 10MB. Resized to 300×100.</p>
                   </div>
 
                   {/* Bucket F: paper width */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Paper Width
                     </label>
                     <select
                       value={form.paper_width}
                       onChange={(e) => setForm({ ...form, paper_width: Number(e.target.value) })}
-                      className="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF] text-sm"
+                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm"
                     >
                       {PAPER_SIZES.map((sz) => (
                         <option key={sz.value} value={sz.value}>{sz.label}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-400 mt-1">Controls layout width on browser popup and thermal printer.</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Controls layout width on browser popup and thermal printer.</p>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-5 space-y-3">
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
+                  <div className="border-t border-(--ui-border) pt-5 space-y-3">
+                    <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                       Options
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
@@ -417,9 +417,9 @@ export default function ReceiptTemplates() {
                         type="checkbox"
                         checked={form.show_barcode}
                         onChange={(e) => setForm({ ...form, show_barcode: e.target.checked })}
-                        className="w-4 h-4 accent-[#8066FF]"
+                        className="w-4 h-4 accent-(--ui-primary)"
                       />
-                      <span className="text-sm text-slate-700 font-medium">Show barcode on receipt</span>
+                      <span className="text-sm text-(--ui-text) font-medium">Show barcode on receipt</span>
                     </label>
                     {/* Bucket F: three new toggles. Defaults ON — merchants
                         opt out for space on 58mm rolls or privacy reasons. */}
@@ -428,53 +428,53 @@ export default function ReceiptTemplates() {
                         type="checkbox"
                         checked={form.show_tax_breakdown}
                         onChange={(e) => setForm({ ...form, show_tax_breakdown: e.target.checked })}
-                        className="w-4 h-4 accent-[#8066FF]"
+                        className="w-4 h-4 accent-(--ui-primary)"
                       />
-                      <span className="text-sm text-slate-700 font-medium">Show tax breakdown</span>
+                      <span className="text-sm text-(--ui-text) font-medium">Show tax breakdown</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={form.show_fbr}
                         onChange={(e) => setForm({ ...form, show_fbr: e.target.checked })}
-                        className="w-4 h-4 accent-[#8066FF]"
+                        className="w-4 h-4 accent-(--ui-primary)"
                       />
-                      <span className="text-sm text-slate-700 font-medium">Show FBR reference (IRN)</span>
+                      <span className="text-sm text-(--ui-text) font-medium">Show FBR reference (IRN)</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={form.show_qr}
                         onChange={(e) => setForm({ ...form, show_qr: e.target.checked })}
-                        className="w-4 h-4 accent-[#8066FF]"
+                        className="w-4 h-4 accent-(--ui-primary)"
                       />
-                      <span className="text-sm text-slate-700 font-medium">Show FBR QR code</span>
+                      <span className="text-sm text-(--ui-text) font-medium">Show FBR QR code</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={form.is_active}
                         onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                        className="w-4 h-4 accent-[#8066FF]"
+                        className="w-4 h-4 accent-(--ui-primary)"
                       />
-                      <span className="text-sm text-slate-700 font-medium">Set as active template</span>
-                      <span className="text-xs text-slate-400">(used by POS when printing)</span>
+                      <span className="text-sm text-(--ui-text) font-medium">Set as active template</span>
+                      <span className="text-xs text-(--ui-text-muted)">(used by POS when printing)</span>
                     </label>
                   </div>
                 </div>
 
-                <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
+                <div className="p-6 border-t border-(--ui-border) bg-(--ui-muted-surface) shrink-0 flex gap-3">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-2.5 text-slate-600 bg-white border border-slate-200 font-bold rounded-xl hover:bg-slate-50 text-sm"
+                    className="flex-1 py-2.5 text-(--ui-text-muted) bg-(--ui-surface) border border-(--ui-border) font-bold rounded-xl hover:bg-(--ui-muted-surface) text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="flex-1 py-2.5 bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold rounded-xl transition-colors shadow-md text-sm disabled:opacity-60"
+                    className="flex-1 py-2.5 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) font-bold rounded-xl transition-colors shadow-md text-sm disabled:opacity-60"
                   >
                     {isSaving ? "Saving…" : editingTemplate ? "Update Template" : "Save Template"}
                   </button>
@@ -482,8 +482,8 @@ export default function ReceiptTemplates() {
               </form>
 
               {/* Live preview panel */}
-              <div className="w-56 border-l border-slate-100 bg-slate-50 flex flex-col items-center p-5 gap-4 shrink-0">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Live Preview</span>
+              <div className="w-56 border-l border-(--ui-border) bg-(--ui-muted-surface) flex flex-col items-center p-5 gap-4 shrink-0">
+                <span className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide">Live Preview</span>
                 <ReceiptPreview template={form} symbol={symbol} />
               </div>
             </div>

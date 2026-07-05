@@ -246,11 +246,11 @@ export default function InvoiceView({ saleId, onBack }) {
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <RefreshCw size={20} className="animate-spin text-slate-400" />
+      <RefreshCw size={20} className="animate-spin text-(--ui-text-muted)" />
     </div>
   );
   if (error) return (
-    <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl">{error}</div>
+    <div className="bg-(--ui-danger-bg) text-(--ui-danger-fg) px-6 py-4 rounded-(--ui-radius-md)">{error}</div>
   );
   if (!data) return null;
 
@@ -265,12 +265,12 @@ export default function InvoiceView({ saleId, onBack }) {
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         {onBack && (
-          <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+          <button onClick={onBack} className="flex items-center gap-2 text-sm text-(--ui-text-muted) hover:text-(--ui-text)">
             <ArrowLeft size={15} /> Back to Sales
           </button>
         )}
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-slate-400 flex items-center gap-1">
+          <span className="text-xs text-(--ui-text-muted) flex items-center gap-1">
             <FileText size={12} /> {sale.invoice_number || `SALE-${sale.id}`}
           </span>
           <button
@@ -281,7 +281,7 @@ export default function InvoiceView({ saleId, onBack }) {
           </button>
           <button
             onClick={() => handleExportJson().catch((e) => setError(e.message))}
-            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium"
+            className="flex items-center gap-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white px-4 py-2 rounded-full text-sm font-semibold"
           >
             <Download size={15} /> Export JSON
           </button>
@@ -289,45 +289,45 @@ export default function InvoiceView({ saleId, onBack }) {
       </div>
 
       {/* Invoice preview */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
+      <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-lg) p-8 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-start border-b-2 border-[#7B61FF] pb-5">
           <div>
             <div className="text-3xl font-black text-[#7B61FF] tracking-tight">INVOICE</div>
-            <div className="text-slate-500 text-xs mt-1">One Shop — Point of Sale</div>
-            {sale.outlet_name && <div className="text-slate-400 text-xs">{sale.outlet_name}</div>}
+            <div className="text-(--ui-text-muted) text-xs mt-1">One Shop — Point of Sale</div>
+            {sale.outlet_name && <div className="text-(--ui-text-muted) text-xs">{sale.outlet_name}</div>}
           </div>
           <div className="text-right">
-            <div className="text-lg font-bold text-slate-800">{sale.invoice_number || `SALE-${sale.id}`}</div>
-            <div className="text-xs text-slate-500 mt-1">{fmtDate(sale.timestamp)}</div>
-            {sale.employee_name && <div className="text-xs text-slate-400">Served by: {sale.employee_name}</div>}
+            <div className="text-lg font-bold text-(--ui-text)">{sale.invoice_number || `SALE-${sale.id}`}</div>
+            <div className="text-xs text-(--ui-text-muted) mt-1">{fmtDate(sale.timestamp)}</div>
+            {sale.employee_name && <div className="text-xs text-(--ui-text-muted)">Served by: {sale.employee_name}</div>}
           </div>
         </div>
 
         {/* Meta grid */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Bill To</div>
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-md) p-4">
+            <div className="text-xs text-(--ui-text-muted) uppercase tracking-wide mb-2">Bill To</div>
             {sale.customer_name ? (
               <div>
-                <p className="font-semibold text-slate-800">{sale.customer_name}</p>
-                {sale.customer_phone && <p className="text-xs text-slate-500 mt-0.5">{sale.customer_phone}</p>}
-                {sale.customer_email && <p className="text-xs text-slate-500">{sale.customer_email}</p>}
+                <p className="font-semibold text-(--ui-text)">{sale.customer_name}</p>
+                {sale.customer_phone && <p className="text-xs text-(--ui-text-muted) mt-0.5">{sale.customer_phone}</p>}
+                {sale.customer_email && <p className="text-xs text-(--ui-text-muted)">{sale.customer_email}</p>}
               </div>
             ) : (
-              <p className="text-slate-500 text-sm">Walk-in Customer</p>
+              <p className="text-(--ui-text-muted) text-sm">Walk-in Customer</p>
             )}
           </div>
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Invoice Details</div>
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-md) p-4">
+            <div className="text-xs text-(--ui-text-muted) uppercase tracking-wide mb-2">Invoice Details</div>
             <div className="space-y-1.5 text-sm">
               {[
-                ["Invoice No.", sale.invoice_number || `SALE-${sale.id}`, "font-semibold text-slate-800"],
-                ["Payment", sale.payment_method, "text-slate-700"],
-                ["Status", sale.status === "voided" ? "Voided" : "Paid", sale.status === "voided" ? "text-red-600 font-semibold" : "text-green-600 font-semibold"],
+                ["Invoice No.", sale.invoice_number || `SALE-${sale.id}`, "font-semibold text-(--ui-text)"],
+                ["Payment", sale.payment_method, "text-(--ui-text)"],
+                ["Status", sale.status === "voided" ? "Voided" : "Paid", sale.status === "voided" ? "text-(--ui-danger-fg) font-semibold" : "text-(--ui-success-fg) font-semibold"],
               ].map(([k, v, vc]) => (
                 <div key={k} className="flex justify-between">
-                  <span className="text-slate-500">{k}</span>
+                  <span className="text-(--ui-text-muted)">{k}</span>
                   <span className={vc}>{v}</span>
                 </div>
               ))}
@@ -349,15 +349,15 @@ export default function InvoiceView({ saleId, onBack }) {
           </thead>
           <tbody>
             {items.map((item, idx) => (
-              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-3 text-slate-400">{idx + 1}</td>
-                <td className="px-4 py-3 text-slate-800 font-medium">{item.product_name}</td>
-                <td className="px-4 py-3 text-right text-slate-500 text-xs">
+              <tr key={idx} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-(--ui-text-muted)">{idx + 1}</td>
+                <td className="px-4 py-3 text-(--ui-text) font-medium">{item.product_name}</td>
+                <td className="px-4 py-3 text-right text-(--ui-text-muted) text-xs">
                   {item.tax_name ? `${item.tax_name} (${item.tax_rate}%)` : "—"}
                 </td>
-                <td className="px-4 py-3 text-right text-slate-600">{fmt(item.price_at_sale)}</td>
-                <td className="px-4 py-3 text-right text-slate-600">{item.quantity}</td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-800">{fmt(item.price_at_sale * item.quantity)}</td>
+                <td className="px-4 py-3 text-right text-(--ui-text-muted)">{fmt(item.price_at_sale)}</td>
+                <td className="px-4 py-3 text-right text-(--ui-text-muted)">{item.quantity}</td>
+                <td className="px-4 py-3 text-right font-semibold text-(--ui-text)">{fmt(item.price_at_sale * item.quantity)}</td>
               </tr>
             ))}
           </tbody>
@@ -366,15 +366,15 @@ export default function InvoiceView({ saleId, onBack }) {
         {/* Totals */}
         <div className="flex justify-end">
           <div className="w-72 space-y-2">
-            <div className="flex justify-between text-sm text-slate-600"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
+            <div className="flex justify-between text-sm text-(--ui-text-muted)"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
             {sale.discount_amount > 0 && (
-              <div className="flex justify-between text-sm text-red-600"><span>Discount</span><span>- {fmt(sale.discount_amount)}</span></div>
+              <div className="flex justify-between text-sm text-(--ui-danger-fg)"><span>Discount</span><span>- {fmt(sale.discount_amount)}</span></div>
             )}
             {taxTotal > 0 && (
-              <div className="flex justify-between text-sm text-slate-600"><span>Tax</span><span>{fmt(taxTotal)}</span></div>
+              <div className="flex justify-between text-sm text-(--ui-text-muted)"><span>Tax</span><span>{fmt(taxTotal)}</span></div>
             )}
             {sale.points_redeemed > 0 && (
-              <div className="flex justify-between text-sm text-slate-600"><span>Points Redeemed</span><span>- {fmt(sale.points_redeemed)}</span></div>
+              <div className="flex justify-between text-sm text-(--ui-text-muted)"><span>Points Redeemed</span><span>- {fmt(sale.points_redeemed)}</span></div>
             )}
             <div className="flex justify-between pt-3 border-t-2 border-[#7B61FF] font-black text-[#7B61FF] text-lg">
               <span>Total</span><span>{fmt(sale.total_amount)}</span>
@@ -385,10 +385,10 @@ export default function InvoiceView({ saleId, onBack }) {
         {/* Payments */}
         {payments?.length > 0 && (
           <div>
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Payments Received</div>
+            <div className="text-xs text-(--ui-text-muted) uppercase tracking-wide mb-2">Payments Received</div>
             <div className="flex flex-wrap gap-2">
               {payments.map((p, i) => (
-                <span key={i} className="inline-flex items-center gap-1.5 bg-violet-100 text-violet-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                <span key={i} className="inline-flex items-center gap-1.5 bg-(--ui-muted-surface) text-(--ui-text) text-xs font-semibold px-3 py-1.5 rounded-full">
                   {p.payment_method}: {fmt(p.amount)}
                 </span>
               ))}
@@ -398,13 +398,13 @@ export default function InvoiceView({ saleId, onBack }) {
 
         {/* Notes */}
         {sale.notes && (
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-sm text-slate-600">
-            <span className="font-semibold text-slate-700">Notes: </span>{sale.notes}
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-md) p-4 text-sm text-(--ui-text-muted)">
+            <span className="font-semibold text-(--ui-text)">Notes: </span>{sale.notes}
           </div>
         )}
 
         {/* Footer */}
-        <div className="text-center text-xs text-slate-400 border-t border-slate-200 pt-4">
+        <div className="text-center text-xs text-(--ui-text-muted) border-t border-(--ui-border) pt-4">
           Thank you for your purchase · One Shop POS
         </div>
       </div>

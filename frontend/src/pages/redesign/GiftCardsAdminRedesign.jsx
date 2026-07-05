@@ -339,12 +339,12 @@ export default function GiftCardsAdminRedesign() {
       >
         {createResult ? (
           <div className="space-y-3">
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <p className="text-sm text-emerald-700 mb-2">Gift card created!</p>
-              <p className="font-mono text-xl font-bold text-emerald-900 tracking-widest">
+            <div className="rounded-(--ui-radius-md) bg-(--ui-success-bg) p-4">
+              <p className="text-sm text-(--ui-success-fg) mb-2">Gift card created!</p>
+              <p className="font-mono text-xl font-bold text-(--ui-text) tracking-widest">
                 {createResult.code}
               </p>
-              <p className="text-sm text-emerald-700 mt-1">
+              <p className="text-sm text-(--ui-success-fg) mt-1">
                 Balance: <strong>{fmt(createResult.initial_value)}</strong>
               </p>
             </div>

@@ -71,10 +71,10 @@ function PortalShell() {
 
   if (configErr) {
     return (
-      <div className="min-h-screen grid place-items-center p-6 bg-slate-50">
+      <div className="min-h-screen grid place-items-center p-6 bg-(--ui-bg)">
         <div className="max-w-md text-center space-y-3">
-          <h1 className="text-2xl font-bold text-slate-800">Portal unavailable</h1>
-          <p className="text-slate-600">{configErr}</p>
+          <h1 className="text-2xl font-bold text-(--ui-text)">Portal unavailable</h1>
+          <p className="text-(--ui-text-muted)">{configErr}</p>
         </div>
       </div>
     );
@@ -82,7 +82,7 @@ function PortalShell() {
 
   if (!config || auth.bootstrapping) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500">
+      <div className="min-h-screen grid place-items-center bg-(--ui-bg) text-(--ui-text-muted)">
         Loading portal…
       </div>
     );
@@ -96,31 +96,31 @@ function PortalShell() {
   const needsChrome = auth.isAuthenticated;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      <header className="bg-white border-b border-slate-200">
+    <div className="min-h-screen bg-(--ui-bg) text-(--ui-text)">
+      <header className="bg-(--ui-surface) border-b border-(--ui-border)">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to={`/portal/${tenantSlug}`} className="flex items-center gap-3">
             {logoUrl ? (
-              <img src={logoUrl} alt={storeName} className="h-9 w-9 rounded object-cover" />
+              <img src={logoUrl} alt={storeName} className="h-9 w-9 rounded-(--ui-radius-sm) object-cover" />
             ) : (
-              <div className="h-9 w-9 rounded bg-emerald-600 text-white grid place-items-center font-bold">
+              <div className="h-9 w-9 rounded-(--ui-radius-sm) bg-(--ui-primary) text-(--ui-on-primary) grid place-items-center font-bold">
                 {storeName.charAt(0).toUpperCase()}
               </div>
             )}
             <div>
-              <div className="text-sm text-slate-500">{labels.portal_title || "Customer Portal"}</div>
+              <div className="text-sm text-(--ui-text-muted)">{labels.portal_title || "Customer Portal"}</div>
               <div className="text-lg font-semibold">{storeName}</div>
             </div>
           </Link>
           {auth.isAuthenticated && (
             <div className="flex items-center gap-3">
-              <div className="text-sm text-slate-600 hidden sm:block">
+              <div className="text-sm text-(--ui-text-muted) hidden sm:block">
                 {auth.customer?.name || auth.customer?.email}
               </div>
               <button
                 type="button"
                 onClick={auth.logout}
-                className="text-sm text-slate-600 hover:text-slate-900 px-3 py-1 border border-slate-200 rounded"
+                className="text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) px-3 py-1.5 border border-(--ui-border-strong) rounded-full"
               >
                 Sign out
               </button>
@@ -130,14 +130,14 @@ function PortalShell() {
       </header>
 
       {needsChrome && (
-        <nav className="bg-white border-b border-slate-200">
+        <nav className="bg-(--ui-surface) border-b border-(--ui-border)">
           <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
             <NavLink
               end
               to={`/portal/${tenantSlug}`}
               className={({ isActive }) =>
                 `px-4 py-3 text-sm font-medium border-b-2 ${
-                  isActive ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-600"
+                  isActive ? "border-(--ui-primary) text-(--ui-text)" : "border-transparent text-(--ui-text-muted)"
                 }`
               }
             >
@@ -152,8 +152,8 @@ function PortalShell() {
                   className={({ isActive }) =>
                     `px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap ${
                       isActive
-                        ? "border-emerald-600 text-emerald-700"
-                        : "border-transparent text-slate-600"
+                        ? "border-(--ui-primary) text-(--ui-text)"
+                        : "border-transparent text-(--ui-text-muted)"
                     }`
                   }
                 >

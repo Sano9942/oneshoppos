@@ -287,22 +287,22 @@ describe("TabBar", () => {
 describe("Button extensions", () => {
   beforeEach(() => cleanup());
 
-  it("iconOnly applies square padding (p-2) at default size", () => {
+  it("iconOnly renders a fixed square at default size", () => {
     render(<Button iconOnly aria-label="Edit">i</Button>);
     const btn = screen.getByRole("button", { name: "Edit" });
-    expect(btn.className).toContain("p-2");
+    expect(btn.className).toContain("h-10 w-10");
   });
 
-  it("iconOnly + size=sm applies p-1.5", () => {
+  it("iconOnly + size=sm renders a smaller fixed square", () => {
     render(<Button iconOnly size="sm" aria-label="Edit">i</Button>);
     const btn = screen.getByRole("button", { name: "Edit" });
-    expect(btn.className).toContain("p-1.5");
+    expect(btn.className).toContain("h-8 w-8");
   });
 
-  it("tone=link applies primary text color and zero padding", () => {
+  it("tone=link applies link text color and zero padding", () => {
     render(<Button tone="link">Show more</Button>);
     const btn = screen.getByRole("button", { name: "Show more" });
-    expect(btn.className).toContain("text-(--ui-primary)");
+    expect(btn.className).toContain("text-(--ui-link)");
     expect(btn.className).toContain("p-0");
   });
 });

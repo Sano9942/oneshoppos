@@ -244,7 +244,7 @@ export default function CashManagementRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -337,10 +337,10 @@ export default function CashManagementRedesign() {
                     {r.closing_cash == null ? (
                       <span className="text-(--ui-text-muted)">-</span>
                     ) : (
-                      <button className="text-blue-700 hover:underline" onClick={() => loadDenominations(r)}>{money(r.closing_cash)}</button>
+                      <button className="text-(--ui-link) hover:underline" onClick={() => loadDenominations(r)}>{money(r.closing_cash)}</button>
                     )}
                   </td>
-                  <td className={`px-3 py-2 text-right font-semibold ${Number(r.variance || 0) < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                  <td className={`px-3 py-2 text-right font-semibold ${Number(r.variance || 0) < 0 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                     {r.variance == null ? "-" : money(r.variance)}
                   </td>
                   <td className="px-3 py-2">

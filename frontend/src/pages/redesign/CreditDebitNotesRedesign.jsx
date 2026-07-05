@@ -226,15 +226,15 @@ export default function CreditDebitNotesRedesign() {
       }
     >
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex gap-1 mb-4 border-b border-(--ui-border)">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => { setTab(t.key); setSearch(""); setStatusFilter(""); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.key
-                ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-                : "border-transparent text-(--ui-text-muted) hover:text-gray-700 dark:text-gray-400"
+                ? "border-(--ui-primary) text-(--ui-primary)"
+                : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {t.label}
@@ -253,7 +253,7 @@ export default function CreditDebitNotesRedesign() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm"
+          className="rounded-md border border-(--ui-border-strong) bg-white px-3 py-1.5 text-sm"
         >
           <option value="">All Statuses</option>
           <option value="draft">Draft</option>
@@ -264,7 +264,7 @@ export default function CreditDebitNotesRedesign() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
+        <div className="mb-4 p-3 bg-(--ui-danger-bg) text-(--ui-danger-fg) rounded-lg text-sm">
           {error}
           <button className="ml-2 underline" onClick={() => setError("")}>dismiss</button>
         </div>
@@ -276,13 +276,13 @@ export default function CreditDebitNotesRedesign() {
         ) : !filtered.length ? (
           <EmptyState
             title={`No ${activeTab.label.toLowerCase()}`}
-            description="Create your first note to get started."
+            body="Create your first note to get started."
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-(--ui-text-muted) dark:text-gray-400">
+                <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                   <th className="pb-2 font-medium">Note #</th>
                   <th className="pb-2 font-medium">Type</th>
                   <th className="pb-2 font-medium">Customer / Supplier</th>
@@ -295,7 +295,7 @@ export default function CreditDebitNotesRedesign() {
               </thead>
               <tbody>
                 {filtered.map((n) => (
-                  <tr key={n.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <tr key={n.id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
                     <td className="py-2.5 font-mono text-xs">{n.note_number}</td>
                     <td className="py-2.5 capitalize">{n.type}</td>
                     <td className="py-2.5">{n.customer_name || n.supplier_name || "—"}</td>
@@ -311,14 +311,14 @@ export default function CreditDebitNotesRedesign() {
                           <>
                             <button
                               onClick={() => openEdit(n)}
-                              className="p-1 text-(--ui-text-muted) hover:text-blue-600"
+                              className="p-1 text-(--ui-text-muted) hover:text-(--ui-link)"
                               title="Edit"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setConfirm({ action: "approve", note: n })}
-                              className="p-1 text-(--ui-text-muted) hover:text-green-600"
+                              className="p-1 text-(--ui-text-muted) hover:text-(--ui-success-fg)"
                               title="Approve"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -328,7 +328,7 @@ export default function CreditDebitNotesRedesign() {
                         {n.status !== "cancelled" && (
                           <button
                             onClick={() => setConfirm({ action: "cancel", note: n })}
-                            className="p-1 text-(--ui-text-muted) hover:text-red-600"
+                            className="p-1 text-(--ui-text-muted) hover:text-(--ui-danger-fg)"
                             title="Cancel"
                           >
                             <XCircle className="w-4 h-4" />
@@ -358,7 +358,7 @@ export default function CreditDebitNotesRedesign() {
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value, customer_id: "", supplier_id: "" })}
                   disabled={modal === "edit"}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm"
                 >
                   <option value="sales">Sales</option>
                   <option value="purchase">Purchase</option>
@@ -383,7 +383,7 @@ export default function CreditDebitNotesRedesign() {
                       ? setForm({ ...form, customer_id: e.target.value })
                       : setForm({ ...form, supplier_id: e.target.value })
                   }
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm"
                   size={5}
                 >
                   <option value="">— Select —</option>
@@ -446,7 +446,7 @@ export default function CreditDebitNotesRedesign() {
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               rows={2}
-              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-none"
+              className="w-full rounded-md border border-(--ui-border-strong) bg-white px-3 py-2 text-sm resize-none"
             />
           </div>
         </div>
@@ -467,7 +467,7 @@ export default function CreditDebitNotesRedesign() {
       >
         {confirm ? (
           <>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+            <p className="text-sm text-(--ui-text-muted) mb-1">
               {confirm.note.note_number} — {money(confirm.note.amount)}
             </p>
             {confirm.action === "approve" && (
@@ -476,7 +476,7 @@ export default function CreditDebitNotesRedesign() {
               </p>
             )}
             {confirm.action === "cancel" && confirm.note.status === "approved" && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
+              <p className="text-xs text-(--ui-warning-fg) mb-4">
                 This will reverse the balance adjustment.
               </p>
             )}

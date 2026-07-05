@@ -52,15 +52,15 @@ export function AttendanceTab({ filters }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <CardShell title="Attendance Days" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{rows.length}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{rows.length}</div>
         </CardShell>
         <CardShell title="Present Records" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">
             {rows.filter((row) => row.status === "present").length}
           </div>
         </CardShell>
         <CardShell title="Total Hours" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">
             {totalHours.toFixed(2)}
           </div>
         </CardShell>
@@ -95,17 +95,17 @@ export function AttendanceTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-              <td className="p-4 text-slate-600">{r.outlet_name}</td>
-              <td className="p-4 text-slate-500">{fmtDate(r.check_in)}</td>
-              <td className="p-4 font-medium text-emerald-600 font-mono">
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{r.outlet_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{fmtDate(r.check_in)}</td>
+              <td className="p-4 font-medium text-(--ui-success-fg) font-mono">
                 {fmtTime(r.check_in)}
               </td>
-              <td className="p-4 font-medium text-rose-600 font-mono">
+              <td className="p-4 font-medium text-(--ui-danger-fg) font-mono">
                 {fmtTime(r.check_out)}
               </td>
-              <td className="p-4 font-bold text-slate-900">
+              <td className="p-4 font-bold text-(--ui-text)">
                 {Number(r.hours || 0).toFixed(2)} hrs
               </td>
             </tr>
@@ -149,15 +149,15 @@ export function LaborPerformanceTab({ filters }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <CardShell title="Staff Tracked" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{data.length}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{data.length}</div>
         </CardShell>
         <CardShell title="Hours Worked" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">
             {totalHours.toFixed(2)}
           </div>
         </CardShell>
         <CardShell title="Revenue" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</div>
         </CardShell>
       </div>
 
@@ -187,17 +187,17 @@ export function LaborPerformanceTab({ filters }) {
           empty={!data.length}
         >
           {data.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-              <td className="p-4 text-slate-600">{Number(r.total_hours || 0).toFixed(2)} hrs</td>
-              <td className="p-4 font-bold text-slate-800">{fmt(r.total_revenue)}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{Number(r.total_hours || 0).toFixed(2)} hrs</td>
+              <td className="p-4 font-bold text-(--ui-text)">{fmt(r.total_revenue)}</td>
               <td className="p-4">
-                <div className="font-bold text-amber-600">
+                <div className="font-bold text-(--ui-warning-fg)">
                   {fmt(r.revenue_per_hour)}/hr
                 </div>
-                <div className="w-16 bg-slate-100 h-1 rounded-full mt-1">
+                <div className="w-16 bg-(--ui-muted-surface) h-1 rounded-full mt-1">
                   <div
-                    className="bg-amber-500 h-full rounded-full"
+                    className="bg-(--ui-warning-fg) h-full rounded-full"
                     style={{
                       width: `${Math.min(100, (Number(r.revenue_per_hour || 0) / 200) * 100)}%`,
                     }}
@@ -241,16 +241,16 @@ export function LaborVsSalesTab({ filters }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <CardShell title="Staff" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{data.length}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{data.length}</div>
         </CardShell>
         <CardShell title="Hours Worked" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{totalHours.toFixed(1)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{totalHours.toFixed(1)}</div>
         </CardShell>
         <CardShell title="Revenue" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</div>
         </CardShell>
         <CardShell title="Labor Cost" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalLabor)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{fmt(totalLabor)}</div>
         </CardShell>
       </div>
       <CardShell
@@ -269,13 +269,13 @@ export function LaborVsSalesTab({ filters }) {
       >
         <TableShell cols={["Employee", "Hours", "Sales", "Revenue", "Rev/Hour", "Labor Cost"]} loading={loading} empty={!data.length}>
           {data.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-              <td className="p-4 text-slate-600">{Number(r.hours_worked || 0).toFixed(1)}h</td>
-              <td className="p-4 text-slate-600">{r.sale_count}</td>
-              <td className="p-4 font-bold text-slate-800">{fmt(r.revenue)}</td>
-              <td className="p-4 font-bold text-amber-600">{fmt(r.revenue_per_hour)}/hr</td>
-              <td className="p-4 text-slate-600">{fmt(r.labor_cost)}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{Number(r.hours_worked || 0).toFixed(1)}h</td>
+              <td className="p-4 text-(--ui-text-muted)">{r.sale_count}</td>
+              <td className="p-4 font-bold text-(--ui-text)">{fmt(r.revenue)}</td>
+              <td className="p-4 font-bold text-(--ui-warning-fg)">{fmt(r.revenue_per_hour)}/hr</td>
+              <td className="p-4 text-(--ui-text-muted)">{fmt(r.labor_cost)}</td>
             </tr>
           ))}
         </TableShell>
@@ -329,17 +329,17 @@ export function StaffAttributionTab({ filters }) {
           empty={!data.length}
         >
           {data.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-              <td className="p-4 text-slate-600">{r.sale_count}</td>
-              <td className="p-4 font-bold text-slate-800">{fmt(r.revenue)}</td>
-              <td className="p-4 text-amber-600">{fmt(r.discount_total)}</td>
-              <td className="p-4 text-rose-500">{r.void_count}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{r.sale_count}</td>
+              <td className="p-4 font-bold text-(--ui-text)">{fmt(r.revenue)}</td>
+              <td className="p-4 text-(--ui-warning-fg)">{fmt(r.discount_total)}</td>
+              <td className="p-4 text-(--ui-danger-fg)">{r.void_count}</td>
               <td className="p-4">
-                <span className="text-orange-500">{r.return_count}</span>
-                <span className="text-xs text-slate-400 ml-1">({fmt(r.return_total)})</span>
+                <span className="text-(--ui-warning-fg)">{r.return_count}</span>
+                <span className="text-xs text-(--ui-text-muted) ml-1">({fmt(r.return_total)})</span>
               </td>
-              <td className="p-4 text-blue-600">{r.approval_count}</td>
+              <td className="p-4 text-(--ui-link)">{r.approval_count}</td>
             </tr>
           ))}
         </TableShell>
@@ -381,13 +381,13 @@ export function LossPreventionTab({ filters }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <CardShell title="Staff Audited" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{data.length}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{data.length}</div>
         </CardShell>
         <CardShell title="Void Value" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalVoidValue)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{fmt(totalVoidValue)}</div>
         </CardShell>
         <CardShell title="Refund Value" subtitle={null}>
-          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalRefundValue)}</div>
+          <div className="px-4 py-5 text-2xl font-bold text-(--ui-text)">{fmt(totalRefundValue)}</div>
         </CardShell>
       </div>
 
@@ -421,19 +421,19 @@ export function LossPreventionTab({ filters }) {
           empty={!data.length}
         >
           {data.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
-              <td className="p-4 font-medium text-slate-600">{fmt(r.total_revenue)}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.employee_name}</td>
+              <td className="p-4 font-medium text-(--ui-text-muted)">{fmt(r.total_revenue)}</td>
               <td className="p-4">
-                <div className="text-rose-500 font-bold">Voids: {fmt(r.void_value)}</div>
-                <div className="text-orange-500 font-bold">Refunds: {fmt(r.refund_value)}</div>
+                <div className="text-(--ui-danger-fg) font-bold">Voids: {fmt(r.void_value)}</div>
+                <div className="text-(--ui-warning-fg) font-bold">Refunds: {fmt(r.refund_value)}</div>
               </td>
               <td className="p-4">
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-bold ${
                     Number(r.risk_ratio_pct || 0) > 5
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-emerald-100 text-emerald-700"
+                      ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                      : "bg-(--ui-success-bg) text-(--ui-success-fg)"
                   }`}
                 >
                   {r.risk_ratio_pct}% Risk

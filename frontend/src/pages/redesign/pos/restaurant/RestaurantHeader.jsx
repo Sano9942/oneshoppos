@@ -42,26 +42,26 @@ export default function RestaurantHeader({ onBack, scrollRef }) {
 
   if (collapsed) {
     return (
-      <div className="sticky top-0 z-40 h-9 px-4 flex items-center justify-between bg-[#0F172A] text-white shadow-md border-b border-[#1E293B]">
+      <div className="sticky top-0 z-40 h-9 px-4 flex items-center justify-between bg-(--ui-primary) text-white border-b border-(--ui-primary)">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white"
+          className="flex items-center gap-1 text-xs font-semibold text-white/70 hover:text-white"
         >
           <ChevronLeft size={14} />
           Floor
         </button>
         <div className="flex items-center gap-3 text-xs">
           <span className="font-bold">{contextLabel}</span>
-          {seatCount > 0 && <span className="text-slate-400">· {seatCount}g</span>}
-          <span className="text-slate-400">· {elapsed}</span>
+          {seatCount > 0 && <span className="text-white/60">· {seatCount}g</span>}
+          <span className="text-white/60">· {elapsed}</span>
         </div>
-        <span className="text-xs text-slate-400 truncate max-w-[120px]">{serverName}</span>
+        <span className="text-xs text-white/60 truncate max-w-[120px]">{serverName}</span>
       </div>
     );
   }
 
   return (
-    <div className="sticky top-0 z-40 bg-[#0F172A] text-white border-b border-[#1E293B] shadow-md">
+    <div className="sticky top-0 z-40 bg-(--ui-primary) text-white border-b border-(--ui-primary)">
       <div className="px-6 py-3 flex items-center gap-4">
         <button
           onClick={onBack}
@@ -73,7 +73,7 @@ export default function RestaurantHeader({ onBack, scrollRef }) {
         <div className="flex-1 flex items-center gap-6">
           <div>
             <div className="text-xl font-black tracking-tight">{contextLabel}</div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-0.5">
+            <div className="text-[10px] uppercase tracking-wider text-white/60 mt-0.5">
               {orderContext === "dine_in" ? "Dine-in" : orderContext}
             </div>
           </div>
@@ -91,11 +91,11 @@ export default function RestaurantHeader({ onBack, scrollRef }) {
 function Stat({ icon: Icon, label, value }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
+      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-white/70">
         <Icon size={14} />
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+        <div className="text-[10px] uppercase tracking-wider text-white/60">{label}</div>
         <div className="text-sm font-bold">{value}</div>
       </div>
     </div>

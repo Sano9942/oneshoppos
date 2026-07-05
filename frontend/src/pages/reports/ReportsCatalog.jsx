@@ -83,16 +83,16 @@ export function CategoryWiseTab({ filters }) {
         empty={!rows.length}
       >
         {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50">
-            <td className="p-4 font-bold text-slate-800 text-sm italic">
+          <tr key={i} className="hover:bg-(--ui-muted-surface)">
+            <td className="p-4 font-bold text-(--ui-text) text-sm italic">
               {r.category}
             </td>
             <td className="p-4">
-              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-bold">
+              <span className="bg-(--ui-muted-surface) text-(--ui-text) px-2 py-0.5 rounded text-xs font-bold">
                 {r.units_sold} items
               </span>
             </td>
-            <td className="p-4 font-bold text-indigo-600">
+            <td className="p-4 font-bold text-(--ui-link)">
               {fmt(r.revenue)}
             </td>
           </tr>
@@ -140,46 +140,46 @@ export function ProductSpecTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Categorized
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {categorizedRows} / {rows.length}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Branded
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {brandedRows} / {rows.length}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             With Supplier
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {supplierRows} / {rows.length}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Active Masters
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {activeRows} / {rows.length}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Multi-Outlet
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {multiOutletRows}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{totalStock} units in scope</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{totalStock} units in scope</p>
         </div>
       </div>
 
@@ -230,50 +230,50 @@ export function ProductSpecTab({ filters }) {
           emptyIcon={Package}
         >
           {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+            <tr key={r.id} className="hover:bg-(--ui-muted-surface) transition-colors">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{r.name}</div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="text-sm font-semibold text-(--ui-text)">{r.name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">
                   #{r.id} | {r.barcode || "No barcode"}
                 </div>
-                <div className="text-[11px] text-slate-400">{r.sku || "No SKU"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.sku || "No SKU"}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{r.category}</div>
-                <div className="text-[11px] text-slate-400">{r.brand}</div>
-                <div className="text-[11px] text-slate-400">{r.supplier}</div>
+                <div className="text-sm text-(--ui-text)">{r.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.brand}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.supplier}</div>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                  <span className="rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                     {r.status || "unknown"}
                   </span>
-                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                  <span className="rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-(--ui-link)">
                     {r.product_type || "standard"}
                   </span>
                 </div>
               </td>
               <td className="px-4 py-3 text-sm">
-                <div className="text-sm font-bold text-slate-900">
+                <div className="text-sm font-bold text-(--ui-text)">
                   Sell: {fmt(r.price)}
                 </div>
-                <div className="text-[11px] text-slate-500">Cost: {fmt(r.cost_price)}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] text-(--ui-text-muted)">Cost: {fmt(r.cost_price)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   Unit: {r.unit || "-"} | Min/Max: {r.min_qty ?? 0}/{r.max_qty ?? 0}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{r.tax_name}</div>
-                <div className="text-[11px] font-semibold text-slate-500">
+                <div className="text-sm text-(--ui-text)">{r.tax_name}</div>
+                <div className="text-[11px] font-semibold text-(--ui-text-muted)">
                   {r.tax_rate}%
                 </div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] text-(--ui-text-muted)">
                   Master status: {r.status || "-"}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-slate-900">
+                <div className="text-sm font-bold text-(--ui-text)">
                   {Number(r.total_stock || 0)} units
                 </div>
-                <div className="text-[11px] text-slate-500">
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {Number(r.outlet_count || 0)} outlets
                 </div>
               </td>
@@ -327,24 +327,24 @@ export function HistoryCostTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Receipt Lines
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Qty Received
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalQty}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalQty}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cost Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalValue)}</p>
-          <p className="mt-1 text-xs text-slate-500">{changedCostRows} rows differ from current master cost</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalValue)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{changedCostRows} rows differ from current master cost</p>
         </div>
       </div>
 
@@ -385,33 +385,33 @@ export function HistoryCostTab({ filters }) {
           emptyIcon={History}
         >
           {rows.map((row, index) => (
-            <tr key={`${row.grn_id}-${row.product_id}-${index}`} className="hover:bg-slate-50">
+            <tr key={`${row.grn_id}-${row.product_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.grn_number || `GRN #${row.grn_id}`}</div>
-                <div className="text-[11px] text-slate-400">{fmtDateTime(row.received_at)}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.grn_number || `GRN #${row.grn_id}`}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmtDateTime(row.received_at)}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode || "No barcode"}</div>
-                <div className="text-[11px] text-slate-400">{row.sku || "No SKU"}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode || "No barcode"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.sku || "No SKU"}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{row.outlet_name}</div>
-                <div className="text-[11px] text-slate-400">{row.supplier}</div>
-                <div className="text-[11px] text-slate-400">{row.category} | {row.brand}</div>
+                <div className="text-sm text-(--ui-text)">{row.outlet_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.supplier}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.category} | {row.brand}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.qty_received}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{row.qty_received}</td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{fmt(row.received_cost_price)}</div>
-                <div className="text-[11px] text-slate-400">{fmt(row.received_cost_value)} total</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{fmt(row.received_cost_price)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmt(row.received_cost_value)} total</div>
               </td>
               <td className="px-4 py-3">
                 <div
-                  className={`text-sm font-bold ${Number(row.vs_current_cost || 0) === 0 ? "text-slate-700" : Number(row.vs_current_cost || 0) > 0 ? "text-amber-700" : "text-emerald-700"}`}
+                  className={`text-sm font-bold ${Number(row.vs_current_cost || 0) === 0 ? "text-(--ui-text)" : Number(row.vs_current_cost || 0) > 0 ? "text-(--ui-warning-fg)" : "text-(--ui-success-fg)"}`}
                 >
                   {fmt(row.vs_current_cost)}
                 </div>
-                <div className="text-[11px] text-slate-400">Master: {fmt(row.current_master_cost)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Master: {fmt(row.current_master_cost)}</div>
               </td>
             </tr>
           ))}
@@ -461,24 +461,24 @@ export function HistorySaleTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Sale Lines
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Units Sold
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalQty}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalQty}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Profit
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalGross)}</p>
-          <p className="mt-1 text-xs text-slate-500">{fmt(totalRevenue)} revenue in scope</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalGross)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{fmt(totalRevenue)} revenue in scope</p>
         </div>
       </div>
 
@@ -521,29 +521,29 @@ export function HistorySaleTab({ filters }) {
           emptyIcon={ReceiptText}
         >
           {rows.map((row, index) => (
-            <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-slate-50">
+            <tr key={`${row.sale_id}-${row.product_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">#{row.sale_id}</div>
-                <div className="text-[11px] text-slate-400">{fmtDateTime(row.timestamp)}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">#{row.sale_id}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode || "No barcode"}</div>
-                <div className="text-[11px] text-slate-400">{row.category} | {row.brand}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode || "No barcode"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.category} | {row.brand}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{row.outlet_name}</div>
-                <div className="text-[11px] text-slate-400">{row.employee_name}</div>
-                <div className="text-[11px] text-slate-400">{row.supplier}</div>
+                <div className="text-sm text-(--ui-text)">{row.outlet_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.employee_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.supplier}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.quantity}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{row.quantity}</td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{fmt(row.price_at_sale)}</div>
-                <div className="text-[11px] text-slate-400">Cost: {fmt(row.cost_price_at_sale)}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{fmt(row.price_at_sale)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Cost: {fmt(row.cost_price_at_sale)}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-emerald-700">{fmt(row.line_gross_profit)}</div>
-                <div className="text-[11px] text-slate-400">{fmt(row.line_revenue)} revenue</div>
+                <div className="text-sm font-bold text-(--ui-success-fg)">{fmt(row.line_gross_profit)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmt(row.line_revenue)} revenue</div>
               </td>
             </tr>
           ))}
@@ -611,7 +611,7 @@ export function ProductAuditTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
         <div className="flex flex-wrap gap-2">
           {presets.map((preset) => (
             <button
@@ -620,16 +620,16 @@ export function ProductAuditTab({ filters }) {
               onClick={() => setIssue(preset.value)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 issue === preset.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600"
+                  ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
               }`}
             >
               {preset.label}
             </button>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Idle Days</span>
+        <div className="ml-auto flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Idle Days</span>
           <input
             type="number"
             min="1"
@@ -642,21 +642,21 @@ export function ProductAuditTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rows In View</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Rows In View</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing Barcode</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{metricSummary.missing_barcode || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Missing Barcode</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{metricSummary.missing_barcode || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing Supplier</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{metricSummary.missing_supplier || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Missing Supplier</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{metricSummary.missing_supplier || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No Recent Sales</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{metricSummary.no_recent_sales || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">No Recent Sales</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{metricSummary.no_recent_sales || 0}</p>
         </div>
       </div>
 
@@ -702,43 +702,43 @@ export function ProductAuditTab({ filters }) {
           emptyIcon={SearchCheck}
         >
           {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{row.name}</div>
-                <div className="font-mono text-[11px] text-slate-400">#{row.id} | {row.barcode || "No barcode"}</div>
-                <div className="text-[11px] text-slate-400">{row.sku || "No SKU"}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{row.name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">#{row.id} | {row.barcode || "No barcode"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.sku || "No SKU"}</div>
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-1">
                   {(row.issue_tags || []).map((tag) => (
-                    <span key={tag} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                    <span key={tag} className="rounded-full bg-(--ui-warning-bg) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-(--ui-warning-fg)">
                       {tag.replaceAll("_", " ")}
                     </span>
                   ))}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{row.category}</div>
-                <div className="text-[11px] text-slate-400">{row.brand}</div>
-                <div className="text-[11px] text-slate-400">{row.supplier}</div>
-                <div className="mt-1 text-[11px] text-slate-400">
+                <div className="text-sm text-(--ui-text)">{row.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.brand}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.supplier}</div>
+                <div className="mt-1 text-[11px] text-(--ui-text-muted)">
                   {row.status || "unknown"} | {row.product_type || "standard"} | {row.unit || "-"}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">Sell: {fmt(row.price)}</div>
-                <div className="text-[11px] text-slate-400">Cost: {fmt(row.cost_price)}</div>
-                <div className="text-[11px] text-slate-400">Min/Max: {row.min_qty ?? 0}/{row.max_qty ?? 0}</div>
-                <div className="text-[11px] text-slate-400">Stock: {Number(row.total_stock || 0)} in {Number(row.outlet_count || 0)} outlets</div>
+                <div className="text-sm font-semibold text-(--ui-text)">Sell: {fmt(row.price)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Cost: {fmt(row.cost_price)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Min/Max: {row.min_qty ?? 0}/{row.max_qty ?? 0}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Stock: {Number(row.total_stock || 0)} in {Number(row.outlet_count || 0)} outlets</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">
+                <div className="text-sm text-(--ui-text)">
                   {row.last_sold_at ? fmtDate(row.last_sold_at) : "Never sold"}
                 </div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {row.days_since_sale == null ? "No sale history" : `${row.days_since_sale} days since sale`}
                 </div>
-                <div className="text-[11px] text-slate-400">{Number(row.lifetime_units_sold || 0)} lifetime units</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{Number(row.lifetime_units_sold || 0)} lifetime units</div>
               </td>
             </tr>
           ))}

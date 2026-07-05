@@ -94,29 +94,29 @@ export default function AdminTaxRates() {
     setAddMode(true);
   };
 
-  if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
+  if (loading) return <div className="p-6 text-center text-(--ui-text-muted)">Loading...</div>;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">Tax Rate Reference</h1>
+    <div>
+      <h1 className="text-2xl font-bold text-(--ui-text) mb-4">Tax Rate Reference</h1>
 
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setTab("rates")}
-          className={`px-4 py-2 rounded text-sm font-medium ${tab === "rates" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+          className={`ui-focus-ring px-4 py-2 rounded-full text-sm font-semibold transition ${tab === "rates" ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong) hover:text-(--ui-text)"}`}
         >
           Tax Rates ({rates.length})
         </button>
         <button
           onClick={() => setTab("suggestions")}
-          className={`px-4 py-2 rounded text-sm font-medium ${tab === "suggestions" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+          className={`ui-focus-ring px-4 py-2 rounded-full text-sm font-semibold transition ${tab === "suggestions" ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong) hover:text-(--ui-text)"}`}
         >
           Suggestions ({suggestions.length})
         </button>
       </div>
 
       {msg && (
-        <div className="mb-3 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800">
+        <div className="mb-3 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-2 text-sm text-(--ui-text)">
           {msg}
           <button onClick={() => setMsg("")} className="ml-2 font-bold">&times;</button>
         </div>
@@ -126,48 +126,48 @@ export default function AdminTaxRates() {
         <>
           <button
             onClick={startAdd}
-            className="mb-3 rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+            className="ui-focus-ring mb-3 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong)"
           >
             + Add Rate
           </button>
 
           {(addMode || editRow) && (
-            <div className="mb-4 rounded border bg-white p-4 shadow-sm">
-              <h3 className="text-lg font-medium mb-3">{editRow ? "Edit Rate" : "Add Rate"}</h3>
+            <div className="mb-4 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-4">
+              <h3 className="text-lg font-bold text-(--ui-text) mb-3">{editRow ? "Edit Rate" : "Add Rate"}</h3>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
-                  <label className="text-xs font-medium text-gray-600">HS Code</label>
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" value={form.hs_code || ""} onChange={(e) => setForm({ ...form, hs_code: e.target.value })} />
+                  <label className="text-xs font-medium text-(--ui-text-muted)">HS Code</label>
+                  <input className="ui-focus-ring w-full border border-(--ui-border-strong) bg-white rounded-(--ui-radius-sm) px-2 py-1.5 text-sm text-(--ui-text)" value={form.hs_code || ""} onChange={(e) => setForm({ ...form, hs_code: e.target.value })} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Description (EN)</label>
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" value={form.description_en || ""} onChange={(e) => setForm({ ...form, description_en: e.target.value })} />
+                  <label className="text-xs font-medium text-(--ui-text-muted)">Description (EN)</label>
+                  <input className="ui-focus-ring w-full border border-(--ui-border-strong) bg-white rounded-(--ui-radius-sm) px-2 py-1.5 text-sm text-(--ui-text)" value={form.description_en || ""} onChange={(e) => setForm({ ...form, description_en: e.target.value })} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Description (UR)</label>
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" dir="rtl" value={form.description_ur || ""} onChange={(e) => setForm({ ...form, description_ur: e.target.value })} />
+                  <label className="text-xs font-medium text-(--ui-text-muted)">Description (UR)</label>
+                  <input className="ui-focus-ring w-full border border-(--ui-border-strong) bg-white rounded-(--ui-radius-sm) px-2 py-1.5 text-sm text-(--ui-text)" dir="rtl" value={form.description_ur || ""} onChange={(e) => setForm({ ...form, description_ur: e.target.value })} />
                 </div>
                 {PROVINCE_FIELDS.map((f) => (
                   <div key={f.key}>
-                    <label className="text-xs font-medium text-gray-600">{f.label} %</label>
-                    <input className="w-full border rounded px-2 py-1.5 text-sm" type="number" step="0.01" value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+                    <label className="text-xs font-medium text-(--ui-text-muted)">{f.label} %</label>
+                    <input className="ui-focus-ring w-full border border-(--ui-border-strong) bg-white rounded-(--ui-radius-sm) px-2 py-1.5 text-sm text-(--ui-text)" type="number" step="0.01" value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
                   </div>
                 ))}
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-600">Exemption Notes</label>
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" value={form.exemption_notes || ""} onChange={(e) => setForm({ ...form, exemption_notes: e.target.value })} />
+                  <label className="text-xs font-medium text-(--ui-text-muted)">Exemption Notes</label>
+                  <input className="ui-focus-ring w-full border border-(--ui-border-strong) bg-white rounded-(--ui-radius-sm) px-2 py-1.5 text-sm text-(--ui-text)" value={form.exemption_notes || ""} onChange={(e) => setForm({ ...form, exemption_notes: e.target.value })} />
                 </div>
               </div>
               <div className="mt-3 flex gap-2">
-                <button onClick={saveRate} className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700">Save</button>
-                <button onClick={() => { setEditRow(null); setAddMode(false); setForm({}); }} className="rounded border px-4 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
+                <button onClick={saveRate} className="ui-focus-ring rounded-full bg-(--ui-primary) px-4 py-1.5 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong)">Save</button>
+                <button onClick={() => { setEditRow(null); setAddMode(false); setForm({}); }} className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-1.5 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)">Cancel</button>
               </div>
             </div>
           )}
 
-          <div className="overflow-auto rounded border bg-white">
+          <div className="overflow-auto rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface)">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border) text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">HS Code</th>
                   <th className="px-3 py-2 text-left font-medium">Description (EN)</th>
@@ -182,18 +182,18 @@ export default function AdminTaxRates() {
               </thead>
               <tbody>
                 {rates.map((r) => (
-                  <tr key={r.id} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2 font-mono">{r.hs_code}</td>
-                    <td className="px-3 py-2">{r.description_en}</td>
-                    <td className="px-3 py-2">{Number(r.federal_gst)}%</td>
-                    <td className="px-3 py-2">{Number(r.punjab_pra)}%</td>
-                    <td className="px-3 py-2">{Number(r.sindh_srb)}%</td>
-                    <td className="px-3 py-2">{Number(r.kpk_kpra)}%</td>
-                    <td className="px-3 py-2">{Number(r.balochistan_bra)}%</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{r.exemption_notes || "-"}</td>
-                    <td className="px-3 py-2">
-                      <button onClick={() => startEdit(r)} className="mr-2 text-blue-600 hover:underline text-xs">Edit</button>
-                      <button onClick={() => deleteRate(r.id)} className="text-red-600 hover:underline text-xs">Del</button>
+                  <tr key={r.id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-3 py-2 font-mono text-(--ui-text)">{r.hs_code}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{r.description_en}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{Number(r.federal_gst)}%</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{Number(r.punjab_pra)}%</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{Number(r.sindh_srb)}%</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{Number(r.kpk_kpra)}%</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{Number(r.balochistan_bra)}%</td>
+                    <td className="px-3 py-2 text-xs text-(--ui-text-muted)">{r.exemption_notes || "-"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <button onClick={() => startEdit(r)} className="mr-3 text-(--ui-link) hover:underline text-xs font-semibold">Edit</button>
+                      <button onClick={() => deleteRate(r.id)} className="text-(--ui-danger) hover:underline text-xs font-semibold">Del</button>
                     </td>
                   </tr>
                 ))}
@@ -204,12 +204,12 @@ export default function AdminTaxRates() {
       )}
 
       {tab === "suggestions" && (
-        <div className="overflow-auto rounded border bg-white">
+        <div className="overflow-auto rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface)">
           {suggestions.length === 0 ? (
-            <p className="p-6 text-center text-gray-500">No pending suggestions</p>
+            <p className="p-6 text-center text-(--ui-text-muted)">No pending suggestions</p>
           ) : (
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border) text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Tenant</th>
                   <th className="px-3 py-2 text-left font-medium">Ref ID</th>
@@ -223,17 +223,17 @@ export default function AdminTaxRates() {
               </thead>
               <tbody>
                 {suggestions.map((s) => (
-                  <tr key={`${s.tenant_slug}-${s.id}`} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2">{s.tenant_name}</td>
-                    <td className="px-3 py-2">{s.reference_id}</td>
-                    <td className="px-3 py-2">{s.field_name}</td>
-                    <td className="px-3 py-2">{s.current_value != null ? `${Number(s.current_value)}%` : "-"}</td>
-                    <td className="px-3 py-2 font-semibold">{Number(s.suggested_value)}%</td>
-                    <td className="px-3 py-2 text-xs">{s.source_reference || "-"}</td>
-                    <td className="px-3 py-2 text-xs">{s.notes || "-"}</td>
-                    <td className="px-3 py-2">
-                      <button onClick={() => reviewSuggestion(s.id, s.tenant_slug, "approved")} className="mr-2 rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Approve</button>
-                      <button onClick={() => reviewSuggestion(s.id, s.tenant_slug, "rejected")} className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700">Reject</button>
+                  <tr key={`${s.tenant_slug}-${s.id}`} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-3 py-2 text-(--ui-text)">{s.tenant_name}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{s.reference_id}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{s.field_name}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{s.current_value != null ? `${Number(s.current_value)}%` : "-"}</td>
+                    <td className="px-3 py-2 font-semibold text-(--ui-text)">{Number(s.suggested_value)}%</td>
+                    <td className="px-3 py-2 text-xs text-(--ui-text-muted)">{s.source_reference || "-"}</td>
+                    <td className="px-3 py-2 text-xs text-(--ui-text-muted)">{s.notes || "-"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <button onClick={() => reviewSuggestion(s.id, s.tenant_slug, "approved")} className="ui-focus-ring mr-2 rounded-full bg-(--ui-primary) px-3 py-1 text-xs font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong)">Approve</button>
+                      <button onClick={() => reviewSuggestion(s.id, s.tenant_slug, "rejected")} className="ui-focus-ring rounded-full bg-(--ui-danger) px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90">Reject</button>
                     </td>
                   </tr>
                 ))}

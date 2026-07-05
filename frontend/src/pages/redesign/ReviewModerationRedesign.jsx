@@ -61,7 +61,7 @@ export default function ReviewModerationRedesign() {
             onClick={() => setStatusFilter(tab.key)}
             className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
               statusFilter === tab.key
-                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                ? "border-(--ui-primary) text-(--ui-primary)"
                 : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
@@ -94,7 +94,7 @@ export default function ReviewModerationRedesign() {
                     <span>·</span>
                     <span>{r.customer_name}</span>
                     {r.sale_id && (
-                      <span className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                      <span className="inline-flex items-center gap-0.5 text-(--ui-success-fg)">
                         <ShieldCheck size={12} /> Verified
                       </span>
                     )}
@@ -107,8 +107,8 @@ export default function ReviewModerationRedesign() {
                 {r.status !== "pending" && (
                   <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium ${
                     r.status === "approved"
-                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                      ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+                      : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
                   }`}>
                     {r.status}
                   </span>
@@ -125,7 +125,7 @@ export default function ReviewModerationRedesign() {
                 <div className="flex gap-2 pt-1">
                   <Button
                     size="sm"
-                    variant="primary"
+                    tone="primary"
                     disabled={moderating === r.id}
                     onClick={() => moderate(r.id, "approved")}
                   >
@@ -133,7 +133,7 @@ export default function ReviewModerationRedesign() {
                   </Button>
                   <Button
                     size="sm"
-                    variant="ghost"
+                    tone="plain"
                     disabled={moderating === r.id}
                     onClick={() => moderate(r.id, "rejected")}
                   >
@@ -147,8 +147,8 @@ export default function ReviewModerationRedesign() {
                 <div className="flex gap-2 pt-1">
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="text-red-600 hover:text-red-700"
+                    tone="plain"
+                    className="text-(--ui-danger-fg)"
                     disabled={moderating === r.id}
                     onClick={() => deleteReview(r.id)}
                   >

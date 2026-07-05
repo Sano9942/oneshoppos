@@ -21,10 +21,10 @@ import {
 const PAGE_SIZE = 25;
 
 const AGING_BUCKETS = [
-  { key: "fresh", label: "Fresh", color: "bg-green-500", textColor: "text-green-700", sub: "0-2 days" },
-  { key: "aging", label: "Aging", color: "bg-yellow-500", textColor: "text-yellow-700", sub: "3-5 days" },
-  { key: "stale", label: "Stale", color: "bg-orange-500", textColor: "text-orange-700", sub: "6-10 days" },
-  { key: "critical", label: "Critical", color: "bg-red-500", textColor: "text-red-700", sub: "10+ days" },
+  { key: "fresh", label: "Fresh", color: "bg-(--ui-success-fg)", sub: "0-2 days" },
+  { key: "aging", label: "Aging", color: "bg-(--ui-warning-fg)", sub: "3-5 days" },
+  { key: "stale", label: "Stale", color: "bg-(--ui-danger-fg)/50", sub: "6-10 days" },
+  { key: "critical", label: "Critical", color: "bg-(--ui-danger-fg)", sub: "10+ days" },
 ];
 
 function agingBucket(days) {
@@ -39,15 +39,15 @@ function AgingDot({ days }) {
   const d = Number(days) || 0;
   const bucket = agingBucket(d);
   const dotColor =
-    bucket === "fresh" ? "bg-green-500" :
-    bucket === "aging" ? "bg-yellow-500" :
-    bucket === "stale" ? "bg-orange-500" : "bg-red-500";
+    bucket === "fresh" ? "bg-(--ui-success-fg)" :
+    bucket === "aging" ? "bg-(--ui-warning-fg)" :
+    bucket === "stale" ? "bg-(--ui-danger-fg)/50" : "bg-(--ui-danger-fg)";
 
   return (
     <span className="inline-flex items-center gap-1">
       <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
       {bucket === "critical" && (
-        <span className="text-xs font-medium text-red-600">{d}d</span>
+        <span className="text-xs font-medium text-(--ui-danger-fg)">{d}d</span>
       )}
     </span>
   );
@@ -338,24 +338,24 @@ export default function OrdersRedesign() {
           <button
             key={b.key}
             onClick={() => { setAgingFilter((prev) => (prev === b.key ? null : b.key)); setPage(1); }}
-            className={`rounded-lg border p-3 text-left transition-all ${
+            className={`rounded-(--ui-radius-md) border p-3 text-left transition ${
               agingFilter === b.key
-                ? "border-2 border-(--ui-primary) ring-2 ring-(--ui-primary)/20"
-                : "border-(--ui-border)"
-            } bg-(--ui-surface) hover:shadow-sm`}
+                ? "border-(--ui-text) ring-1 ring-(--ui-text)"
+                : "border-(--ui-border) hover:border-(--ui-border-strong)"
+            } bg-(--ui-surface)`}
           >
             <div className="flex items-center gap-2">
               <span className={`inline-block h-3 w-3 rounded-full ${b.color}`} />
-              <span className="text-xs uppercase text-(--ui-text-muted)">{b.label}</span>
+              <span className="text-[13px] text-(--ui-text-muted)">{b.label}</span>
             </div>
-            <p className={`mt-1 text-2xl font-semibold ${b.textColor}`}>{agingSummary[b.key]}</p>
+            <p className="mt-1 text-2xl font-semibold text-(--ui-text)">{agingSummary[b.key]}</p>
             <p className="text-xs text-(--ui-text-muted)">{b.sub}</p>
           </button>
         ))}
       </div>
 
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -430,7 +430,7 @@ export default function OrdersRedesign() {
           <div className="p-3">
             {selectedIds.size > 0 ? (
               <BulkActionBar>
-                <span className="text-sm font-semibold text-emerald-800">
+                <span className="text-sm font-semibold text-(--ui-text)">
                   {selectedIds.size} selected
                 </span>
                 <Button size="sm" disabled={busy} onClick={markComplete}>
@@ -654,7 +654,7 @@ export default function OrdersRedesign() {
 
               {/* Active tracking banner */}
               {selectedOrder.tracking_number && (
-                <div className="rounded-lg border border-(--ui-border) bg-(--ui-surface-subtle) p-2.5 text-xs">
+                <div className="rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-2.5 text-xs">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-(--ui-text-muted)">
                       <Truck size={12} />
@@ -837,7 +837,7 @@ function BookShipmentModal({ open, order, couriers, busy, onClose, onSubmit, fmt
               </p>
             </div>
             {error && (
-              <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              <p className="rounded-(--ui-radius-sm) bg-(--ui-danger-bg) px-3 py-2 text-xs text-(--ui-danger-fg)">
                 {error}
               </p>
             )}

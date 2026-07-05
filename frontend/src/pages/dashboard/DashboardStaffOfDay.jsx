@@ -14,17 +14,17 @@ export default function DashboardStaffOfDay({ data }) {
   const rows = Array.isArray(data?.staffOfDay) ? data.staffOfDay : [];
   if (rows.length === 0) return null;
 
+  // Monochrome podium: #1 gets the black tag, runners-up go gray.
   const rankStyle = (i) => {
-    if (i === 0) return { tag: "bg-amber-500/90 text-white", border: "border-amber-400/60" };
-    if (i === 1) return { tag: "bg-slate-400/80 text-white", border: "border-slate-300/60" };
-    return { tag: "bg-orange-600/80 text-white", border: "border-orange-500/60" };
+    if (i === 0) return { tag: "bg-(--ui-primary) text-white", border: "border-(--ui-border-strong)" };
+    return { tag: "bg-(--ui-muted-surface) text-(--ui-text)", border: "border-(--ui-border)" };
   };
 
   return (
     <SectionCard>
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-bold text-(--ui-text)">
-          <Trophy size={14} className="text-amber-500" />
+          <Trophy size={14} className="text-(--ui-warning-fg)" />
           Staff of the day
           <span className="text-xs font-normal text-(--ui-text-muted)">(top {rows.length})</span>
         </h3>
@@ -50,7 +50,7 @@ export default function DashboardStaffOfDay({ data }) {
                   </div>
                 </div>
               </div>
-              <div className="font-bold text-[#8066FF] shrink-0">{fmt(r.total)}</div>
+              <div className="shrink-0 font-bold text-(--ui-text)">{fmt(r.total)}</div>
             </div>
           );
         })}

@@ -9,7 +9,7 @@ export function DeltaArrow({ today, yesterday, invert = false }) {
   const isPositive = invert ? pct < 0 : pct > 0;
   const abs = Math.abs(pct).toFixed(1);
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isPositive ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
       {pct > 0 ? "↑" : pct < 0 ? "↓" : "→"} {abs}%
     </span>
   );

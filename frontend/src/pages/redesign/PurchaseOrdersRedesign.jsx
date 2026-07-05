@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtDate, fmtDateTime, todayLocalStr } from "../../utils/dates";
 import {
@@ -61,7 +62,8 @@ function exportCSV(rows) {
 }
 
 export default function PurchaseOrdersRedesign() {
-  const { employee, hasPerm } = useAuth();
+  const { employee, hasPerm, authHeaders } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const [view, setView] = useState("list");
   const [rows, setRows] = useState([]);
@@ -94,6 +96,10 @@ export default function PurchaseOrdersRedesign() {
   const [grnReceivedBy, setGrnReceivedBy] = useState("");
   const [grnNotes, setGrnNotes] = useState("");
   const [grnQtys, setGrnQtys] = useState({});
+  // F07: per-line batch number + expiry at receive (only sent for tracked products;
+  // the backend ignores them for untracked SKUs and auto-suggests expiry from
+  // shelf_life_days when the field is left blank).
+  const [grnBatches, setGrnBatches] = useState({});
 
   // Scan & Receive state
   const [scanMode, setScanMode] = useState(false);
@@ -494,6 +500,7 @@ export default function PurchaseOrdersRedesign() {
       initial[item.product_id] = Number(item.quantity || 0);
     });
     setGrnQtys(initial);
+    setGrnBatches({});
     setGrnOutletId(String(outlets[0]?.id || ""));
     setGrnReceivedBy("");
     setGrnNotes("");
@@ -517,6 +524,8 @@ export default function PurchaseOrdersRedesign() {
         items: (selectedPo.items || []).map((item) => ({
           product_id: item.product_id,
           qty_received: Number(grnQtys[item.product_id] ?? item.quantity ?? 0),
+          batch_number: grnBatches[item.product_id]?.batch_number || null,
+          expiry_date: grnBatches[item.product_id]?.expiry_date || null,
         })),
       };
       const data = await api.post(`/api/purchase-orders/${selectedPo.purchaseOrder.id}/receive`, payload);
@@ -678,7 +687,7 @@ export default function PurchaseOrdersRedesign() {
         }
       >
         {error ? (
-          <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
             {error}
           </SectionCard>
         ) : null}
@@ -772,7 +781,7 @@ export default function PurchaseOrdersRedesign() {
                       size="sm"
                       iconOnly
                       aria-label="Remove item"
-                      className="hover:text-rose-600"
+                      className="hover:text-(--ui-danger-fg)"
                       onClick={() => removeCartItem(item.product_id)}
                     >
                       <X size={14} />
@@ -906,12 +915,12 @@ export default function PurchaseOrdersRedesign() {
         }
       >
         {error ? (
-          <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
             {error}
           </SectionCard>
         ) : null}
         {notice ? (
-          <SectionCard className="mb-3 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          <SectionCard className="mb-3 bg-(--ui-success-bg) p-3 text-sm text-(--ui-success-fg)">
             {notice}
           </SectionCard>
         ) : null}
@@ -1040,26 +1049,52 @@ export default function PurchaseOrdersRedesign() {
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-(--ui-border) p-2"
+                className="rounded border border-(--ui-border) p-2"
               >
-                <div>
-                  <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
-                  <p className="text-xs text-(--ui-text-muted)">
-                    Ordered: {item.quantity} | {item.barcode || "-"}
-                  </p>
+                <div className="grid grid-cols-[1fr_140px] items-center gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">
+                      Ordered: {item.quantity} | {item.barcode || "-"}
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={item.quantity}
+                    value={grnQtys[item.product_id] ?? item.quantity}
+                    onChange={(e) =>
+                      setGrnQtys((prev) => ({
+                        ...prev,
+                        [item.product_id]: e.target.value,
+                      }))
+                    }
+                  />
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  max={item.quantity}
-                  value={grnQtys[item.product_id] ?? item.quantity}
-                  onChange={(e) =>
-                    setGrnQtys((prev) => ({
-                      ...prev,
-                      [item.product_id]: e.target.value,
-                    }))
-                  }
-                />
+                {flags?.batch_expiry_tracking && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Batch / lot no. (optional)"
+                      value={grnBatches[item.product_id]?.batch_number || ""}
+                      onChange={(e) =>
+                        setGrnBatches((prev) => ({
+                          ...prev,
+                          [item.product_id]: { ...prev[item.product_id], batch_number: e.target.value },
+                        }))
+                      }
+                    />
+                    <Input
+                      type="date"
+                      value={grnBatches[item.product_id]?.expiry_date || ""}
+                      onChange={(e) =>
+                        setGrnBatches((prev) => ({
+                          ...prev,
+                          [item.product_id]: { ...prev[item.product_id], expiry_date: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1095,7 +1130,7 @@ export default function PurchaseOrdersRedesign() {
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-(--ui-muted-surface)">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${pct >= 100 ? "bg-emerald-500" : "bg-blue-500"}`}
+                        className={`h-full rounded-full transition-all duration-300 ${pct >= 100 ? "bg-(--ui-success-fg)" : "bg-(--ui-primary)"}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -1107,14 +1142,14 @@ export default function PurchaseOrdersRedesign() {
                   resolves to a serial_required product. Captures one
                   serial per scan. */}
               {serialPrompt ? (
-                <div className="mb-3 rounded border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
-                  <div className="mb-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                <div className="mb-3 rounded-(--ui-radius-sm) bg-(--ui-warning-bg) p-3">
+                  <div className="mb-1 text-xs font-semibold text-(--ui-warning-fg)">
                     Serial required — {serialPrompt.productName}
                   </div>
                   <div className="flex gap-2">
                     <input
                       ref={serialInputRef}
-                      className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) dark:bg-(--ui-surface)"
+                      className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
                       placeholder="Scan or type the serial / IMEI"
                       value={serialInput}
                       onChange={(e) => setSerialInput(e.target.value)}
@@ -1144,7 +1179,7 @@ export default function PurchaseOrdersRedesign() {
               <div className="mb-3">
                 <input
                   ref={scanInputRef}
-                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) disabled:cursor-not-allowed disabled:opacity-50 dark:bg-(--ui-surface)"
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder={
                     serialPrompt
                       ? "Finish serial entry above first…"
@@ -1163,7 +1198,7 @@ export default function PurchaseOrdersRedesign() {
               </div>
 
               {scanError ? (
-                <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                <div className="mb-2 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">
                   {scanError}
                 </div>
               ) : null}
@@ -1172,7 +1207,7 @@ export default function PurchaseOrdersRedesign() {
               {scanLog.length > 0 ? (
                 <div className="mb-3 max-h-20 overflow-auto rounded border border-(--ui-border) bg-(--ui-muted-surface) p-2">
                   {scanLog.map((entry, i) => (
-                    <div key={i} className={`text-xs ${entry.over_received ? "text-amber-600" : "text-emerald-600"}`}>
+                    <div key={i} className={`text-xs ${entry.over_received ? "text-(--ui-warning-fg)" : "text-(--ui-success-fg)"}`}>
                       {entry.product_name} — {entry.qty_received}/{entry.qty_ordered}
                       {entry.over_received ? " ⚠ over-received" : ""}
                     </div>
@@ -1203,20 +1238,20 @@ export default function PurchaseOrdersRedesign() {
                         <tr
                           key={item.id}
                           className={`border-t border-(--ui-border) transition-colors duration-300 ${
-                            isFlashing ? "bg-emerald-100 dark:bg-emerald-900" : ""
+                            isFlashing ? "bg-(--ui-success-bg)" : ""
                           }`}
                         >
                           <td className="px-3 py-2 text-(--ui-text)">
                             {item.product_name}
                             {item.serial_required ? (
-                              <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-900 dark:text-violet-300">
+                              <span className="ml-2 inline-flex items-center rounded-full bg-(--ui-muted-surface) px-1.5 py-0.5 text-[10px] font-bold text-(--ui-text-muted)">
                                 SN
                               </span>
                             ) : null}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">{item.barcode || "-"}</td>
                           <td className="px-3 py-2 text-center text-(--ui-text)">{ordered}</td>
-                          <td className={`px-3 py-2 text-center font-semibold ${isOver ? "text-amber-600" : received > 0 ? "text-emerald-600" : "text-(--ui-text)"}`}>
+                          <td className={`px-3 py-2 text-center font-semibold ${isOver ? "text-(--ui-warning-fg)" : received > 0 ? "text-(--ui-success-fg)" : "text-(--ui-text)"}`}>
                             {received}
                           </td>
                           <td className="px-3 py-2 text-center">
@@ -1225,7 +1260,7 @@ export default function PurchaseOrdersRedesign() {
                             ) : isDone ? (
                               <Badge tone="success">Done</Badge>
                             ) : received > 0 ? (
-                              <Badge tone="info">Partial</Badge>
+                              <Badge tone="default">Partial</Badge>
                             ) : (
                               <Badge tone="default">Pending</Badge>
                             )}
@@ -1276,16 +1311,16 @@ export default function PurchaseOrdersRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
       {notice ? (
-        <SectionCard className="mb-3 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <SectionCard className="mb-3 bg-(--ui-success-bg) p-3 text-sm text-(--ui-success-fg)">
           {notice}
         </SectionCard>
       ) : null}
-      {warn && <SectionCard className="mb-3 border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{warn}</SectionCard>}
+      {warn && <SectionCard className="mb-3 bg-(--ui-warning-bg) p-3 text-sm text-(--ui-warning-fg)">{warn}</SectionCard>}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">
@@ -1514,7 +1549,7 @@ export default function PurchaseOrdersRedesign() {
                           size="sm"
                           iconOnly
                           aria-label="Remove item"
-                          className="hover:text-rose-600"
+                          className="hover:text-(--ui-danger-fg)"
                           onClick={() => removeEditCartItem(item.product_id)}
                         >
                           <X size={13} />
@@ -1552,7 +1587,7 @@ export default function PurchaseOrdersRedesign() {
             </div>
 
             {error ? (
-              <div className="mt-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-600">
+              <div className="mt-3 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">
                 {error}
               </div>
             ) : null}

@@ -37,7 +37,7 @@ function ManufacturerPortalShell() {
 
   if (auth.bootstrapping) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500">
+      <div className="min-h-screen grid place-items-center bg-(--ui-bg) text-(--ui-text-muted)">
         Loading portal…
       </div>
     );
@@ -45,31 +45,34 @@ function ManufacturerPortalShell() {
 
   const isAuthed = auth.isAuthenticated;
 
+  // Manufacturer portal wears DARK top-chrome (black header + nav) to keep it
+  // visually distinct from the light-chrome customer portal — both stay fully
+  // monochrome (no hues), so a partner never confuses the two surfaces.
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      <header className="bg-white border-b border-slate-200">
+    <div className="min-h-screen bg-(--ui-bg) text-(--ui-text)">
+      <header className="bg-(--ui-primary) text-(--ui-on-primary)">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link
             to={`/manufacturer-portal/${tenantSlug}`}
             className="flex items-center gap-3"
           >
-            <div className="h-9 w-9 rounded bg-indigo-600 text-white grid place-items-center font-bold">
+            <div className="h-9 w-9 rounded-(--ui-radius-sm) bg-(--ui-on-primary) text-(--ui-primary) grid place-items-center font-bold">
               {tenantSlug.charAt(0).toUpperCase()}
             </div>
             <div>
-              <div className="text-sm text-slate-500">Manufacturer Portal</div>
+              <div className="text-xs uppercase tracking-wide text-(--ui-on-primary)/55">Manufacturer Portal</div>
               <div className="text-lg font-semibold">{tenantSlug}</div>
             </div>
           </Link>
           {isAuthed && (
             <div className="flex items-center gap-3">
-              <div className="text-sm text-slate-600 hidden sm:block">
+              <div className="text-sm text-(--ui-on-primary)/70 hidden sm:block">
                 {auth.partner?.name || auth.partner?.email}
               </div>
               <button
                 type="button"
                 onClick={auth.logout}
-                className="text-sm text-slate-600 hover:text-slate-900 px-3 py-1 border border-slate-200 rounded"
+                className="text-sm text-(--ui-on-primary)/85 hover:text-(--ui-on-primary) px-3 py-1.5 border border-(--ui-on-primary)/25 rounded-full"
               >
                 Sign out
               </button>
@@ -79,7 +82,7 @@ function ManufacturerPortalShell() {
       </header>
 
       {isAuthed && (
-        <nav className="bg-white border-b border-slate-200">
+        <nav className="bg-(--ui-primary) border-t border-(--ui-on-primary)/10">
           <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
             <NavLink
               end
@@ -87,8 +90,8 @@ function ManufacturerPortalShell() {
               className={({ isActive }) =>
                 `px-4 py-3 text-sm font-medium border-b-2 ${
                   isActive
-                    ? "border-indigo-600 text-indigo-700"
-                    : "border-transparent text-slate-600"
+                    ? "border-(--ui-on-primary) text-(--ui-on-primary)"
+                    : "border-transparent text-(--ui-on-primary)/55"
                 }`
               }
             >
@@ -99,8 +102,8 @@ function ManufacturerPortalShell() {
               className={({ isActive }) =>
                 `px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap ${
                   isActive
-                    ? "border-indigo-600 text-indigo-700"
-                    : "border-transparent text-slate-600"
+                    ? "border-(--ui-on-primary) text-(--ui-on-primary)"
+                    : "border-transparent text-(--ui-on-primary)/55"
                 }`
               }
             >
@@ -111,8 +114,8 @@ function ManufacturerPortalShell() {
               className={({ isActive }) =>
                 `px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap ${
                   isActive
-                    ? "border-indigo-600 text-indigo-700"
-                    : "border-transparent text-slate-600"
+                    ? "border-(--ui-on-primary) text-(--ui-on-primary)"
+                    : "border-transparent text-(--ui-on-primary)/55"
                 }`
               }
             >

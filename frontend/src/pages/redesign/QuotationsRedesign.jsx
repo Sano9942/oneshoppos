@@ -206,7 +206,7 @@ export default function QuotationsRedesign() {
         }
       >
         {error && (
-          <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard>
+          <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard>
         )}
 
         <SectionCard className="mb-4 p-4">
@@ -278,7 +278,7 @@ export default function QuotationsRedesign() {
                   </span>
                   <button
                     onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-rose-600 hover:text-rose-700"
+                    className="text-(--ui-danger-fg) hover:opacity-70"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -361,7 +361,7 @@ export default function QuotationsRedesign() {
       }
     >
       {error && (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard>
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard>
       )}
 
       <SectionCard>
@@ -431,7 +431,7 @@ export default function QuotationsRedesign() {
                           </Button>
                         </div>
                         {sendMsg.id === q.id && sendMsg.msg && (
-                          <span className={`text-xs ${sendMsg.ok ? "text-emerald-600" : "text-rose-600"}`}>
+                          <span className={`text-xs ${sendMsg.ok ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                             {sendMsg.msg}
                           </span>
                         )}

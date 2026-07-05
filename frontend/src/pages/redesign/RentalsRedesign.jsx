@@ -95,7 +95,7 @@ function TabNav({ tab }) {
             to={t.path}
             className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition ${
               active
-                ? "bg-(--ui-primary) text-white"
+                ? "bg-(--ui-primary) text-(--ui-on-primary)"
                 : "bg-(--ui-surface) border border-(--ui-border) text-(--ui-text) hover:bg-(--ui-muted-surface)"
             }`}
           >
@@ -377,7 +377,7 @@ function ContractsTab() {
                       <td className="py-2 pr-3">{c.customer_name || "—"}</td>
                       <td className="py-2 pr-3 text-(--ui-text-muted)">{c.item_summary || "—"}</td>
                       <td className="py-2 pr-3">{fmtUtcDateTime(c.rental_start)}</td>
-                      <td className={`py-2 pr-3 ${isOverdue ? "text-red-600 font-semibold" : ""}`}>
+                      <td className={`py-2 pr-3 ${isOverdue ? "text-(--ui-danger-fg) font-semibold" : ""}`}>
                         {fmtUtcDateTime(c.expected_return)}
                         {isOverdue && " (overdue)"}
                       </td>
@@ -664,7 +664,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
       )}
 
       {contract.cancellation_reason && (
-        <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm">
+        <div className="mt-3 p-3 bg-(--ui-danger-bg) rounded text-sm">
           <strong>Cancelled:</strong> {contract.cancellation_reason}
         </div>
       )}
@@ -892,11 +892,11 @@ function TimelineTab() {
           <div className="inline-flex rounded-md border border-(--ui-border) overflow-hidden">
             <button
               onClick={() => setView("week")}
-              className={`px-3 py-1.5 text-sm ${view === "week" ? "bg-(--ui-primary) text-white" : "bg-(--ui-surface)"}`}
+              className={`px-3 py-1.5 text-sm ${view === "week" ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-surface)"}`}
             >Week</button>
             <button
               onClick={() => setView("month")}
-              className={`px-3 py-1.5 text-sm ${view === "month" ? "bg-(--ui-primary) text-white" : "bg-(--ui-surface)"}`}
+              className={`px-3 py-1.5 text-sm ${view === "month" ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-surface)"}`}
             >Month</button>
           </div>
           <Button size="sm" onClick={() => shift(-1)}><ChevronLeft size={14} /></Button>
@@ -952,7 +952,7 @@ function TimelineTab() {
                     {bookings.map((b, i) => (
                       <div
                         key={i}
-                        className="m-1 rounded text-xs text-white px-2 py-1 overflow-hidden pointer-events-auto cursor-default shadow-sm"
+                        className="m-1 rounded text-xs text-(--ui-on-primary) px-2 py-1 overflow-hidden pointer-events-auto cursor-default"
                         style={blockStyle(b)}
                         title={`${b.contract_number} — ${b.customer_name || "Walk-in"} (${STATUS_LABELS[b.status] || b.status})`}
                       >

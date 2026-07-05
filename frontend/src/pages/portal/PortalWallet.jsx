@@ -36,59 +36,59 @@ export default function PortalWallet() {
     }
   };
 
-  if (!data) return <div className="text-slate-500">Loading…</div>;
+  if (!data) return <div className="text-(--ui-text-muted)">Loading…</div>;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Wallet</h1>
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-sm text-slate-500">Balance</div>
+            <div className="text-sm text-(--ui-text-muted)">Balance</div>
             <div className="text-4xl font-semibold">{Number(data.balance || 0).toLocaleString()}</div>
           </div>
           <button
             type="button"
             onClick={() => setTopupOpen((v) => !v)}
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+            className="px-4 py-2 rounded-lg bg-(--ui-primary) text-(--ui-on-primary) text-sm font-semibold hover:bg-(--ui-primary-strong)"
           >
             {topupOpen ? "Cancel" : "Top up"}
           </button>
         </div>
         {topupOpen && (
-          <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+          <div className="mt-4 pt-4 border-t border-(--ui-border) space-y-2">
             <input
               type="number"
               min="1"
               placeholder="Amount"
               value={topupAmount}
               onChange={(e) => setTopupAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
             />
-            {topupError && <p className="text-xs text-red-600">{topupError}</p>}
+            {topupError && <p className="text-xs text-(--ui-danger-fg)">{topupError}</p>}
             <button
               type="button"
               onClick={submitTopup}
               disabled={topupBusy || !topupAmount}
-              className="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+              className="w-full px-4 py-2 rounded-lg bg-(--ui-primary) text-(--ui-on-primary) text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50"
             >
               {topupBusy ? "Redirecting…" : "Pay now"}
             </button>
           </div>
         )}
       </div>
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
         <h2 className="font-semibold mb-3">Recent activity</h2>
         {(data.ledger || []).length === 0 ? (
-          <div className="text-sm text-slate-500">No wallet activity yet.</div>
+          <div className="text-sm text-(--ui-text-muted)">No wallet activity yet.</div>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-(--ui-border)">
             {data.ledger.map((l) => (
               <li key={l.id} className="py-2 flex justify-between text-sm">
                 <span>
                   {new Date(l.created_at).toLocaleDateString()} — {l.note || l.reference_type}
                 </span>
-                <span className={l.type === "credit" ? "text-emerald-700" : "text-red-600"}>
+                <span className={l.type === "credit" ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}>
                   {l.type === "credit" ? "+" : "−"}
                   {Number(l.amount).toLocaleString()}
                 </span>

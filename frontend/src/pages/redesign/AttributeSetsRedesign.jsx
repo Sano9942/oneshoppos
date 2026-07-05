@@ -182,7 +182,7 @@ export default function AttributeSetsRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -217,7 +217,7 @@ export default function AttributeSetsRedesign() {
                 {!loading && visibleRows.map((row) => (
                   <tr
                     key={row.id}
-                    className={`border-t border-(--ui-border) ${selectedId === row.id ? "bg-emerald-50" : ""}`}
+                    className={`border-t border-(--ui-border) ${selectedId === row.id ? "bg-(--ui-muted-surface)" : ""}`}
                   >
                     <td className="px-3 py-2">
                       {/* Unstyled 2-line row-select trigger — a <Button> would add background/border. */}
@@ -309,7 +309,7 @@ export default function AttributeSetsRedesign() {
 
                   <div className="mb-2 flex flex-wrap gap-1">
                     {(attr.options || []).map((opt, optIdx) => (
-                      <span key={`${opt}-${optIdx}`} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                      <span key={`${opt}-${optIdx}`} className="inline-flex items-center gap-1 rounded-full bg-(--ui-muted-surface) px-2 py-1 text-xs text-(--ui-text)">
                         {opt}
                         {/* Remove-option X inside a custom chip — Button would break the chip layout. */}
                         <button type="button" onClick={() => removeOption(idx, optIdx)} aria-label="Remove option">

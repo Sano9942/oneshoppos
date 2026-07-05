@@ -79,23 +79,23 @@ export function ProductPerformanceTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Units Sold
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalUnits}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Profit
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalGrossProfit)}
           </p>
         </div>
@@ -133,36 +133,36 @@ export function ProductPerformanceTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 transition-colors">
+            <tr key={`${r.id}-${i}`} className="hover:bg-(--ui-muted-surface) transition-colors">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">
+                <div className="text-sm font-semibold text-(--ui-text)">
                   {r.product_name}
                 </div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">
                   {r.barcode}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{r.category}</div>
-                <div className="text-[11px] text-slate-400">{r.brand}</div>
-                <div className="text-[11px] text-slate-400">{r.supplier}</div>
+                <div className="text-sm text-(--ui-text)">{r.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.brand}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.supplier}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {r.units_sold}
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {fmt(r.revenue)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-indigo-700">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-link)">
                 {fmt(r.gross_profit)}
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-emerald-600">
+                <div className="text-sm font-bold text-(--ui-success-fg)">
                   {r.margin_pct}%
                 </div>
-                <div className="mt-1 h-1 w-16 rounded-full bg-slate-100">
+                <div className="mt-1 h-1 w-16 rounded-full bg-(--ui-muted-surface)">
                   <div
-                    className="h-full rounded-full bg-emerald-500"
+                    className="h-full rounded-full bg-(--ui-success-fg)"
                     style={{ width: `${Math.max(0, Math.min(100, Number(r.margin_pct || 0)))}%` }}
                   />
                 </div>
@@ -228,23 +228,23 @@ export function BrandWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Brands in View
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Profit
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalGrossProfit)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalGrossProfit)}</p>
         </div>
       </div>
 
@@ -277,17 +277,17 @@ export function BrandWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r) => (
-            <tr key={r.brand_id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{r.brand}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.order_count}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">{r.units_sold}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(r.revenue)}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-emerald-700">{fmt(r.gross_profit)}</td>
+            <tr key={r.brand_id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{r.brand}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.order_count}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{r.units_sold}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(r.revenue)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-success-fg)">{fmt(r.gross_profit)}</td>
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-slate-800">{r.contribution_pct}%</div>
-                <div className="mt-1 h-1.5 w-20 rounded-full bg-slate-100">
+                <div className="text-sm font-bold text-(--ui-text)">{r.contribution_pct}%</div>
+                <div className="mt-1 h-1.5 w-20 rounded-full bg-(--ui-muted-surface)">
                   <div
-                    className="h-full rounded-full bg-blue-500"
+                    className="h-full rounded-full bg-(--ui-primary)"
                     style={{ width: `${Math.max(0, Math.min(100, Number(r.contribution_pct || 0)))}%` }}
                   />
                 </div>
@@ -484,37 +484,37 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.revenue)}</p>
-          <p className="mt-1 text-xs text-slate-500">{summary.order_count || 0} orders</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.revenue)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{summary.order_count || 0} orders</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Profit
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.gross_profit)}</p>
-          <p className="mt-1 text-xs text-slate-500">{summary.units_sold || 0} units sold</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary.gross_profit)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{summary.units_sold || 0} units sold</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Brands / Suppliers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {summary.brand_count || 0} / {summary.supplier_count || 0}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Dimensions represented</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">Dimensions represented</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             SKUs / Categories
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {summary.sku_count || 0} / {summary.category_count || 0}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Active in current view</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">Active in current view</p>
         </div>
       </div>
 
@@ -544,10 +544,10 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
         }
       >
         <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <h3 className="font-bold text-slate-700">Top Items</h3>
-              <p className="text-xs text-slate-500">Top revenue-driving products with cross-dimension tags</p>
+          <div className="rounded-2xl border border-(--ui-border)">
+            <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+              <h3 className="font-bold text-(--ui-text)">Top Items</h3>
+              <p className="text-xs text-(--ui-text-muted)">Top revenue-driving products with cross-dimension tags</p>
             </div>
             <TableShell
               cols={["Product", "Dimension Tags", "Revenue", "Margin %"]}
@@ -555,33 +555,33 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               empty={!items.length}
             >
               {items.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
+                <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
                   <td className="px-4 py-3">
-                    <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                    <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                    <div className="text-sm font-semibold text-(--ui-text)">{row.product_name}</div>
+                    <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-slate-700">{row.category}</div>
-                    <div className="text-[11px] text-slate-400">{row.brand}</div>
-                    <div className="text-[11px] text-slate-400">{row.supplier}</div>
+                    <div className="text-sm text-(--ui-text)">{row.category}</div>
+                    <div className="text-[11px] text-(--ui-text-muted)">{row.brand}</div>
+                    <div className="text-[11px] text-(--ui-text-muted)">{row.supplier}</div>
                   </td>
-                  <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-emerald-700">{row.margin_pct}%</td>
+                  <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-(--ui-success-fg)">{row.margin_pct}%</td>
                 </tr>
               ))}
               </TableShell>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Category Leaders</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Category Leaders</h3>
               </div>
               <TableShell cols={["Category", "Units", "Revenue"]} loading={loading} empty={!categories.length}>
                 {categories.map((row) => (
-                  <tr key={row.category_id} className="hover:bg-slate-50">
+                  <tr key={row.category_id} className="hover:bg-(--ui-muted-surface)">
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.category}</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.category}</div>
                       <button
                         type="button"
                         onClick={() =>
@@ -589,27 +589,27 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
                             categoryId: String(row.category_id || ""),
                           })
                         }
-                        className="mt-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                        className="mt-1 text-[11px] font-semibold text-(--ui-link) hover:text-(--ui-link)"
                       >
                         Open in product performance
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.units_sold}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.units_sold}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Brand Leaders</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Brand Leaders</h3>
               </div>
               <TableShell cols={["Brand", "Units", "Revenue"]} loading={loading} empty={!brands.length}>
                 {brands.map((row) => (
-                  <tr key={row.brand_id} className="hover:bg-slate-50">
+                  <tr key={row.brand_id} className="hover:bg-(--ui-muted-surface)">
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.brand}</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.brand}</div>
                       <button
                         type="button"
                         onClick={() =>
@@ -617,27 +617,27 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
                             brandId: String(row.brand_id || ""),
                           })
                         }
-                        className="mt-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                        className="mt-1 text-[11px] font-semibold text-(--ui-link) hover:text-(--ui-link)"
                       >
                         Open in product performance
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.units_sold}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.units_sold}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Supplier Leaders</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Supplier Leaders</h3>
               </div>
               <TableShell cols={["Supplier", "Units", "Revenue"]} loading={loading} empty={!suppliers.length}>
                 {suppliers.map((row) => (
-                  <tr key={row.supplier_id} className="hover:bg-slate-50">
+                  <tr key={row.supplier_id} className="hover:bg-(--ui-muted-surface)">
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.supplier}</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.supplier}</div>
                       <button
                         type="button"
                         onClick={() =>
@@ -645,13 +645,13 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
                             supplierId: String(row.supplier_id || ""),
                           })
                         }
-                        className="mt-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                        className="mt-1 text-[11px] font-semibold text-(--ui-link) hover:text-(--ui-link)"
                       >
                         Open in product performance
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.units_sold}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.units_sold}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
@@ -686,10 +686,10 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
           }
         >
           <div className="grid grid-cols-1 gap-4 p-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
               <div className="mb-3">
-                <h3 className="font-bold text-slate-700">Comparison Overview</h3>
-                <p className="text-xs text-slate-500">Current-period revenue against the previous matching window</p>
+                <h3 className="font-bold text-(--ui-text)">Comparison Overview</h3>
+                <p className="text-xs text-(--ui-text-muted)">Current-period revenue against the previous matching window</p>
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -705,24 +705,24 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Top Item Comparison</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Top Item Comparison</h3>
               </div>
               <TableShell cols={["Item", "Current", "Previous", "Delta"]} loading={loading} empty={!itemComparison.length}>
                 {itemComparison.map((row) => (
                   <tr
                     key={row.entity_id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-(--ui-muted-surface)"
                     onClick={() => drillComparisonRow("item", row)}
                   >
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.entity_label}</div>
-                      <div className="text-[11px] font-semibold text-blue-600">Open in product performance</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.entity_label}</div>
+                      <div className="text-[11px] font-semibold text-(--ui-link)">Open in product performance</div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.current_revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.previous_revenue)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.current_revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.previous_revenue)}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                       {fmt(row.revenue_delta)} ({row.revenue_delta_pct}%)
                     </td>
                   </tr>
@@ -730,24 +730,24 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Top Category Comparison</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Top Category Comparison</h3>
               </div>
               <TableShell cols={["Category", "Current", "Previous", "Delta"]} loading={loading} empty={!categoryComparison.length}>
                 {categoryComparison.map((row) => (
                   <tr
                     key={row.entity_id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-(--ui-muted-surface)"
                     onClick={() => drillComparisonRow("category", row)}
                   >
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.entity_label}</div>
-                      <div className="text-[11px] font-semibold text-blue-600">Open in product performance</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.entity_label}</div>
+                      <div className="text-[11px] font-semibold text-(--ui-link)">Open in product performance</div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.current_revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.previous_revenue)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.current_revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.previous_revenue)}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                       {fmt(row.revenue_delta)} ({row.revenue_delta_pct}%)
                     </td>
                   </tr>
@@ -755,24 +755,24 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Top Brand Comparison</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Top Brand Comparison</h3>
               </div>
               <TableShell cols={["Brand", "Current", "Previous", "Delta"]} loading={loading} empty={!brandComparison.length}>
                 {brandComparison.map((row) => (
                   <tr
                     key={row.entity_id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-(--ui-muted-surface)"
                     onClick={() => drillComparisonRow("brand", row)}
                   >
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.entity_label}</div>
-                      <div className="text-[11px] font-semibold text-blue-600">Open in product performance</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.entity_label}</div>
+                      <div className="text-[11px] font-semibold text-(--ui-link)">Open in product performance</div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.current_revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.previous_revenue)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.current_revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.previous_revenue)}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                       {fmt(row.revenue_delta)} ({row.revenue_delta_pct}%)
                     </td>
                   </tr>
@@ -780,24 +780,24 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Top Supplier Comparison</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Top Supplier Comparison</h3>
               </div>
               <TableShell cols={["Supplier", "Current", "Previous", "Delta"]} loading={loading} empty={!supplierComparison.length}>
                 {supplierComparison.map((row) => (
                   <tr
                     key={row.entity_id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-(--ui-muted-surface)"
                     onClick={() => drillComparisonRow("supplier", row)}
                   >
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.entity_label}</div>
-                      <div className="text-[11px] font-semibold text-blue-600">Open in product performance</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.entity_label}</div>
+                      <div className="text-[11px] font-semibold text-(--ui-link)">Open in product performance</div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.current_revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.previous_revenue)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.current_revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.previous_revenue)}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                       {fmt(row.revenue_delta)} ({row.revenue_delta_pct}%)
                     </td>
                   </tr>
@@ -805,24 +805,24 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Top Sub-Category Comparison</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Top Sub-Category Comparison</h3>
               </div>
               <TableShell cols={["Sub-Category", "Current", "Previous", "Delta"]} loading={loading} empty={!subcategoryComparison.length}>
                 {subcategoryComparison.map((row) => (
                   <tr
                     key={row.entity_id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-(--ui-muted-surface)"
                     onClick={() => drillComparisonRow("subcategory", row)}
                   >
                     <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-800">{row.entity_label}</div>
-                      <div className="text-[11px] font-semibold text-blue-600">Open in product performance</div>
+                      <div className="text-sm font-semibold text-(--ui-text)">{row.entity_label}</div>
+                      <div className="text-[11px] font-semibold text-(--ui-link)">Open in product performance</div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.current_revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.previous_revenue)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.current_revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmt(row.previous_revenue)}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${Number(row.revenue_delta || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                       {fmt(row.revenue_delta)} ({row.revenue_delta_pct}%)
                     </td>
                   </tr>
@@ -854,10 +854,10 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
           }
         >
           <div className="grid grid-cols-1 gap-4 p-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
               <div className="mb-3">
-                <h3 className="font-bold text-slate-700">Trend Lines</h3>
-                <p className="text-xs text-slate-500">Monthly revenue leaders by dimension</p>
+                <h3 className="font-bold text-(--ui-text)">Trend Lines</h3>
+                <p className="text-xs text-(--ui-text-muted)">Monthly revenue leaders by dimension</p>
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -875,76 +875,76 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Item Leaders by Month</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Item Leaders by Month</h3>
               </div>
               <TableShell cols={["Month", "Leader", "Revenue"]} loading={loading} empty={!itemMonthly.length}>
                 {itemMonthly.map((row, index) => (
-                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.month_bucket}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.entity_label}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.month_bucket}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.entity_label}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Category Leaders by Month</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Category Leaders by Month</h3>
               </div>
               <TableShell cols={["Month", "Leader", "Revenue"]} loading={loading} empty={!categoryMonthly.length}>
                 {categoryMonthly.map((row, index) => (
-                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.month_bucket}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.entity_label}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.month_bucket}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.entity_label}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Brand Leaders by Month</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Brand Leaders by Month</h3>
               </div>
               <TableShell cols={["Month", "Leader", "Revenue"]} loading={loading} empty={!brandMonthly.length}>
                 {brandMonthly.map((row, index) => (
-                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.month_bucket}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.entity_label}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.month_bucket}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.entity_label}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Supplier Leaders by Month</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Supplier Leaders by Month</h3>
               </div>
               <TableShell cols={["Month", "Leader", "Revenue"]} loading={loading} empty={!supplierMonthly.length}>
                 {supplierMonthly.map((row, index) => (
-                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.month_bucket}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.entity_label}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.month_bucket}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.entity_label}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>
             </div>
 
-            <div className="rounded-2xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="font-bold text-slate-700">Sub-Category Leaders by Month</h3>
+            <div className="rounded-2xl border border-(--ui-border)">
+              <div className="border-b border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+                <h3 className="font-bold text-(--ui-text)">Sub-Category Leaders by Month</h3>
               </div>
               <TableShell cols={["Month", "Leader", "Revenue"]} loading={loading} empty={!subcategoryMonthly.length}>
                 {subcategoryMonthly.map((row, index) => (
-                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-600">{row.month_bucket}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.entity_label}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+                  <tr key={`${row.month_bucket}-${row.entity_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.month_bucket}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.entity_label}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
                   </tr>
                 ))}
               </TableShell>

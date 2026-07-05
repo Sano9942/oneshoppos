@@ -5,12 +5,12 @@ import { usePortalAuth } from "./PortalAuthProvider";
 
 function Card({ title, value, subtitle, href, cta }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-      <div className="text-sm text-slate-500">{title}</div>
+    <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
+      <div className="text-sm text-(--ui-text-muted)">{title}</div>
       <div className="text-3xl font-semibold mt-2">{value}</div>
-      {subtitle && <div className="text-sm text-slate-500 mt-1">{subtitle}</div>}
+      {subtitle && <div className="text-sm text-(--ui-text-muted) mt-1">{subtitle}</div>}
       {href && cta && (
-        <Link to={href} className="inline-block mt-4 text-sm text-emerald-700 hover:underline">
+        <Link to={href} className="inline-block mt-4 text-sm text-(--ui-success-fg) hover:underline">
           {cta} →
         </Link>
       )}
@@ -66,11 +66,11 @@ export default function PortalDashboard() {
         <h1 className="text-2xl font-semibold">
           {labels.dashboard_heading || "Welcome back"}, {auth.customer?.name || "there"}
         </h1>
-        <p className="text-slate-600">Your account at {storeName}</p>
+        <p className="text-(--ui-text-muted)">Your account at {storeName}</p>
       </div>
 
       {loading ? (
-        <div className="text-slate-500">Loading…</div>
+        <div className="text-(--ui-text-muted)">Loading…</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {enabledTabs.includes("invoices") && (

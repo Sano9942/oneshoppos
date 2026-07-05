@@ -110,7 +110,7 @@ export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onO
       {/* Backdrop — tap outside to close */}
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="absolute right-0 bottom-14 w-56 rounded-xl bg-white border border-slate-200 shadow-2xl z-50 p-2 text-sm"
+        className="absolute right-0 bottom-14 w-56 rounded-xl bg-(--ui-surface) border border-(--ui-border-strong) shadow-(--ui-shadow-lg) z-50 p-2 text-sm"
         onClick={(e) => e.stopPropagation()}
       >
         {items.map(({ key, icon: Icon, label, onClick, disabled, disabledTooltip }) => (
@@ -122,11 +122,11 @@ export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onO
             title={disabled ? disabledTooltip : undefined}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left font-semibold transition ${
               disabled
-                ? "text-slate-400 cursor-not-allowed"
-                : "text-slate-800 hover:bg-slate-100 active:bg-slate-200"
+                ? "text-(--ui-text-muted) cursor-not-allowed"
+                : "text-(--ui-text) hover:bg-(--ui-muted-surface) active:bg-(--ui-border-strong)"
             }`}
           >
-            <Icon size={16} className={disabled ? "text-slate-300" : "text-[#8066FF]"} />
+            <Icon size={16} className={disabled ? "text-(--ui-text-muted)" : "text-(--ui-text)"} />
             <span className="flex-1">{label}</span>
           </button>
         ))}

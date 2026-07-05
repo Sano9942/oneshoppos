@@ -162,12 +162,12 @@ export default function ImportRedesign() {
           <div className="mt-5">
             {/* Summary */}
             <div className="mb-4 flex items-center gap-4">
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-(--ui-success-fg)">
                 <CheckCircle2 className="h-4 w-4" />
                 {validRows.length} valid row{validRows.length !== 1 ? "s" : ""}
               </span>
               {errorRows.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600">
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-(--ui-danger-fg)">
                   <AlertCircle className="h-4 w-4" />
                   {errorRows.length} error{errorRows.length !== 1 ? "s" : ""}
                 </span>
@@ -198,7 +198,7 @@ export default function ImportRedesign() {
                       return (
                         <tr
                           key={i}
-                          className={`border-b border-(--ui-border) ${hasError ? "bg-red-50" : ""}`}
+                          className={`border-b border-(--ui-border) ${hasError ? "bg-(--ui-danger-bg)" : ""}`}
                         >
                           <td className="px-3 py-2 text-(--ui-text-muted)">{row._row ?? i + 1}</td>
                           {columns.map((col) => (
@@ -208,9 +208,9 @@ export default function ImportRedesign() {
                           ))}
                           <td className="px-3 py-2">
                             {hasError ? (
-                              <span className="text-xs text-red-600">{row._errors.join("; ")}</span>
+                              <span className="text-xs text-(--ui-danger-fg)">{row._errors.join("; ")}</span>
                             ) : (
-                              <span className="text-xs text-emerald-600">OK</span>
+                              <span className="text-xs text-(--ui-success-fg)">OK</span>
                             )}
                           </td>
                         </tr>

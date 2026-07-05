@@ -522,10 +522,10 @@ export default function POSReturnExchangeModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
-          <h2 className="font-semibold text-slate-800">Return / Exchange</h2>
-          <button onClick={() => setReturnModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-(--ui-border-strong) shrink-0">
+          <h2 className="font-semibold text-(--ui-text)">Return / Exchange</h2>
+          <button onClick={() => setReturnModalOpen(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={16} />
           </button>
         </div>
@@ -534,10 +534,10 @@ export default function POSReturnExchangeModal() {
 
           {!resolvedSale && (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-slate-700">Do you have the original bill?</p>
+              <p className="text-sm font-medium text-(--ui-text)">Do you have the original bill?</p>
               <div className="flex gap-2">
                 <input
-                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="flex-1 border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                   placeholder="Enter invoice number (e.g. INV-2026-00042)"
                   value={invoiceSearch}
                   onChange={(e) => setInvoiceSearch(e.target.value)}
@@ -546,19 +546,19 @@ export default function POSReturnExchangeModal() {
                 <button
                   onClick={searchInvoice}
                   disabled={saleLoading}
-                  className="px-4 py-2 bg-violet-600 text-white text-sm rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-(--ui-primary) text-white text-sm rounded-lg hover:bg-(--ui-primary-strong) disabled:opacity-50"
                 >
                   {saleLoading ? "..." : "Find Bill"}
                 </button>
               </div>
-              <p className="text-xs text-slate-400">— or —</p>
+              <p className="text-xs text-(--ui-text-muted)">— or —</p>
               <button
                 onClick={() => {
                   setResolvedSale({ id: null, invoice_number: "No Bill" });
                   setReturnItems([]);
                   setReturnQtys({});
                 }}
-                className="text-sm text-rose-600 underline hover:text-rose-700"
+                className="text-sm text-(--ui-danger-fg) underline hover:text-(--ui-danger-fg)"
               >
                 Continue without a bill (manual return)
               </button>
@@ -568,20 +568,20 @@ export default function POSReturnExchangeModal() {
           {resolvedSale && returnItems.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold uppercase text-slate-400">
+                <p className="text-xs font-semibold uppercase text-(--ui-text-muted)">
                   Return Items from {resolvedSale.invoice_number}
                 </p>
                 {perLineRestockOn && (
                   <div className="flex gap-1 text-xs">
                     <button
                       onClick={() => setLineRestock(Object.fromEntries(returnItems.map((i) => [i.product_id, true])))}
-                      className="px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      className="px-2 py-1 rounded border border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                     >
                       All Restock ON
                     </button>
                     <button
                       onClick={() => setLineRestock(Object.fromEntries(returnItems.map((i) => [i.product_id, false])))}
-                      className="px-2 py-1 rounded border border-amber-200 text-amber-700 hover:bg-amber-50"
+                      className="px-2 py-1 rounded border border-(--ui-warning-fg)/30 text-(--ui-warning-fg) hover:bg-(--ui-warning-bg)"
                     >
                       All Restock OFF
                     </button>
@@ -596,46 +596,46 @@ export default function POSReturnExchangeModal() {
                   return (
                     <div
                       key={item.product_id}
-                      className={`p-2 border rounded-lg ${perLineRestockOn && !restock ? "border-amber-200 bg-amber-50/40" : "border-slate-100"}`}
+                      className={`p-2 border rounded-lg ${perLineRestockOn && !restock ? "border-(--ui-warning-fg)/30 bg-(--ui-warning-bg)" : "border-(--ui-border)"}`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
-                          <p className="text-xs text-slate-400">{money(item.price)} each</p>
+                          <p className="text-sm font-medium text-(--ui-text) truncate">{item.name}</p>
+                          <p className="text-xs text-(--ui-text-muted)">{money(item.price)} each</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.max(0, (q[item.product_id] || 0) - 1) }))}
-                            className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
+                            className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                           >
                             <Minus size={12} />
                           </button>
                           <span className="w-6 text-center text-sm font-medium">{returnQtys[item.product_id] || 0}</span>
                           <button
                             onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.min(item.maxQty, (q[item.product_id] || 0) + 1) }))}
-                            className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
+                            className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                           >
                             <Plus size={12} />
                           </button>
-                          <span className="text-xs text-slate-400 w-12 text-right">of {item.maxQty}</span>
+                          <span className="text-xs text-(--ui-text-muted) w-12 text-right">of {item.maxQty}</span>
                         </div>
                       </div>
 
                       {perLineRestockOn && (
                         <div className="mt-2 flex items-center gap-3 flex-wrap">
-                          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                          <label className="flex items-center gap-1.5 text-xs text-(--ui-text-muted) cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={restock}
                               onChange={(e) => setLineRestock((m) => ({ ...m, [item.product_id]: e.target.checked }))}
-                              className="accent-violet-600"
+                              className="accent-(--ui-primary)"
                             />
                             Restock
                           </label>
                           <select
                             value={lineReasonId[item.product_id] || ""}
                             onChange={(e) => setLineReasonId((m) => ({ ...m, [item.product_id]: e.target.value ? Number(e.target.value) : null }))}
-                            className="flex-1 min-w-35 text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            className="flex-1 min-w-35 text-xs border border-(--ui-border-strong) rounded px-2 py-1 bg-(--ui-surface) focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
                           >
                             <option value="">Reason (defaults to header)</option>
                             {returnReasons.map((r) => (
@@ -645,7 +645,7 @@ export default function POSReturnExchangeModal() {
                           {!restock && (
                             <span
                               title="This item will be scrapped (logged for shrinkage)"
-                              className="flex items-center gap-1 text-xs text-amber-700"
+                              className="flex items-center gap-1 text-xs text-(--ui-warning-fg)"
                             >
                               <AlertTriangle size={12} /> Scrap
                             </span>
@@ -655,7 +655,7 @@ export default function POSReturnExchangeModal() {
 
                       {itemSerials.length > 0 && (
                         <div className="mt-2">
-                          <p className="text-xs text-slate-400 mb-1">Serial numbers on this invoice:</p>
+                          <p className="text-xs text-(--ui-text-muted) mb-1">Serial numbers on this invoice:</p>
                           <div className="flex flex-wrap gap-1.5">
                             {itemSerials.map((s) => {
                               const active = chosenSerials.includes(s.id);
@@ -674,8 +674,8 @@ export default function POSReturnExchangeModal() {
                                   })}
                                   className={`px-2 py-0.5 rounded text-xs border transition ${
                                     active
-                                      ? "border-violet-500 bg-violet-50 text-violet-700"
-                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                      ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                                      : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                                   }`}
                                 >
                                   {s.serial_number}
@@ -694,23 +694,23 @@ export default function POSReturnExchangeModal() {
 
           {resolvedSale && resolvedSale.id === null && (
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Add Items to Return</p>
+              <p className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Add Items to Return</p>
               <div className="relative mb-2">
-                <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                <Search size={13} className="absolute left-2.5 top-2.5 text-(--ui-text-muted) pointer-events-none" />
                 <input
-                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                   placeholder={returnSearching ? "Searching..." : "Search product to return"}
                   value={returnSearch}
                   onChange={(e) => setReturnSearch(e.target.value)}
                 />
               </div>
               {returnSearchResults.length > 0 && (
-                <div className="border border-slate-200 rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
+                <div className="border border-(--ui-border-strong) rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
                   {returnSearchResults.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => addReturnItem(p)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) border-b border-(--ui-border) last:border-0"
                     >
                       {p.name} — {money(p.price)}
                     </button>
@@ -720,13 +720,13 @@ export default function POSReturnExchangeModal() {
               {returnItems.length > 0 && (
                 <div className="space-y-1">
                   {returnItems.map((item) => (
-                    <div key={item.product_id} className="flex items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg">
-                      <p className="text-sm flex-1 text-slate-800">{item.name}</p>
+                    <div key={item.product_id} className="flex items-center justify-between gap-3 p-2 border border-(--ui-border) rounded-lg">
+                      <p className="text-sm flex-1 text-(--ui-text)">{item.name}</p>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.max(1, (q[item.product_id] || 1) - 1) }))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"><Minus size={12} /></button>
+                        <button onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.max(1, (q[item.product_id] || 1) - 1) }))} className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"><Minus size={12} /></button>
                         <span className="w-6 text-center text-sm">{returnQtys[item.product_id] || 1}</span>
-                        <button onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: (q[item.product_id] || 1) + 1 }))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"><Plus size={12} /></button>
-                        <button onClick={() => { setReturnItems((p) => p.filter((i) => i.product_id !== item.product_id)); }} className="text-rose-400 hover:text-rose-600 ml-1"><X size={13} /></button>
+                        <button onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: (q[item.product_id] || 1) + 1 }))} className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"><Plus size={12} /></button>
+                        <button onClick={() => { setReturnItems((p) => p.filter((i) => i.product_id !== item.product_id)); }} className="text-(--ui-text-muted) hover:text-(--ui-danger-fg) ml-1"><X size={13} /></button>
                       </div>
                     </div>
                   ))}
@@ -737,9 +737,9 @@ export default function POSReturnExchangeModal() {
 
           {resolvedSale && (
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Reason (optional)</label>
+              <label className="text-xs text-(--ui-text-muted) mb-1 block">Reason (optional)</label>
               <input
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                 placeholder="Damaged, wrong item, etc."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -749,7 +749,7 @@ export default function POSReturnExchangeModal() {
 
           {resolvedSale && (
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-400 mb-2">What does the customer want?</p>
+              <p className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">What does the customer want?</p>
               <div className="flex gap-2">
                 {["refund", "exchange"].map((m) => (
                   <button
@@ -757,8 +757,8 @@ export default function POSReturnExchangeModal() {
                     onClick={() => setMode(m)}
                     className={`flex-1 py-2 rounded-lg border text-sm font-medium transition ${
                       mode === m
-                        ? "border-violet-500 bg-violet-50 text-violet-700"
-                        : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                        ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                        : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                     }`}
                   >
                     {m === "refund" ? "Full Refund" : "Exchange for Other Items"}
@@ -770,23 +770,23 @@ export default function POSReturnExchangeModal() {
 
           {resolvedSale && mode === "exchange" && (
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Add Replacement Items</p>
+              <p className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Add Replacement Items</p>
               <div className="relative mb-2">
-                <ShoppingCart size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                <ShoppingCart size={13} className="absolute left-2.5 top-2.5 text-(--ui-text-muted) pointer-events-none" />
                 <input
-                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                   placeholder={exSearching ? "Searching..." : "Search product to exchange for"}
                   value={exSearch}
                   onChange={(e) => setExSearch(e.target.value)}
                 />
               </div>
               {exResults.length > 0 && (
-                <div className="border border-slate-200 rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
+                <div className="border border-(--ui-border-strong) rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
                   {exResults.map((p) => (
                     <button
                       key={p.variant_id || p.id}
                       onClick={() => addExchangeItem(p)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) border-b border-(--ui-border) last:border-0"
                     >
                       {p.name} — {money(p.price)}
                     </button>
@@ -796,13 +796,13 @@ export default function POSReturnExchangeModal() {
               {exchangeItems.length > 0 && (
                 <div className="space-y-1 mt-2">
                   {exchangeItems.map((item) => (
-                    <div key={item.variant_id || item.id} className="flex items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg">
-                      <p className="text-sm flex-1 text-slate-800">{item.name}</p>
+                    <div key={item.variant_id || item.id} className="flex items-center justify-between gap-3 p-2 border border-(--ui-border) rounded-lg">
+                      <p className="text-sm flex-1 text-(--ui-text)">{item.name}</p>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: Math.max(1, i.qty - 1) } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Minus size={12} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: Math.max(1, i.qty - 1) } : i))} className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted)"><Minus size={12} /></button>
                         <span className="w-6 text-center text-sm">{item.qty}</span>
-                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: i.qty + 1 } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Plus size={12} /></button>
-                        <button onClick={() => setExchangeItems((p) => p.filter((i) => (i.variant_id || i.id) !== (item.variant_id || item.id)))} className="text-rose-400 hover:text-rose-600 ml-1"><X size={13} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: i.qty + 1 } : i))} className="w-6 h-6 rounded border border-(--ui-border-strong) flex items-center justify-center text-(--ui-text-muted)"><Plus size={12} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.filter((i) => (i.variant_id || i.id) !== (item.variant_id || item.id)))} className="text-(--ui-text-muted) hover:text-(--ui-danger-fg) ml-1"><X size={13} /></button>
                       </div>
                     </div>
                   ))}
@@ -812,29 +812,29 @@ export default function POSReturnExchangeModal() {
           )}
 
           {resolvedSale && (
-            <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="border-t border-(--ui-border) pt-4 space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Return value</span>
-                <span className="font-medium text-rose-600">− {money(refundTotal)}</span>
+                <span className="text-(--ui-text-muted)">Return value</span>
+                <span className="font-medium text-(--ui-danger-fg)">− {money(refundTotal)}</span>
               </div>
               {mode === "exchange" && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Exchange items</span>
-                  <span className="font-medium text-slate-800">{money(exchangeTotal)}</span>
+                  <span className="text-(--ui-text-muted)">Exchange items</span>
+                  <span className="font-medium text-(--ui-text)">{money(exchangeTotal)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm font-semibold border-t border-slate-100 pt-2">
+              <div className="flex justify-between text-sm font-semibold border-t border-(--ui-border) pt-2">
                 <span>
                   {balance > 0 ? "Customer pays" : balance < 0 ? "Refund to customer" : "Even exchange"}
                 </span>
-                <span className={balance > 0 ? "text-emerald-600" : balance < 0 ? "text-rose-600" : "text-slate-400"}>
+                <span className={balance > 0 ? "text-(--ui-success-fg)" : balance < 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text-muted)"}>
                   {balance === 0 ? money(0) : money(Math.abs(balance))}
                 </span>
               </div>
 
               {(mode === "refund" || (mode === "exchange" && balance < 0)) && (
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Refund method</p>
+                  <p className="text-xs text-(--ui-text-muted) mb-1">Refund method</p>
                   <div className="flex gap-2 flex-wrap">
                     {[
                       "Cash",
@@ -852,8 +852,8 @@ export default function POSReturnExchangeModal() {
                         onClick={() => setSettleMethod(m)}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
                           settleMethod === m
-                            ? "border-violet-500 bg-violet-50 text-violet-700"
-                            : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                         }`}
                       >
                         {m === "credit_reversal" ? "Reduce A/R" : m}
@@ -861,7 +861,7 @@ export default function POSReturnExchangeModal() {
                     ))}
                   </div>
                   {settleMethod === "credit_reversal" && (
-                    <p className="mt-1.5 text-[11px] text-violet-600">
+                    <p className="mt-1.5 text-[11px] text-(--ui-text-muted)">
                       Refund will reduce the buyer's outstanding A/R balance
                       on the original on-account invoice — no cash leaves the
                       drawer.
@@ -872,7 +872,7 @@ export default function POSReturnExchangeModal() {
 
               {mode === "exchange" && balance > 0 && (
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Customer pays via</p>
+                  <p className="text-xs text-(--ui-text-muted) mb-1">Customer pays via</p>
                   <div className="flex gap-2">
                     {["Cash", "Card", "Wallet"].map((m) => (
                       <button
@@ -880,8 +880,8 @@ export default function POSReturnExchangeModal() {
                         onClick={() => setSettleMethod(m)}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
                           settleMethod === m
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                         }`}
                       >
                         {m}
@@ -895,17 +895,17 @@ export default function POSReturnExchangeModal() {
         </div>
 
         {resolvedSale && (
-          <div className="flex gap-2 px-5 py-3 border-t border-slate-200 shrink-0">
+          <div className="flex gap-2 px-5 py-3 border-t border-(--ui-border-strong) shrink-0">
             <button
               onClick={() => setReturnModalOpen(false)}
-              className="flex-1 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex-1 py-2 rounded-lg border border-(--ui-border-strong) text-sm text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
             >
               Cancel
             </button>
             <button
               onClick={handleComplete}
               disabled={submitting}
-              className="flex-1 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+              className="flex-1 py-2 rounded-lg bg-(--ui-primary) text-white text-sm font-medium hover:bg-(--ui-primary-strong) disabled:opacity-50"
             >
               {submitting ? "Processing..." : mode === "exchange" ? "Complete Exchange" : "Process Refund"}
             </button>

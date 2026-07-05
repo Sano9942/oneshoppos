@@ -28,10 +28,10 @@ import {
   Select,
 } from "../../ui/primitives";
 
-const STATUS_COLORS = {
-  in_progress: "blue",
-  completed: "green",
-  cancelled: "gray",
+const STATUS_TONES = {
+  in_progress: "warning",
+  completed: "success",
+  cancelled: "default",
 };
 
 // ── List View ─────────────────────────────────────────────────────────────
@@ -70,18 +70,18 @@ function CountListView({ counts, loading, onSelect, onNew }) {
           </div>
 
           {loading ? (
-            <p className="text-gray-500 dark:text-slate-400 py-8 text-center">Loading...</p>
+            <p className="text-(--ui-text-muted) py-8 text-center">Loading...</p>
           ) : filtered.length === 0 ? (
             <EmptyState
-              icon={ClipboardCheck}
+              icon={<ClipboardCheck size={28} />}
               title="No stock counts"
-              description="Start a new count to audit your inventory"
+              body="Start a new count to audit your inventory"
             />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-gray-500 dark:text-slate-400">
+                  <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                     <th className="pb-2 pr-4">Count #</th>
                     <th className="pb-2 pr-4">Outlet</th>
                     <th className="pb-2 pr-4">Status</th>
@@ -95,17 +95,17 @@ function CountListView({ counts, loading, onSelect, onNew }) {
                   {filtered.map((c) => (
                     <tr
                       key={c.id}
-                      className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
+                      className="border-b border-(--ui-border) last:border-0 hover:bg-(--ui-muted-surface) cursor-pointer"
                       onClick={() => onSelect(c.id)}
                     >
                       <td className="py-2 pr-4 font-mono">{c.count_number}</td>
                       <td className="py-2 pr-4">{c.outlet_name}</td>
                       <td className="py-2 pr-4">
-                        <Badge color={STATUS_COLORS[c.status] || "gray"}>
+                        <Badge tone={STATUS_TONES[c.status] || "default"}>
                           {c.status === "in_progress" ? "In Progress" : c.status}
                         </Badge>
                       </td>
-                      <td className="py-2 pr-4 text-gray-600 dark:text-slate-300">
+                      <td className="py-2 pr-4 text-(--ui-text-muted)">
                         {c.items_counted}/{c.total_items} counted
                       </td>
                       <td className="py-2 pr-4">{c.started_by_name || "—"}</td>
@@ -326,8 +326,8 @@ function CountingView({ countId, onBack }) {
     return list;
   }, [items, filter, search]);
 
-  if (loading) return <p className="p-8 text-center text-gray-500 dark:text-slate-400">Loading count...</p>;
-  if (!count) return <p className="p-8 text-center text-red-500">Count not found</p>;
+  if (loading) return <p className="p-8 text-center text-(--ui-text-muted)">Loading count...</p>;
+  if (!count) return <p className="p-8 text-center text-(--ui-danger-fg)">Count not found</p>;
 
   // Completion summary screen
   if (completeSummary) {
@@ -337,33 +337,33 @@ function CountingView({ countId, onBack }) {
         <div className="p-4 md:p-6 max-w-lg mx-auto space-y-4">
           <SectionCard>
             <div className="text-center mb-4">
-              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
+              <CheckCircle className="w-12 h-12 text-(--ui-success-fg) mx-auto mb-2" />
               <h3 className="text-lg font-semibold">Stock Count Finalized</h3>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3 text-center">
-                <p className="text-gray-500 dark:text-slate-400">Total Items</p>
+              <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3 text-center">
+                <p className="text-(--ui-text-muted)">Total Items</p>
                 <p className="text-xl font-bold">{completeSummary.total_items}</p>
               </div>
-              <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3 text-center">
-                <p className="text-gray-500 dark:text-slate-400">With Variance</p>
-                <p className="text-xl font-bold text-amber-600">{completeSummary.items_with_variance}</p>
+              <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3 text-center">
+                <p className="text-(--ui-text-muted)">With Variance</p>
+                <p className="text-xl font-bold text-(--ui-warning-fg)">{completeSummary.items_with_variance}</p>
               </div>
-              <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
-                <p className="text-gray-500 dark:text-slate-400">Over (+)</p>
-                <p className="text-xl font-bold text-green-600">
+              <div className="bg-(--ui-success-bg) rounded-(--ui-radius-sm) p-3 text-center">
+                <p className="text-(--ui-text-muted)">Over (+)</p>
+                <p className="text-xl font-bold text-(--ui-success-fg)">
                   {completeSummary.items_over} items (+{completeSummary.total_over})
                 </p>
               </div>
-              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
-                <p className="text-gray-500 dark:text-slate-400">Under (-)</p>
-                <p className="text-xl font-bold text-red-600">
+              <div className="bg-(--ui-danger-bg) rounded-(--ui-radius-sm) p-3 text-center">
+                <p className="text-(--ui-text-muted)">Under (-)</p>
+                <p className="text-xl font-bold text-(--ui-danger-fg)">
                   {completeSummary.items_under} items (-{completeSummary.total_under})
                 </p>
               </div>
             </div>
             {count.status === "completed" && (
-              <p className="text-xs text-gray-400 dark:text-slate-500 mt-3 text-center">
+              <p className="text-xs text-(--ui-text-muted) mt-3 text-center">
                 {autoAdjust ? "Stock adjustments were auto-created." : "No auto-adjustments were made."}
               </p>
             )}
@@ -409,7 +409,7 @@ function CountingView({ countId, onBack }) {
           <SectionCard>
             <div className="flex items-center gap-3">
               <div className="relative grow">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--ui-text-muted)" />
                 <input
                   ref={scanRef}
                   type="text"
@@ -417,7 +417,7 @@ function CountingView({ countId, onBack }) {
                   onChange={(e) => setScanInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleScan()}
                   placeholder="Scan barcode or type SKU..."
-                  className="w-full pl-10 pr-4 py-3 text-lg border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:border-gray-700"
+                  className="w-full pl-10 pr-4 py-3 text-lg border border-(--ui-border-strong) rounded-(--ui-radius-sm) focus:ring-2 focus:ring-(--ui-focus) focus:outline-none"
                   autoFocus
                 />
               </div>
@@ -430,8 +430,8 @@ function CountingView({ countId, onBack }) {
               <div
                 className={`mt-2 px-3 py-2 rounded-lg text-sm font-medium animate-pulse ${
                   lastScanned.error
-                    ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                    : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                    ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                    : "bg-(--ui-success-bg) text-(--ui-success-fg)"
                 }`}
               >
                 {lastScanned.error
@@ -443,15 +443,15 @@ function CountingView({ countId, onBack }) {
         )}
 
         {/* Progress bar */}
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-slate-300">
+        <div className="flex items-center justify-between text-sm text-(--ui-text-muted)">
           <span>{countedCount} of {items.length} products counted</span>
           <span className="font-mono">
             {items.length ? Math.round((countedCount / items.length) * 100) : 0}%
           </span>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div className="w-full bg-(--ui-muted-surface) rounded-full h-2">
           <div
-            className="bg-blue-500 h-2 rounded-full transition-all"
+            className="bg-(--ui-primary) h-2 rounded-full transition-all"
             style={{ width: `${items.length ? (countedCount / items.length) * 100 : 0}%` }}
           />
         </div>
@@ -470,8 +470,8 @@ function CountingView({ countId, onBack }) {
                 onClick={() => setFilter(f.key)}
                 className={`px-3 py-1 text-sm rounded-full transition ${
                   filter === f.key
-                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400"
+                    ? "bg-(--ui-primary) text-white"
+                    : "bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong)"
                 }`}
               >
                 {f.label}
@@ -479,13 +479,13 @@ function CountingView({ countId, onBack }) {
             ))}
           </div>
           <div className="relative grow max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--ui-text-muted)" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search products..."
-              className="w-full pl-9 pr-3 py-1.5 text-sm border rounded-lg dark:bg-gray-800 dark:border-gray-700"
+              className="w-full pl-9 pr-3 py-1.5 text-sm border border-(--ui-border-strong) rounded-(--ui-radius-sm)"
             />
           </div>
         </div>
@@ -495,7 +495,7 @@ function CountingView({ countId, onBack }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500 dark:text-slate-400">
+                <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                   <th className="pb-2 pr-4">Product</th>
                   <th className="pb-2 pr-4 text-center">System Qty</th>
                   <th className="pb-2 pr-4 text-center">Counted</th>
@@ -506,7 +506,7 @@ function CountingView({ countId, onBack }) {
               <tbody>
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400 dark:text-slate-500">
+                    <td colSpan={5} className="py-8 text-center text-(--ui-text-muted)">
                       No items match filter
                     </td>
                   </tr>
@@ -516,15 +516,15 @@ function CountingView({ countId, onBack }) {
                     return (
                       <tr
                         key={item.id}
-                        className={`border-b last:border-0 ${
+                        className={`border-b border-(--ui-border) last:border-0 ${
                           lastScanned && !lastScanned.error && lastScanned.product_id === item.product_id
-                            ? "bg-green-50 dark:bg-green-900/20"
+                            ? "bg-(--ui-success-bg)"
                             : ""
                         }`}
                       >
                         <td className="py-2 pr-4">
                           <div className="font-medium">{item.product_name}</div>
-                          <div className="text-xs text-gray-400 dark:text-slate-500">
+                          <div className="text-xs text-(--ui-text-muted)">
                             {item.barcode || item.sku || "—"}
                           </div>
                         </td>
@@ -541,12 +541,12 @@ function CountingView({ countId, onBack }) {
                                   if (e.key === "Enter") handleManualQty(item.id);
                                   if (e.key === "Escape") { setEditingItemId(null); setEditQty(""); }
                                 }}
-                                className="w-16 text-center border rounded px-1 py-0.5 text-sm dark:bg-gray-800"
+                                className="w-16 text-center border border-(--ui-border-strong) rounded px-1 py-0.5 text-sm"
                                 autoFocus
                               />
                               <button
                                 onClick={() => handleManualQty(item.id)}
-                                className="text-blue-600 text-xs font-medium"
+                                className="text-(--ui-link) text-xs font-medium"
                               >
                                 OK
                               </button>
@@ -568,17 +568,17 @@ function CountingView({ countId, onBack }) {
                           <span
                             className={`font-mono font-medium ${
                               variance > 0
-                                ? "text-green-600"
+                                ? "text-(--ui-success-fg)"
                                 : variance < 0
-                                ? "text-red-600"
-                                : "text-gray-400 dark:text-slate-500"
+                                ? "text-(--ui-danger-fg)"
+                                : "text-(--ui-text-muted)"
                             }`}
                           >
                             {variance > 0 ? "+" : ""}
                             {variance}
                           </span>
                         </td>
-                        <td className="py-2 text-xs text-gray-400 dark:text-slate-500">
+                        <td className="py-2 text-xs text-(--ui-text-muted)">
                           {item.last_scanned_at ? fmtUtcDateTime(item.last_scanned_at) : "—"}
                         </td>
                       </tr>
@@ -598,10 +598,10 @@ function CountingView({ countId, onBack }) {
         title="Complete Stock Count"
         size="md"
       >
-        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+        <p className="text-sm text-(--ui-text-muted) mb-4">
           {countedCount} of {items.length} products have been counted.
           {items.length - countedCount > 0 && (
-            <span className="text-amber-600 font-medium">
+            <span className="text-(--ui-warning-fg) font-medium">
               {" "}{items.length - countedCount} products were not scanned (will show 0 counted).
             </span>
           )}

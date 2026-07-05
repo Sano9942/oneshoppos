@@ -28,9 +28,9 @@ export default function PortalSignup() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
       <h1 className="text-xl font-semibold mb-1">Create your account</h1>
-      <p className="text-sm text-slate-500 mb-6">We'll email you a code to verify your address.</p>
+      <p className="text-sm text-(--ui-text-muted) mb-6">We'll email you a code to verify your address.</p>
 
       <form onSubmit={submit} className="space-y-4">
         <div>
@@ -39,7 +39,7 @@ export default function PortalSignup() {
             required
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
           />
         </div>
         <div>
@@ -49,7 +49,7 @@ export default function PortalSignup() {
             required
             value={form.email}
             onChange={(e) => update("email", e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             autoComplete="email"
           />
         </div>
@@ -58,7 +58,7 @@ export default function PortalSignup() {
           <input
             value={form.mobile}
             onChange={(e) => update("mobile", e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             autoComplete="tel"
           />
         </div>
@@ -70,26 +70,26 @@ export default function PortalSignup() {
             minLength={8}
             value={form.password}
             onChange={(e) => update("password", e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             autoComplete="new-password"
           />
-          <p className="text-xs text-slate-500 mt-1">At least 8 characters.</p>
+          <p className="text-xs text-(--ui-text-muted) mt-1">At least 8 characters.</p>
         </div>
 
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg)">{error}</div>}
 
         <button
           type="submit"
           disabled={sending}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-medium disabled:opacity-50"
+          className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) py-2 rounded font-medium disabled:opacity-50"
         >
           {sending ? "Creating…" : "Create account"}
         </button>
       </form>
 
-      <div className="border-t border-slate-200 mt-6 pt-4 text-sm text-slate-600 text-center">
+      <div className="border-t border-(--ui-border) mt-6 pt-4 text-sm text-(--ui-text-muted) text-center">
         Already have an account?{" "}
-        <Link to={`/portal/${tenantSlug}/login`} className="text-emerald-700 font-medium hover:underline">
+        <Link to={`/portal/${tenantSlug}/login`} className="text-(--ui-link) font-medium hover:underline">
           Sign in
         </Link>
       </div>

@@ -39,7 +39,7 @@ export function ExportButton({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
+      className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-(--ui-border-strong) px-3 py-1.5 text-xs text-(--ui-text-muted) transition-colors hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
     >
       <Download size={12} /> Export CSV
     </button>
@@ -59,20 +59,20 @@ export function TableShell({
       <div className="max-h-[70vh] overflow-auto">
         <table className="w-full min-w-180 border-collapse text-left">
         <thead>
-          <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 backdrop-blur">
+          <tr className="sticky top-0 z-10 border-b border-(--ui-border) bg-(--ui-muted-surface) text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted) backdrop-blur">
             {cols.map((c) => (
-              <th key={c} className="whitespace-nowrap border-b border-slate-200 px-4 py-3">
+              <th key={c} className="whitespace-nowrap border-b border-(--ui-border) px-4 py-3">
                 {c}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 bg-white align-top">
+        <tbody className="divide-y divide-(--ui-border) bg-(--ui-surface) align-top">
           {loading ? (
             <tr>
               <td
                 colSpan={cols.length}
-                className="p-10 text-center text-sm text-slate-400"
+                className="p-10 text-center text-sm text-(--ui-text-muted)"
               >
                 Loading...
               </td>
@@ -80,8 +80,8 @@ export function TableShell({
           ) : empty ? (
             <tr>
               <td colSpan={cols.length} className="p-12 text-center">
-                <Icon size={40} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-slate-500 font-medium">No data found</p>
+                <Icon size={40} className="mx-auto text-(--ui-text-muted) mb-2" />
+                <p className="text-(--ui-text-muted) font-medium">No data found</p>
               </td>
             </tr>
           ) : (
@@ -104,38 +104,38 @@ export function DateRangeFilter({
   searchPlaceholder,
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-3">
       {setSearch && (
         <div className="relative min-w-40 flex-1 basis-full lg:basis-auto">
           <Search
             size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
           />
           <input
             type="text"
             placeholder={searchPlaceholder || "Search..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            className="w-full pl-8 pr-3 py-1.5 border border-(--ui-border-strong) rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
           />
         </div>
       )}
-      <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
-        <label className="text-xs font-medium text-slate-500">From</label>
+      <div className="flex items-center gap-1.5 rounded-lg bg-(--ui-muted-surface) px-2 py-1">
+        <label className="text-xs font-medium text-(--ui-text-muted)">From</label>
         <input
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
-          className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          className="px-2 py-1.5 border border-(--ui-border-strong) rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
         />
       </div>
-      <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
-        <label className="text-xs font-medium text-slate-500">To</label>
+      <div className="flex items-center gap-1.5 rounded-lg bg-(--ui-muted-surface) px-2 py-1">
+        <label className="text-xs font-medium text-(--ui-text-muted)">To</label>
         <input
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
-          className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          className="px-2 py-1.5 border border-(--ui-border-strong) rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
         />
       </div>
       {(search || dateFrom || dateTo) && (
@@ -145,7 +145,7 @@ export function DateRangeFilter({
             setDateFrom("");
             setDateTo("");
           }}
-          className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+          className="text-xs text-(--ui-text-muted) hover:text-(--ui-danger-fg) flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-(--ui-danger-bg) transition-colors"
         >
           <X size={12} /> Clear
         </button>
@@ -156,12 +156,12 @@ export function DateRangeFilter({
 
 export function CardShell({ title, subtitle, action, children }) {
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-(--ui-border) bg-(--ui-surface)">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-(--ui-border) bg-(--ui-muted-surface) p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
-          <h2 className="font-bold text-slate-700">{title}</h2>
+          <h2 className="font-bold text-(--ui-text)">{title}</h2>
           {subtitle && (
-            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-(--ui-text-muted) mt-0.5">{subtitle}</p>
           )}
         </div>
         {action && <div className="shrink-0 self-start sm:self-auto">{action}</div>}
@@ -173,21 +173,21 @@ export function CardShell({ title, subtitle, action, children }) {
 
 export function MetricCard({ title, value, compPct, compLabel }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col gap-2">
-      <h3 className="text-sm font-medium text-slate-500">{title}</h3>
-      <div className="text-2xl font-bold text-slate-900">{value}</div>
+    <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-4 flex flex-col gap-2">
+      <h3 className="text-sm font-medium text-(--ui-text-muted)">{title}</h3>
+      <div className="text-2xl font-bold text-(--ui-text)">{value}</div>
       <div
         className={
           "text-xs font-semibold " +
           (compPct > 0
-            ? "text-emerald-600"
+            ? "text-(--ui-success-fg)"
             : compPct < 0
-              ? "text-rose-600"
-              : "text-slate-500")
+              ? "text-(--ui-danger-fg)"
+              : "text-(--ui-text-muted)")
         }
       >
         {compPct > 0 ? "↑" : compPct < 0 ? "↓" : ""} {Math.abs(compPct)}%
-        <span className="font-normal text-slate-400 ml-1">vs {compLabel}</span>
+        <span className="font-normal text-(--ui-text-muted) ml-1">vs {compLabel}</span>
       </div>
     </div>
   );

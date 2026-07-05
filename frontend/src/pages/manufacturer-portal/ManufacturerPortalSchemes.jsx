@@ -79,63 +79,63 @@ export default function ManufacturerPortalSchemes() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Schemes</h1>
-        <p className="text-slate-600 mt-1">
+        <h1 className="text-2xl font-bold text-(--ui-text)">Schemes</h1>
+        <p className="text-(--ui-text-muted) mt-1">
           Volume schemes and promotions that touched your brand SKUs during
           this window.
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-md">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">From</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">From</label>
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">To</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">To</label>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+              className="w-full px-3 py-2 border border-(--ui-border-strong) rounded text-sm"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-700">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg">
+        <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between">
+          <div className="text-sm font-medium text-(--ui-text)">
             {loading
               ? "Loading…"
               : `${rows.length} scheme${rows.length === 1 ? "" : "s"} · ${fmtCurrency(totalDiscount)} total discount`}
           </div>
           {reportWindow && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-(--ui-text-muted)">
               {reportWindow.from} → {reportWindow.to} · {reportWindow.timezone}
             </div>
           )}
         </div>
 
         {err && (
-          <div className="px-4 py-3 text-sm text-red-600 bg-red-50 border-b border-red-200">
+          <div className="px-4 py-3 text-sm text-(--ui-danger-fg) bg-(--ui-danger-bg) border-b border-(--ui-danger-bg)">
             {err}
           </div>
         )}
 
         {!loading && rows.length === 0 && !err ? (
-          <div className="px-4 py-12 text-center text-sm text-slate-500">
+          <div className="px-4 py-12 text-center text-sm text-(--ui-text-muted)">
             No schemes were applied to sales of your brands in this window.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="text-xs text-slate-500 uppercase border-b border-slate-200 bg-slate-50">
+            <thead className="text-xs text-(--ui-text-muted) uppercase border-b border-(--ui-border) bg-(--ui-muted-surface)">
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Scheme</th>
                 <th className="text-left px-4 py-2 font-medium">Type</th>
@@ -146,16 +146,16 @@ export default function ManufacturerPortalSchemes() {
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={idx} className="border-b border-slate-100">
+                <tr key={idx} className="border-b border-(--ui-border)">
                   <td className="px-4 py-2 font-medium">{r.scheme_name}</td>
-                  <td className="px-4 py-2 text-slate-600">
+                  <td className="px-4 py-2 text-(--ui-text-muted)">
                     {SCHEME_TYPE_LABELS[r.scheme_type] || r.scheme_type}
                   </td>
                   <td className="px-4 py-2 text-right">{r.application_count}</td>
                   <td className="px-4 py-2 text-right">
                     {fmtQty(r.total_qty_qualifying)}
                   </td>
-                  <td className="px-4 py-2 text-right font-medium text-emerald-700">
+                  <td className="px-4 py-2 text-right font-medium text-(--ui-success-fg)">
                     {fmtCurrency(r.total_discount)}
                   </td>
                 </tr>
@@ -166,7 +166,7 @@ export default function ManufacturerPortalSchemes() {
       </div>
 
       {note && (
-        <div className="text-xs text-slate-500 italic bg-slate-50 border border-slate-200 rounded px-4 py-3">
+        <div className="text-xs text-(--ui-text-muted) italic bg-(--ui-muted-surface) border border-(--ui-border) rounded px-4 py-3">
           {note}
         </div>
       )}

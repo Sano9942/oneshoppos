@@ -270,7 +270,7 @@ export default function ReturnsRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -308,7 +308,7 @@ export default function ReturnsRedesign() {
                   visibleRows.map((r) => (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
+                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-(--ui-muted-surface)" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
                       <td className="px-3 py-2 font-medium text-(--ui-text)">RTN-{r.id}</td>
@@ -316,7 +316,7 @@ export default function ReturnsRedesign() {
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "-"}</td>
                       <td className="px-3 py-2 text-center text-(--ui-text)">{r.item_count || 0}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(r.total_refund)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-danger-fg)">{money(r.total_refund)}</td>
                     </tr>
                   ))}
               </tbody>
@@ -348,7 +348,7 @@ export default function ReturnsRedesign() {
                 </SectionCard>
                 <SectionCard className="p-2 text-center">
                   <p className="text-xs text-(--ui-text-muted)">Total</p>
-                  <p className="font-semibold text-rose-700">{money(detail.returnData.total_refund)}</p>
+                  <p className="font-semibold text-(--ui-danger-fg)">{money(detail.returnData.total_refund)}</p>
                 </SectionCard>
               </div>
               {detail.returnData.reason ? (
@@ -409,7 +409,7 @@ export default function ReturnsRedesign() {
                       </div>
                     ) : null}
                   </div>
-                  {barcodeError ? <p className="mt-1 text-xs text-rose-700">{barcodeError}</p> : null}
+                  {barcodeError ? <p className="mt-1 text-xs text-(--ui-danger-fg)">{barcodeError}</p> : null}
                 </form>
 
                 <div className="h-[calc(100%-44px)] overflow-auto rounded border border-(--ui-border)">
@@ -509,7 +509,7 @@ export default function ReturnsRedesign() {
                 <SectionCard className="mt-3 p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-(--ui-text-muted)">Total Refund</span>
-                    <span className="text-lg font-semibold text-rose-700">{money(draftTotal)}</span>
+                    <span className="text-lg font-semibold text-(--ui-danger-fg)">{money(draftTotal)}</span>
                   </div>
                   <div className="mt-2">
                     <Badge tone="warning">{items.length} items in draft</Badge>

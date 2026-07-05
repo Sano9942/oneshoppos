@@ -16,11 +16,11 @@ import {
 } from "../../ui/primitives";
 
 const STATUS_TONES = {
-  active: "amber",
-  paid: "emerald",
-  completed: "slate",
-  cancelled: "slate",
-  forfeit: "rose",
+  active: "warning",
+  paid: "success",
+  completed: "default",
+  cancelled: "default",
+  forfeit: "danger",
 };
 
 export default function HoldsRedesign() {
@@ -144,28 +144,28 @@ export default function HoldsRedesign() {
           </Select>
         </div>
 
-        {error && <div className="text-rose-600 text-sm mb-2">{error}</div>}
+        {error && <div className="text-(--ui-danger-fg) text-sm mb-2">{error}</div>}
 
         <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-          <div className="bg-slate-50 rounded px-3 py-2">
-            <div className="text-slate-500">Count</div>
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) px-3 py-2">
+            <div className="text-(--ui-text-muted)">Count</div>
             <div className="text-lg font-bold">{totals.count}</div>
           </div>
-          <div className="bg-slate-50 rounded px-3 py-2">
-            <div className="text-slate-500">Total held</div>
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) px-3 py-2">
+            <div className="text-(--ui-text-muted)">Total held</div>
             <div className="text-lg font-bold">{fmt(totals.total)}</div>
           </div>
-          <div className="bg-slate-50 rounded px-3 py-2">
-            <div className="text-slate-500">Balance outstanding</div>
+          <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) px-3 py-2">
+            <div className="text-(--ui-text-muted)">Balance outstanding</div>
             <div className="text-lg font-bold">{fmt(totals.balance)}</div>
           </div>
         </div>
 
         {rows.length === 0 && !loading && (
           <EmptyState
-            icon={Package}
+            icon={<Package size={28} />}
             title="No holds"
-            description="Customer holds will appear here once created from the POS."
+            body="Customer holds will appear here once created from the POS."
           />
         )}
 
@@ -186,18 +186,18 @@ export default function HoldsRedesign() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-(--ui-border) hover:bg-slate-50">
+                  <tr key={r.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                     <td className="px-3 py-2 font-semibold">{r.hold_number}</td>
                     <td className="px-3 py-2">
                       {r.customer_name_full || r.customer_name || "Walk-in"}
-                      {r.customer_phone && <div className="text-xs text-slate-400">{r.customer_phone}</div>}
+                      {r.customer_phone && <div className="text-xs text-(--ui-text-muted)">{r.customer_phone}</div>}
                     </td>
                     <td className="px-3 py-2">{r.outlet_name || r.outlet_id}</td>
                     <td className="px-3 py-2 text-right">{fmt(r.total_amount)}</td>
                     <td className="px-3 py-2 text-right font-bold">{fmt(r.balance_due)}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{fmtUtcDateTime(r.hold_until)}</td>
+                    <td className="px-3 py-2 text-xs text-(--ui-text-muted)">{fmtUtcDateTime(r.hold_until)}</td>
                     <td className="px-3 py-2">
-                      <Badge tone={STATUS_TONES[r.status] || "slate"}>{r.status}</Badge>
+                      <Badge tone={STATUS_TONES[r.status] || "default"}>{r.status}</Badge>
                     </td>
                     <td className="px-3 py-2 text-right">
                       <Button size="sm" onClick={() => openDetail(r.id)}>View</Button>
@@ -213,35 +213,35 @@ export default function HoldsRedesign() {
       {detail && (
         <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" onClick={() => setDetail(null)}>
           <div
-            className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl"
+            className="bg-white rounded-(--ui-radius-lg) w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-(--ui-shadow-lg)"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+            <div className="flex items-center justify-between p-5 border-b border-(--ui-border)">
               <div>
-                <div className="text-xl font-black">{detail.hold.hold_number}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xl font-bold text-(--ui-text)">{detail.hold.hold_number}</div>
+                <div className="text-xs text-(--ui-text-muted)">
                   {detail.hold.customer_name_full || detail.hold.customer_name || "Walk-in"}
                   {detail.hold.customer_phone && <span> · {detail.hold.customer_phone}</span>}
                 </div>
               </div>
-              <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => setDetail(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
                 <X size={18} />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-4 gap-2 text-sm">
-                <div><div className="text-xs text-slate-500">Status</div><Badge tone={STATUS_TONES[detail.hold.status]}>{detail.hold.status}</Badge></div>
-                <div><div className="text-xs text-slate-500">Total</div><div className="font-bold">{fmt(detail.hold.total_amount)}</div></div>
-                <div><div className="text-xs text-slate-500">Paid</div><div className="font-bold text-emerald-600">{fmt(detail.hold.deposit_paid)}</div></div>
-                <div><div className="text-xs text-slate-500">Balance</div><div className="font-bold text-[#8066FF]">{fmt(detail.hold.balance_due)}</div></div>
+                <div><div className="text-xs text-(--ui-text-muted)">Status</div><Badge tone={STATUS_TONES[detail.hold.status]}>{detail.hold.status}</Badge></div>
+                <div><div className="text-xs text-(--ui-text-muted)">Total</div><div className="font-bold">{fmt(detail.hold.total_amount)}</div></div>
+                <div><div className="text-xs text-(--ui-text-muted)">Paid</div><div className="font-bold text-(--ui-success-fg)">{fmt(detail.hold.deposit_paid)}</div></div>
+                <div><div className="text-xs text-(--ui-text-muted)">Balance</div><div className="font-bold text-(--ui-text)">{fmt(detail.hold.balance_due)}</div></div>
               </div>
 
               <div>
-                <h4 className="text-xs font-semibold uppercase text-slate-400 mb-2">Items</h4>
-                <table className="w-full text-sm border border-slate-100 rounded">
+                <h4 className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Items</h4>
+                <table className="w-full text-sm border border-(--ui-border) rounded">
                   <tbody>
                     {detail.items.map((it) => (
-                      <tr key={it.id} className="border-t first:border-t-0 border-slate-100">
+                      <tr key={it.id} className="border-t first:border-t-0 border-(--ui-border)">
                         <td className="px-3 py-2">{it.product_name}</td>
                         <td className="px-3 py-2 text-right">Qty {it.quantity}</td>
                         <td className="px-3 py-2 text-right font-semibold">{fmt(Number(it.price_at_hold) * Number(it.quantity))}</td>
@@ -253,12 +253,12 @@ export default function HoldsRedesign() {
 
               {detail.payments.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-slate-400 mb-2">Payment history</h4>
-                  <table className="w-full text-sm border border-slate-100 rounded">
+                  <h4 className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Payment history</h4>
+                  <table className="w-full text-sm border border-(--ui-border) rounded">
                     <tbody>
                       {detail.payments.map((p) => (
-                        <tr key={p.id} className="border-t first:border-t-0 border-slate-100">
-                          <td className="px-3 py-2 text-xs text-slate-500">{fmtUtcDateTime(p.paid_at)}</td>
+                        <tr key={p.id} className="border-t first:border-t-0 border-(--ui-border)">
+                          <td className="px-3 py-2 text-xs text-(--ui-text-muted)">{fmtUtcDateTime(p.paid_at)}</td>
                           <td className="px-3 py-2">{p.method}</td>
                           <td className="px-3 py-2 text-right font-semibold">{fmt(p.amount)}</td>
                         </tr>
@@ -270,12 +270,12 @@ export default function HoldsRedesign() {
 
               {detail.hold.notes && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-slate-400 mb-1">Notes</h4>
-                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{detail.hold.notes}</div>
+                  <h4 className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-1">Notes</h4>
+                  <div className="text-sm text-(--ui-text) whitespace-pre-wrap">{detail.hold.notes}</div>
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2 p-5 border-t border-slate-100">
+            <div className="flex justify-end gap-2 p-5 border-t border-(--ui-border)">
               {["active", "paid"].includes(detail.hold.status) && (
                 <>
                   <Button size="sm" onClick={() => cancelHold(detail.hold.id, false)} disabled={busy}>

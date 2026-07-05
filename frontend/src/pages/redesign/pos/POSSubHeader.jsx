@@ -50,10 +50,10 @@ export default function POSSubHeader() {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 md:mb-4 gap-2 sm:gap-0">
       <div>
-        <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+        <h2 className="text-2xl md:text-3xl font-black text-(--ui-text) tracking-tight">
           Sell
         </h2>
-        <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-400 font-medium">
+        <div className="flex items-center gap-1.5 mt-0.5 text-xs text-(--ui-text-muted) font-medium">
           <span className="hidden sm:flex items-center gap-1.5">
             <Calendar size={12} />
             {new Date().toLocaleDateString("en-GB")}
@@ -63,17 +63,17 @@ export default function POSSubHeader() {
               onClick={() => setTaxInclusive((v) => !v)}
               className={`sm:ml-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
                 taxInclusive
-                  ? "bg-[#8066FF]/10 border-[#8066FF] text-[#8066FF]"
-                  : "bg-white border-slate-200 text-slate-500"
+                  ? "bg-(--ui-muted-surface) border-(--ui-text) text-(--ui-text)"
+                  : "bg-(--ui-surface) border-(--ui-border) text-(--ui-text-muted)"
               }`}
             >
               <span
                 className={`w-7 h-3.5 rounded-full relative transition-colors ${
-                  taxInclusive ? "bg-[#8066FF]" : "bg-slate-200"
+                  taxInclusive ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"
                 }`}
               >
                 <span
-                  className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow transition-all ${
+                  className={`w-3 h-3 bg-(--ui-surface) rounded-full absolute top-0.5 shadow transition-all ${
                     taxInclusive ? "left-3.5" : "left-0.5"
                   }`}
                 />
@@ -86,17 +86,17 @@ export default function POSSubHeader() {
             title="When on, each barcode scan creates a new cart line instead of incrementing quantity"
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
               bulkScanOn
-                ? "bg-[#8066FF]/10 border-[#8066FF] text-[#8066FF]"
-                : "bg-white border-slate-200 text-slate-500"
+                ? "bg-(--ui-muted-surface) border-(--ui-text) text-(--ui-text)"
+                : "bg-(--ui-surface) border-(--ui-border) text-(--ui-text-muted)"
             }`}
           >
             <span
               className={`w-7 h-3.5 rounded-full relative transition-colors ${
-                bulkScanOn ? "bg-[#8066FF]" : "bg-slate-200"
+                bulkScanOn ? "bg-(--ui-primary)" : "bg-(--ui-border-strong)"
               }`}
             >
               <span
-                className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow transition-all ${
+                className={`w-3 h-3 bg-(--ui-surface) rounded-full absolute top-0.5 shadow transition-all ${
                   bulkScanOn ? "left-3.5" : "left-0.5"
                 }`}
               />
@@ -109,7 +109,7 @@ export default function POSSubHeader() {
         <button
           onClick={parkSale}
           disabled={!cart.length || !selectedOutletId}
-          className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-(--ui-text) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 rounded-full text-xs font-bold hover:bg-(--ui-muted-surface) transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Pause size={13} /> Park Sale
         </button>
@@ -118,11 +118,11 @@ export default function POSSubHeader() {
             loadParked(selectedOutletId);
             setShowParked(true);
           }}
-          className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm relative"
+          className="flex items-center gap-1.5 text-(--ui-text) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 rounded-full text-xs font-bold hover:bg-(--ui-muted-surface) transition relative"
         >
           <Play size={13} /> Parked
           {parkedSales.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-[#8066FF] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-1.5 bg-(--ui-primary) text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">
               {parkedSales.length}
             </span>
           )}
@@ -132,13 +132,13 @@ export default function POSSubHeader() {
             <button
               onClick={() => setHoldCreateOpen(true)}
               disabled={!cart.length || !selectedOutletId}
-              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 text-(--ui-text) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 rounded-full text-xs font-bold hover:bg-(--ui-muted-surface) transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Package size={13} /> Hold
             </button>
             <button
               onClick={() => setHoldPickupOpen(true)}
-              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm"
+              className="flex items-center gap-1.5 text-(--ui-text) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 rounded-full text-xs font-bold hover:bg-(--ui-muted-surface) transition"
             >
               <Package size={13} /> Pick Up
             </button>

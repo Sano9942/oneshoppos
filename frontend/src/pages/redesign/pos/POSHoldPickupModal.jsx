@@ -157,15 +157,15 @@ export default function POSHoldPickupModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+      <div className="bg-(--ui-surface) rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-(--ui-shadow-lg)">
+        <div className="flex items-center justify-between p-5 border-b border-(--ui-border)">
           <div>
-            <h3 className="text-xl font-black text-slate-900">Pick Up Hold</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-xl font-black text-(--ui-text)">Pick Up Hold</h3>
+            <p className="text-xs text-(--ui-text-muted) mt-0.5">
               Scan the hold slip barcode or enter the hold number (e.g. H-2026-00042).
             </p>
           </div>
-          <button onClick={() => setHoldPickupOpen(false)} className="text-slate-400 hover:text-slate-700">
+          <button onClick={() => setHoldPickupOpen(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={18} />
           </button>
         </div>
@@ -174,10 +174,10 @@ export default function POSHoldPickupModal() {
           {!hold && (
             <div className="flex gap-2">
               <div className="flex-1 relative">
-                <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+                <Search size={14} className="absolute left-3 top-3 text-(--ui-text-muted)" />
                 <input
                   autoFocus
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="w-full pl-9 pr-3 py-2 border border-(--ui-border-strong) rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                   placeholder="Hold number (e.g. H-2026-00042)"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -187,7 +187,7 @@ export default function POSHoldPickupModal() {
               <button
                 onClick={loadSearch}
                 disabled={loading}
-                className="px-4 py-2 bg-violet-600 text-white text-sm rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                className="px-4 py-2 bg-(--ui-primary) text-white text-sm rounded-lg hover:bg-(--ui-primary-strong) disabled:opacity-50"
               >
                 {loading ? "…" : "Find"}
               </button>
@@ -196,47 +196,47 @@ export default function POSHoldPickupModal() {
 
           {hold && (
             <>
-              <div className="bg-slate-50 rounded-lg p-4">
+              <div className="bg-(--ui-muted-surface) rounded-lg p-4">
                 <div className="flex justify-between mb-2">
                   <div>
-                    <div className="text-lg font-black text-slate-900">{hold.hold_number}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-lg font-black text-(--ui-text)">{hold.hold_number}</div>
+                    <div className="text-xs text-(--ui-text-muted)">
                       {hold.customer_name_full || hold.customer_name || "Walk-in"}
                       {hold.customer_phone && <span> · {hold.customer_phone}</span>}
                     </div>
                   </div>
                   <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
-                    hold.status === "paid" ? "bg-emerald-100 text-emerald-700" :
-                    hold.status === "active" ? "bg-amber-100 text-amber-700" :
-                    "bg-slate-100 text-slate-600"
+                    hold.status === "paid" ? "bg-(--ui-success-bg) text-(--ui-success-fg)" :
+                    hold.status === "active" ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" :
+                    "bg-(--ui-muted-surface) text-(--ui-text-muted)"
                   }`}>
                     {hold.status}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-sm mt-3">
                   <div>
-                    <div className="text-xs text-slate-500">Total</div>
-                    <div className="font-bold text-slate-900">{money(hold.total_amount)}</div>
+                    <div className="text-xs text-(--ui-text-muted)">Total</div>
+                    <div className="font-bold text-(--ui-text)">{money(hold.total_amount)}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500">Paid</div>
-                    <div className="font-bold text-emerald-600">{money(hold.deposit_paid)}</div>
+                    <div className="text-xs text-(--ui-text-muted)">Paid</div>
+                    <div className="font-bold text-(--ui-success-fg)">{money(hold.deposit_paid)}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500">Balance</div>
-                    <div className="font-black text-[#8066FF]">{money(hold.balance_due)}</div>
+                    <div className="text-xs text-(--ui-text-muted)">Balance</div>
+                    <div className="font-black text-(--ui-text)">{money(hold.balance_due)}</div>
                   </div>
                 </div>
               </div>
 
               <div>
-                <h4 className="text-xs font-semibold uppercase text-slate-400 mb-2">Items</h4>
-                <div className="border border-slate-100 rounded-lg divide-y">
+                <h4 className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Items</h4>
+                <div className="border border-(--ui-border) rounded-lg divide-y">
                   {items.map((it) => (
                     <div key={it.id} className="flex justify-between px-3 py-2 text-sm">
                       <div>
-                        <div className="font-semibold text-slate-900">{it.product_name}</div>
-                        <div className="text-xs text-slate-500">Qty {it.quantity}</div>
+                        <div className="font-semibold text-(--ui-text)">{it.product_name}</div>
+                        <div className="text-xs text-(--ui-text-muted)">Qty {it.quantity}</div>
                       </div>
                       <div className="font-semibold">{money(Number(it.price_at_hold) * Number(it.quantity))}</div>
                     </div>
@@ -246,11 +246,11 @@ export default function POSHoldPickupModal() {
 
               {payments.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-slate-400 mb-2">Payment history</h4>
-                  <div className="border border-slate-100 rounded-lg divide-y">
+                  <h4 className="text-xs font-semibold uppercase text-(--ui-text-muted) mb-2">Payment history</h4>
+                  <div className="border border-(--ui-border) rounded-lg divide-y">
                     {payments.map((p) => (
                       <div key={p.id} className="flex justify-between px-3 py-2 text-xs">
-                        <span className="text-slate-600">{p.method}</span>
+                        <span className="text-(--ui-text-muted)">{p.method}</span>
                         <span className="font-semibold">{money(p.amount)}</span>
                       </div>
                     ))}
@@ -260,19 +260,19 @@ export default function POSHoldPickupModal() {
 
               <div className="flex items-end gap-2 pt-2">
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Amount</label>
+                  <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Amount</label>
                   <input
                     type="number"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value)}
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Method</label>
+                  <label className="block text-xs font-semibold text-(--ui-text-muted) mb-1">Method</label>
                   <select
-                    className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    className="border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm"
                     value={payMethod}
                     onChange={(e) => setPayMethod(e.target.value)}
                   >
@@ -287,13 +287,13 @@ export default function POSHoldPickupModal() {
                   onClick={addPayment}
                   disabled={submitting}
                   title="Record a partial payment toward this hold. The hold stays open with the remaining balance until fully paid."
-                  className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                  className="px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) text-sm font-semibold rounded-lg hover:bg-(--ui-muted-surface) disabled:opacity-50"
                 >
                   Take Deposit
                 </button>
               </div>
               {Number(hold?.balance_due || 0) > 0 && (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-(--ui-text-muted)">
                   Tip: Use <span className="font-semibold">Take Deposit</span> to record a partial payment now and leave the hold open. Use <span className="font-semibold">Complete &amp; Print</span> to settle in full.
                 </p>
               )}
@@ -302,10 +302,10 @@ export default function POSHoldPickupModal() {
         </div>
 
         {hold && (
-          <div className="flex justify-end gap-2 p-5 border-t border-slate-100">
+          <div className="flex justify-end gap-2 p-5 border-t border-(--ui-border)">
             <button
               onClick={() => setHoldPickupOpen(false)}
-              className="px-4 py-2 text-slate-600 text-sm font-semibold hover:bg-slate-100 rounded-lg"
+              className="px-4 py-2 text-(--ui-text-muted) text-sm font-semibold hover:bg-(--ui-muted-surface) rounded-lg"
               disabled={submitting}
             >
               Close
@@ -313,7 +313,7 @@ export default function POSHoldPickupModal() {
             <button
               onClick={completeHold}
               disabled={submitting}
-              className="px-5 py-2 bg-[#8066FF] text-white text-sm font-bold rounded-lg hover:bg-[#7056ef] disabled:opacity-40"
+              className="px-5 py-2 bg-(--ui-primary) text-white text-sm font-bold rounded-lg hover:bg-(--ui-primary-strong) disabled:opacity-40"
             >
               {submitting ? "…" : "Complete & Print"}
             </button>

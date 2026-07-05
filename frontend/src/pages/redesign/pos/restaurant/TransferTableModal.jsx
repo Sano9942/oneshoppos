@@ -89,16 +89,16 @@ export default function TransferTableModal({ open, onClose, onTransferred }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col border border-slate-100/20 max-h-[90vh]">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <ArrowRightLeft className="text-[#8066FF]" size={20} />
+    <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-(--ui-surface) rounded-3xl shadow-(--ui-shadow-lg) w-full max-w-2xl flex flex-col border border-(--ui-border) max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-(--ui-border) flex items-center justify-between bg-(--ui-muted-surface) rounded-t-3xl shrink-0">
+          <h2 className="text-lg font-bold text-(--ui-text) flex items-center gap-2">
+            <ArrowRightLeft className="text-(--ui-text)" size={20} />
             Transfer to Table
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200"
+            className="text-(--ui-text-muted) hover:text-(--ui-text) p-1.5 rounded-full hover:bg-(--ui-border-strong)"
           >
             <X size={18} />
           </button>
@@ -114,8 +114,8 @@ export default function TransferTableModal({ open, onClose, onTransferred }) {
                   onClick={() => setActivePlan(p.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
                     activePlan === p.id
-                      ? "bg-[#8066FF] text-white border-[#8066FF]"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      ? "bg-(--ui-primary) text-white border-(--ui-primary)"
+                      : "bg-(--ui-surface) text-(--ui-text-muted) border-(--ui-border-strong) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   {p.name}
@@ -125,9 +125,9 @@ export default function TransferTableModal({ open, onClose, onTransferred }) {
           )}
 
           {loading ? (
-            <p className="text-sm text-slate-400 text-center py-8">Loading tables…</p>
+            <p className="text-sm text-(--ui-text-muted) text-center py-8">Loading tables…</p>
           ) : tables.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">No tables on this plan.</p>
+            <p className="text-sm text-(--ui-text-muted) text-center py-8">No tables on this plan.</p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               {tables.map((t) => {
@@ -148,10 +148,10 @@ export default function TransferTableModal({ open, onClose, onTransferred }) {
                     }
                     className={`min-h-[88px] rounded-2xl p-3 border-2 flex flex-col items-center justify-center transition ${
                       isCurrent
-                        ? "border-[#8066FF] bg-[#8066FF]/10 text-[#8066FF]"
+                        ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
                         : occupied
-                        ? "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed"
-                        : "border-slate-200 bg-white text-slate-800 hover:border-[#8066FF] hover:bg-[#8066FF]/5 active:scale-[0.98]"
+                        ? "border-(--ui-border) bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
+                        : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text) hover:border-(--ui-primary) hover:bg-(--ui-muted-surface) active:scale-[0.98]"
                     }`}
                   >
                     <span className="text-lg font-black tracking-tight">{t.label}</span>
@@ -165,11 +165,11 @@ export default function TransferTableModal({ open, onClose, onTransferred }) {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-3xl shrink-0">
+        <div className="px-6 py-4 border-t border-(--ui-border) flex items-center justify-end gap-2 bg-(--ui-muted-surface) rounded-b-3xl shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200 transition"
+            className="px-4 py-2 rounded-xl font-bold text-sm text-(--ui-text-muted) hover:bg-(--ui-border-strong) transition"
           >
             Cancel
           </button>

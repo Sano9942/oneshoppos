@@ -97,21 +97,21 @@ export default function POSCloseShiftModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-70 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+    <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-3xl border border-(--ui-border-strong) bg-(--ui-surface) shadow-(--ui-shadow-lg)">
+        <div className="flex items-center justify-between border-b border-(--ui-border) px-6 py-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-(--ui-text-muted)">
               Close Shift
             </p>
-            <h2 className="mt-1 text-2xl font-black text-slate-900">
+            <h2 className="mt-1 text-2xl font-black text-(--ui-text)">
               Shift #{activeShift.id}
             </h2>
           </div>
           <button
             type="button"
             onClick={reset}
-            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-full p-2 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
           >
             <X size={18} />
           </button>
@@ -119,29 +119,29 @@ export default function POSCloseShiftModal() {
 
         <div className="space-y-4 px-6 py-5">
           {result ? (
-            <div className="space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
-              <p className="font-bold text-slate-900">Expected: {money(result.expected_cash)}</p>
-              <p className="font-bold text-slate-900">Counted: {money(result.closing_cash)}</p>
-              <p className="font-black text-slate-900">Variance: {money(result.variance)}</p>
+            <div className="space-y-2 rounded-2xl border border-(--ui-success-bg) bg-(--ui-success-bg) p-4 text-sm">
+              <p className="font-bold text-(--ui-text)">Expected: {money(result.expected_cash)}</p>
+              <p className="font-bold text-(--ui-text)">Counted: {money(result.closing_cash)}</p>
+              <p className="font-black text-(--ui-text)">Variance: {money(result.variance)}</p>
               <button
                 type="button"
                 onClick={reset}
-                className="mt-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
+                className="mt-2 rounded-xl bg-(--ui-primary) px-4 py-2 text-sm font-bold text-white hover:bg-(--ui-primary-strong)"
               >
                 Done
               </button>
             </div>
           ) : (
             <form className="space-y-4" onSubmit={closeShift}>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+              <div className="rounded-2xl border border-(--ui-border-strong) bg-(--ui-muted-surface) p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-(--ui-text)">
                   <Calculator size={16} />
                   Closing Denominations
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {denoms.map((row, index) => (
-                    <label key={row.denomination} className="rounded-xl border border-slate-200 bg-white p-3">
-                      <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <label key={row.denomination} className="rounded-xl border border-(--ui-border-strong) bg-(--ui-surface) p-3">
+                      <span className="block text-xs font-bold uppercase tracking-wide text-(--ui-text-muted)">
                         {symbol} {row.denomination}
                       </span>
                       <input
@@ -157,12 +157,12 @@ export default function POSCloseShiftModal() {
                             ),
                           )
                         }
-                        className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 focus:border-[#8066FF] focus:outline-none"
+                        className="mt-2 w-full rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm font-semibold text-(--ui-text) focus:border-(--ui-focus) focus:outline-none"
                       />
                     </label>
                   ))}
                 </div>
-                <p className="mt-4 text-base font-black text-slate-900">
+                <p className="mt-4 text-base font-black text-(--ui-text)">
                   Counted Total: {money(closingCash)}
                 </p>
               </div>
@@ -175,25 +175,25 @@ export default function POSCloseShiftModal() {
                   : "Variance reason (optional)"}
                 className={`w-full rounded-xl border px-4 py-3 text-sm font-medium focus:outline-none ${
                   needsThresholdApproval && !varianceReason
-                    ? "border-rose-300 focus:border-rose-500"
-                    : "border-slate-300 focus:border-[#8066FF]"
+                    ? "border-(--ui-danger) focus:border-(--ui-danger)"
+                    : "border-(--ui-border-strong) focus:border-(--ui-focus)"
                 }`}
               />
               <input
                 value={approvedBy}
                 onChange={(e) => setApprovedBy(e.target.value)}
                 placeholder="Approved by (optional)"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium focus:border-[#8066FF] focus:outline-none"
+                className="w-full rounded-xl border border-(--ui-border-strong) px-4 py-3 text-sm font-medium focus:border-(--ui-focus) focus:outline-none"
               />
               <input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Notes (optional)"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium focus:border-[#8066FF] focus:outline-none"
+                className="w-full rounded-xl border border-(--ui-border-strong) px-4 py-3 text-sm font-medium focus:border-(--ui-focus) focus:outline-none"
               />
               {needsThresholdApproval && (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-2">
-                  <p className="text-sm font-semibold text-amber-900">
+                <div className="rounded-2xl border border-(--ui-warning-bg) bg-(--ui-warning-bg) p-4 space-y-2">
+                  <p className="text-sm font-semibold text-(--ui-warning-fg)">
                     Variance exceeds tenant threshold
                     {thresholdAmount != null ? ` (${money(thresholdAmount)})` : ""}.
                     A manager PIN is required to close.
@@ -205,7 +205,7 @@ export default function POSCloseShiftModal() {
                     onChange={(e) => setManagerPin(e.target.value)}
                     placeholder="Manager PIN"
                     autoFocus
-                    className="w-full rounded-xl border border-amber-400 px-4 py-3 text-sm font-medium tracking-widest focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-(--ui-warning-fg) px-4 py-3 text-sm font-medium tracking-widest focus:border-(--ui-warning-fg) focus:outline-none"
                   />
                 </div>
               )}
@@ -213,14 +213,14 @@ export default function POSCloseShiftModal() {
                 <button
                   type="button"
                   onClick={reset}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-(--ui-border-strong) bg-(--ui-surface) px-4 py-3 text-sm font-bold text-(--ui-text) hover:bg-(--ui-muted-surface)"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="rounded-xl bg-rose-600 px-5 py-3 text-sm font-black text-white hover:bg-rose-700 disabled:opacity-50"
+                  className="rounded-xl bg-(--ui-danger) px-5 py-3 text-sm font-black text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {busy ? "Closing Shift..." : "Close Shift"}
                 </button>

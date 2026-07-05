@@ -278,7 +278,7 @@ export default function PrinterSettingsRedesign() {
             <option value="guest_bill">Guest bill (restaurant)</option>
             <option value="expo">Expo</option>
           </select>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-(--ui-text-muted) mt-1">
             Kitchen stations map to fire-chit printers via KDS station config.
           </p>
         </div>
@@ -296,7 +296,7 @@ export default function PrinterSettingsRedesign() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            className="bg-(--ui-primary) text-(--ui-on-primary) px-5 py-2 rounded hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
@@ -307,12 +307,12 @@ export default function PrinterSettingsRedesign() {
           >
             {testing ? "Testing…" : "Test Print"}
           </button>
-          {saved && <span className="text-green-600 text-sm">Settings saved.</span>}
-          {saveError && <span className="text-red-600 text-sm">{saveError}</span>}
+          {saved && <span className="text-(--ui-success-fg) text-sm">Settings saved.</span>}
+          {saveError && <span className="text-(--ui-danger-fg) text-sm">{saveError}</span>}
         </div>
 
         {testResult && (
-          <div className={`rounded px-4 py-3 text-sm ${testResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+          <div className={`rounded px-4 py-3 text-sm ${testResult.ok ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"}`}>
             {testResult.message}
           </div>
         )}
@@ -394,7 +394,7 @@ export default function PrinterSettingsRedesign() {
           <button
             onClick={handleEmailSave}
             disabled={emailSaving}
-            className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            className="bg-(--ui-primary) text-(--ui-on-primary) px-5 py-2 rounded hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             {emailSaving ? "Saving…" : "Save Email Settings"}
           </button>
@@ -405,12 +405,12 @@ export default function PrinterSettingsRedesign() {
           >
             {emailTesting ? "Sending…" : "Send Test Email"}
           </button>
-          {emailSaved && <span className="text-green-600 text-sm">Email settings saved.</span>}
-          {emailSaveError && <span className="text-red-600 text-sm">{emailSaveError}</span>}
+          {emailSaved && <span className="text-(--ui-success-fg) text-sm">Email settings saved.</span>}
+          {emailSaveError && <span className="text-(--ui-danger-fg) text-sm">{emailSaveError}</span>}
         </div>
 
         {emailTestResult && (
-          <div className={`rounded px-4 py-3 text-sm ${emailTestResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+          <div className={`rounded px-4 py-3 text-sm ${emailTestResult.ok ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"}`}>
             {emailTestResult.message}
           </div>
         )}

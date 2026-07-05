@@ -7,14 +7,14 @@ export const TERMS_VERSION = "1.0";
 
 export default function Terms() {
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Terms of Service</h1>
-        <p className="mt-1 text-xs text-slate-500">
+    <div className="min-h-screen bg-(--ui-muted-surface) px-4 py-10">
+      <div className="mx-auto max-w-3xl rounded-2xl bg-(--ui-surface) p-8">
+        <h1 className="text-2xl font-bold text-(--ui-text)">Terms of Service</h1>
+        <p className="mt-1 text-xs text-(--ui-text-muted)">
           Version {TERMS_VERSION} &middot; Effective Date: [Effective Date] &middot; Last Updated: [Last Updated Date]
         </p>
 
-        <div className="prose prose-sm prose-slate mt-6 max-w-none leading-relaxed text-slate-700">
+        <div className="prose prose-sm prose-slate mt-6 max-w-none leading-relaxed text-(--ui-text)">
           <p>
             These Terms of Service ("Terms") form a binding agreement between
             <strong> [Legal Entity Name]</strong>, a company organized under the laws of the
@@ -138,7 +138,7 @@ export default function Terms() {
           <h2>19. Contact</h2>
           <p>Questions about these Terms: <strong>[Legal Entity Name]</strong>, <strong>[Registered Address]</strong>, email <strong>support@sanopos.com</strong>.</p>
 
-          <p className="mt-8 text-xs italic text-slate-500">
+          <p className="mt-8 text-xs italic text-(--ui-text-muted)">
             By creating an account or using the Service, you acknowledge that you have
             read, understood, and agree to be bound by these Terms of Service.
           </p>

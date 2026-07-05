@@ -31,21 +31,21 @@ const TABS = [
 ];
 
 const PROVIDER_META = {
-  daraz: { name: "Daraz", category: "marketplace", icon: ShoppingBag, color: "text-orange-500", fields: ["api_key", "api_secret", "oauth_token"], labels: { api_key: "App Key", api_secret: "App Secret", oauth_token: "Access Token" }, actions: ["sync-products", "pull-orders", "push-inventory"], note: "Manual sync only — click Pull Orders to fetch new orders. Automatic background sync coming soon." },
-  shopify: { name: "Shopify", category: "marketplace", icon: ShoppingBag, color: "text-green-600", link: "/integrations/shopify" },
-  woocommerce: { name: "WooCommerce", category: "marketplace", icon: ShoppingBag, color: "text-purple-600", link: "/integrations/woocommerce" },
-  facebook: { name: "Facebook Shop", category: "social", icon: MessageCircle, color: "text-blue-600", fields: ["oauth_token"], labels: { oauth_token: "Page Access Token" }, configFields: ["catalog_id", "commerce_account_id"], actions: ["sync-products", "pull-orders", "push-inventory"], note: "Manual sync only — click Pull Orders to fetch new orders. Automatic background sync coming soon." },
-  instagram: { name: "Instagram Shopping", category: "social", icon: MessageCircle, color: "text-pink-500", note: "Managed via Facebook Shop connection" },
-  whatsapp: { name: "WhatsApp Business", category: "messaging", icon: MessageCircle, color: "text-green-500", fields: ["api_key"], labels: { api_key: "API Token" }, configFields: ["phone_number_id", "business_account_id"], costWarning: "WhatsApp Business API charges per conversation. First 1,000 service conversations/month are free.", note: "Manual sync only — automatic inbound message sync coming soon." },
-  google_merchant: { name: "Google Merchant Center", category: "feeds", icon: Rss, color: "text-blue-500", fields: ["oauth_token"], labels: { oauth_token: "OAuth Token" }, configFields: ["merchant_id"], actions: ["sync-products"], note: "Manual sync only — click Sync Products to push your catalog. Automatic feed status checks coming soon." },
+  daraz: { name: "Daraz", category: "marketplace", icon: ShoppingBag, color: "text-(--ui-warning-fg)", fields: ["api_key", "api_secret", "oauth_token"], labels: { api_key: "App Key", api_secret: "App Secret", oauth_token: "Access Token" }, actions: ["sync-products", "pull-orders", "push-inventory"], note: "Manual sync only — click Pull Orders to fetch new orders. Automatic background sync coming soon." },
+  shopify: { name: "Shopify", category: "marketplace", icon: ShoppingBag, color: "text-(--ui-success-fg)", link: "/integrations/shopify" },
+  woocommerce: { name: "WooCommerce", category: "marketplace", icon: ShoppingBag, color: "text-(--ui-text-muted)", link: "/integrations/woocommerce" },
+  facebook: { name: "Facebook Shop", category: "social", icon: MessageCircle, color: "text-(--ui-link)", fields: ["oauth_token"], labels: { oauth_token: "Page Access Token" }, configFields: ["catalog_id", "commerce_account_id"], actions: ["sync-products", "pull-orders", "push-inventory"], note: "Manual sync only — click Pull Orders to fetch new orders. Automatic background sync coming soon." },
+  instagram: { name: "Instagram Shopping", category: "social", icon: MessageCircle, color: "text-(--ui-text-muted)", note: "Managed via Facebook Shop connection" },
+  whatsapp: { name: "WhatsApp Business", category: "messaging", icon: MessageCircle, color: "text-(--ui-success-fg)", fields: ["api_key"], labels: { api_key: "API Token" }, configFields: ["phone_number_id", "business_account_id"], costWarning: "WhatsApp Business API charges per conversation. First 1,000 service conversations/month are free.", note: "Manual sync only — automatic inbound message sync coming soon." },
+  google_merchant: { name: "Google Merchant Center", category: "feeds", icon: Rss, color: "text-(--ui-link)", fields: ["oauth_token"], labels: { oauth_token: "OAuth Token" }, configFields: ["merchant_id"], actions: ["sync-products"], note: "Manual sync only — click Sync Products to push your catalog. Automatic feed status checks coming soon." },
   // Payment providers
-  xpay: { name: "xPay", category: "payment", icon: CreditCard, color: "text-emerald-600", note: "Configured via environment variables (PAYMENT_GATEWAY=xpay)" },
-  jazzcash: { name: "JazzCash", category: "payment", icon: CreditCard, color: "text-red-500", fields: ["api_key", "api_secret"], labels: { api_key: "Merchant ID", api_secret: "Merchant Password" }, configFields: ["return_url"] },
-  easypaisa: { name: "Easypaisa", category: "payment", icon: CreditCard, color: "text-green-600", fields: ["api_key", "api_secret"], labels: { api_key: "Store ID", api_secret: "Store Password" } },
+  xpay: { name: "xPay", category: "payment", icon: CreditCard, color: "text-(--ui-success-fg)", note: "Configured via environment variables (PAYMENT_GATEWAY=xpay)" },
+  jazzcash: { name: "JazzCash", category: "payment", icon: CreditCard, color: "text-(--ui-danger-fg)", fields: ["api_key", "api_secret"], labels: { api_key: "Merchant ID", api_secret: "Merchant Password" }, configFields: ["return_url"] },
+  easypaisa: { name: "Easypaisa", category: "payment", icon: CreditCard, color: "text-(--ui-success-fg)", fields: ["api_key", "api_secret"], labels: { api_key: "Store ID", api_secret: "Store Password" } },
   // SMS providers
-  zong_sms: { name: "Zong SMS", category: "sms", icon: Smartphone, color: "text-purple-600", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
-  jazz_sms: { name: "Jazz SMS", category: "sms", icon: Smartphone, color: "text-red-500", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
-  twilio: { name: "Twilio", category: "sms", icon: Smartphone, color: "text-blue-600", fields: ["api_key", "api_secret"], labels: { api_key: "Account SID", api_secret: "Auth Token" }, configFields: ["from_number"] },
+  zong_sms: { name: "Zong SMS", category: "sms", icon: Smartphone, color: "text-(--ui-text-muted)", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
+  jazz_sms: { name: "Jazz SMS", category: "sms", icon: Smartphone, color: "text-(--ui-danger-fg)", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
+  twilio: { name: "Twilio", category: "sms", icon: Smartphone, color: "text-(--ui-link)", fields: ["api_key", "api_secret"], labels: { api_key: "Account SID", api_secret: "Auth Token" }, configFields: ["from_number"] },
 };
 
 function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onTest, onSync, navigate }) {
@@ -53,7 +53,7 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
   const hasLink = meta.link;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+    <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
           <div className={`mt-0.5 ${meta.color}`}>
@@ -61,20 +61,20 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900 dark:text-white">{meta.name}</span>
+              <span className="font-medium text-(--ui-text)">{meta.name}</span>
               {isConnected && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                <span className="inline-flex items-center gap-1 rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-xs font-medium text-(--ui-success-fg)">
                   <Check size={12} /> Connected
                 </span>
               )}
               {channel?.last_error && (
-                <span className="inline-flex items-center gap-1 text-xs text-red-500">
+                <span className="inline-flex items-center gap-1 text-xs text-(--ui-danger-fg)">
                   <AlertCircle size={12} /> Error
                 </span>
               )}
             </div>
             {channel?.last_sync_at && (
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-(--ui-text-muted)">
+              <p className="mt-0.5 text-xs text-(--ui-text-muted)">
                 Last sync: {new Date(channel.last_sync_at).toLocaleString()}
               </p>
             )}
@@ -87,7 +87,7 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
           {hasLink ? (
             <button
               onClick={() => navigate(meta.link)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+              className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) px-3 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
             >
               Manage <ExternalLink size={12} />
             </button>
@@ -95,13 +95,13 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
             <>
               <button
                 onClick={() => onTest(provider)}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) px-3 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
               >
                 <RefreshCw size={12} /> Test
               </button>
               <button
                 onClick={() => onDisconnect(provider)}
-                className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                className="inline-flex items-center gap-1 rounded-lg border border-(--ui-danger-bg) px-3 py-1.5 text-xs font-medium text-(--ui-danger-fg) hover:bg-(--ui-danger-bg)"
               >
                 <X size={12} /> Disconnect
               </button>
@@ -109,7 +109,7 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
           ) : meta.fields ? (
             <button
               onClick={() => onConnect(provider)}
-              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-1 rounded-lg bg-(--ui-primary) px-3 py-1.5 text-xs font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
             >
               <Plug size={12} /> Connect
             </button>
@@ -119,7 +119,7 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
 
       {/* Cost warning banner */}
       {meta.costWarning && (
-        <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+        <div className="mt-3 rounded-lg bg-(--ui-warning-bg) px-3 py-2 text-xs text-(--ui-warning-fg)">
           <AlertCircle size={12} className="mb-0.5 mr-1 inline" />
           {meta.costWarning}
         </div>
@@ -127,12 +127,12 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
 
       {/* Quick sync actions for connected integrations */}
       {isConnected && meta.actions?.length > 0 && (
-        <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
+        <div className="mt-3 flex gap-2 border-t border-(--ui-border) pt-3">
           {meta.actions.map((action) => (
             <button
               key={action}
               onClick={() => onSync(provider, action)}
-              className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+              className="rounded-md bg-(--ui-muted-surface) px-2.5 py-1 text-xs font-medium text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
             >
               {action.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
             </button>
@@ -146,13 +146,13 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
 function CourierCard({ courier }) {
   const navigate = useNavigate();
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+    <div className="flex items-center justify-between rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4">
       <div className="flex items-center gap-3">
         <Truck size={20} className="text-(--ui-text-muted)" />
         <div>
-          <span className="font-medium text-slate-900 dark:text-white">{courier.name}</span>
+          <span className="font-medium text-(--ui-text)">{courier.name}</span>
           {courier.enabled && (
-            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-xs font-medium text-(--ui-success-fg)">
               <Check size={12} /> Enabled
             </span>
           )}
@@ -160,7 +160,7 @@ function CourierCard({ courier }) {
       </div>
       <button
         onClick={() => navigate("/courier-settings")}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+        className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) px-3 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
       >
         Configure <ExternalLink size={12} />
       </button>
@@ -329,15 +329,15 @@ export default function IntegrationsHubRedesign() {
       subtitle="Connect your store to marketplaces, social channels, messaging, and courier services"
     >
       {/* Tabs */}
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+      <div className="mb-6 flex gap-1 overflow-x-auto rounded-lg bg-(--ui-muted-surface) p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
-                : "text-slate-600 hover:text-slate-900 dark:text-(--ui-text-muted) dark:hover:text-white"
+                ? "bg-(--ui-surface) text-(--ui-text)"
+                : "text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {tab.label}
@@ -371,7 +371,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "payment") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-(--ui-text-muted)">
               Payment Gateways
             </h2>
           )}
@@ -399,7 +399,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "sms") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-(--ui-text-muted)">
               SMS Providers
             </h2>
           )}
@@ -427,7 +427,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "courier") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-(--ui-text-muted)">
               Courier Services
             </h2>
           )}

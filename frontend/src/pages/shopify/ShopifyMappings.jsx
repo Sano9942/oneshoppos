@@ -158,15 +158,15 @@ export default function ShopifyMappings() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-800">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between">
+          <h3 className="text-base font-semibold text-(--ui-text)">
             Location Mapping
           </h3>
           <button
             onClick={loadLiveLocations}
             disabled={loadingLocations}
-            className="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50"
+            className="inline-flex items-center gap-2 px-3 py-1.5 border border-(--ui-border-strong) text-(--ui-text) rounded-lg text-xs font-semibold hover:bg-(--ui-muted-surface)"
           >
             <RefreshCw
               size={12}
@@ -176,7 +176,7 @@ export default function ShopifyMappings() {
           </button>
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-left">
+          <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left">
             <tr>
               <th className="p-3">POS Outlet</th>
               <th className="p-3">Current Mapping</th>
@@ -189,13 +189,13 @@ export default function ShopifyMappings() {
               const existing = mappingByOutlet[outlet.id];
               const draftValue = locationDraftByOutlet[outlet.id] || "";
               return (
-                <tr key={outlet.id} className="border-t border-slate-100">
-                  <td className="p-3 font-medium text-slate-700">
+                <tr key={outlet.id} className="border-t border-(--ui-border)">
+                  <td className="p-3 font-medium text-(--ui-text)">
                     {outlet.name}
                   </td>
-                  <td className="p-3 text-slate-500 text-xs">
+                  <td className="p-3 text-(--ui-text-muted) text-xs">
                     {existing ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-(--ui-success-bg) text-(--ui-success-fg) border border-(--ui-success-bg) rounded">
                         {existing.shopify_location_name ||
                           existing.shopify_location_id}
                       </span>
@@ -212,7 +212,7 @@ export default function ShopifyMappings() {
                           [outlet.id]: e.target.value,
                         }))
                       }
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs"
+                      className="w-full px-2 py-1.5 border border-(--ui-border) rounded text-xs"
                       disabled={liveLocations.length === 0}
                     >
                       <option value="">
@@ -233,7 +233,7 @@ export default function ShopifyMappings() {
                       disabled={
                         !draftValue || savingLocationOutletId === outlet.id
                       }
-                      className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs hover:bg-slate-800 disabled:opacity-50"
+                      className="px-3 py-1.5 bg-(--ui-primary) text-(--ui-on-primary) rounded text-xs hover:bg-(--ui-primary-strong) disabled:opacity-50"
                     >
                       {savingLocationOutletId === outlet.id ? "..." : "Save"}
                     </button>
@@ -245,16 +245,16 @@ export default function ShopifyMappings() {
         </table>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-800">
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between">
+          <h3 className="text-base font-semibold text-(--ui-text)">
             Auto-Mapping Suggestions
           </h3>
           <div className="flex gap-2">
             <button
               onClick={loadSuggestions}
               disabled={loadingSuggestions}
-              className="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 py-1.5 border border-(--ui-border-strong) text-(--ui-text) rounded-lg text-xs font-semibold hover:bg-(--ui-muted-surface) disabled:opacity-50"
             >
               <RefreshCw
                 size={12}
@@ -265,7 +265,7 @@ export default function ShopifyMappings() {
             <button
               onClick={applySuggestions}
               disabled={applyingSuggestions || reviewedSuggestions.length === 0}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-(--ui-success-fg) text-(--ui-on-primary) rounded-lg text-xs font-semibold hover:bg-(--ui-success-fg) disabled:opacity-50"
             >
               <Link2 size={12} />
               Apply Approved ({reviewedSuggestions.length})
@@ -276,7 +276,7 @@ export default function ShopifyMappings() {
         {liveSuggestions.length > 0 ? (
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500 text-left sticky top-0 z-10">
+              <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left sticky top-0 z-10">
                 <tr>
                   <th className="p-3">Local Product</th>
                   <th className="p-3">Shopify Variant</th>
@@ -291,25 +291,25 @@ export default function ShopifyMappings() {
                   return (
                     <tr
                       key={suggestionKey(s, idx)}
-                      className={`border-t border-slate-100 ${isExcluded ? "bg-slate-50 opacity-60" : ""}`}
+                      className={`border-t border-(--ui-border) ${isExcluded ? "bg-(--ui-muted-surface) opacity-60" : ""}`}
                     >
                       <td className="p-3">
-                        <div className="font-medium text-slate-700">
+                        <div className="font-medium text-(--ui-text)">
                           {s.product_name}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
+                        <div className="text-[10px] text-(--ui-text-muted) font-mono">
                           {s.local_barcode}
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="text-slate-600">{s.shopify_title}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">
+                        <div className="text-(--ui-text-muted)">{s.shopify_title}</div>
+                        <div className="text-[10px] text-(--ui-text-muted) font-mono">
                           {s.shopify_variant_id}
                         </div>
                       </td>
                       <td className="p-3">
                         <span
-                          className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${s.confidence === "exact_barcode" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"}`}
+                          className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${s.confidence === "exact_barcode" ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-muted-surface) text-(--ui-link)"}`}
                         >
                           {s.confidence}
                         </span>
@@ -317,7 +317,7 @@ export default function ShopifyMappings() {
                       <td className="p-3 text-right">
                         <button
                           onClick={() => toggleSuggestion(s, idx)}
-                          className={`px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-wider ${isExcluded ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                          className={`px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-wider ${isExcluded ? "border-(--ui-success-bg) text-(--ui-success-fg) hover:bg-(--ui-success-bg)" : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"}`}
                         >
                           {isExcluded ? "Approve" : "Exclude"}
                         </button>
@@ -329,7 +329,7 @@ export default function ShopifyMappings() {
             </table>
           </div>
         ) : (
-          <div className="p-12 text-center text-slate-400 italic text-sm">
+          <div className="p-12 text-center text-(--ui-text-muted) italic text-sm">
             No suggestions generated. Click "Generate Suggestions" to use
             AI-assisted matching.
           </div>
@@ -337,11 +337,11 @@ export default function ShopifyMappings() {
       </div>
 
       {applySuggestionConflicts.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2 mb-2">
+        <div className="bg-(--ui-warning-bg) border border-(--ui-warning-bg) rounded-xl p-4">
+          <h4 className="text-sm font-bold text-(--ui-warning-fg) flex items-center gap-2 mb-2">
             <ShieldAlert size={16} /> Apply Conflicts
           </h4>
-          <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
+          <ul className="text-xs text-(--ui-warning-fg) space-y-1 list-disc list-inside">
             {applySuggestionConflicts.map((c, i) => (
               <li key={i}>
                 {c.reason} for variant {c.shopify_variant_id}

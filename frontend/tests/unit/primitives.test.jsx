@@ -49,13 +49,13 @@ describe("UI Primitives", () => {
   describe("Badge", () => {
     it("should render correctly with different tones", () => {
       const { rerender } = render(<Badge tone="success">Success</Badge>);
-      expect(screen.getByText("Success")).toHaveClass("bg-emerald-100");
+      expect(screen.getByText("Success")).toHaveClass("bg-(--ui-success-bg)");
 
       rerender(<Badge tone="warning">Warning</Badge>);
-      expect(screen.getByText("Warning")).toHaveClass("bg-amber-100");
+      expect(screen.getByText("Warning")).toHaveClass("bg-(--ui-warning-bg)");
 
       rerender(<Badge tone="danger">Danger</Badge>);
-      expect(screen.getByText("Danger")).toHaveClass("bg-rose-100");
+      expect(screen.getByText("Danger")).toHaveClass("bg-(--ui-danger-bg)");
     });
   });
 

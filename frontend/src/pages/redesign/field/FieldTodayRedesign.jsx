@@ -121,7 +121,7 @@ export default function FieldTodayRedesign() {
             {checkedInCount} / {total} visited
           </div>
           {pendingSyncCount > 0 && (
-            <div className="rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs font-medium">
+            <div className="rounded-full bg-(--ui-warning-bg) text-(--ui-warning-fg) px-3 py-1 text-xs font-medium">
               {pendingSyncCount} pending sync
             </div>
           )}
@@ -129,7 +129,7 @@ export default function FieldTodayRedesign() {
       </div>
 
       {error && (
-        <div className="mx-4 mt-3 rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2 text-sm">
+        <div className="mx-4 mt-3 rounded-lg bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg) px-3 py-2 text-sm">
           {error}
         </div>
       )}
@@ -174,10 +174,10 @@ export default function FieldTodayRedesign() {
                 )}
                 {visited && outcome && (
                   <div className="mt-2 inline-flex items-center gap-1 text-xs">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-(--ui-success-fg)" />
                     <span className="text-(--ui-text)">{outcome.label}</span>
                     {flagged && (
-                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 text-xs">
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-(--ui-warning-bg) text-(--ui-warning-fg) px-2 py-0.5 text-xs">
                         <AlertCircle className="h-3 w-3" /> GPS flagged
                       </span>
                     )}

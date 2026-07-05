@@ -13,9 +13,9 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 
 function ShiftRequired({ title, body }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-      <h3 className="text-sm font-bold text-slate-700">{title}</h3>
-      <p className="mt-2 text-sm text-slate-500">{body}</p>
+    <div className="rounded-2xl border border-dashed border-(--ui-border-strong) bg-(--ui-surface) p-10 text-center">
+      <h3 className="text-sm font-bold text-(--ui-text)">{title}</h3>
+      <p className="mt-2 text-sm text-(--ui-text-muted)">{body}</p>
     </div>
   );
 }
@@ -62,35 +62,35 @@ export function ShiftSummaryTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(summary.total_sales)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Returns
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">
             {fmt(summary.total_returns)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Net Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-emerald-700">
+          <p className="mt-2 text-2xl font-bold text-(--ui-success-fg)">
             {fmt(netSales)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Orders / Voids
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {Number(summary.order_count || 0)} / {Number(summary.void_count || 0)}
           </p>
         </div>
@@ -119,42 +119,42 @@ export function ShiftSummaryTab({ filters }) {
       >
         <TableShell cols={["Metric", "Value"]} loading={loading} empty={!data}>
           <tr>
-            <td className="px-4 py-3 text-sm font-medium text-slate-500">
+            <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
               Total Sales
             </td>
-            <td className="px-4 py-3 text-sm font-bold text-slate-900">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
               {fmt(summary.total_sales)}
             </td>
           </tr>
           <tr>
-            <td className="px-4 py-3 text-sm font-medium text-slate-500">
+            <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
               Total Returns
             </td>
-            <td className="px-4 py-3 text-sm font-bold text-rose-700">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">
               {fmt(summary.total_returns)}
             </td>
           </tr>
           <tr>
-            <td className="px-4 py-3 text-sm font-medium text-slate-500">
+            <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
               Order Count
             </td>
-            <td className="px-4 py-3 text-sm font-bold text-slate-900">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
               {Number(summary.order_count || 0)}
             </td>
           </tr>
           <tr>
-            <td className="px-4 py-3 text-sm font-medium text-slate-500">
+            <td className="px-4 py-3 text-sm font-medium text-(--ui-text-muted)">
               Void Count
             </td>
-            <td className="px-4 py-3 text-sm font-bold text-slate-900">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
               {Number(summary.void_count || 0)}
             </td>
           </tr>
-          <tr className="bg-emerald-50/60">
-            <td className="px-4 py-3 text-sm font-bold text-emerald-700">
+          <tr className="bg-(--ui-success-bg)/60">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">
               Net Sales
             </td>
-            <td className="px-4 py-3 text-sm font-bold text-emerald-700">
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">
               {fmt(netSales)}
             </td>
           </tr>
@@ -208,23 +208,23 @@ export function ShiftSalesTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Transactions
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Shift Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalSales)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalSales)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Voided Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">{voidedSales}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">{voidedSales}</p>
         </div>
       </div>
 
@@ -257,34 +257,34 @@ export function ShiftSalesTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">
+            <tr key={r.id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmtDateTime(r.timestamp)}
               </td>
-              <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">
+              <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">
                 #{r.id}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.customer_name || "Walk-in"}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.employee_name || "-"}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.payment_method || "-"}
               </td>
               <td className="px-4 py-3 text-sm">
                 <span
                   className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                     Number(r.voided || 0) !== 0
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-emerald-100 text-emerald-700"
+                      ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                      : "bg-(--ui-success-bg) text-(--ui-success-fg)"
                   }`}
                 >
                   {Number(r.voided || 0) !== 0 ? "Voided" : "Posted"}
                 </span>
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.total_amount)}
               </td>
             </tr>
@@ -335,23 +335,23 @@ export function PaymentSummaryTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Payment Types
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Total Settled
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(total)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(total)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Transactions
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {rows.reduce((sum, row) => sum + Number(row.count || 0), 0)}
           </p>
         </div>
@@ -385,15 +385,15 @@ export function PaymentSummaryTab({ filters }) {
             const pct =
               total > 0 ? ((Number(r.total || 0) / total) * 100).toFixed(1) : "0.0";
             return (
-              <tr key={r.payment_method} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={r.payment_method} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   {r.payment_method || "Unknown"}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{r.count}</td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.count}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                   {fmt(r.total)}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{pct}%</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{pct}%</td>
               </tr>
             );
           })}
@@ -431,33 +431,33 @@ export function CashFlowTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Sessions
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Opening Float
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(rows.reduce((sum, row) => sum + Number(row.start_cash || 0), 0))}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Closing Cash
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(rows.reduce((sum, row) => sum + Number(row.end_cash || 0), 0))}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Open Sessions
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {rows.filter((row) => !row.end_time).length}
           </p>
         </div>
@@ -491,23 +491,23 @@ export function CashFlowTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={r.id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.outlet_name}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.employee_name || "-"}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {fmtDateTime(r.start_time)}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                 {r.end_time ? fmtDateTime(r.end_time) : "Open"}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.start_cash)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.end_cash)}
               </td>
             </tr>
@@ -556,17 +556,17 @@ export function CurrentSessionZReportTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Tenders
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Session Total
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(rows.reduce((sum, row) => sum + Number(row.total || 0), 0))}
           </p>
         </div>
@@ -592,11 +592,11 @@ export function CurrentSessionZReportTab({ filters }) {
       >
         <TableShell cols={["Method", "Total"]} loading={loading} empty={!rows.length}>
           {rows.map((r) => (
-            <tr key={r.method} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+            <tr key={r.method} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.method}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.total)}
               </td>
             </tr>
@@ -652,23 +652,23 @@ export function CashAuditTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cash In
           </p>
-          <p className="mt-2 text-2xl font-bold text-emerald-700">{fmt(totalIn)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-success-fg)">{fmt(totalIn)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cash Out
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">{fmt(totalOut)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">{fmt(totalOut)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Net Cash
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalIn - totalOut)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalIn - totalOut)}</p>
         </div>
       </div>
 
@@ -694,11 +694,11 @@ export function CashAuditTab({ filters }) {
       >
         <TableShell cols={["Timestamp", "Type", "Reference", "Amount"]} loading={loading} empty={!rows.length}>
           {rows.map((r, index) => (
-            <tr key={`${r.type}-${r.ref_id}-${index}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(r.timestamp)}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{r.type}</td>
-              <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{r.ref_id}</td>
-              <td className={`px-4 py-3 text-sm font-bold ${Number(r.amount || 0) < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+            <tr key={`${r.type}-${r.ref_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{r.type}</td>
+              <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{r.ref_id}</td>
+              <td className={`px-4 py-3 text-sm font-bold ${Number(r.amount || 0) < 0 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                 {fmt(r.amount)}
               </td>
             </tr>
@@ -737,23 +737,23 @@ export function DenominationsTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Denomination Rows
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Total Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalValue)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalValue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Stages
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {new Set(rows.map((row) => row.stage).filter(Boolean)).size}
           </p>
         </div>
@@ -787,13 +787,13 @@ export function DenominationsTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, index) => (
-            <tr key={`${r.session_id}-${r.stage}-${r.denomination}-${index}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{r.session_id}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.stage || "-"}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{Number(r.denomination || 0)}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.count}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(r.subtotal)}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.employee_name || "-"}</td>
+            <tr key={`${r.session_id}-${r.stage}-${r.denomination}-${index}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{r.session_id}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.stage || "-"}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{Number(r.denomination || 0)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.count}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(r.subtotal)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.employee_name || "-"}</td>
             </tr>
           ))}
         </TableShell>

@@ -110,7 +110,7 @@ export default function ScheduledChangesRedesign() {
                   <td className="py-2">{c.created_by_name || "-"}</td>
                   <td className="py-2 text-right">
                     {c.status === "pending" && (
-                      <button onClick={() => handleCancel(c.id)} className="p-1 hover:text-red-500" title="Cancel"><Ban size={14} /></button>
+                      <button onClick={() => handleCancel(c.id)} className="p-1 hover:text-(--ui-danger-fg)" title="Cancel"><Ban size={14} /></button>
                     )}
                   </td>
                 </tr>

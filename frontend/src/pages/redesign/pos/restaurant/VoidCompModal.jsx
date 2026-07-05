@@ -77,8 +77,8 @@ export default function VoidCompModal({
 
   const ready = saleItemId && reasonCode && pin.length >= 4 && Number(amount) > 0;
   const Icon = tab === "comp" ? Gift : Ban;
-  const accent = tab === "comp" ? "#059669" : "#E11D48"; // emerald / rose
-  const accentHover = tab === "comp" ? "#047857" : "#BE123C";
+  const accent = tab === "comp" ? "var(--ui-primary)" : "var(--ui-danger)"; // comp = primary, void = danger
+  const accentHover = tab === "comp" ? "var(--ui-primary-strong)" : "var(--ui-danger)";
 
   const submit = async () => {
     setError(null);
@@ -109,20 +109,20 @@ export default function VoidCompModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border-strong)">
           <div className="flex items-center gap-2">
             <Icon size={18} style={{ color: accent }} />
-            <h2 className="text-lg font-black text-slate-900">
+            <h2 className="text-lg font-black text-(--ui-text)">
               {tab === "comp" ? "Comp Item" : "Void Item"}
             </h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={20} /></button>
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-(--ui-border-strong)">
           {["void", "comp"].map((t) => (
             <button
               key={t}
@@ -130,8 +130,8 @@ export default function VoidCompModal({
               onClick={() => setTab(t)}
               className={`flex-1 px-4 py-2.5 text-sm font-bold uppercase tracking-wide transition ${
                 tab === t
-                  ? "text-slate-900 border-b-2 border-[#8066FF]"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "text-(--ui-text) border-b-2 border-(--ui-primary)"
+                  : "text-(--ui-text-muted) hover:text-(--ui-text)"
               }`}
             >
               {t}
@@ -141,25 +141,25 @@ export default function VoidCompModal({
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {!saleItemId && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-sm p-3 font-semibold">
+            <div className="rounded-xl border border-(--ui-warning-fg)/30 bg-(--ui-warning-bg) text-(--ui-warning-fg) text-sm p-3 font-semibold">
               Select a completed sale item before voiding or comping. Cart items in an open
               check become adjustable once the check is closed.
             </div>
           )}
 
           {itemName && (
-            <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-              <div className="text-xs text-slate-500 font-semibold uppercase">Item</div>
-              <div className="text-base font-black text-slate-900">{itemName}</div>
+            <div className="rounded-xl bg-(--ui-muted-surface) border border-(--ui-border-strong) p-3">
+              <div className="text-xs text-(--ui-text-muted) font-semibold uppercase">Item</div>
+              <div className="text-base font-black text-(--ui-text)">{itemName}</div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Reason</label>
+            <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Reason</label>
             <select
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+              className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             >
               <option value="">Pick a reason…</option>
               {reasons.map((r) => (
@@ -169,31 +169,31 @@ export default function VoidCompModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Note <span className="normal-case font-medium text-slate-400">(optional)</span></label>
+            <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Note <span className="normal-case font-medium text-(--ui-text-muted)">(optional)</span></label>
             <input
               type="text"
               value={reasonNote}
               onChange={(e) => setReasonNote(e.target.value)}
               placeholder="Additional context…"
               maxLength={500}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+              className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Amount</label>
+            <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Amount</label>
             <input
               type="number"
               step="0.01"
               min="0"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+              className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Manager PIN</label>
+            <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Manager PIN</label>
             <input
               type="password"
               inputMode="numeric"
@@ -202,24 +202,24 @@ export default function VoidCompModal({
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
               placeholder="4–8 digits"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF] font-mono tracking-widest"
+              className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus) font-mono tracking-widest"
             />
           </div>
 
           {impersonationBlocked && (
-            <div className="rounded-xl border border-rose-300 bg-rose-50 text-rose-800 text-sm p-3 font-semibold">
+            <div className="rounded-xl border border-(--ui-danger-fg)/30 bg-(--ui-danger-bg) text-(--ui-danger-fg) text-sm p-3 font-semibold">
               Manager override is not allowed while impersonating a tenant.
             </div>
           )}
           {error && (
-            <div className="text-sm text-rose-600 font-semibold">{error}</div>
+            <div className="text-sm text-(--ui-danger-fg) font-semibold">{error}</div>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
+        <div className="px-5 py-3 border-t border-(--ui-border-strong) flex justify-end gap-2 bg-(--ui-muted-surface)">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-200"
+            className="px-4 py-2 rounded-xl text-sm font-bold text-(--ui-text) hover:bg-(--ui-border-strong)"
           >
             Cancel
           </button>
@@ -229,7 +229,7 @@ export default function VoidCompModal({
             style={{ backgroundColor: !ready || busy ? undefined : accent }}
             onMouseEnter={(e) => { if (ready && !busy) e.currentTarget.style.backgroundColor = accentHover; }}
             onMouseLeave={(e) => { if (ready && !busy) e.currentTarget.style.backgroundColor = accent; }}
-            className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:bg-slate-300 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:bg-(--ui-muted-surface) disabled:cursor-not-allowed"
           >
             {busy ? "Saving…" : tab === "comp" ? "Comp Item" : "Void Item"}
           </button>

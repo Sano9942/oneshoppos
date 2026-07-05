@@ -7,11 +7,11 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtUtcDateTime } from "../../utils/dates";
 
 const STATUS_DOTS = {
-  posted: "bg-emerald-500",
-  pending: "bg-amber-400",
-  processing: "bg-amber-400",
-  failed: "bg-red-500",
-  not_applicable: "bg-slate-400",
+  posted: "bg-(--ui-success-fg)",
+  pending: "bg-(--ui-warning-fg)",
+  processing: "bg-(--ui-warning-fg)",
+  failed: "bg-(--ui-danger-fg)",
+  not_applicable: "bg-(--ui-text-muted)",
 };
 
 const STATUS_LABELS = {
@@ -132,9 +132,9 @@ export default function FBRDashboardRedesign() {
   // --- Render ---
 
   const summaryCards = [
-    { label: "Posted Today", value: summary?.posted_today ?? "-", color: "text-emerald-600" },
-    { label: "Pending", value: summary?.pending ?? "-", color: "text-amber-600" },
-    { label: "Failed", value: summary?.failed ?? "-", color: "text-red-600" },
+    { label: "Posted Today", value: summary?.posted_today ?? "-", color: "text-(--ui-success-fg)" },
+    { label: "Pending", value: summary?.pending ?? "-", color: "text-(--ui-warning-fg)" },
+    { label: "Failed", value: summary?.failed ?? "-", color: "text-(--ui-danger-fg)" },
     { label: "Total", value: summary?.total ?? "-", color: "text-(--ui-text)" },
   ];
 
@@ -279,7 +279,7 @@ export default function FBRDashboardRedesign() {
                           title="Retry"
                           disabled={retrying[inv.id]}
                           onClick={() => handleRetry(inv.id)}
-                          className="rounded p-1 text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-50"
+                          className="rounded p-1 text-(--ui-danger-fg) hover:bg-(--ui-danger-bg) transition-colors disabled:opacity-50"
                         >
                           <RotateCcw size={15} className={retrying[inv.id] ? "animate-spin" : ""} />
                         </button>

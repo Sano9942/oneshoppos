@@ -4,8 +4,8 @@ import { useCurrency } from "./DashboardShared";
 function ExceptionRow({ label, item, fmt, warnPct, dangerPct, onClick }) {
   const pct = item?.pct_of_sales ?? 0;
   const color =
-    pct >= dangerPct ? "text-red-600" :
-    pct >= warnPct ? "text-amber-600" :
+    pct >= dangerPct ? "text-(--ui-danger-fg)" :
+    pct >= warnPct ? "text-(--ui-warning-fg)" :
     "text-(--ui-text-muted)";
 
   return (

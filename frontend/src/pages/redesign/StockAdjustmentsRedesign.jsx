@@ -161,7 +161,7 @@ export default function StockAdjustmentsRedesign() {
         </div>
       }
     >
-      {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}
+      {error ? <SectionCard className="mb-3 bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard> : null}
 
       <SectionCard>
         <TableToolbar
@@ -205,7 +205,7 @@ export default function StockAdjustmentsRedesign() {
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name}</td>
                   <td className="px-3 py-2"><Badge>{r.reason}</Badge></td>
-                  <td className={`px-3 py-2 text-right font-semibold ${Number(r.quantity_change || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                  <td className={`px-3 py-2 text-right font-semibold ${Number(r.quantity_change || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                     {Number(r.quantity_change || 0) > 0 ? "+" : ""}{r.quantity_change}
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "Admin"}</td>

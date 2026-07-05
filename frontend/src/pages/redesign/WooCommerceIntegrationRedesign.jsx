@@ -64,7 +64,7 @@ export default function WooCommerceIntegrationRedesign() {
             onClick={() => setTab(t.id)}
             className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               tab === t.id
-                ? "bg-(--ui-surface) text-(--ui-text) shadow-sm"
+                ? "bg-(--ui-surface) text-(--ui-text)"
                 : "text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
@@ -131,8 +131,8 @@ function ConnectionTab({ status, onRefresh }) {
         <div
           className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm ${
             msg.type === "success"
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-red-50 text-red-700"
+              ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+              : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
           }`}
         >
           {msg.type === "success" ? (
@@ -147,8 +147,8 @@ function ConnectionTab({ status, onRefresh }) {
       {status?.connected ? (
         <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6">
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-              <Link2 className="h-5 w-5 text-emerald-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-(--ui-success-bg)">
+              <Link2 className="h-5 w-5 text-(--ui-success-fg)" />
             </div>
             <div>
               <p className="font-semibold text-(--ui-text)">Connected</p>
@@ -157,7 +157,7 @@ function ConnectionTab({ status, onRefresh }) {
           </div>
           <button
             onClick={disconnect}
-            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="flex items-center gap-2 rounded-lg border border-(--ui-danger-bg) px-4 py-2 text-sm font-medium text-(--ui-danger-fg) hover:bg-(--ui-danger-bg)"
           >
             <Unplug className="h-4 w-4" />
             Disconnect
@@ -187,7 +187,7 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="https://yourstore.com"
               value={storeUrl}
               onChange={(e) => setStoreUrl(e.target.value)}
-              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) focus:outline-none"
             />
           </div>
 
@@ -201,7 +201,7 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="ck_..."
               value={consumerKey}
               onChange={(e) => setConsumerKey(e.target.value)}
-              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) focus:outline-none"
             />
           </div>
 
@@ -215,14 +215,14 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="cs_..."
               value={consumerSecret}
               onChange={(e) => setConsumerSecret(e.target.value)}
-              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-(--ui-primary) px-4 py-2.5 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -260,12 +260,12 @@ function ProductsTab({ connected }) {
 
   if (!connected) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
-        <p className="font-medium text-amber-800">
+      <div className="rounded-xl border border-(--ui-warning-bg) bg-(--ui-warning-bg) p-6 text-center">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-(--ui-warning-fg)" />
+        <p className="font-medium text-(--ui-warning-fg)">
           Connect your WooCommerce store first
         </p>
-        <p className="mt-1 text-sm text-amber-600">
+        <p className="mt-1 text-sm text-(--ui-warning-fg)">
           Go to the Connection tab to set up your store credentials.
         </p>
       </div>
@@ -285,7 +285,7 @@ function ProductsTab({ connected }) {
         <button
           onClick={importProducts}
           disabled={importing}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-(--ui-primary) px-4 py-2.5 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           {importing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -297,11 +297,11 @@ function ProductsTab({ connected }) {
       </div>
 
       {result && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        <div className="flex items-center gap-3 rounded-xl border border-(--ui-success-bg) bg-(--ui-success-bg) p-4">
+          <CheckCircle2 className="h-5 w-5 text-(--ui-success-fg)" />
           <div>
-            <p className="font-medium text-emerald-800">Import complete</p>
-            <p className="text-sm text-emerald-600">
+            <p className="font-medium text-(--ui-success-fg)">Import complete</p>
+            <p className="text-sm text-(--ui-success-fg)">
               {result.imported} new products imported, {result.updated} existing
               products updated.
             </p>
@@ -310,9 +310,9 @@ function ProductsTab({ connected }) {
       )}
 
       {error && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
-          <AlertTriangle className="h-5 w-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="flex items-center gap-3 rounded-xl border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+          <AlertTriangle className="h-5 w-5 text-(--ui-danger-fg)" />
+          <p className="text-sm text-(--ui-danger-fg)">{error}</p>
         </div>
       )}
     </div>
@@ -342,12 +342,12 @@ function StockTab({ connected }) {
 
   if (!connected) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
-        <p className="font-medium text-amber-800">
+      <div className="rounded-xl border border-(--ui-warning-bg) bg-(--ui-warning-bg) p-6 text-center">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-(--ui-warning-fg)" />
+        <p className="font-medium text-(--ui-warning-fg)">
           Connect your WooCommerce store first
         </p>
-        <p className="mt-1 text-sm text-amber-600">
+        <p className="mt-1 text-sm text-(--ui-warning-fg)">
           Go to the Connection tab to set up your store credentials.
         </p>
       </div>
@@ -367,7 +367,7 @@ function StockTab({ connected }) {
         <button
           onClick={syncStock}
           disabled={syncing}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-(--ui-primary) px-4 py-2.5 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           {syncing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -379,11 +379,11 @@ function StockTab({ connected }) {
       </div>
 
       {result && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        <div className="flex items-center gap-3 rounded-xl border border-(--ui-success-bg) bg-(--ui-success-bg) p-4">
+          <CheckCircle2 className="h-5 w-5 text-(--ui-success-fg)" />
           <div>
-            <p className="font-medium text-emerald-800">Sync complete</p>
-            <p className="text-sm text-emerald-600">
+            <p className="font-medium text-(--ui-success-fg)">Sync complete</p>
+            <p className="text-sm text-(--ui-success-fg)">
               {result.synced} product stock levels pushed to WooCommerce.
             </p>
           </div>
@@ -391,9 +391,9 @@ function StockTab({ connected }) {
       )}
 
       {error && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
-          <AlertTriangle className="h-5 w-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="flex items-center gap-3 rounded-xl border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+          <AlertTriangle className="h-5 w-5 text-(--ui-danger-fg)" />
+          <p className="text-sm text-(--ui-danger-fg)">{error}</p>
         </div>
       )}
     </div>

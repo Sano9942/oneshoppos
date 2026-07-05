@@ -32,11 +32,11 @@ const BREAK_REASONS = [
 ];
 
 const KEYPAD_BTN =
-  "w-20 h-20 text-2xl font-bold rounded-2xl bg-slate-700 text-white hover:bg-slate-600 active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
+  "w-20 h-20 text-2xl font-bold rounded-2xl bg-(--ui-surface) text-(--ui-text) border border-(--ui-border-strong) hover:bg-(--ui-muted-surface) active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
 const KEYPAD_BTN_BACK =
-  "w-20 h-20 text-xl font-bold rounded-2xl bg-slate-600 text-slate-300 hover:bg-slate-500 active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
+  "w-20 h-20 text-xl font-bold rounded-2xl bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong) active:scale-95 transition-transform duration-75 disabled:opacity-50 select-none cursor-pointer";
 const KEYPAD_BTN_OK =
-  "w-20 h-20 text-xl font-bold rounded-2xl bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 transition-transform duration-75 disabled:opacity-40 select-none cursor-pointer";
+  "w-20 h-20 text-xl font-bold rounded-2xl bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) active:scale-95 transition-transform duration-75 disabled:opacity-40 select-none cursor-pointer";
 
 function PinDots({ length }) {
   const total = Math.max(length, 4);
@@ -46,7 +46,7 @@ function PinDots({ length }) {
         <div
           key={i}
           className={`w-4 h-4 rounded-full border-2 ${
-            i < length ? "bg-white border-white" : "bg-transparent border-slate-500"
+            i < length ? "bg-(--ui-primary) border-(--ui-primary)" : "bg-transparent border-(--ui-border-strong)"
           }`}
         />
       ))}
@@ -58,7 +58,7 @@ function PinPad({ pin, error, loading, onDigit, onBackspace, onSubmit }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <PinDots length={pin.length} />
-      {error && <p className="text-red-400 text-sm mb-2 text-center">{error}</p>}
+      {error && <p className="text-(--ui-danger-fg) text-sm mb-2 text-center">{error}</p>}
       <div className="grid grid-cols-3 gap-3">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
           <button key={d} onClick={() => onDigit(String(d))} disabled={loading} className={KEYPAD_BTN}>
@@ -87,10 +87,10 @@ function Clock() {
   }, []);
   return (
     <div className="text-right">
-      <p className="text-2xl font-mono font-semibold text-white">
+      <p className="text-2xl font-mono font-semibold text-(--ui-text)">
         {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
       </p>
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-(--ui-text-muted)">
         {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
       </p>
     </div>
@@ -282,14 +282,14 @@ export default function KioskRedesign() {
 
   if (view === "idle") {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white px-4">
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-4 border-b border-slate-800">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-4 border-b border-(--ui-border)">
           <div className="flex items-center gap-3">
-            <span className="text-slate-400 text-sm">Store:</span>
+            <span className="text-(--ui-text-muted) text-sm">Store:</span>
             {kioskLocked && outlet ? (
               <>
-                <span className="font-semibold text-white">{outlet.name}</span>
-                <span className="text-xs text-slate-500 bg-slate-800 rounded px-2 py-1">Locked</span>
+                <span className="font-semibold text-(--ui-text)">{outlet.name}</span>
+                <span className="text-xs text-(--ui-text-muted) bg-(--ui-muted-surface) rounded px-2 py-1">Locked</span>
               </>
             ) : (
               <select
@@ -298,7 +298,7 @@ export default function KioskRedesign() {
                   const found = outlets.find((o) => o.id === Number(e.target.value));
                   setOutlet(found || null);
                 }}
-                className="bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm font-semibold cursor-pointer"
+                className="bg-(--ui-surface) border border-(--ui-border-strong) text-(--ui-text) rounded-lg px-3 py-1.5 text-sm font-semibold cursor-pointer"
               >
                 <option value="">Select your store...</option>
                 {outlets.map((o) => (
@@ -313,8 +313,8 @@ export default function KioskRedesign() {
         </div>
 
         <div className="flex flex-col items-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Attendance Kiosk</h1>
-          <p className="text-slate-400 mb-8 text-center">Enter your PIN to clock in, break, or clock out</p>
+          <h1 className="text-3xl font-bold text-(--ui-text) mb-2">Attendance Kiosk</h1>
+          <p className="text-(--ui-text-muted) mb-8 text-center">Enter your PIN to clock in, break, or clock out</p>
           <PinPad
             pin={pin}
             error={error}
@@ -334,34 +334,34 @@ export default function KioskRedesign() {
     const session = todayStatus?.current_session;
 
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white px-4">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
         <div className="w-full max-w-sm flex flex-col items-center gap-6">
-          <div className="w-full bg-slate-800 rounded-2xl p-6 text-center border border-slate-700">
-            <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-3xl font-bold mx-auto mb-3">
+          <div className="w-full bg-(--ui-surface) rounded-2xl p-6 text-center border border-(--ui-border)">
+            <div className="w-16 h-16 rounded-full bg-(--ui-muted-surface) text-(--ui-text) flex items-center justify-center text-3xl font-bold mx-auto mb-3">
               {employee?.name?.[0]?.toUpperCase()}
             </div>
-            <h2 className="text-2xl font-bold text-white">{employee?.name}</h2>
+            <h2 className="text-2xl font-bold text-(--ui-text)">{employee?.name}</h2>
 
-            {s === "not_clocked_in" && <p className="text-slate-400 mt-1">You are not clocked in today</p>}
+            {s === "not_clocked_in" && <p className="text-(--ui-text-muted) mt-1">You are not clocked in today</p>}
             {s === "clocked_in" && (
               <>
-                <p className="text-emerald-400 font-semibold mt-1">
+                <p className="text-(--ui-success-fg) font-semibold mt-1">
                   Clocked In - {session ? fmtElapsed(session.session_start) : ""}
                 </p>
-                <p className="text-slate-400 text-sm mt-1">{fmtDuration(netHours)} worked today</p>
+                <p className="text-(--ui-text-muted) text-sm mt-1">{fmtDuration(netHours)} worked today</p>
               </>
             )}
             {s === "on_break" && (
               <>
-                <p className="text-amber-400 font-semibold mt-1 capitalize">
+                <p className="text-(--ui-warning-fg) font-semibold mt-1 capitalize">
                   On {session?.break_reason || "Break"} -{" "}
                   {session ? fmtElapsed(session.session_start) : ""}
                 </p>
-                <p className="text-slate-400 text-sm mt-1">{fmtDuration(netHours)} worked today</p>
+                <p className="text-(--ui-text-muted) text-sm mt-1">{fmtDuration(netHours)} worked today</p>
               </>
             )}
             {s === "clocked_out" && (
-              <p className="text-blue-400 font-semibold mt-1">
+              <p className="text-(--ui-link) font-semibold mt-1">
                 Checked out — {fmtDuration(netHours)} worked today
               </p>
             )}
@@ -371,7 +371,7 @@ export default function KioskRedesign() {
             <button
               onClick={clockIn}
               disabled={loading}
-              className="w-full py-5 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-5 text-xl font-bold rounded-2xl bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) active:scale-95 transition-all disabled:opacity-50"
             >
               {loading ? "Please wait..." : "Clock In"}
             </button>
@@ -382,14 +382,14 @@ export default function KioskRedesign() {
               <button
                 onClick={() => setView("break_select")}
                 disabled={loading}
-                className="w-full py-5 text-xl font-bold rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-95 transition-all disabled:opacity-50"
+                className="w-full py-5 text-xl font-bold rounded-2xl bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) active:scale-95 transition-all disabled:opacity-50"
               >
                 Go on Break
               </button>
               <button
                 onClick={endOfDay}
                 disabled={loading}
-              className="w-full py-4 text-lg font-bold rounded-2xl bg-slate-600 hover:bg-slate-500 active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-4 text-lg font-bold rounded-2xl bg-(--ui-muted-surface) text-(--ui-text) hover:bg-(--ui-border-strong) active:scale-95 transition-all disabled:opacity-50"
             >
               {loading ? "Please wait..." : "Clock Out (End of Day)"}
             </button>
@@ -400,7 +400,7 @@ export default function KioskRedesign() {
             <button
               onClick={clockIn}
               disabled={loading}
-              className="w-full py-5 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-5 text-xl font-bold rounded-2xl bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) active:scale-95 transition-all disabled:opacity-50"
             >
               {loading ? "Please wait..." : "Resume Shift"}
             </button>
@@ -411,22 +411,22 @@ export default function KioskRedesign() {
               <button
                 onClick={clockIn}
                 disabled={loading}
-                className="w-full py-5 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+                className="w-full py-5 text-xl font-bold rounded-2xl bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) active:scale-95 transition-all disabled:opacity-50"
               >
                 {loading ? "Please wait..." : "Clock In Again"}
               </button>
               <button
                 onClick={resetToIdle}
-                className="w-full py-4 text-lg font-bold rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all"
+                className="w-full py-4 text-lg font-bold rounded-2xl bg-(--ui-muted-surface) text-(--ui-text) hover:bg-(--ui-border-strong) active:scale-95 transition-all"
               >
                 Done
               </button>
             </>
           )}
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && <p className="text-(--ui-danger-fg) text-sm text-center">{error}</p>}
 
-          <button onClick={resetToIdle} className="text-slate-500 text-sm hover:text-slate-400 mt-2">
+          <button onClick={resetToIdle} className="text-(--ui-text-muted) text-sm hover:text-(--ui-text-muted) mt-2">
             {"<- Back"}
           </button>
         </div>
@@ -436,23 +436,23 @@ export default function KioskRedesign() {
 
   if (view === "break_select") {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white px-4">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
         <div className="w-full max-w-sm flex flex-col items-center gap-4">
-          <h2 className="text-2xl font-bold text-white mb-2">Select Break Reason</h2>
+          <h2 className="text-2xl font-bold text-(--ui-text) mb-2">Select Break Reason</h2>
           <div className="w-full grid grid-cols-2 gap-3">
             {BREAK_REASONS.map((r) => (
               <button
                 key={r.key}
                 onClick={goOnBreak(r.key)}
                 disabled={loading}
-                className="py-5 text-lg font-bold rounded-2xl bg-slate-700 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"
+                className="py-5 text-lg font-bold rounded-2xl bg-(--ui-muted-surface) text-(--ui-text) hover:bg-(--ui-border-strong) active:scale-95 transition-all disabled:opacity-50"
               >
                 {r.label}
               </button>
             ))}
           </div>
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-          <button onClick={() => setView("status")} className="text-slate-500 text-sm hover:text-slate-400 mt-2">
+          {error && <p className="text-(--ui-danger-fg) text-sm text-center">{error}</p>}
+          <button onClick={() => setView("status")} className="text-(--ui-text-muted) text-sm hover:text-(--ui-text-muted) mt-2">
             {"<- Cancel"}
           </button>
         </div>
@@ -460,22 +460,18 @@ export default function KioskRedesign() {
     );
   }
 
-  const colorMap = {
-    emerald: "bg-emerald-700",
-    amber: "bg-amber-600",
-    blue: "bg-blue-700",
-  };
+  const titleColor = {
+    emerald: "text-(--ui-success-fg)",
+    amber: "text-(--ui-warning-fg)",
+    blue: "text-(--ui-link)",
+  }[confirm.color] || "text-(--ui-text)";
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col items-center justify-center text-white px-4 ${
-        colorMap[confirm.color] || "bg-slate-800"
-      }`}
-    >
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
       <div className="text-center">
-        <p className="text-5xl font-bold mb-4">{confirm.title}</p>
-        {confirm.body && <p className="text-2xl text-white/80">{confirm.body}</p>}
-        <p className="text-white/50 mt-8 text-sm">Returning to kiosk in 5 seconds...</p>
+        <p className={`text-5xl font-bold mb-4 ${titleColor}`}>{confirm.title}</p>
+        {confirm.body && <p className="text-2xl text-(--ui-text-muted)">{confirm.body}</p>}
+        <p className="text-(--ui-text-muted) mt-8 text-sm">Returning to kiosk in 5 seconds...</p>
       </div>
     </div>
   );

@@ -136,8 +136,8 @@ export default function ReportBuilderRedesign() {
                 <div className="space-y-1">
                   {definitions.map(d => (
                     <div key={d.id} className="flex items-center justify-between text-sm py-1 border-b border-(--ui-border)">
-                      <button onClick={() => handleLoad(d)} className="text-(--ui-text) hover:text-blue-500 text-left truncate grow">{d.name}</button>
-                      <button onClick={() => handleDeleteDef(d.id)} className="p-1 hover:text-red-500 shrink-0"><Trash2 size={12} /></button>
+                      <button onClick={() => handleLoad(d)} className="text-(--ui-text) hover:text-(--ui-link) text-left truncate grow">{d.name}</button>
+                      <button onClick={() => handleDeleteDef(d.id)} className="p-1 hover:text-(--ui-danger-fg) shrink-0"><Trash2 size={12} /></button>
                     </div>
                   ))}
                 </div>
@@ -156,7 +156,7 @@ export default function ReportBuilderRedesign() {
                 <div className="flex gap-2 flex-wrap">
                   {datasets.map(d => (
                     <button key={d.key} onClick={() => { setSelectedDataset(d.key); setSelectedDims([]); setSelectedMeasures([]); setResults(null); }}
-                      className={`px-3 py-1.5 text-sm rounded border ${selectedDataset === d.key ? "bg-(--ui-primary) text-white border-(--ui-primary)" : "bg-(--ui-bg) border-(--ui-border) text-(--ui-text)"}`}>
+                      className={`px-3 py-1.5 text-sm rounded border ${selectedDataset === d.key ? "bg-(--ui-primary) text-(--ui-on-primary) border-(--ui-primary)" : "bg-(--ui-bg) border-(--ui-border) text-(--ui-text)"}`}>
                       {d.label}
                     </button>
                   ))}
@@ -240,7 +240,7 @@ export default function ReportBuilderRedesign() {
                       <thead>
                         <tr className="border-b border-(--ui-border) text-left text-(--ui-muted)">
                           {[...selectedDims, ...selectedMeasures].map(col => (
-                            <th key={col} className="py-2 font-medium px-2 cursor-pointer hover:text-blue-500" onClick={() => { setSortBy(col); setSortOrder(prev => prev === "asc" ? "desc" : "asc"); }}>
+                            <th key={col} className="py-2 font-medium px-2 cursor-pointer hover:text-(--ui-link)" onClick={() => { setSortBy(col); setSortOrder(prev => prev === "asc" ? "desc" : "asc"); }}>
                               {col.replace(/_/g, " ")} {sortBy === col ? (sortOrder === "asc" ? "↑" : "↓") : ""}
                             </th>
                           ))}
