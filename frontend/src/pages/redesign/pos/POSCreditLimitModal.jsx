@@ -50,44 +50,44 @@ export default function POSCreditLimitModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-sm p-6 text-(--ui-text)">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-amber-400" />
+            <Receipt className="h-5 w-5 text-(--ui-warning-fg)" />
             <h3 className="text-lg font-semibold">Credit Limit Exceeded</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mb-4 rounded-lg bg-slate-900/50 border border-slate-700 p-3 space-y-1.5 text-sm">
+        <div className="mb-4 rounded-lg bg-(--ui-muted-surface) border border-(--ui-border) p-3 space-y-1.5 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-400">Current outstanding</span>
+            <span className="text-(--ui-text-muted)">Current outstanding</span>
             <span className="font-mono">{fmt(prompt.outstanding)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-400">This sale</span>
+            <span className="text-(--ui-text-muted)">This sale</span>
             <span className="font-mono">{fmt(prompt.attempted)}</span>
           </div>
-          <div className="flex justify-between border-t border-slate-700 pt-1.5">
-            <span className="text-slate-400">Credit limit</span>
+          <div className="flex justify-between border-t border-(--ui-border) pt-1.5">
+            <span className="text-(--ui-text-muted)">Credit limit</span>
             <span className="font-mono">{fmt(prompt.limit)}</span>
           </div>
-          <div className="flex justify-between text-rose-400 font-semibold">
+          <div className="flex justify-between text-(--ui-danger-fg) font-semibold">
             <span>Over by</span>
             <span className="font-mono">{fmt(prompt.deficit)}</span>
           </div>
         </div>
 
-        <p className="text-sm text-slate-300 mb-4">
+        <p className="text-sm text-(--ui-text-muted) mb-4">
           A manager PIN with <span className="font-mono">override_credit_limit</span>{" "}
           permission is required to push this sale through.
         </p>
 
         <form onSubmit={handleSubmit}>
-          <label className="block text-sm text-slate-300 mb-1">Manager PIN</label>
+          <label className="block text-sm text-(--ui-text-muted) mb-1">Manager PIN</label>
           <input
             type="password"
             inputMode="numeric"
@@ -95,10 +95,10 @@ export default function POSCreditLimitModal({
             onChange={(e) => setPin(e.target.value)}
             placeholder="Enter manager PIN"
             autoFocus
-            className="w-full rounded-lg bg-slate-700 border border-slate-600 px-4 py-3 text-lg text-center tracking-widest placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full rounded-lg bg-(--ui-surface) border border-(--ui-border-strong) px-4 py-3 text-lg text-center tracking-widest placeholder:text-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
           />
           {error && (
-            <div className="mt-2 flex items-center gap-1 text-sm text-rose-400">
+            <div className="mt-2 flex items-center gap-1 text-sm text-(--ui-danger-fg)">
               <ShieldAlert className="h-4 w-4" />
               {error}
             </div>
@@ -106,14 +106,14 @@ export default function POSCreditLimitModal({
           <button
             type="submit"
             disabled={loading || !pin.trim()}
-            className="mt-4 w-full rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 py-2.5 font-semibold text-slate-900 transition-colors"
+            className="mt-4 w-full rounded-lg bg-(--ui-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 py-2.5 font-semibold text-white transition-colors"
           >
             {loading ? "Verifying…" : "Approve Credit Sale"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="mt-2 w-full rounded-lg bg-slate-700 hover:bg-slate-600 py-2 font-semibold text-slate-200 transition-colors"
+            className="mt-2 w-full rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) hover:bg-(--ui-muted-surface) py-2 font-semibold text-(--ui-text) transition-colors"
           >
             Cancel
           </button>

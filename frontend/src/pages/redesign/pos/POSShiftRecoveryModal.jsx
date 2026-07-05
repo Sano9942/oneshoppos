@@ -56,18 +56,18 @@ export default function POSShiftRecoveryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h3 className="text-lg font-bold text-slate-800">Yesterday's shift is still open</h3>
+            <AlertTriangle className="h-5 w-5 text-(--ui-warning-fg)" />
+            <h3 className="text-lg font-bold text-(--ui-text)">Yesterday's shift is still open</h3>
           </div>
-          <button onClick={handleKeepOpen} className="text-slate-400 hover:text-slate-600">
+          <button onClick={handleKeepOpen} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4 text-sm text-amber-800">
+        <div className="rounded-xl bg-(--ui-warning-bg) border border-(--ui-warning-bg) p-3 mb-4 text-sm text-(--ui-warning-fg)">
           <div className="flex items-center gap-1 mb-1">
             <Clock className="h-4 w-4" />
             Shift <span className="font-semibold">#{shift.id}</span> opened {openedAt}.
@@ -84,21 +84,21 @@ export default function POSShiftRecoveryModal({
           <button
             type="button"
             onClick={handleCloseNow}
-            className="w-full rounded-lg bg-[#8066FF] hover:bg-[#6b55d9] text-white font-semibold py-2.5 transition"
+            className="w-full rounded-lg bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-semibold py-2.5 transition"
           >
             Close now
           </button>
           <button
             type="button"
             onClick={handleQuickClose}
-            className="w-full rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2 transition"
+            className="w-full rounded-lg border border-(--ui-border-strong) hover:bg-(--ui-muted-surface) text-(--ui-text) font-medium py-2 transition"
           >
             Quick close with auto-reason
           </button>
           <button
             type="button"
             onClick={handleKeepOpen}
-            className="w-full rounded-lg text-slate-500 hover:bg-slate-50 text-sm py-2 transition"
+            className="w-full rounded-lg text-(--ui-text-muted) hover:bg-(--ui-muted-surface) text-sm py-2 transition"
           >
             Keep open for now
           </button>
