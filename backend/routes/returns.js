@@ -3,6 +3,7 @@ const logger = require("../services/logger");
 const { validate } = require("../middleware/validate");
 const { CreateReturnSchema } = require("../schemas/returns");
 const kitEngine = require("../services/kit-engine");
+const batchStock = require("../services/batch-stock");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { verifyManagerPin } = require("../services/manager-pin");
 const { recordApprovalEvent } = require("../services/approval-policy");
@@ -475,6 +476,19 @@ module.exports = function registerReturnsRoutes(app, deps) {
                 outletId: outlet_id,
                 qty: Number(item.quantity),
               });
+              // F07: return each tracked component to the batch it sold from.
+              const comps = await kitEngine.loadComponents(client, item.product_id);
+              for (const comp of comps) {
+                await batchStock.returnToBatch(client, {
+                  productId: comp.component_product_id,
+                  variantId: comp.component_variant_id || null,
+                  outletId: outlet_id,
+                  qty: batchStock.roundQty(Number(comp.quantity) * Number(item.quantity)),
+                  refType: "return",
+                  refId: retId,
+                  originalSaleId: original_sale_id || null,
+                });
+              }
             } else {
               // Restock outlet_stock
               await client.query(
@@ -500,6 +514,17 @@ module.exports = function registerReturnsRoutes(app, deps) {
                   [item.variant_id, outlet_id, item.quantity],
                 );
               }
+              // F07: return the restocked units to their original batch (else
+              // newest active / a fresh return batch) for tracked SKUs.
+              await batchStock.returnToBatch(client, {
+                productId: item.product_id,
+                variantId: item.variant_id || null,
+                outletId: outlet_id,
+                qty: Number(item.quantity),
+                refType: "return",
+                refId: retId,
+                originalSaleId: original_sale_id || null,
+              });
             }
           }
 

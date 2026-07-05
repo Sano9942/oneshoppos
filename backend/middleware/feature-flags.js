@@ -146,6 +146,12 @@ const DEFAULT_FEATURE_FLAGS = {
   // shipped as is_bundle/product_bundles and works on every tenant); seeded
   // ON by presets that consume it (retail/food-service verticals).
   kit_bom_engine: false,
+  // F07 batch/expiry/lot engine. Default false — gates the surfaces (GRN batch
+  // capture fields, expiring-soon page, batch reports, textile roll picker). The
+  // real functional gate for FEFO consumption is per-product products.track_batches,
+  // so untracked SKUs are unaffected regardless of this flag. Seeded ON by the
+  // retail sub-type presets that consume it (grocery/butcher/sweet_shop/textile).
+  batch_expiry_tracking: false,
 };
 
 // Per-tenant feature flag cache

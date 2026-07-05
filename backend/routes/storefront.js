@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const kitEngine = require("./../services/kit-engine");
+const batchStock = require("./../services/batch-stock");
 const { getOrCreateCart, addItem, updateItem, removeItem, getCartWithItems } = require("../services/storefront-cart");
 const { calculateQuote } = require("../services/quote");
 const { allocateOrder } = require("../services/allocation");
@@ -834,6 +835,17 @@ module.exports = function mountStorefrontRoutes(app, deps) {
              WHERE outlet_id = $2 AND product_id = $3`,
             [qi.qty, stockOutletId, qi.productId]
           );
+
+          // F07: FEFO-consume batches for a tracked SKU on the storefront path
+          // (same tx, right after the FOR UPDATE decrement). Drift-tolerant.
+          await batchStock.consumeBatches(client, {
+            productId: qi.productId,
+            variantId: qi.variantId || null,
+            outletId: stockOutletId,
+            qty: qi.qty,
+            refType: "web_order",
+            refId: order.id,
+          });
 
           // Insert reservation as 'converted' (already decremented)
           const reservationKey = `order_${order.id}_item_${orderItem.id}`;

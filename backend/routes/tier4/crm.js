@@ -1,5 +1,6 @@
 const express = require("express");
 const kitEngine = require("../../services/kit-engine");
+const batchStock = require("../../services/batch-stock");
 const nodemailer = require("nodemailer");
 
 // ─── FBR E-INVOICING PLACEHOLDER ───────────────────────────────────────
@@ -682,6 +683,18 @@ module.exports = function createCRMRouter({
                 { statusCode: 400, code: "kit_not_supported" }
               );
             }
+            // F07: this convert path decrements outlet_stock with NO FOR UPDATE
+            // (the documented completion-01 concurrency gap). Bolting batch
+            // consumption onto an unlocked decrement would race the batch ledger
+            // against the total → guaranteed drift. Hard-reject batch-tracked
+            // products here (same stance as kits) until the base decrement is
+            // hardened; sell them at POS where FEFO consumption is safe.
+            if (await batchStock.isTracked(client, it.product_id)) {
+              throw Object.assign(
+                new Error("This quotation contains a batch/expiry-tracked product — convert it to a sale at POS instead."),
+                { statusCode: 400, code: "batch_tracked_not_supported" }
+              );
+            }
             const qty = Number(it.quantity || 0);
             const lineRate = Number(it.tax_rate || 0);
             const lineTax =
@@ -717,7 +730,9 @@ module.exports = function createCRMRouter({
         );
         res.json({ message: "Quotation converted", sale_id: saleId });
       } catch (err) {
-        res.status(500).json({ error: err.message });
+        // Honor guarded rejections (kit / batch-tracked products throw a 400 with
+        // a code) instead of masking every guard as a generic 500.
+        res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
       }
     },
   );

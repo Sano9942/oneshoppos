@@ -5,6 +5,7 @@ const { recordApprovalEvent } = require("../services/approval-policy");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const { verifyManagerPin } = require("../services/manager-pin");
 const kitEngine = require("../services/kit-engine");
+const batchStock = require("../services/batch-stock");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -367,7 +368,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             // keeps outlet_stock + variant_outlet_stock + the variant rollup in
             // sync, mirroring the sale-time decrement.
             const { rows: [prod] } = await client.query(
-              "SELECT COALESCE(bom_type, 'standard') AS bom_type FROM products WHERE id = $1",
+              "SELECT COALESCE(bom_type, 'standard') AS bom_type, COALESCE(track_batches, false) AS track_batches FROM products WHERE id = $1",
               [item.product_id]
             );
 
@@ -377,6 +378,20 @@ module.exports = function registerSalesRoutes(app, deps) {
                 outletId: sale.outlet_id,
                 qty: restoreQtyInt,
               });
+              // F07: return each tracked component's units to the batch it left
+              // from at sale time (resolved via the original sale's movements).
+              const comps = await kitEngine.loadComponents(client, item.product_id);
+              for (const comp of comps) {
+                await batchStock.returnToBatch(client, {
+                  productId: comp.component_product_id,
+                  variantId: comp.component_variant_id || null,
+                  outletId: sale.outlet_id,
+                  qty: batchStock.roundQty(Number(comp.quantity) * restoreQtyInt),
+                  refType: "void",
+                  refId: id,
+                  originalSaleId: id,
+                });
+              }
             } else {
               await client.query(
                 `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
@@ -399,6 +414,20 @@ module.exports = function registerSalesRoutes(app, deps) {
                      DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
                   [item.variant_id, sale.outlet_id, restoreQtyInt]
                 );
+              }
+
+              // F07: return voided units to their original batch (else newest /
+              // a fresh return batch) so the invariant holds after the restore.
+              if (prod && prod.track_batches === true) {
+                await batchStock.returnToBatch(client, {
+                  productId: item.product_id,
+                  variantId: item.variant_id || null,
+                  outletId: sale.outlet_id,
+                  qty: restoreQtyInt,
+                  refType: "void",
+                  refId: id,
+                  originalSaleId: id,
+                });
               }
             }
 
@@ -1234,6 +1263,14 @@ module.exports = function registerSalesRoutes(app, deps) {
         const kitInfoFor = (item) =>
           kitMap.get(Number(item.original_product_id || item.id));
         const isKit = (item) => kitInfoFor(item)?.bomType === "kit";
+        // F07: which cart lines are batch-tracked — one batched lookup so a cart
+        // of untracked SKUs pays zero extra queries (regression guarantee).
+        const trackedMap = await batchStock.loadTrackedMap(
+          client,
+          cartItems.map((it) => Number(it.original_product_id || it.id))
+        );
+        const isTrackedLine = (item) =>
+          trackedMap.get(Number(item.original_product_id || item.id)) === true;
         // Locked component decrements per cart line, reused in the deduct pass so
         // every row is locked+checked before any write.
         const kitDecrementsByIndex = {};
@@ -1459,12 +1496,25 @@ module.exports = function registerSalesRoutes(app, deps) {
           // no rounding. Weighted sales (e.g. 1.25 kg) deduct 1.25 from stock.
           const stockDeductQty = Number(item.quantity);
 
+          const lineProductId = item.original_product_id || item.id;
           if (isKit(item)) {
             // Deduct the components locked + verified in the check pass above.
             await kitEngine.decrementComponents(client, {
               outletId: outlet_id,
               decrements: kitDecrementsByIndex[cartIdx] || [],
             });
+            // F07: a kit holds no stock; consume batches PER COMPONENT (the engine
+            // stays batch-agnostic — consumeBatches self-skips untracked components).
+            for (const d of kitDecrementsByIndex[cartIdx] || []) {
+              await batchStock.consumeBatches(client, {
+                productId: d.component_product_id,
+                variantId: d.component_variant_id || null,
+                outletId: outlet_id,
+                qty: d.needed,
+                refType: "sale",
+                refId: newSaleId,
+              });
+            }
           } else if (item.variant_id) {
             // 2-G.1: deduct per-variant outlet stock (upsert creates the row
             // if this variant hasn't been stocked at this outlet yet).
@@ -1483,13 +1533,36 @@ module.exports = function registerSalesRoutes(app, deps) {
             );
             await client.query(
               "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-              [stockDeductQty, item.original_product_id || item.id, outlet_id]
+              [stockDeductQty, lineProductId, outlet_id]
             );
+            // F07: FEFO-consume batches for tracked SKUs, in the same tx that
+            // just decremented outlet_stock under FOR UPDATE (drift-tolerant).
+            if (isTrackedLine(item)) {
+              await batchStock.consumeBatches(client, {
+                productId: lineProductId,
+                variantId: item.variant_id || null,
+                outletId: outlet_id,
+                qty: stockDeductQty,
+                refType: "sale",
+                refId: newSaleId,
+                batchId: item.batch_id || null, // optional manual pick (roll/carcass)
+              });
+            }
           } else {
             await client.query(
               "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
               [stockDeductQty, item.id, outlet_id]
             );
+            if (isTrackedLine(item)) {
+              await batchStock.consumeBatches(client, {
+                productId: lineProductId,
+                outletId: outlet_id,
+                qty: stockDeductQty,
+                refType: "sale",
+                refId: newSaleId,
+                batchId: item.batch_id || null,
+              });
+            }
           }
         }
 
