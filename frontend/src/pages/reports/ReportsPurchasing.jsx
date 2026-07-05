@@ -49,23 +49,23 @@ export function SupplierWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Suppliers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalSuppliers}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalSuppliers}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Purchase Orders
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalPurchaseOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalPurchaseOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Total Spend
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalSpend)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalSpend)}</p>
         </div>
       </div>
 
@@ -97,19 +97,19 @@ export function SupplierWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.supplier_name}-${i}`} className="hover:bg-slate-50">
+            <tr key={`${r.supplier_name}-${i}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-bold text-slate-800">{r.supplier_name}</div>
+                <div className="text-sm font-bold text-(--ui-text)">{r.supplier_name}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-600">{r.contact_person || "General"}</div>
-                <div className="text-[11px] text-slate-400">{r.phone || "-"}</div>
+                <div className="text-sm text-(--ui-text-muted)">{r.contact_person || "General"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.phone || "-"}</div>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {r.total_pos}
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.total_items}</td>
-              <td className="px-4 py-3 text-sm font-bold text-indigo-700">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.total_items}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-link)">
                 {fmt(r.total_cost)}
               </td>
             </tr>
@@ -148,10 +148,10 @@ export function PurchaseOrdersReportTab({ filters }) {
 
   const statusColor = (s) =>
     s === "Received"
-      ? "bg-emerald-100 text-emerald-700"
+      ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
       : s === "Ordered"
-        ? "bg-blue-100 text-blue-700"
-        : "bg-slate-100 text-slate-700";
+        ? "bg-(--ui-muted-surface) text-(--ui-link)"
+        : "bg-(--ui-muted-surface) text-(--ui-text)";
 
   const totalOrders = rows.length;
   const totalCost = rows.reduce(
@@ -164,29 +164,29 @@ export function PurchaseOrdersReportTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Purchase Orders
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Total Cost
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalCost)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalCost)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Received
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{receivedOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{receivedOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Draft
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{draftOrders}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{draftOrders}</p>
         </div>
       </div>
 
@@ -217,14 +217,14 @@ export function PurchaseOrdersReportTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 text-sm">
-              <td className="px-4 py-3 text-slate-500">{fmtDate(r.created_at)}</td>
+            <tr key={`${r.id}-${i}`} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="px-4 py-3 text-(--ui-text-muted)">{fmtDate(r.created_at)}</td>
               <td className="px-4 py-3">
-                <div className="font-mono font-bold text-slate-800">
+                <div className="font-mono font-bold text-(--ui-text)">
                   PO-{String(r.id).padStart(4, "0")}
                 </div>
               </td>
-              <td className="px-4 py-3 font-medium text-slate-600">
+              <td className="px-4 py-3 font-medium text-(--ui-text-muted)">
                 {r.supplier_name}
               </td>
               <td className="px-4 py-3">
@@ -234,7 +234,7 @@ export function PurchaseOrdersReportTab({ filters }) {
                   {r.status}
                 </div>
               </td>
-              <td className="px-4 py-3 font-bold text-slate-900">
+              <td className="px-4 py-3 font-bold text-(--ui-text)">
                 {fmt(r.total_cost)}
               </td>
             </tr>
@@ -294,8 +294,8 @@ export function TotalPurchasesTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex rounded-xl bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           {[
             ["all", "All"],
             ["received", "Received"],
@@ -306,13 +306,13 @@ export function TotalPurchasesTab({ filters }) {
               key={value}
               type="button"
               onClick={() => setStatusMode(value)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${statusMode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${statusMode === value ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="flex rounded-xl bg-slate-100 p-1">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           {[
             ["all", "All Tax"],
             ["gst", "GST"],
@@ -322,7 +322,7 @@ export function TotalPurchasesTab({ filters }) {
               key={value}
               type="button"
               onClick={() => setTaxMode(value)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
             >
               {label}
             </button>
@@ -331,25 +331,25 @@ export function TotalPurchasesTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">POs</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.order_count || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">POs</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.order_count || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Received</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.received_count || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Received</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.received_count || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Not Received</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.not_received_count || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Not Received</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.not_received_count || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ordered Cost</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary?.ordered_cost || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Ordered Cost</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary?.ordered_cost || 0)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Received Cost</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary?.received_cost || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Received Cost</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary?.received_cost || 0)}</p>
         </div>
       </div>
 
@@ -388,29 +388,29 @@ export function TotalPurchasesTab({ filters }) {
           emptyIcon={Boxes}
         >
           {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50 text-sm">
-              <td className="px-4 py-3 text-slate-500">{fmtDate(row.created_at)}</td>
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="px-4 py-3 text-(--ui-text-muted)">{fmtDate(row.created_at)}</td>
               <td className="px-4 py-3">
-                <div className="font-mono font-bold text-slate-800">PO-{String(row.id).padStart(4, "0")}</div>
-                <div className="text-[11px] text-slate-400">{row.line_count} lines</div>
+                <div className="font-mono font-bold text-(--ui-text)">PO-{String(row.id).padStart(4, "0")}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.line_count} lines</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-medium text-slate-700">{row.supplier_name}</div>
-                <div className="text-[11px] text-slate-400">{row.outlet_name}</div>
+                <div className="font-medium text-(--ui-text)">{row.supplier_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.outlet_name}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="inline-block rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-700">
+                <div className="inline-block rounded bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-bold uppercase text-(--ui-text)">
                   {row.status}
                 </div>
-                <div className="mt-1 text-[11px] text-slate-400">Invoice: {row.invoice_status}</div>
+                <div className="mt-1 text-[11px] text-(--ui-text-muted)">Invoice: {row.invoice_status}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">{row.qty_ordered} ordered</div>
-                <div className="text-[11px] text-slate-400">{row.qty_received} received</div>
+                <div className="font-semibold text-(--ui-text)">{row.qty_ordered} ordered</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.qty_received} received</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-bold text-slate-900">{fmt(row.received_cost || row.ordered_cost)}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="font-bold text-(--ui-text)">{fmt(row.received_cost || row.ordered_cost)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   Tax {fmt(row.received_tax || row.ordered_tax)} | Pending {fmt(row.pending_cost)}
                 </div>
               </td>
@@ -471,8 +471,8 @@ export function ItemwisePurchasesTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex rounded-xl bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           {[
             ["all", "All"],
             ["received", "Received"],
@@ -483,13 +483,13 @@ export function ItemwisePurchasesTab({ filters }) {
               key={value}
               type="button"
               onClick={() => setStatusMode(value)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${statusMode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${statusMode === value ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="flex rounded-xl bg-slate-100 p-1">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           {[
             ["all", "All Tax"],
             ["gst", "GST"],
@@ -499,7 +499,7 @@ export function ItemwisePurchasesTab({ filters }) {
               key={value}
               type="button"
               onClick={() => setTaxMode(value)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${taxMode === value ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
             >
               {label}
             </button>
@@ -508,21 +508,21 @@ export function ItemwisePurchasesTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.item_count || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Items</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.item_count || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Qty Ordered</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.qty_ordered || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Qty Ordered</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.qty_ordered || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Qty Received</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{summary?.qty_received || 0}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Qty Received</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{summary?.qty_received || 0}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Received Cost</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary?.received_cost || 0)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Received Cost</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(summary?.received_cost || 0)}</p>
         </div>
       </div>
 
@@ -562,28 +562,28 @@ export function ItemwisePurchasesTab({ filters }) {
           emptyIcon={ClipboardList}
         >
           {rows.map((row) => (
-            <tr key={`${row.product_id}-${row.supplier_name}`} className="hover:bg-slate-50 text-sm">
+            <tr key={`${row.product_id}-${row.supplier_name}`} className="hover:bg-(--ui-muted-surface) text-sm">
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                <div className="font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-slate-700">{row.category}</div>
-                <div className="text-[11px] text-slate-400">{row.brand}</div>
-                <div className="text-[11px] text-slate-400">{row.supplier_name}</div>
+                <div className="text-(--ui-text)">{row.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.brand}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.supplier_name}</div>
               </td>
-              <td className="px-4 py-3 font-semibold text-slate-700">{row.po_count}</td>
+              <td className="px-4 py-3 font-semibold text-(--ui-text)">{row.po_count}</td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">{row.qty_ordered} ordered</div>
-                <div className="text-[11px] text-slate-400">{row.qty_received} received</div>
-              </td>
-              <td className="px-4 py-3">
-                <div className="font-bold text-slate-900">{fmt(row.received_cost || row.ordered_cost)}</div>
-                <div className="text-[11px] text-slate-400">Avg {fmt(row.avg_cost_price)}</div>
+                <div className="font-semibold text-(--ui-text)">{row.qty_ordered} ordered</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.qty_received} received</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-700">{row.tax_name}</div>
-                <div className="text-[11px] text-slate-400">{row.tax_rate}%</div>
+                <div className="font-bold text-(--ui-text)">{fmt(row.received_cost || row.ordered_cost)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Avg {fmt(row.avg_cost_price)}</div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="font-semibold text-(--ui-text)">{row.tax_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.tax_rate}%</div>
               </td>
             </tr>
           ))}
@@ -670,31 +670,31 @@ export function POWorkflowTab({ filters }) {
           emptyIcon={ClipboardList}
         >
           {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50 text-sm">
+            <tr key={row.id} className="hover:bg-(--ui-muted-surface) text-sm">
               <td className="px-4 py-3">
-                <div className="font-mono font-bold text-slate-800">PO-{String(row.id).padStart(4, "0")}</div>
-                <div className="text-[11px] text-slate-400">{fmtDate(row.created_at)}</div>
+                <div className="font-mono font-bold text-(--ui-text)">PO-{String(row.id).padStart(4, "0")}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{fmtDate(row.created_at)}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-medium text-slate-700">{row.supplier_name}</div>
-                <div className="text-[11px] text-slate-400">{row.outlet_name}</div>
+                <div className="font-medium text-(--ui-text)">{row.supplier_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.outlet_name}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">Approval: {row.approval_status}</div>
-                <div className="text-[11px] text-slate-400">PO: {row.po_status}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="font-semibold text-(--ui-text)">Approval: {row.approval_status}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">PO: {row.po_status}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {row.grn_number ? `${row.grn_number} | ${fmtDateTime(row.received_at)}` : "No GRN"}
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">{row.invoice_status}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="font-semibold text-(--ui-text)">{row.invoice_status}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {fmt(row.amount_paid)} paid / {fmt(row.invoice_amount)} invoiced
                 </div>
-                <div className="text-[11px] text-slate-400">Due {fmt(row.amount_due)}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">Due {fmt(row.amount_due)}</div>
               </td>
               <td className="px-4 py-3">
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-700">
+                <span className="rounded-full bg-(--ui-muted-surface) px-2 py-1 text-[10px] font-bold uppercase text-(--ui-text)">
                   {row.workflow_stage}
                 </span>
               </td>
@@ -778,24 +778,24 @@ export function ProcurementParityTab({ filters }) {
           emptyIcon={Archive}
         >
           {rows.map((row, index) => (
-            <tr key={`${row.event_type}-${row.reference}-${index}`} className="hover:bg-slate-50 text-sm">
+            <tr key={`${row.event_type}-${row.reference}-${index}`} className="hover:bg-(--ui-muted-surface) text-sm">
               <td className="px-4 py-3">
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-700">
+                <span className="rounded-full bg-(--ui-muted-surface) px-2 py-1 text-[10px] font-bold uppercase text-(--ui-text)">
                   {row.event_type}
                 </span>
               </td>
-              <td className="px-4 py-3 text-slate-500">{fmtDateTime(row.event_at)}</td>
+              <td className="px-4 py-3 text-(--ui-text-muted)">{fmtDateTime(row.event_at)}</td>
               <td className="px-4 py-3">
-                <div className="font-semibold text-slate-800">{row.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                <div className="font-semibold text-(--ui-text)">{row.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{row.barcode}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="font-medium text-slate-700">{row.outlet_name}</div>
-                <div className="text-[11px] text-slate-400">{row.counterparty || row.supplier_name || "-"}</div>
-                <div className="text-[11px] text-slate-400">{row.reference}</div>
+                <div className="font-medium text-(--ui-text)">{row.outlet_name}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.counterparty || row.supplier_name || "-"}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{row.reference}</div>
               </td>
-              <td className="px-4 py-3 font-semibold text-slate-800">{row.quantity}</td>
-              <td className="px-4 py-3 font-bold text-slate-900">{fmt(row.estimated_cost)}</td>
+              <td className="px-4 py-3 font-semibold text-(--ui-text)">{row.quantity}</td>
+              <td className="px-4 py-3 font-bold text-(--ui-text)">{fmt(row.estimated_cost)}</td>
             </tr>
           ))}
         </TableShell>
@@ -845,31 +845,31 @@ export function GRNReportTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             GRN Rows
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Qty Received
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalReceivedQty}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalReceivedQty}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Received Cost
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalReceivedCost)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Suppliers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{suppliersTouched}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{suppliersTouched}</p>
         </div>
       </div>
 
@@ -900,16 +900,16 @@ export function GRNReportTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.date}-${r.product_name}-${i}`} className="hover:bg-slate-50 text-sm">
-              <td className="px-4 py-3 text-slate-500">{fmtDate(r.date)}</td>
-              <td className="px-4 py-3 font-bold text-slate-800">{r.product_name}</td>
-              <td className="px-4 py-3 font-medium text-slate-600">
+            <tr key={`${r.date}-${r.product_name}-${i}`} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="px-4 py-3 text-(--ui-text-muted)">{fmtDate(r.date)}</td>
+              <td className="px-4 py-3 font-bold text-(--ui-text)">{r.product_name}</td>
+              <td className="px-4 py-3 font-medium text-(--ui-text-muted)">
                 {r.supplier_name}
               </td>
-              <td className="px-4 py-3 font-bold text-blue-700">+{r.quantity}</td>
-              <td className="px-4 py-3 font-semibold text-slate-700">
+              <td className="px-4 py-3 font-bold text-(--ui-link)">+{r.quantity}</td>
+              <td className="px-4 py-3 font-semibold text-(--ui-text)">
                 {fmt(Number(r.quantity || 0) * Number(r.cost_price || 0))}
-                <div className="text-[10px] text-slate-400">
+                <div className="text-[10px] text-(--ui-text-muted)">
                   Unit {fmt(r.cost_price)}
                 </div>
               </td>

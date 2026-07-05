@@ -43,29 +43,29 @@ export default function FBRExportTab() {
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">From</label>
+          <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">From</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+            className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm focus:border-(--ui-focus) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/10"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">To</label>
+          <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">To</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+            className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm focus:border-(--ui-focus) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/10"
           />
         </div>
         <button
           onClick={generate}
           disabled={!from || !to || loading}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) transition-colors hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           <Search size={14} />
           {loading ? "Generating..." : "Generate"}
@@ -73,7 +73,7 @@ export default function FBRExportTab() {
         {rows.length > 0 && (
           <button
             onClick={exportCsv}
-            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+            className="flex items-center gap-2 rounded-lg bg-(--ui-success-fg) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) transition-colors hover:bg-(--ui-success-fg)"
           >
             <Download size={14} />
             Download CSV
@@ -82,14 +82,14 @@ export default function FBRExportTab() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-lg border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </div>
       )}
 
       {/* Company info */}
       {rows.length > 0 && company.company_name && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-xs text-(--ui-text-muted)">
           <span className="font-semibold">{company.company_name}</span>
           {company.ntn && <span className="ml-3">NTN: {company.ntn}</span>}
           {company.strn && <span className="ml-3">STRN: {company.strn}</span>}
@@ -99,10 +99,10 @@ export default function FBRExportTab() {
 
       {/* Table */}
       {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-(--ui-border) bg-(--ui-surface)">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-xs font-semibold text-(--ui-text-muted)">
                 <th className="px-3 py-2">Invoice #</th>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Buyer</th>
@@ -116,7 +116,7 @@ export default function FBRExportTab() {
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                <tr key={i} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
                   <td className="px-3 py-2 font-medium">{r.invoice_number}</td>
                   <td className="px-3 py-2">{r.invoice_date}</td>
                   <td className="px-3 py-2">{r.buyer_name}</td>
@@ -134,7 +134,7 @@ export default function FBRExportTab() {
       )}
 
       {!loading && rows.length === 0 && !error && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-slate-400">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-(--ui-border) bg-(--ui-muted-surface) py-12 text-(--ui-text-muted)">
           <FileSpreadsheet size={32} className="mb-2" />
           <p className="text-sm font-medium">Select a date range and click Generate</p>
           <p className="text-xs">FBR-compliant invoice data will appear here</p>

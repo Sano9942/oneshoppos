@@ -42,13 +42,13 @@ export function ComparativeTrendsTab({ filters }) {
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-400 font-medium">
+      <div className="p-8 text-center text-(--ui-text-muted) font-medium">
         Calculating comparative benchmarks...
       </div>
     );
   if (!data?.data?.today)
     return (
-      <div className="p-8 text-center text-slate-400">
+      <div className="p-8 text-center text-(--ui-text-muted)">
         No snapshot data for today
       </div>
     );
@@ -59,8 +59,8 @@ export function ComparativeTrendsTab({ filters }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
+        <div className="w-2 h-2 rounded-full bg-(--ui-success-fg) animate-pulse" />
+        <h2 className="text-sm font-bold text-(--ui-text) uppercase tracking-tight">
           Today's Live Pulse
         </h2>
       </div>
@@ -120,16 +120,16 @@ export function ComparativeTrendsTab({ filters }) {
       >
         <TableShell cols={["Period", "Revenue", "Orders"]}>
           <tr>
-            <td className="px-4 py-3 text-sm font-semibold text-slate-800">Current</td>
-            <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(today.revenue)}</td>
-            <td className="px-4 py-3 text-sm text-slate-600">{today.orders}</td>
+            <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">Current</td>
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(today.revenue)}</td>
+            <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{today.orders}</td>
           </tr>
           <tr>
-            <td className="px-4 py-3 text-sm font-semibold text-slate-800">Comparison</td>
-            <td className="px-4 py-3 text-sm font-bold text-slate-900">
+            <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">Comparison</td>
+            <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
               {fmt(yesterday?.revenue || 0)}
             </td>
-            <td className="px-4 py-3 text-sm text-slate-600">{yesterday?.orders || 0}</td>
+            <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{yesterday?.orders || 0}</td>
           </tr>
         </TableShell>
       </CardShell>
@@ -166,7 +166,7 @@ export function HeatmapsTab({ filters }) {
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-400 font-medium">
+      <div className="p-8 text-center text-(--ui-text-muted) font-medium">
         Generating sales density map...
       </div>
     );
@@ -217,14 +217,14 @@ export function HeatmapsTab({ filters }) {
           <div className="grid grid-cols-[80px_repeat(24,1fr)] gap-1 text-[10px]">
             <div />
             {hours.map((h) => (
-              <div key={h} className="text-center font-bold text-slate-400">
+              <div key={h} className="text-center font-bold text-(--ui-text-muted)">
                 {h}
               </div>
             ))}
 
             {days.map((dayName, d) => (
               <React.Fragment key={dayName}>
-                <div className="font-bold text-slate-600 flex items-center justify-end pr-2 h-8">
+                <div className="font-bold text-(--ui-text-muted) flex items-center justify-end pr-2 h-8">
                   {dayName}
                 </div>
                 {Array.from({ length: 24 }).map((_, h) => {
@@ -240,7 +240,7 @@ export function HeatmapsTab({ filters }) {
                     <div
                       key={h}
                       title={`${dayName} ${hours[h]}: ${fmt(rev)}`}
-                      className="rounded-sm transition-all hover:ring-2 hover:ring-blue-400 cursor-help h-8"
+                      className="rounded-sm transition-all hover:ring-2 hover:ring-(--ui-focus) cursor-help h-8"
                       style={{
                         backgroundColor:
                           rev > 0
@@ -290,13 +290,13 @@ export function RevenueLeaksTab({ filters }) {
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-400 font-medium">
+      <div className="p-8 text-center text-(--ui-text-muted) font-medium">
         Scanning for patterns of revenue leakage...
       </div>
     );
   if (!data)
     return (
-      <div className="p-8 text-center text-slate-400">
+      <div className="p-8 text-center text-(--ui-text-muted)">
         No anomaly data found
       </div>
     );
@@ -304,33 +304,33 @@ export function RevenueLeaksTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl">
-          <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-1">
+        <div className="bg-(--ui-danger-bg) border border-(--ui-danger-bg) p-4 rounded-2xl">
+          <p className="text-[10px] font-bold text-(--ui-danger-fg) uppercase tracking-widest mb-1">
             Potential Leakage
           </p>
-          <p className="text-2xl font-black text-rose-700">
+          <p className="text-2xl font-black text-(--ui-danger-fg)">
             {fmt(data.summary.leakage_total)}
           </p>
         </div>
-        <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
-          <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest mb-1">
+        <div className="bg-(--ui-warning-bg) border border-(--ui-warning-bg) p-4 rounded-2xl">
+          <p className="text-[10px] font-bold text-(--ui-warning-fg) uppercase tracking-widest mb-1">
             Voids Impact
           </p>
-          <p className="text-2xl font-black text-orange-700">
+          <p className="text-2xl font-black text-(--ui-warning-fg)">
             {fmt(data.summary.voids)}
           </p>
-          <p className="text-[10px] text-orange-600 font-medium">
+          <p className="text-[10px] text-(--ui-warning-fg) font-medium">
             Across {data.transactions.voided} bills
           </p>
         </div>
-        <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl">
-          <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">
+        <div className="bg-(--ui-muted-surface) border border-(--ui-focus) p-4 rounded-2xl">
+          <p className="text-[10px] font-bold text-(--ui-link) uppercase tracking-widest mb-1">
             Discounts Given
           </p>
-          <p className="text-2xl font-black text-indigo-700">
+          <p className="text-2xl font-black text-(--ui-link)">
             {fmt(data.summary.discounts)}
           </p>
-          <p className="text-[10px] text-indigo-600 font-medium">
+          <p className="text-[10px] text-(--ui-link) font-medium">
             On {data.transactions.discounted} sales
           </p>
         </div>
@@ -360,17 +360,17 @@ export function RevenueLeaksTab({ filters }) {
           empty={!data.top_leak_employees.length}
         >
           {data.top_leak_employees.map((e, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">
                 {e.employee_name}
               </td>
-              <td className="p-4 font-black text-rose-600">
+              <td className="p-4 font-black text-(--ui-danger-fg)">
                 {fmt(e.total_leakage)}
               </td>
-              <td className="p-4 font-medium text-slate-600">
+              <td className="p-4 font-medium text-(--ui-text-muted)">
                 {fmt(e.void_value)}
               </td>
-              <td className="p-4 font-medium text-slate-600">
+              <td className="p-4 font-medium text-(--ui-text-muted)">
                 {fmt(e.discount_value)}
               </td>
             </tr>
@@ -457,11 +457,11 @@ export function ProductMixTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-bold text-slate-800">{r.pname1}</td>
-              <td className="p-4 font-bold text-slate-800">{r.pname2}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-bold text-(--ui-text)">{r.pname1}</td>
+              <td className="p-4 font-bold text-(--ui-text)">{r.pname2}</td>
               <td className="p-4">
-                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black">
+                <span className="bg-(--ui-muted-surface) text-(--ui-link) px-3 py-1 rounded-full text-xs font-black">
                   {r.co_occurrences} times
                 </span>
               </td>
@@ -501,10 +501,10 @@ export function RetailMatrixTab({ filters }) {
   }, [load]);
 
   const Q_COLORS = {
-    Star: "bg-amber-100 text-amber-700",
-    Plowhorse: "bg-emerald-100 text-emerald-700",
-    Puzzle: "bg-blue-100 text-blue-700",
-    Dog: "bg-rose-100 text-rose-700",
+    Star: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+    Plowhorse: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+    Puzzle: "bg-(--ui-muted-surface) text-(--ui-link)",
+    Dog: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
   };
   const stars = matrix.filter((row) => row.matrix_category === "Star").length;
   const plowhorses = matrix.filter((row) => row.matrix_category === "Plowhorse").length;
@@ -552,20 +552,20 @@ export function RetailMatrixTab({ filters }) {
         empty={!matrix.length}
       >
         {matrix.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
-            <td className="p-4 font-medium text-slate-600">
+          <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+            <td className="p-4 font-bold text-(--ui-text)">{r.product_name}</td>
+            <td className="p-4 font-medium text-(--ui-text-muted)">
               {r.volume} units
             </td>
-            <td className="p-4 font-semibold text-slate-700">
+            <td className="p-4 font-semibold text-(--ui-text)">
               {fmt(r.total_revenue)}
             </td>
-            <td className="p-4 font-bold text-slate-900">
+            <td className="p-4 font-bold text-(--ui-text)">
               {fmt(r.avg_unit_margin)}
             </td>
             <td className="p-4">
               <span
-                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${Q_COLORS[r.matrix_category] || "bg-slate-100"}`}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${Q_COLORS[r.matrix_category] || "bg-(--ui-muted-surface)"}`}
               >
                 {r.matrix_category}
               </span>

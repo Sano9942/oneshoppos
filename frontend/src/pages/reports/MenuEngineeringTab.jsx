@@ -123,29 +123,29 @@ export default function MenuEngineeringTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 bg-white border border-slate-200 rounded-lg p-3">
+      <div className="flex flex-wrap items-end gap-3 bg-(--ui-surface) border border-(--ui-border) rounded-lg p-3">
         <div>
-          <label className="block text-xs text-slate-500">From</label>
+          <label className="block text-xs text-(--ui-text-muted)">From</label>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm" />
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm" />
         </div>
         <div>
-          <label className="block text-xs text-slate-500">To</label>
+          <label className="block text-xs text-(--ui-text-muted)">To</label>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm" />
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm" />
         </div>
         <div>
-          <label className="block text-xs text-slate-500">Outlet</label>
+          <label className="block text-xs text-(--ui-text-muted)">Outlet</label>
           <select value={outletId} onChange={(e) => setOutletId(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm">
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm">
             <option value="">All outlets</option>
             {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </div>
         <div className="grow">
-          <label className="block text-xs text-slate-500">Category</label>
+          <label className="block text-xs text-(--ui-text-muted)">Category</label>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm w-60">
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm w-60">
             <option value="">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -153,27 +153,27 @@ export default function MenuEngineeringTab() {
         <ExportButton onClick={exportCsv} />
       </div>
 
-      {error && <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 text-sm">{error}</div>}
-      {loading && <div className="p-3 text-slate-500 text-sm">Loading menu engineering…</div>}
+      {error && <div className="p-3 bg-(--ui-danger-bg) text-(--ui-danger-fg) rounded border border-(--ui-danger-bg) text-sm">{error}</div>}
+      {loading && <div className="p-3 text-(--ui-text-muted) text-sm">Loading menu engineering…</div>}
 
       {!loading && !error && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             {Object.entries(CLASS_META).map(([key, meta]) => (
-              <div key={key} className="bg-white border border-slate-200 rounded-lg p-3">
+              <div key={key} className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-3">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full inline-block" style={{ background: meta.color }} />
                   <span className="font-semibold">{meta.label}</span>
                 </div>
                 <div className="text-2xl font-bold mt-1">{quadrantCounts[key] || 0}</div>
-                <div className="text-xs text-slate-500">{meta.short}</div>
+                <div className="text-xs text-(--ui-text-muted)">{meta.short}</div>
               </div>
             ))}
           </div>
 
           <CardShell title="Boston Matrix — popularity vs margin per unit">
             {products.length === 0 ? (
-              <div className="p-4 text-slate-500 text-sm">No sales in this date range.</div>
+              <div className="p-4 text-(--ui-text-muted) text-sm">No sales in this date range.</div>
             ) : (
               <div style={{ width: "100%", height: 360 }}>
                 <ResponsiveContainer>
@@ -190,7 +190,7 @@ export default function MenuEngineeringTab() {
                         if (!active || !payload?.length) return null;
                         const p = payload[0].payload;
                         return (
-                          <div className="bg-white border border-slate-200 rounded p-2 text-xs shadow">
+                          <div className="bg-(--ui-surface) border border-(--ui-border) rounded p-2 text-xs shadow">
                             <div className="font-semibold">{p.name}</div>
                             <div>Popularity: {p.popularity}</div>
                             <div>Avg margin: {fmt(p.avg_margin_per_unit)}</div>
@@ -232,7 +232,7 @@ export default function MenuEngineeringTab() {
                 <tr key={p.product_id} className="border-b">
                   <td className="py-2">
                     <button
-                      className="text-blue-600 hover:underline"
+                      className="text-(--ui-link) hover:underline"
                       onClick={() => toggleSort("name")}
                     >
                       {p.name}
@@ -244,7 +244,7 @@ export default function MenuEngineeringTab() {
                   <td>{fmt(p.avg_margin_per_unit)}</td>
                   <td>
                     <span
-                      className="inline-block px-2 py-0.5 rounded text-xs text-white"
+                      className="inline-block px-2 py-0.5 rounded text-xs text-(--ui-on-primary)"
                       style={{ background: CLASS_META[p.classification]?.color || "#64748b" }}
                     >
                       {CLASS_META[p.classification]?.label || p.classification}

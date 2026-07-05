@@ -30,8 +30,8 @@ export default function ClinicalTab() {
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <div className="p-4 text-slate-500">Loading clinical reports…</div>;
-  if (error) return <div className="p-4 text-red-600">{error}</div>;
+  if (loading) return <div className="p-4 text-(--ui-text-muted)">Loading clinical reports…</div>;
+  if (error) return <div className="p-4 text-(--ui-danger-fg)">{error}</div>;
   if (!data) return null;
 
   return (
@@ -39,7 +39,7 @@ export default function ClinicalTab() {
       <Card title="Plan Completion by Provider">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Provider</th>
               <th>Total plans</th>
               <th>Completed</th>
@@ -62,7 +62,7 @@ export default function ClinicalTab() {
       <Card title="Session Attendance (no-show rates)">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Provider</th>
               <th>Scheduled</th>
               <th>Completed</th>
@@ -77,7 +77,7 @@ export default function ClinicalTab() {
                 <td>{r.scheduled_count}</td>
                 <td>{r.completed_count}</td>
                 <td>{r.no_show_count}</td>
-                <td className={r.no_show_pct >= 10 ? "text-red-600 font-semibold" : ""}>
+                <td className={r.no_show_pct >= 10 ? "text-(--ui-danger-fg) font-semibold" : ""}>
                   {r.no_show_pct != null ? `${r.no_show_pct}%` : "—"}
                 </td>
               </tr>
@@ -109,7 +109,7 @@ export default function ClinicalTab() {
       <Card title="Lab Turnaround by Vendor">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Vendor</th>
               <th>Orders</th>
               <th>Completed</th>
@@ -134,7 +134,7 @@ export default function ClinicalTab() {
 
 function Card({ title, children }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
+    <div className="bg-(--ui-surface) border border-(--ui-border) rounded-lg p-4">
       <h3 className="font-semibold mb-3">{title}</h3>
       {children}
     </div>
@@ -144,7 +144,7 @@ function Card({ title, children }) {
 function Stat({ label, value }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
+      <dt className="text-xs text-(--ui-text-muted)">{label}</dt>
       <dd className="text-lg font-semibold">{value}</dd>
     </div>
   );

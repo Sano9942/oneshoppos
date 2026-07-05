@@ -83,17 +83,17 @@ export function InventoryLossTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50">
-              <td className="p-4 text-sm text-slate-500">{fmtDateTime(r.timestamp)}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface)">
+              <td className="p-4 text-sm text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
               <td className="p-4 text-sm">
-                <div className="font-bold text-slate-800">{r.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{r.barcode}</div>
+                <div className="font-bold text-(--ui-text)">{r.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{r.barcode}</div>
               </td>
-              <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
-              <td className="p-4 text-rose-600 font-bold">
+              <td className="p-4 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
+              <td className="p-4 text-(--ui-danger-fg) font-bold">
                 {Math.abs(Number(r.quantity_change || 0))}
               </td>
-              <td className="p-4 text-sm text-slate-700">{r.reason || "-"}</td>
+              <td className="p-4 text-sm text-(--ui-text)">{r.reason || "-"}</td>
             </tr>
           ))}
         </TableShell>
@@ -174,16 +174,16 @@ export function WastageTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
-              <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
-              <td className="p-4 text-slate-600">{r.outlet_name}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4 font-bold text-(--ui-text)">{r.product_name}</td>
+              <td className="p-4 text-(--ui-text-muted)">{r.outlet_name}</td>
               <td className="p-4">
-                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold italic uppercase tracking-wider">
+                <span className="bg-(--ui-warning-bg) text-(--ui-warning-fg) px-2 py-0.5 rounded text-[10px] font-bold italic uppercase tracking-wider">
                   {r.reason || "Damage"}
                 </span>
               </td>
-              <td className="p-4 font-bold text-rose-600">
+              <td className="p-4 font-bold text-(--ui-danger-fg)">
                 {Math.abs(Number(r.quantity_change || 0))}
               </td>
             </tr>
@@ -263,17 +263,17 @@ export function ProductMovementTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
               <td className="p-4">
-                <div className="font-bold text-slate-800">{r.product_name}</div>
-                <div className="font-mono text-[11px] text-slate-400">{r.barcode}</div>
+                <div className="font-bold text-(--ui-text)">{r.product_name}</div>
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">{r.barcode}</div>
               </td>
-              <td className="p-4 font-medium text-slate-600">
-                {r.from_outlet_name} <span className="text-blue-500 mx-1">-&gt;</span> {r.to_outlet_name}
+              <td className="p-4 font-medium text-(--ui-text-muted)">
+                {r.from_outlet_name} <span className="text-(--ui-link) mx-1">-&gt;</span> {r.to_outlet_name}
               </td>
-              <td className="p-4 font-bold text-blue-700">{r.quantity}</td>
-              <td className="p-4 text-sm text-slate-500">{r.employee_name}</td>
+              <td className="p-4 font-bold text-(--ui-link)">{r.quantity}</td>
+              <td className="p-4 text-sm text-(--ui-text-muted)">{r.employee_name}</td>
             </tr>
           ))}
         </TableShell>
@@ -349,15 +349,15 @@ export function STRReportTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 text-sm">
-              <td className="p-4 font-mono font-bold text-indigo-600 uppercase">
+            <tr key={i} className="hover:bg-(--ui-muted-surface) text-sm">
+              <td className="p-4 font-mono font-bold text-(--ui-link) uppercase">
                 STR-{String(r.reference_id || i + 1).padStart(4, "0")}
               </td>
-              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
-              <td className="p-4 font-medium text-slate-600">
+              <td className="p-4 text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4 font-medium text-(--ui-text-muted)">
                 {r.from_outlet_name} -&gt; {r.to_outlet_name}
               </td>
-              <td className="p-4 font-bold text-slate-900">{r.quantity}</td>
+              <td className="p-4 font-bold text-(--ui-text)">{r.quantity}</td>
             </tr>
           ))}
         </TableShell>
@@ -394,7 +394,7 @@ export function OutletComparisonTab({ filters }) {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-slate-400 font-medium">
+      <div className="p-8 text-center text-(--ui-text-muted) font-medium">
         Analyzing outlet performance...
       </div>
     );
@@ -415,38 +415,38 @@ export function OutletComparisonTab({ filters }) {
         {data.map((o) => (
           <div
             key={o.id}
-            className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+            className="bg-(--ui-surface) rounded-2xl border border-(--ui-border) p-5 hover:shadow-md transition-shadow"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <div className="w-10 h-10 rounded-xl bg-(--ui-muted-surface) flex items-center justify-center text-(--ui-link)">
                   <Building2 size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900">{o.name}</h3>
-                  <p className="text-xs text-slate-500">{o.order_count} Transactions</p>
+                  <h3 className="font-bold text-(--ui-text)">{o.name}</h3>
+                  <p className="text-xs text-(--ui-text-muted)">{o.order_count} Transactions</p>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xl font-bold text-slate-900">{fmt(o.revenue)}</div>
-                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                <div className="text-xl font-bold text-(--ui-text)">{fmt(o.revenue)}</div>
+                <div className="text-[10px] font-bold text-(--ui-success-fg) uppercase tracking-widest">
                   Revenue
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-50">
-              <div className="p-3 bg-slate-50 rounded-xl">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-(--ui-border)">
+              <div className="p-3 bg-(--ui-muted-surface) rounded-xl">
+                <p className="text-[10px] font-bold text-(--ui-text-muted) uppercase mb-1">
                   Avg Ticket
                 </p>
-                <p className="font-bold text-slate-800">{fmt(o.avg_basket || 0)}</p>
+                <p className="font-bold text-(--ui-text)">{fmt(o.avg_basket || 0)}</p>
               </div>
-              <div className="p-3 bg-slate-50 rounded-xl">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className="p-3 bg-(--ui-muted-surface) rounded-xl">
+                <p className="text-[10px] font-bold text-(--ui-text-muted) uppercase mb-1">
                   Unique Customers
                 </p>
-                <p className="font-bold text-slate-800">{o.unique_customers}</p>
+                <p className="font-bold text-(--ui-text)">{o.unique_customers}</p>
               </div>
             </div>
           </div>

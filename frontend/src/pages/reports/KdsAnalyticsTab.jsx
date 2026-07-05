@@ -93,31 +93,31 @@ export default function KdsAnalyticsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 bg-white border border-slate-200 rounded-lg p-3">
+      <div className="flex flex-wrap items-end gap-3 bg-(--ui-surface) border border-(--ui-border) rounded-lg p-3">
         <div>
-          <label className="block text-xs text-slate-500">From</label>
+          <label className="block text-xs text-(--ui-text-muted)">From</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm"
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500">To</label>
+          <label className="block text-xs text-(--ui-text-muted)">To</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm"
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm"
           />
         </div>
         <div className="grow">
-          <label className="block text-xs text-slate-500">Station</label>
+          <label className="block text-xs text-(--ui-text-muted)">Station</label>
           <select
             value={stationFilter}
             onChange={(e) => setStationFilter(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1 text-sm w-60"
+            className="border border-(--ui-border-strong) rounded px-2 py-1 text-sm w-60"
           >
             <option value="">All stations</option>
             {stations.map((s) => (
@@ -128,14 +128,14 @@ export default function KdsAnalyticsTab() {
         <ExportButton onClick={exportCsv} />
       </div>
 
-      {error && <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 text-sm">{error}</div>}
-      {loading && <div className="p-3 text-slate-500 text-sm">Loading KDS analytics…</div>}
+      {error && <div className="p-3 bg-(--ui-danger-bg) text-(--ui-danger-fg) rounded border border-(--ui-danger-bg) text-sm">{error}</div>}
+      {loading && <div className="p-3 text-(--ui-text-muted) text-sm">Loading KDS analytics…</div>}
 
       {!loading && !error && (
         <>
           <CardShell title="Prep Time by Station (p50 vs p95, seconds)">
             {stations.length === 0 ? (
-              <div className="p-4 text-slate-500 text-sm">No bumped tickets in this range.</div>
+              <div className="p-4 text-(--ui-text-muted) text-sm">No bumped tickets in this range.</div>
             ) : (
               <div style={{ width: "100%", height: 280 }}>
                 <ResponsiveContainer>
@@ -155,7 +155,7 @@ export default function KdsAnalyticsTab() {
 
           <CardShell title="Load Trend — avg prep seconds over time">
             {snapshotSeries.series.length === 0 ? (
-              <div className="p-4 text-slate-500 text-sm">No load snapshots yet — the 15-min worker populates this chart.</div>
+              <div className="p-4 text-(--ui-text-muted) text-sm">No load snapshots yet — the 15-min worker populates this chart.</div>
             ) : (
               <div style={{ width: "100%", height: 240 }}>
                 <ResponsiveContainer>
@@ -187,7 +187,7 @@ export default function KdsAnalyticsTab() {
                 const delta = s.target_prep_seconds != null && s.mean != null
                   ? Math.round(s.mean - s.target_prep_seconds)
                   : null;
-                const deltaClass = delta == null ? "" : delta <= 0 ? "text-green-600" : "text-red-600 font-semibold";
+                const deltaClass = delta == null ? "" : delta <= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg) font-semibold";
                 return (
                   <tr key={s.station_id} className="border-b">
                     <td className="py-2">{s.station_name}</td>

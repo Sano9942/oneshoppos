@@ -47,8 +47,8 @@ export function OverviewTab({ filters }) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center">
-          <BarChart3 className="text-blue-500 w-12 h-12 mb-4 animate-bounce" />
-          <p className="text-slate-500 font-medium italic">
+          <BarChart3 className="text-(--ui-link) w-12 h-12 mb-4 animate-bounce" />
+          <p className="text-(--ui-text-muted) font-medium italic">
             Gathering your retail insights...
           </p>
         </div>
@@ -57,7 +57,7 @@ export function OverviewTab({ filters }) {
 
   if (error)
     return (
-      <div className="p-10 text-center text-rose-600 bg-rose-50 rounded-2xl border border-rose-100">
+      <div className="p-10 text-center text-(--ui-danger-fg) bg-(--ui-danger-bg) rounded-2xl border border-(--ui-danger-bg)">
         {error}
       </div>
     );
@@ -116,40 +116,40 @@ export function OverviewTab({ filters }) {
         {stats.map((s, i) => (
           <div
             key={i}
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group"
+            className="bg-(--ui-surface) p-5 rounded-2xl border border-(--ui-border) hover:shadow-md transition-shadow group"
           >
             <div className="flex justify-between items-start mb-2">
-              <span className="text-sm font-medium text-slate-500 group-hover:text-blue-600 transition-colors">
+              <span className="text-sm font-medium text-(--ui-text-muted) group-hover:text-(--ui-link) transition-colors">
                 {s.title}
               </span>
               <span
                 className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   s.positive
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-rose-50 text-rose-600"
+                    ? "bg-(--ui-success-bg) text-(--ui-success-fg)"
+                    : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
                 }`}
               >
                 {s.trend}
               </span>
             </div>
-            <div className="text-2xl font-bold text-slate-800">{s.value}</div>
+            <div className="text-2xl font-bold text-(--ui-text)">{s.value}</div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Trend Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-(--ui-surface) p-6 rounded-2xl border border-(--ui-border)">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-slate-800">Revenue Forecast</h3>
-              <p className="text-xs text-slate-500">
+              <h3 className="font-bold text-(--ui-text)">Revenue Forecast</h3>
+              <p className="text-xs text-(--ui-text-muted)">
                 Store revenue trend for the last 6 months
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              <span className="text-xs font-medium text-slate-600">Actual</span>
+              <div className="w-3 h-3 rounded-full bg-(--ui-primary)"></div>
+              <span className="text-xs font-medium text-(--ui-text-muted)">Actual</span>
             </div>
           </div>
           <div className="h-64">
@@ -200,8 +200,8 @@ export function OverviewTab({ filters }) {
         </div>
 
         {/* KPI Rail */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 text-center">Executive KPI Rail</h3>
+        <div className="bg-(--ui-surface) p-6 rounded-2xl border border-(--ui-border)">
+          <h3 className="font-bold text-(--ui-text) mb-4 text-center">Executive KPI Rail</h3>
           <div className="space-y-4">
             {[
               {
@@ -209,34 +209,34 @@ export function OverviewTab({ filters }) {
         label: "Low Stock Items",
         value: lowStockItems,
         note: `${Number(data?.currentStockUnits || 0)} stock units live`,
-        tone: "text-violet-600",
+        tone: "text-(--ui-text-muted)",
               },
               {
                 icon: TrendingUp,
         label: "Month Purchases",
         value: fmt(data?.monthPurchases),
         note: `Month sales ${fmt(data?.monthSales)}`,
-        tone: "text-indigo-600",
+        tone: "text-(--ui-link)",
               },
               {
                 icon: AlertTriangle,
         label: "Leakage Today",
         value: fmt(leakageTotal),
         note: `Disc ${fmt(data?.discountsToday?.value)} | Void ${fmt(data?.voidsToday?.value)} | Refund ${fmt(data?.refundsToday?.value)}`,
-        tone: "text-rose-600",
+        tone: "text-(--ui-danger-fg)",
               },
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div key={item.label} className="rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Icon size={14} className={item.tone} />
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                       {item.label}
                     </p>
                   </div>
                   <p className={`mt-2 text-xl font-bold ${item.tone}`}>{item.value}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.note}</p>
+                  <p className="mt-1 text-xs text-(--ui-text-muted)">{item.note}</p>
                 </div>
               );
             })}
@@ -245,8 +245,8 @@ export function OverviewTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4">Category Contribution</h3>
+        <div className="bg-(--ui-surface) p-6 rounded-2xl border border-(--ui-border)">
+          <h3 className="font-bold text-(--ui-text) mb-4">Category Contribution</h3>
           <div className="space-y-4">
             {topCategories.map((c, i) => {
               const percentage =
@@ -256,12 +256,12 @@ export function OverviewTab({ filters }) {
               return (
                 <div key={i} className="space-y-1.5">
                   <div className="flex justify-between text-xs font-medium">
-                    <span className="text-slate-600 truncate mr-2">{c.category}</span>
-                    <span className="text-slate-900 font-bold">{percentage}%</span>
+                    <span className="text-(--ui-text-muted) truncate mr-2">{c.category}</span>
+                    <span className="text-(--ui-text) font-bold">{percentage}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-(--ui-muted-surface) h-1.5 rounded-full overflow-hidden">
                     <div
-                      className="bg-blue-500 h-full rounded-full transition-all duration-1000"
+                      className="bg-(--ui-primary) h-full rounded-full transition-all duration-1000"
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -271,18 +271,18 @@ export function OverviewTab({ filters }) {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4">Payment Contribution Today</h3>
+        <div className="bg-(--ui-surface) p-6 rounded-2xl border border-(--ui-border)">
+          <h3 className="font-bold text-(--ui-text) mb-4">Payment Contribution Today</h3>
           <div className="space-y-4">
             {paymentContribution.map((p, i) => (
               <div key={i} className="space-y-1.5">
                 <div className="flex justify-between text-xs font-medium">
-                  <span className="text-slate-600 truncate mr-2">{p.payment_method}</span>
-                  <span className="text-slate-900 font-bold">{fmt(p.total)}</span>
+                  <span className="text-(--ui-text-muted) truncate mr-2">{p.payment_method}</span>
+                  <span className="text-(--ui-text) font-bold">{fmt(p.total)}</span>
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-(--ui-muted-surface) h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-1000"
+                    className="bg-(--ui-success-fg) h-full rounded-full transition-all duration-1000"
                     style={{
                       width: `${todayRevenue > 0 ? (Number(p.total || 0) / todayRevenue) * 100 : 0}%`,
                     }}

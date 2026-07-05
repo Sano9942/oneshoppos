@@ -54,29 +54,29 @@ export function RefundsVoidsTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Voids
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">
             {Number(summary.void_count || 0)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{fmt(summary.void_value)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{fmt(summary.void_value)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Refunds
           </p>
-          <p className="mt-2 text-2xl font-bold text-amber-700">
+          <p className="mt-2 text-2xl font-bold text-(--ui-warning-fg)">
             {Number(summary.refund_count || 0)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{fmt(summary.refund_value)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">{fmt(summary.refund_value)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Combined Leakage
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(summary.leakage_total)}
           </p>
         </div>
@@ -110,13 +110,13 @@ export function RefundsVoidsTab({ filters }) {
           empty={!voids.length}
         >
           {voids.map((r) => (
-            <tr key={r.sale_id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(r.timestamp)}</td>
-              <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{r.sale_id}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.employee_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.customer_name}</td>
-              <td className="px-4 py-3 text-sm font-bold text-rose-700">{fmt(r.total_amount)}</td>
+            <tr key={r.sale_id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
+              <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{r.sale_id}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.employee_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.customer_name}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">{fmt(r.total_amount)}</td>
             </tr>
           ))}
         </TableShell>
@@ -151,14 +151,14 @@ export function RefundsVoidsTab({ filters }) {
           empty={!refunds.length}
         >
           {refunds.map((r) => (
-            <tr key={r.return_id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(r.timestamp)}</td>
-              <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{r.return_id}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.employee_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.customer_name}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.refund_method}</td>
-              <td className="px-4 py-3 text-sm font-bold text-amber-700">{fmt(r.total_refund)}</td>
+            <tr key={r.return_id} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(r.timestamp)}</td>
+              <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{r.return_id}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.employee_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.customer_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.refund_method}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-warning-fg)">{fmt(r.total_refund)}</td>
             </tr>
           ))}
         </TableShell>
@@ -212,29 +212,29 @@ export function CashierWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cashiers
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Gross Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(grossSales)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(grossSales)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Refunds
           </p>
-          <p className="mt-2 text-2xl font-bold text-amber-700">{fmt(totalRefunds)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-warning-fg)">{fmt(totalRefunds)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Voids
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">{fmt(totalVoids)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">{fmt(totalVoids)}</p>
         </div>
       </div>
 
@@ -269,20 +269,20 @@ export function CashierWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r) => (
-            <tr key={r.employee_id} className="hover:bg-slate-50">
+            <tr key={r.employee_id} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">{r.employee_name}</div>
+                <div className="text-sm font-semibold text-(--ui-text)">{r.employee_name}</div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.sale_count}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(r.sales_value)}</td>
-              <td className="px-4 py-3 text-sm text-amber-700">{fmt(r.discount_value)}</td>
-              <td className="px-4 py-3 text-sm text-amber-700">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.sale_count}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(r.sales_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-warning-fg)">{fmt(r.discount_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-warning-fg)">
                 {r.refund_count} / {fmt(r.refund_value)}
               </td>
-              <td className="px-4 py-3 text-sm text-rose-700">
+              <td className="px-4 py-3 text-sm text-(--ui-danger-fg)">
                 {r.void_count} / {fmt(r.void_value)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmt(r.net_sales)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">{fmt(r.net_sales)}</td>
             </tr>
           ))}
         </TableShell>
@@ -401,13 +401,13 @@ export function DailyOperationsTab({ filters }) {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-5">
+          <div className="h-4 w-40 animate-pulse rounded bg-(--ui-muted-surface)" />
           <div className="mt-3 flex flex-wrap gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-7 w-32 animate-pulse rounded-full bg-slate-100"
+                className="h-7 w-32 animate-pulse rounded-full bg-(--ui-muted-surface)"
               />
             ))}
           </div>
@@ -416,11 +416,11 @@ export function DailyOperationsTab({ filters }) {
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4"
             >
-              <div className="h-3 w-20 animate-pulse rounded bg-slate-200" />
-              <div className="mt-3 h-8 w-24 animate-pulse rounded bg-slate-100" />
-              <div className="mt-2 h-3 w-28 animate-pulse rounded bg-slate-100" />
+              <div className="h-3 w-20 animate-pulse rounded bg-(--ui-muted-surface)" />
+              <div className="mt-3 h-8 w-24 animate-pulse rounded bg-(--ui-muted-surface)" />
+              <div className="mt-2 h-3 w-28 animate-pulse rounded bg-(--ui-muted-surface)" />
             </div>
           ))}
         </div>
@@ -430,16 +430,16 @@ export function DailyOperationsTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-(--ui-text-muted)">
               Daily Operations Brief
             </p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">
+            <h2 className="mt-1 text-lg font-bold text-(--ui-text)">
               Manager view for sales, leakage, and tender mix
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-(--ui-text-muted)">
               This view consolidates sales, refunds, voids, and cashier activity for the selected reporting window.
             </p>
           </div>
@@ -448,7 +448,7 @@ export function DailyOperationsTab({ filters }) {
           {scopeBadges.map((badge) => (
             <span
               key={badge}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
+              className="rounded-full border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1 text-xs font-semibold text-(--ui-text-muted)"
             >
               {badge}
             </span>
@@ -457,39 +457,39 @@ export function DailyOperationsTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Revenue
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             Avg order {fmt(averageOrderValue)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Net Sales
           </p>
-          <p className="mt-2 text-2xl font-bold text-emerald-700">{fmt(netSales)}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-2 text-2xl font-bold text-(--ui-success-fg)">{fmt(netSales)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             After refunds and voids
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Leakage
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-700">{fmt(leakageTotal)}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">{fmt(leakageTotal)}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             {leakageRate.toFixed(1)}% of gross revenue
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Orders
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             {cashiers.length} cashiers in view
           </p>
         </div>
@@ -502,52 +502,52 @@ export function DailyOperationsTab({ filters }) {
             subtitle="Selected shift compared with the broader daily reporting window"
           >
             <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                   Shift Sales
                 </div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">
+                <div className="mt-2 text-2xl font-bold text-(--ui-text)">
                   {fmt(shiftSales)}
                 </div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 text-xs text-(--ui-text-muted)">
                   {shiftOrders} orders in shift #{filters.shiftId}
                 </div>
               </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              <div className="rounded-xl border border-(--ui-warning-bg) bg-(--ui-warning-bg) p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-warning-fg)">
                   Shift Returns
                 </div>
-                <div className="mt-2 text-2xl font-bold text-amber-700">
+                <div className="mt-2 text-2xl font-bold text-(--ui-warning-fg)">
                   {fmt(shiftReturns)}
                 </div>
-                <div className="mt-1 text-xs text-amber-700">
+                <div className="mt-1 text-xs text-(--ui-warning-fg)">
                   Derived from returns in the shift window
                 </div>
               </div>
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+              <div className="rounded-xl border border-(--ui-focus) bg-(--ui-muted-surface) p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-link)">
                   Opening to Closing Cash
                 </div>
-                <div className="mt-2 text-2xl font-bold text-blue-700">
+                <div className="mt-2 text-2xl font-bold text-(--ui-link)">
                   {fmt(shift?.opening_float || 0)} to {fmt(shift?.closing_cash || 0)}
                 </div>
-                <div className="mt-1 text-xs text-blue-700">
+                <div className="mt-1 text-xs text-(--ui-link)">
                   Expected {fmt(shift?.expected_cash || 0)}
                 </div>
               </div>
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+              <div className="rounded-xl border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-danger-fg)">
                   Daily vs Shift Delta
                 </div>
-                <div className="mt-2 text-2xl font-bold text-rose-700">
+                <div className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">
                   {fmt(shiftDifference)}
                 </div>
-                <div className="mt-1 text-xs text-rose-700">
+                <div className="mt-1 text-xs text-(--ui-danger-fg)">
                   Revenue outside the selected shift
                 </div>
               </div>
             </div>
-            <div className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
+            <div className="border-t border-(--ui-border) px-4 py-3 text-sm text-(--ui-text-muted)">
               {shift ? (
                 <>
                   Shift window {fmtDateTime(shift.opened_at)} to{" "}
@@ -555,7 +555,7 @@ export function DailyOperationsTab({ filters }) {
                   {/* Bucket F: flag shifts force-closed by the background worker so
                       finance knows to reconcile manually (expected_cash is NULL). */}
                   {shift.closing_method === "auto" && (
-                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-(--ui-warning-bg) px-2 py-0.5 text-xs font-semibold text-(--ui-warning-fg) ring-1 ring-(--ui-warning-fg)">
                       Auto-closed
                     </span>
                   )}
@@ -580,28 +580,28 @@ export function DailyOperationsTab({ filters }) {
               empty={!selectedShiftPayments.length}
             >
               {selectedShiftPayments.map((row) => (
-                <tr key={row.payment_method} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+                <tr key={row.payment_method} className="hover:bg-(--ui-muted-surface)">
+                  <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                     {row.payment_method}
                   </td>
-                  <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                  <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                     {fmt(row.total)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
+                  <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
                     {row.count}
                   </td>
                 </tr>
               ))}
             </TableShell>
             {!!selectedShiftPayments.length && (
-              <div className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
+              <div className="border-t border-(--ui-border) px-4 py-3 text-sm text-(--ui-text-muted)">
                 Shift tender total {fmt(shiftPaymentTotal)}.
               </div>
             )}
           </CardShell>
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-4 text-sm text-slate-600">
+        <div className="rounded-2xl border border-dashed border-(--ui-border-strong) bg-(--ui-muted-surface) px-5 py-4 text-sm text-(--ui-text-muted)">
           Select a shift in the global filters when you need end-of-day reconciliation against cash, payment mix, and variance.
         </div>
       )}
@@ -613,14 +613,14 @@ export function DailyOperationsTab({ filters }) {
         >
           <TableShell cols={["Method", "Total"]} loading={loading} empty={!paymentMethods.length}>
             {paymentMethods.map((row) => (
-              <tr key={row.method} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+              <tr key={row.method} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                   <div>{row.method}</div>
-                  <div className="text-[11px] font-medium text-slate-400">
+                  <div className="text-[11px] font-medium text-(--ui-text-muted)">
                     {totalRevenue ? `${((Number(row.total || 0) / totalRevenue) * 100).toFixed(1)}% of revenue` : "0.0% of revenue"}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.total)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.total)}</td>
               </tr>
             ))}
           </TableShell>
@@ -632,10 +632,10 @@ export function DailyOperationsTab({ filters }) {
         >
           <TableShell cols={["Cashier", "Gross", "Net"]} loading={loading} empty={!topCashiers.length}>
             {topCashiers.map((row) => (
-              <tr key={row.employee_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm text-slate-900">{fmt(row.sales_value)}</td>
-                <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmt(row.net_sales)}</td>
+              <tr key={row.employee_id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text)">{fmt(row.sales_value)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-success-fg)">{fmt(row.net_sales)}</td>
               </tr>
             ))}
           </TableShell>
@@ -646,39 +646,39 @@ export function DailyOperationsTab({ filters }) {
           subtitle="Quick risk and throughput read for the current view"
         >
           <div className="grid grid-cols-2 gap-3 p-4">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Primary Tender</div>
-              <div className="mt-2 text-2xl font-bold text-rose-700">
+            <div className="rounded-xl bg-(--ui-muted-surface) p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Primary Tender</div>
+              <div className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">
                 {primaryTender?.method || "N/A"}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-(--ui-text-muted)">
                 {primaryTender ? fmt(primaryTender.total) : "No payments in view"}
               </div>
             </div>
-            <div className="rounded-xl bg-emerald-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Active Cashiers</div>
-              <div className="mt-2 text-2xl font-bold text-emerald-700">
+            <div className="rounded-xl bg-(--ui-success-bg) p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-success-fg)">Active Cashiers</div>
+              <div className="mt-2 text-2xl font-bold text-(--ui-success-fg)">
                 {cashiers.length}
               </div>
-              <div className="mt-1 text-xs text-emerald-700">
+              <div className="mt-1 text-xs text-(--ui-success-fg)">
                 Top performer {topCashiers[0]?.employee_name || "N/A"}
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 p-4">
-            <div className="rounded-xl bg-rose-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-rose-600">Voids</div>
-              <div className="mt-2 text-2xl font-bold text-rose-700">
+          <div className="grid grid-cols-2 gap-3 border-t border-(--ui-border) p-4">
+            <div className="rounded-xl bg-(--ui-danger-bg) p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-danger-fg)">Voids</div>
+              <div className="mt-2 text-2xl font-bold text-(--ui-danger-fg)">
                 {Number(refundsVoids?.summary?.void_count || 0)}
               </div>
-              <div className="mt-1 text-xs text-rose-700">{fmt(totalVoids)}</div>
+              <div className="mt-1 text-xs text-(--ui-danger-fg)">{fmt(totalVoids)}</div>
             </div>
-            <div className="rounded-xl bg-amber-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-amber-600">Refunds</div>
-              <div className="mt-2 text-2xl font-bold text-amber-700">
+            <div className="rounded-xl bg-(--ui-warning-bg) p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-(--ui-warning-fg)">Refunds</div>
+              <div className="mt-2 text-2xl font-bold text-(--ui-warning-fg)">
                 {Number(refundsVoids?.summary?.refund_count || 0)}
               </div>
-              <div className="mt-1 text-xs text-amber-700">{fmt(totalRefunds)}</div>
+              <div className="mt-1 text-xs text-(--ui-warning-fg)">{fmt(totalRefunds)}</div>
             </div>
           </div>
         </CardShell>
@@ -691,11 +691,11 @@ export function DailyOperationsTab({ filters }) {
         >
           <TableShell cols={["Time", "Sale", "Employee", "Total"]} loading={loading} empty={!topVoids.length}>
             {topVoids.map((row) => (
-              <tr key={row.sale_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(row.timestamp)}</td>
-                <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{row.sale_id}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm font-bold text-rose-700">{fmt(row.total_amount)}</td>
+              <tr key={row.sale_id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</td>
+                <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{row.sale_id}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-danger-fg)">{fmt(row.total_amount)}</td>
               </tr>
             ))}
           </TableShell>
@@ -707,11 +707,11 @@ export function DailyOperationsTab({ filters }) {
         >
           <TableShell cols={["Time", "Return", "Employee", "Total"]} loading={loading} empty={!topRefunds.length}>
             {topRefunds.map((row) => (
-              <tr key={row.return_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(row.timestamp)}</td>
-                <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">#{row.return_id}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{row.employee_name}</td>
-                <td className="px-4 py-3 text-sm font-bold text-amber-700">{fmt(row.total_refund)}</td>
+              <tr key={row.return_id} className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{fmtDateTime(row.timestamp)}</td>
+                <td className="px-4 py-3 font-mono text-xs font-bold text-(--ui-text)">#{row.return_id}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.employee_name}</td>
+                <td className="px-4 py-3 text-sm font-bold text-(--ui-warning-fg)">{fmt(row.total_refund)}</td>
               </tr>
             ))}
           </TableShell>

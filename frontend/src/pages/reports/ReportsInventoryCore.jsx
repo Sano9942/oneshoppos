@@ -46,17 +46,17 @@ export function SalesStockTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Units Sold</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Units Sold</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalUnits}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Stock</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalStock}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Current Stock</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalStock}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
       </div>
 
@@ -88,21 +88,21 @@ export function SalesStockTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50">
+            <tr key={i} className="hover:bg-(--ui-muted-surface)">
               <td className="p-4">
-                <div className="text-sm font-bold text-slate-800">{r.name}</div>
-                <div className="text-[10px] text-slate-400 font-mono italic">{r.barcode}</div>
+                <div className="text-sm font-bold text-(--ui-text)">{r.name}</div>
+                <div className="text-[10px] text-(--ui-text-muted) font-mono italic">{r.barcode}</div>
               </td>
-              <td className="p-4 text-sm text-slate-600">{r.category}</td>
-              <td className="p-4 text-sm font-bold text-slate-900">{r.units_sold}</td>
+              <td className="p-4 text-sm text-(--ui-text-muted)">{r.category}</td>
+              <td className="p-4 text-sm font-bold text-(--ui-text)">{r.units_sold}</td>
               <td className="p-4">
                 <div
-                  className={`text-sm font-bold ${Number(r.total_stock || 0) <= 5 ? "text-rose-600" : "text-slate-900"}`}
+                  className={`text-sm font-bold ${Number(r.total_stock || 0) <= 5 ? "text-(--ui-danger-fg)" : "text-(--ui-text)"}`}
                 >
                   {r.total_stock}
                 </div>
               </td>
-              <td className="p-4 text-sm font-semibold text-emerald-700">{fmt(r.revenue)}</td>
+              <td className="p-4 text-sm font-semibold text-(--ui-success-fg)">{fmt(r.revenue)}</td>
             </tr>
           ))}
         </TableShell>
@@ -177,19 +177,19 @@ export function InventoryDumpTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex rounded-xl bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           <button
             type="button"
             onClick={() => setAggregate(false)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!aggregate ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!aggregate ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
           >
             Outlet Detail
           </button>
           <button
             type="button"
             onClick={() => setAggregate(true)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${aggregate ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${aggregate ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
           >
             All Outlets
           </button>
@@ -202,16 +202,16 @@ export function InventoryDumpTab({ filters }) {
               onClick={() => setAnomaly(preset.value)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 anomaly === preset.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600"
+                  ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
               }`}
             >
               {preset.label}
             </button>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Margin %</span>
+        <div className="ml-auto flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Margin %</span>
           <input
             type="number"
             min="0"
@@ -224,27 +224,27 @@ export function InventoryDumpTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cost Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalCostValue)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Retail Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">
             {fmt(totalRetailValue)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Low Stock Rows
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{lowStockRows}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{lowStockRows}</p>
         </div>
       </div>
 
@@ -278,36 +278,36 @@ export function InventoryDumpTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.outlet_name}-${r.barcode}-${i}`} className="hover:bg-slate-50">
+            <tr key={`${r.outlet_name}-${r.barcode}-${i}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">
+                <div className="text-sm font-semibold text-(--ui-text)">
                   {r.product_name}
                 </div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">
                   {r.barcode}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
               <td className="px-4 py-3">
-                <div className="text-sm text-slate-700">{r.category}</div>
-                <div className="text-[11px] text-slate-400">{r.brand}</div>
-                <div className="text-[11px] text-slate-400">{r.supplier}</div>
+                <div className="text-sm text-(--ui-text)">{r.category}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.brand}</div>
+                <div className="text-[11px] text-(--ui-text-muted)">{r.supplier}</div>
               </td>
               <td className="px-4 py-3">
                 <span
                   className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${
                     Number(r.quantity || 0) <= 5
-                      ? "bg-rose-50 text-rose-700"
-                      : "bg-slate-100 text-slate-700"
+                      ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                      : "bg-(--ui-muted-surface) text-(--ui-text)"
                   }`}
                 >
                   {r.quantity}
                 </span>
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {fmt(r.cost_value)}
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.retail_value)}
               </td>
             </tr>
@@ -381,19 +381,19 @@ export function OnHandTab({ filters }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex rounded-xl bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <div className="flex rounded-xl bg-(--ui-muted-surface) p-1">
           <button
             type="button"
             onClick={() => setAggregate(false)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!aggregate ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!aggregate ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
           >
             Outlet Detail
           </button>
           <button
             type="button"
             onClick={() => setAggregate(true)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${aggregate ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${aggregate ? "bg-(--ui-surface) text-(--ui-text)" : "text-(--ui-text-muted)"}`}
           >
             All Outlets
           </button>
@@ -406,16 +406,16 @@ export function OnHandTab({ filters }) {
               onClick={() => setAnomaly(preset.value)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 anomaly === preset.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600"
+                  ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
               }`}
             >
               {preset.label}
             </button>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5">
-          <span className="text-xs font-semibold text-slate-500">Margin %</span>
+        <div className="ml-auto flex items-center gap-2 rounded-xl border border-(--ui-border) px-3 py-1.5">
+          <span className="text-xs font-semibold text-(--ui-text-muted)">Margin %</span>
           <input
             type="number"
             min="0"
@@ -428,23 +428,23 @@ export function OnHandTab({ filters }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Retail Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRetail)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRetail)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Cost Value
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalCost)}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalCost)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Low Stock Rows
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{lowStockRows}</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{lowStockRows}</p>
         </div>
       </div>
 
@@ -476,33 +476,33 @@ export function OnHandTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((r, i) => (
-            <tr key={`${r.outlet_name}-${r.barcode}-${i}`} className="hover:bg-slate-50">
+            <tr key={`${r.outlet_name}-${r.barcode}-${i}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3">
-                <div className="text-sm font-semibold text-slate-800">
+                <div className="text-sm font-semibold text-(--ui-text)">
                   {r.product_name}
                 </div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="font-mono text-[11px] text-(--ui-text-muted)">
                   {r.barcode}
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>
               <td className="px-4 py-3">
                 <span
                   className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${
                     Number(r.quantity || 0) <= 5
-                      ? "bg-rose-50 text-rose-700"
-                      : "bg-slate-100 text-slate-700"
+                      ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                      : "bg-(--ui-muted-surface) text-(--ui-text)"
                   }`}
                 >
                   {r.quantity}
                 </span>
               </td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">
                 {fmt(r.retail_value)}
               </td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-600">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text-muted)">
                 <div>{fmt(r.cost_value)}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] text-(--ui-text-muted)">
                   {r.category} • {r.brand}
                 </div>
               </td>

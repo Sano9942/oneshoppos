@@ -59,7 +59,7 @@ export function SalesSummaryTab({ filters }) {
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-400 italic">
+      <div className="p-8 text-center text-(--ui-text-muted) italic">
         Processing sales data...
       </div>
     );
@@ -75,17 +75,17 @@ export function SalesSummaryTab({ filters }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Orders</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Orders</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment Types</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{paymentMethods.length}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Payment Types</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{paymentMethods.length}</p>
         </div>
       </div>
 
@@ -134,18 +134,18 @@ export function SalesSummaryTab({ filters }) {
           <div className="p-4 space-y-4">
             {paymentMethods.map((pm, i) => (
               <div key={i} className="flex items-center gap-4">
-                <div className="text-xs font-bold text-slate-600 w-20">
+                <div className="text-xs font-bold text-(--ui-text-muted) w-20">
                   {pm.method}
                 </div>
-                <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="flex-1 h-3 bg-(--ui-muted-surface) rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 rounded-full"
+                    className="h-full bg-(--ui-success-fg) rounded-full"
                     style={{
                       width: `${totalRevenue > 0 ? (pm.total / totalRevenue) * 100 : 0}%`,
                     }}
                   />
                 </div>
-                <div className="text-xs font-bold text-slate-800">
+                <div className="text-xs font-bold text-(--ui-text)">
                   {fmt(pm.total)}
                 </div>
               </div>
@@ -175,24 +175,24 @@ export function SalesSummaryTab({ filters }) {
       >
         <TableShell cols={["Metric", "Value"]}>
           <tr>
-            <td className="p-4 text-sm font-medium text-slate-500">
+            <td className="p-4 text-sm font-medium text-(--ui-text-muted)">
               Gross Revenue
             </td>
-            <td className="p-4 text-sm font-bold text-slate-900">
+            <td className="p-4 text-sm font-bold text-(--ui-text)">
               {fmt(data?.total_revenue)}
             </td>
           </tr>
           <tr>
-            <td className="p-4 text-sm font-medium text-slate-500">
+            <td className="p-4 text-sm font-medium text-(--ui-text-muted)">
               Tax Collected
             </td>
-            <td className="p-4 text-sm font-bold text-slate-900">
+            <td className="p-4 text-sm font-bold text-(--ui-text)">
               {fmt(data?.total_tax)}
             </td>
           </tr>
-          <tr className="bg-blue-50/50">
-            <td className="p-4 text-sm font-bold text-blue-700">Net Sales</td>
-            <td className="p-4 text-sm font-bold text-blue-700">
+          <tr className="bg-(--ui-muted-surface)/50">
+            <td className="p-4 text-sm font-bold text-(--ui-link)">Net Sales</td>
+            <td className="p-4 text-sm font-bold text-(--ui-link)">
               {fmt(data?.total_revenue - data?.total_tax)}
             </td>
           </tr>
@@ -246,17 +246,17 @@ export function MonthlyMOPMatrixTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Months In Scope</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{matrix.length}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Months In Scope</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{matrix.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Orders</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Orders</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
       </div>
 
@@ -286,12 +286,12 @@ export function MonthlyMOPMatrixTab({ filters }) {
           empty={!matrix.length}
         >
           {matrix.map((row) => (
-            <tr key={row.month_bucket} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.month_bucket}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.total_orders || 0)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.total_amount)}</td>
+            <tr key={row.month_bucket} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.month_bucket}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.total_orders || 0)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.total_amount)}</td>
               {methods.map((method) => (
-                <td key={`${row.month_bucket}-${method}`} className="px-4 py-3 text-sm text-slate-600">
+                <td key={`${row.month_bucket}-${method}`} className="px-4 py-3 text-sm text-(--ui-text-muted)">
                   {fmt(row[method])}
                 </td>
               ))}
@@ -351,17 +351,17 @@ export function SubcategoryWiseTab({ filters }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sub-Categories</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Sub-Categories</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{rows.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Units Sold</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Units Sold</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{totalUnits}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        <div className="rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-(--ui-text)">{fmt(totalRevenue)}</p>
         </div>
       </div>
 
@@ -394,13 +394,13 @@ export function SubcategoryWiseTab({ filters }) {
           empty={!rows.length}
         >
           {rows.map((row, index) => (
-            <tr key={`${row.category_id}-${index}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 text-sm text-slate-600">{row.category}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.subcategory}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.units_sold || 0)}</td>
-              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
-              <td className="px-4 py-3 text-sm font-semibold text-indigo-700">{fmt(row.profit)}</td>
-              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.pct || 0).toFixed(1)}%</td>
+            <tr key={`${row.category_id}-${index}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{row.category}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{row.subcategory}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.units_sold || 0)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-(--ui-text)">{fmt(row.revenue)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-link)">{fmt(row.profit)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{Number(row.pct || 0).toFixed(1)}%</td>
             </tr>
           ))}
         </TableShell>
