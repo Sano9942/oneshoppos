@@ -198,24 +198,24 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
   );
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:sticky sm:top-0 sm:z-10">
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3 sm:sticky sm:top-0 sm:z-10">
       {/* Search */}
       <div className="relative min-w-0 flex-1 basis-full md:basis-auto">
         <Search
           size={14}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
         />
         <input
           type="text"
           placeholder="Global search..."
           value={filters.search}
           onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium"
+          className="w-full pl-9 pr-3 py-2 border border-(--ui-border) rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/10 focus:border-(--ui-focus) transition-all font-medium"
         />
       </div>
 
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:w-auto">
-        <Clock size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:w-auto">
+        <Clock size={14} className="text-(--ui-text-muted)" />
         <input
           type="time"
           value={filters.timeFrom}
@@ -223,7 +223,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
           className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-20"
           title="Time From"
         />
-        <span className="text-slate-300">|</span>
+        <span className="text-(--ui-text-muted)">|</span>
         <input
           type="time"
           value={filters.timeTo}
@@ -234,8 +234,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Date Range */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:w-auto">
-        <Clock size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:w-auto">
+        <Clock size={14} className="text-(--ui-text-muted)" />
         <input
           type="date"
           value={filters.dateFrom}
@@ -243,7 +243,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
           className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-28"
           title="Date From"
         />
-        <span className="text-slate-300">|</span>
+        <span className="text-(--ui-text-muted)">|</span>
         <input
           type="date"
           value={filters.dateTo}
@@ -257,9 +257,9 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       <div className="relative" data-outlet-popover>
         <button
           onClick={() => setOutletOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:min-w-35"
+          className="flex items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-muted-surface) sm:min-w-35"
         >
-          <Building2 size={14} className="text-slate-400 shrink-0" />
+          <Building2 size={14} className="text-(--ui-text-muted) shrink-0" />
           <span className="truncate">
             {filters.outletIds.length === 0
               ? "All Outlets"
@@ -269,16 +269,16 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
           </span>
         </button>
         {outletOpen && (
-          <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-slate-200 bg-white shadow-lg">
-            <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+          <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-(--ui-border) bg-(--ui-surface) shadow-lg">
+            <div className="flex items-center justify-between border-b border-(--ui-border) px-3 py-2">
               <button
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-(--ui-link) hover:underline"
                 onClick={() => setFilters({ ...filters, outletIds: outlets.map((o) => o.id) })}
               >
                 Select All
               </button>
               <button
-                className="text-xs text-slate-500 hover:underline"
+                className="text-xs text-(--ui-text-muted) hover:underline"
                 onClick={() => setFilters({ ...filters, outletIds: [] })}
               >
                 Clear
@@ -286,7 +286,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
               {outlets.map((o) => (
-                <label key={o.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-slate-50">
+                <label key={o.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-(--ui-muted-surface)">
                   <input
                     type="checkbox"
                     checked={filters.outletIds.includes(o.id)}
@@ -296,9 +296,9 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
                         : filters.outletIds.filter((id) => id !== o.id);
                       setFilters({ ...filters, outletIds: next });
                     }}
-                    className="accent-blue-600"
+                    className="accent-(--ui-primary)"
                   />
-                  <span className="text-xs font-medium text-slate-700">{o.name}</span>
+                  <span className="text-xs font-medium text-(--ui-text)">{o.name}</span>
                 </label>
               ))}
             </div>
@@ -307,8 +307,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Category Selector */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
-        <LayoutGrid size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:min-w-35 sm:w-auto">
+        <LayoutGrid size={14} className="text-(--ui-text-muted)" />
         <select
           value={filters.categoryId}
           onChange={(e) =>
@@ -326,8 +326,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Brand Selector */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-30 sm:w-auto">
-        <Tag size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:min-w-30 sm:w-auto">
+        <Tag size={14} className="text-(--ui-text-muted)" />
         <select
           value={filters.brandId}
           onChange={(e) => setFilters({ ...filters, brandId: e.target.value })}
@@ -342,8 +342,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
         </select>
       </div>
 
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
-        <Truck size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:min-w-35 sm:w-auto">
+        <Truck size={14} className="text-(--ui-text-muted)" />
         <select
           value={filters.supplierId}
           onChange={(e) =>
@@ -361,8 +361,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Employee Selector */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-30 sm:w-auto">
-        <Users size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:min-w-30 sm:w-auto">
+        <Users size={14} className="text-(--ui-text-muted)" />
         <select
           value={filters.employeeId}
           onChange={(e) =>
@@ -380,8 +380,8 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Shift Selector */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-40 sm:w-auto">
-        <ClipboardList size={14} className="text-slate-400" />
+      <div className="flex w-full items-center gap-2 rounded-xl border border-(--ui-border) bg-(--ui-muted-surface) px-3 py-1.5 sm:min-w-40 sm:w-auto">
+        <ClipboardList size={14} className="text-(--ui-text-muted)" />
         <select
           value={filters.shiftId}
           onChange={(e) => setFilters({ ...filters, shiftId: e.target.value })}
@@ -400,7 +400,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       {hasActiveFilters && (
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 rounded-xl border border-red-100 px-3 py-1.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 sm:ml-auto"
+          className="flex items-center gap-1.5 rounded-xl border border-(--ui-danger-bg) px-3 py-1.5 text-xs font-bold text-(--ui-danger-fg) transition-colors hover:bg-(--ui-danger-bg) sm:ml-auto"
         >
           <RotateCcw size={12} /> Reset
         </button>
@@ -565,12 +565,12 @@ function TabBreadcrumb({ activeTab }) {
     const GroupIcon = group.tabs[0].icon;
     const TabIcon = tab.icon;
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-400 mb-4 shrink-0">
-        <GroupIcon size={13} className="text-slate-400" />
-        <span className="font-medium text-slate-500">{group.label}</span>
-        <span className="text-slate-300">/</span>
-        <TabIcon size={13} className="text-blue-500" />
-        <span className="font-semibold text-slate-700">{tab.label}</span>
+      <div className="flex items-center gap-2 text-xs text-(--ui-text-muted) mb-4 shrink-0">
+        <GroupIcon size={13} className="text-(--ui-text-muted)" />
+        <span className="font-medium text-(--ui-text-muted)">{group.label}</span>
+        <span className="text-(--ui-text-muted)">/</span>
+        <TabIcon size={13} className="text-(--ui-link)" />
+        <span className="font-semibold text-(--ui-text)">{tab.label}</span>
       </div>
     );
   }
@@ -892,10 +892,10 @@ export default function Reports() {
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
+          <h1 className="text-3xl font-bold tracking-tight text-(--ui-text) mb-1">
             Reports
           </h1>
-          <p className="text-slate-500">
+          <p className="text-(--ui-text-muted)">
             {sidebarGroups.reduce((n, g) => n + g.tabs.length, 0)} reports across
             {sidebarGroups.map((g) => g.label.toLowerCase()).join(", ")}.
           </p>
@@ -908,7 +908,7 @@ export default function Reports() {
       {/* Two-panel layout: group sidebar + sub-tabs + content */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-0">
         {/* Left: group icon sidebar */}
-        <div className="flex shrink-0 gap-1 overflow-x-auto py-1 lg:w-18 lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-2">
+        <div className="flex shrink-0 gap-1 overflow-x-auto py-1 lg:w-18 lg:flex-col lg:overflow-visible lg:border-r lg:border-(--ui-border) lg:pr-2">
           {sidebarGroups.map((group) => {
             const isActive = group === activeGroup;
             const GroupIcon = group.tabs[0].icon;
@@ -919,8 +919,8 @@ export default function Reports() {
                 title={group.label}
                 className={`flex min-w-20 flex-col items-center gap-1 rounded-xl px-2 py-3 text-xs font-medium transition-all lg:min-w-0 ${
                   isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    ? "bg-(--ui-muted-surface) text-(--ui-link)"
+                    : "text-(--ui-text-muted) hover:text-(--ui-text) hover:bg-(--ui-muted-surface)"
                 }`}
               >
                 <GroupIcon size={18} />
@@ -936,15 +936,15 @@ export default function Reports() {
         <div className="flex min-w-0 flex-1 flex-col gap-3 lg:pl-4">
           {/* Sub-tab pill strip for the active group */}
           {activeGroup && (
-            <div className="flex w-full flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+            <div className="flex w-full flex-wrap gap-1 rounded-xl bg-(--ui-muted-surface) p-1">
               {activeGroup.tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
                   className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                     activeTab === id
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-(--ui-surface) text-(--ui-text)"
+                      : "text-(--ui-text-muted) hover:text-(--ui-text)"
                   }`}
                 >
                   <Icon size={13} />
