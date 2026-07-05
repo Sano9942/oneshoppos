@@ -148,13 +148,13 @@ export default function FieldVisitsRedesign() {
                 checked={flaggedOnly}
                 onChange={(e) => setFlaggedOnly(e.target.checked)}
               />
-              <AlertCircle className="h-4 w-4 text-amber-600" /> Flagged only
+              <AlertCircle className="h-4 w-4 text-(--ui-warning-fg)" /> Flagged only
             </label>
           </div>
         </div>
 
         {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2 text-sm mb-3">
+          <div className="rounded-lg bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg) px-3 py-2 text-sm mb-3">
             {error}
           </div>
         )}
@@ -210,7 +210,7 @@ export default function FieldVisitsRedesign() {
                     <span className="inline-flex items-center gap-1 text-(--ui-text)">
                       {OUTCOME_LABELS[v.status] || v.status}
                       {v.gps_flagged && (
-                        <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 text-amber-900 px-1.5 py-0.5 text-xs">
+                        <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-(--ui-warning-bg) text-(--ui-warning-fg) px-1.5 py-0.5 text-xs">
                           <AlertCircle className="h-3 w-3" /> flagged
                         </span>
                       )}

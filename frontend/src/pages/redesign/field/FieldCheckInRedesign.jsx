@@ -9,10 +9,10 @@ import { compressImage } from "../../../utils/imageCompress";
 import { enqueueCheckIn, markSyncing, markSynced, markFailed } from "../../../utils/offlineQueue";
 
 const OUTCOMES = [
-  { value: "ordered", label: "Took Order", color: "bg-emerald-600 hover:bg-emerald-700" },
-  { value: "no_stock_needed", label: "No Stock Needed", color: "bg-slate-600 hover:bg-slate-700" },
-  { value: "shop_closed", label: "Shop Closed", color: "bg-amber-600 hover:bg-amber-700" },
-  { value: "owner_away", label: "Owner Away", color: "bg-amber-600 hover:bg-amber-700" },
+  { value: "ordered", label: "Took Order", color: "bg-(--ui-success-fg) hover:bg-(--ui-success-fg)" },
+  { value: "no_stock_needed", label: "No Stock Needed", color: "bg-(--ui-muted-surface) hover:bg-(--ui-primary-strong)" },
+  { value: "shop_closed", label: "Shop Closed", color: "bg-(--ui-warning-fg) hover:bg-(--ui-warning-fg)" },
+  { value: "owner_away", label: "Owner Away", color: "bg-(--ui-warning-fg) hover:bg-(--ui-warning-fg)" },
 ];
 
 // Browser-generated UUID for idempotency. Crypto.randomUUID is available on
@@ -195,7 +195,7 @@ export default function FieldCheckInRedesign() {
   if (!customer) {
     return (
       <div className="min-h-screen bg-(--ui-bg) p-4">
-        <div className="rounded-xl bg-red-50 border border-red-200 text-red-800 p-4">
+        <div className="rounded-xl bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg) p-4">
           Customer not found on today's route.
         </div>
       </div>
@@ -227,7 +227,7 @@ export default function FieldCheckInRedesign() {
               <div className="font-medium text-(--ui-text) text-sm mb-1">Location</div>
               {gpsLoading && <div className="text-xs text-(--ui-text-muted)">Acquiring GPS…</div>}
               {gpsErr && (
-                <div className="text-xs text-red-700">{gpsErr}</div>
+                <div className="text-xs text-(--ui-danger-fg)">{gpsErr}</div>
               )}
               {gps && (
                 <div className="text-xs text-(--ui-text-muted)">
@@ -235,7 +235,7 @@ export default function FieldCheckInRedesign() {
                 </div>
               )}
               {tagShopLocation && gps && (
-                <div className="mt-2 text-xs text-emerald-700">
+                <div className="mt-2 text-xs text-(--ui-success-fg)">
                   This visit will save the shop's location for future geofence checks.
                 </div>
               )}
@@ -262,7 +262,7 @@ export default function FieldCheckInRedesign() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="rounded-lg bg-(--ui-primary) text-white px-4 py-2 text-sm font-medium"
+                    className="rounded-lg bg-(--ui-primary) text-(--ui-on-primary) px-4 py-2 text-sm font-medium"
                   >
                     Take selfie at shop
                   </button>
@@ -281,14 +281,14 @@ export default function FieldCheckInRedesign() {
                       setSelfieDataUrl(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="text-xs text-(--ui-text-muted) hover:text-red-600 inline-flex items-center gap-1"
+                    className="text-xs text-(--ui-text-muted) hover:text-(--ui-danger-fg) inline-flex items-center gap-1"
                   >
                     <X className="h-3 w-3" /> Retake
                   </button>
                 </div>
               )}
               {selfieErr && (
-                <div className="mt-2 text-xs text-red-700">{selfieErr}</div>
+                <div className="mt-2 text-xs text-(--ui-danger-fg)">{selfieErr}</div>
               )}
             </div>
           </div>
@@ -305,7 +305,7 @@ export default function FieldCheckInRedesign() {
               type="button"
               disabled={submitting || !gps || !selfieDataUrl}
               onClick={() => submit(o.value)}
-              className={`${o.color} text-white font-medium rounded-lg py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1`}
+              className={`${o.color} text-(--ui-on-primary) font-medium rounded-lg py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1`}
             >
               <Check className="h-4 w-4" /> {o.label}
             </button>
