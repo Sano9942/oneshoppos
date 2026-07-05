@@ -307,7 +307,7 @@ export default function BarcodeTemplates() {
         <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 bg-(--ui-muted-surface) text-(--ui-text) rounded-full text-sm font-semibold hover:bg-(--ui-border-strong)">
           <Printer size={16} /> Print Labels
         </button>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-white rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong)">
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong)">
           <Plus size={16} /> New Template
         </button>
       </div>
@@ -315,7 +315,7 @@ export default function BarcodeTemplates() {
       {loading ? (
         <div className="text-center py-12 text-(--ui-text-muted)">Loading...</div>
       ) : (
-        <div className="bg-white border rounded-xl overflow-hidden">
+        <div className="bg-(--ui-surface) border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border)">
               <tr>
@@ -364,7 +364,7 @@ export default function BarcodeTemplates() {
       {/* Add/Edit Template Modal */}
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-(--ui-surface) rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">{modal === "add" ? "New Template" : "Edit Template"}</h2>
               <button onClick={() => setModal(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={18} /></button>
@@ -424,7 +424,7 @@ export default function BarcodeTemplates() {
               <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border rounded-lg text-sm hover:bg-(--ui-muted-surface)">Cancel</button>
                 <button type="submit" disabled={saving}
-                  className="px-4 py-2 bg-(--ui-primary) text-white rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
+                  className="px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
                   {saving ? "Saving..." : modal === "add" ? "Create Template" : "Save Changes"}
                 </button>
               </div>
@@ -436,7 +436,7 @@ export default function BarcodeTemplates() {
       {/* Print Labels Modal */}
       {printModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-(--ui-surface) rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold flex items-center gap-2"><Printer size={18} /> Print Barcode Labels</h2>
               <button onClick={() => setPrintModal(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={18} /></button>
@@ -501,7 +501,7 @@ export default function BarcodeTemplates() {
             <div className="flex gap-3 justify-end pt-1">
               <button type="button" onClick={() => setPrintModal(false)} className="px-4 py-2 border rounded-lg text-sm hover:bg-(--ui-muted-surface)">Cancel</button>
               <button onClick={handlePrint} disabled={printing || !printItems.length || !printTemplate}
-                className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-white rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-50">
                 <Printer size={15} /> {printing ? "Opening..." : "Print Labels"}
               </button>
             </div>

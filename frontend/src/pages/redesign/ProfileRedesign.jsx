@@ -139,7 +139,7 @@ export default function ProfileRedesign() {
             <Input type="password" placeholder="Current PIN" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} required maxLength={10} />
             <Input type="password" placeholder="New PIN (4-10 digits)" value={newPin} onChange={(e) => setNewPin(e.target.value)} required maxLength={10} />
             <Input type="password" placeholder="Confirm new PIN" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} required maxLength={10} />
-            {newPin && confirmPin && newPin !== confirmPin && <p className="text-xs text-red-600">PINs do not match</p>}
+            {newPin && confirmPin && newPin !== confirmPin && <p className="text-xs text-(--ui-danger-fg)">PINs do not match</p>}
             <Button tone="primary" type="submit" disabled={savingPin || !currentPin || !newPin || newPin !== confirmPin}>
               <KeyRound size={14} className="mr-1 inline" />{savingPin ? "Saving..." : "Change PIN"}
             </Button>
@@ -153,7 +153,7 @@ export default function ProfileRedesign() {
             <Input type="password" placeholder="Current password (or PIN if no password set)" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
             <Input type="password" placeholder="New password (min 8 chars)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
             <Input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-            {newPassword && confirmPassword && newPassword !== confirmPassword && <p className="text-xs text-red-600">Passwords do not match</p>}
+            {newPassword && confirmPassword && newPassword !== confirmPassword && <p className="text-xs text-(--ui-danger-fg)">Passwords do not match</p>}
             <Button tone="primary" type="submit" disabled={savingPassword || !currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}>
               <Lock size={14} className="mr-1 inline" />{savingPassword ? "Saving..." : "Change Password"}
             </Button>

@@ -75,56 +75,56 @@ export default function CourierSettingsRedesign() {
       right={
         <button
           onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-(--ui-primary) px-3 py-2 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
         >
           <Plus size={16} /> Add Custom Courier
         </button>
       }
     >
       {showAdd && (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
-          <h3 className="mb-3 text-sm font-semibold text-blue-900 dark:text-blue-200">
+        <div className="mb-6 rounded-xl border border-(--ui-focus) bg-(--ui-muted-surface) p-4">
+          <h3 className="mb-3 text-sm font-semibold text-(--ui-link)">
             Add Custom Courier
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                 Courier Name *
               </label>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g. My Local Rider"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                 Tracking URL Template
               </label>
               <input
                 value={newTemplate}
                 onChange={(e) => setNewTemplate(e.target.value)}
                 placeholder="https://example.com/track/{tracking}"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm"
               />
             </div>
           </div>
           <p className="mt-1 text-xs text-(--ui-text-muted)">
-            Use <code className="rounded bg-slate-200 px-1 dark:bg-slate-700">{"{tracking}"}</code> as
+            Use <code className="rounded bg-(--ui-muted-surface) px-1">{"{tracking}"}</code> as
             a placeholder for the tracking number in the URL template.
           </p>
           <div className="mt-3 flex gap-2">
             <button
               onClick={addCourier}
               disabled={adding || !newName.trim()}
-              className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-lg bg-(--ui-primary) px-4 py-1.5 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
             >
               {adding ? "Adding..." : "Add Courier"}
             </button>
             <button
               onClick={() => setShowAdd(false)}
-              className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"
+              className="rounded-lg border border-(--ui-border-strong) px-4 py-1.5 text-sm text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
             >
               Cancel
             </button>
@@ -136,13 +136,13 @@ export default function CourierSettingsRedesign() {
         {couriers.map((c) => (
           <div
             key={c.id}
-            className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4"
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <Truck size={20} className="text-(--ui-text-muted)" />
                 <div>
-                  <div className="text-sm font-semibold text-slate-800 dark:text-white">
+                  <div className="text-sm font-semibold text-(--ui-text)">
                     {c.name}
                   </div>
                   <div className="text-xs text-(--ui-text-muted)">
@@ -166,11 +166,11 @@ export default function CourierSettingsRedesign() {
                   aria-checked={!!c.enabled}
                   onClick={() => updateField(c.id, "enabled", !c.enabled)}
                   className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                    c.enabled ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600"
+                    c.enabled ? "bg-(--ui-primary)" : "bg-(--ui-muted-surface)"
                   }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-(--ui-surface) transition-transform ${
                       c.enabled ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
@@ -179,7 +179,7 @@ export default function CourierSettingsRedesign() {
             </div>
 
             {c.enabled && c.adapter_key !== "generic" && (
-              <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3 dark:border-slate-700">
+              <div className="mt-3 grid gap-3 border-t border-(--ui-border) pt-3 sm:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                     API Base URL
@@ -188,7 +188,7 @@ export default function CourierSettingsRedesign() {
                     value={c.api_base_url || ""}
                     onChange={(e) => updateField(c.id, "api_base_url", e.target.value)}
                     placeholder="https://api.example.com"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                    className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-1.5 text-sm"
                   />
                 </div>
                 <div>
@@ -199,7 +199,7 @@ export default function CourierSettingsRedesign() {
                     value={c.api_key || ""}
                     onChange={(e) => updateField(c.id, "api_key", e.target.value)}
                     placeholder="Enter API key"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                    className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-1.5 text-sm"
                   />
                 </div>
                 <div>
@@ -211,7 +211,7 @@ export default function CourierSettingsRedesign() {
                     value={c.api_secret || ""}
                     onChange={(e) => updateField(c.id, "api_secret", e.target.value)}
                     placeholder="Enter API secret"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                    className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-1.5 text-sm"
                   />
                 </div>
               </div>
@@ -222,7 +222,7 @@ export default function CourierSettingsRedesign() {
                 <button
                   onClick={() => saveCourier(c)}
                   disabled={saving[c.id]}
-                  className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-lg bg-(--ui-primary) px-4 py-1.5 text-sm font-medium text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
                 >
                   {saving[c.id] ? "Saving..." : "Save"}
                 </button>

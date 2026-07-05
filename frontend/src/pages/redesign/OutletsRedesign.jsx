@@ -176,7 +176,7 @@ export default function OutletsRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard>
+        <SectionCard className="mb-3 border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">{error}</SectionCard>
       ) : null}
 
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-3">
@@ -299,7 +299,7 @@ export default function OutletsRedesign() {
           You'll be redirected to the payment gateway. After payment confirms,
           come back to this page and your new outlet slot will be ready.
         </p>
-        {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-(--ui-danger-fg)">{error}</p>}
         <ModalFooter>
           <Button type="button" onClick={() => setAddOutletConfirmOpen(false)} disabled={addOutletSubmitting}>
             Cancel
@@ -341,7 +341,7 @@ export default function OutletsRedesign() {
                   ))}
               </select>
             </div>
-            {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
+            {error && <p className="mb-3 text-sm text-(--ui-danger-fg)">{error}</p>}
             <ModalFooter>
               <Button type="button" onClick={() => setDeleteTarget(null)}>Cancel</Button>
               <Button tone="danger" onClick={confirmDelete}>

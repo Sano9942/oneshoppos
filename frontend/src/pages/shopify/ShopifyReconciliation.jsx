@@ -204,9 +204,9 @@ export default function ShopifyReconciliation() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
-        <h3 className="text-base font-semibold text-slate-800">
+    <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-base font-semibold text-(--ui-text)">
           Inventory Reconciliation
         </h3>
         <div className="flex items-center gap-2 flex-wrap">
@@ -215,7 +215,7 @@ export default function ShopifyReconciliation() {
             onChange={(e) =>
               setFilters((p) => ({ ...p, status: e.target.value }))
             }
-            className="px-2 py-1.5 border border-slate-300 rounded text-xs"
+            className="px-2 py-1.5 border border-(--ui-border-strong) rounded text-xs"
           >
             <option value="">All Statuses</option>
             <option value="matched">Matched</option>
@@ -227,7 +227,7 @@ export default function ShopifyReconciliation() {
             onChange={(e) =>
               setFilters((p) => ({ ...p, resolution_status: e.target.value }))
             }
-            className="px-2 py-1.5 border border-slate-300 rounded text-xs"
+            className="px-2 py-1.5 border border-(--ui-border-strong) rounded text-xs"
           >
             <option value="">All Resolutions</option>
             <option value="open">Open</option>
@@ -237,20 +237,20 @@ export default function ShopifyReconciliation() {
           <button
             onClick={() => loadReconciliation(false)}
             disabled={loading}
-            className="p-1.5 border border-slate-300 rounded hover:bg-slate-50"
+            className="p-1.5 border border-(--ui-border-strong) rounded hover:bg-(--ui-muted-surface)"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
           <button
             onClick={runReconciliation}
             disabled={running}
-            className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold"
+            className="px-3 py-1.5 bg-(--ui-primary) text-(--ui-on-primary) rounded text-xs font-semibold"
           >
             {running ? "Running..." : "Run Reconciliation"}
           </button>
           <button
             onClick={exportCsv}
-            className="p-1.5 border border-slate-300 rounded hover:bg-slate-50"
+            className="p-1.5 border border-(--ui-border-strong) rounded hover:bg-(--ui-muted-surface)"
           >
             <Download size={14} />
           </button>
@@ -258,23 +258,23 @@ export default function ShopifyReconciliation() {
       </div>
 
       {selectedIds.length > 0 && (
-        <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center gap-4 text-xs font-medium text-slate-700">
+        <div className="bg-(--ui-muted-surface) px-4 py-2 border-b border-(--ui-border) flex items-center gap-4 text-xs font-medium text-(--ui-text)">
           <span>{selectedIds.length} items selected</span>
           <button
             onClick={() => runBulkAction("ignore")}
-            className="text-slate-500 hover:text-slate-800"
+            className="text-(--ui-text-muted) hover:text-(--ui-text)"
           >
             Ignore
           </button>
           <button
             onClick={() => runBulkAction("fix", "pos_wins")}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-(--ui-link) hover:text-(--ui-link)"
           >
             POS Wins
           </button>
           <button
             onClick={() => runBulkAction("fix", "shopify_wins")}
-            className="text-emerald-600 hover:text-emerald-800"
+            className="text-(--ui-success-fg) hover:text-(--ui-success-fg)"
           >
             Shopify Wins
           </button>
@@ -283,7 +283,7 @@ export default function ShopifyReconciliation() {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-left">
+          <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted) text-left">
             <tr>
               <th className="p-3 w-10">
                 <input
@@ -310,7 +310,7 @@ export default function ShopifyReconciliation() {
               return (
                 <tr
                   key={r.id}
-                  className="border-t border-slate-100 hover:bg-slate-50/50"
+                  className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)/50"
                 >
                   <td className="p-3">
                     <input
@@ -320,23 +320,23 @@ export default function ShopifyReconciliation() {
                     />
                   </td>
                   <td className="p-3">
-                    <div className="text-slate-800 font-medium">
+                    <div className="text-(--ui-text) font-medium">
                       {r.product_name}
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
+                    <div className="text-[10px] text-(--ui-text-muted) font-mono">
                       {r.barcode}
                     </div>
                   </td>
-                  <td className="p-3 text-slate-600 font-medium">
+                  <td className="p-3 text-(--ui-text-muted) font-medium">
                     {r.outlet_name}
                   </td>
-                  <td className="p-3 text-slate-800 font-bold">{r.pos_qty}</td>
-                  <td className="p-3 text-slate-800 font-bold">
+                  <td className="p-3 text-(--ui-text) font-bold">{r.pos_qty}</td>
+                  <td className="p-3 text-(--ui-text) font-bold">
                     {r.shopify_qty}
                   </td>
                   <td className="p-3">
                     <span
-                      className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${r.status === "matched" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
+                      className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${r.status === "matched" ? "bg-(--ui-success-bg) text-(--ui-success-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"}`}
                     >
                       {r.status}{" "}
                       {diff !== 0 ? `(${diff > 0 ? "+" : ""}${diff})` : ""}
@@ -349,13 +349,13 @@ export default function ShopifyReconciliation() {
                         <>
                           <button
                             onClick={() => requestFix(r.id, "pos_wins")}
-                            className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] font-bold"
+                            className="px-2 py-1 bg-(--ui-muted-surface) text-(--ui-link) border border-(--ui-focus) rounded text-[10px] font-bold"
                           >
                             POS Wins
                           </button>
                           <button
                             onClick={() => requestFix(r.id, "shopify_wins")}
-                            className="px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-[10px] font-bold"
+                            className="px-2 py-1 bg-(--ui-success-bg) text-(--ui-success-fg) border border-(--ui-success-bg) rounded text-[10px] font-bold"
                           >
                             Shopify Wins
                           </button>
@@ -363,19 +363,19 @@ export default function ShopifyReconciliation() {
                             onClick={() =>
                               resolveReconciliation(r.id, "ignored")
                             }
-                            className="px-2 py-1 text-slate-400 hover:text-slate-600 text-[10px]"
+                            className="px-2 py-1 text-(--ui-text-muted) hover:text-(--ui-text-muted) text-[10px]"
                           >
                             Ignore
                           </button>
                         </>
                       )}
                     {isPending && (
-                      <span className="text-[10px] text-amber-600 italic">
+                      <span className="text-[10px] text-(--ui-warning-fg) italic">
                         Pending Approval
                       </span>
                     )}
                     {r.resolution_status !== "open" && (
-                      <span className="text-[10px] text-slate-400 uppercase font-bold">
+                      <span className="text-[10px] text-(--ui-text-muted) uppercase font-bold">
                         {r.resolution_status}
                       </span>
                     )}

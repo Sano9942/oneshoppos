@@ -108,11 +108,11 @@ export default function BackupRestoreRedesign() {
       }
     >
       {restoring && (
-        <SectionCard className="mb-4 flex items-center gap-3 border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <RefreshCw size={18} className="animate-spin shrink-0 text-amber-600" />
+        <SectionCard className="mb-4 flex items-center gap-3 border-(--ui-warning-bg) bg-(--ui-warning-bg) p-4 text-sm text-(--ui-warning-fg)">
+          <RefreshCw size={18} className="animate-spin shrink-0 text-(--ui-warning-fg)" />
           <div>
             <p className="font-semibold">Restoring database, please wait…</p>
-            <p className="text-xs text-amber-700 mt-0.5">Do not close this page or navigate away until the restore is complete.</p>
+            <p className="text-xs text-(--ui-warning-fg) mt-0.5">Do not close this page or navigate away until the restore is complete.</p>
           </div>
         </SectionCard>
       )}
@@ -121,8 +121,8 @@ export default function BackupRestoreRedesign() {
         <SectionCard
           className={`mb-4 flex items-center gap-2 p-3 text-sm ${
             msg.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700"
+              ? "border-(--ui-success-bg) bg-(--ui-success-bg) text-(--ui-success-fg)"
+              : "border-(--ui-danger-bg) bg-(--ui-danger-bg) text-(--ui-danger-fg)"
           }`}
         >
           {msg.type === "success" ? <CheckCircle size={15} /> : <AlertTriangle size={15} />}
@@ -134,7 +134,7 @@ export default function BackupRestoreRedesign() {
         {/* Download */}
         <SectionCard className="p-5">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--ui-success-bg) text-(--ui-success-fg)">
               <Download size={18} />
             </div>
             <div>
@@ -154,7 +154,7 @@ export default function BackupRestoreRedesign() {
         {/* Restore */}
         <SectionCard className="p-5">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--ui-warning-bg) text-(--ui-warning-fg)">
               <Upload size={18} />
             </div>
             <div>
@@ -175,7 +175,7 @@ export default function BackupRestoreRedesign() {
               <RefreshCw size={15} className="animate-spin text-(--ui-text-muted)" />
             )}
           </div>
-          <p className="mt-2 text-xs text-rose-500">
+          <p className="mt-2 text-xs text-(--ui-danger-fg)">
             <AlertTriangle size={11} className="mr-1 inline" />
             This will permanently overwrite all current data.
           </p>
