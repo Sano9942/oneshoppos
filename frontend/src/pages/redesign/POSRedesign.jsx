@@ -51,16 +51,16 @@ function ShortcutHint({ k, label, onClick, disabled }) {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 hover:bg-slate-200 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 hover:bg-(--ui-muted-surface) transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
-      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{k}</span>
+      <span className="rounded bg-(--ui-primary) px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{k}</span>
       <span className="font-medium">{label}</span>
     </button>
   );
 }
 
 function ShortcutSep() {
-  return <span className="shrink-0 select-none text-slate-300">·</span>;
+  return <span className="shrink-0 select-none text-(--ui-border-strong)">·</span>;
 }
 
 function offlineBannerLabel({ offlineQueueCount, queuedSalesCount, queuedReturnsCount }) {
@@ -108,10 +108,10 @@ function POSContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#F8FAFC] overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-(--ui-bg) overflow-hidden font-sans">
       {/* Offline queue banner */}
       {offlineQueueCount > 0 && (
-        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-between px-4 py-2.5 bg-amber-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-between px-4 py-2.5 bg-(--ui-warning) text-white text-sm font-medium animate-in fade-in slide-in-from-top-4 duration-300">
           <span className="flex items-center gap-2">
             <WifiOff size={16} />
             {offlineBannerLabel({ offlineQueueCount, queuedSalesCount, queuedReturnsCount })}
@@ -128,7 +128,7 @@ function POSContent() {
       )}
       {/* Sync success banner — Bucket F: use the richer message from the hook. */}
       {offlineSyncResult && (
-        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-center px-4 py-2.5 bg-emerald-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-center px-4 py-2.5 bg-(--ui-success-fg) text-white text-sm font-medium animate-in fade-in slide-in-from-top-4 duration-300">
           {offlineSyncResult.sales && offlineSyncResult.returns
             ? `${offlineSyncResult.sales} sale(s) + ${offlineSyncResult.returns} refund(s) synced`
             : offlineSyncResult.returns
@@ -138,13 +138,13 @@ function POSContent() {
       )}
       {/* Notifications */}
       {notice && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-slate-900/90 text-white px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-md border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-(--ui-primary)/95 text-white px-6 py-3 rounded-2xl backdrop-blur-md border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-2 h-2 rounded-full bg-white/80 animate-pulse" />
           <span className="text-sm font-bold tracking-tight">{notice}</span>
         </div>
       )}
       {error && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-rose-600 text-white px-6 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-(--ui-danger) text-white px-6 py-3 rounded-2xl border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
           <span className="text-sm font-bold tracking-tight">{error}</span>
         </div>
       )}
@@ -163,7 +163,7 @@ function POSContent() {
               {posLayout.layout_json.map((tile, i) => (
                 <button key={tile.id || i}
                   className={`rounded-lg p-2 text-white text-center text-xs font-medium hover:opacity-80 transition ${tile.size === "2x1" ? "col-span-2" : ""}`}
-                  style={{ backgroundColor: tile.color || "#8066FF" }}
+                  style={{ backgroundColor: tile.color || "var(--ui-primary)" }}
                   onClick={() => {
                     if (tile.type === "product" && tile.product_id) addToCart({ id: tile.product_id, name: tile.label });
                   }}>
@@ -179,9 +179,9 @@ function POSContent() {
               {suggestions.slice(0, 4).map(s => (
                 <button key={s.product_id}
                   onClick={() => addToCart({ id: s.product_id, name: s.name, price: Number(s.price) })}
-                  className="shrink-0 bg-slate-700 hover:bg-slate-600 rounded-lg p-2 text-xs text-white text-center w-28">
+                  className="shrink-0 bg-(--ui-primary) hover:bg-(--ui-primary-strong) rounded-lg p-2 text-xs text-white text-center w-28">
                   <div className="truncate font-medium">{s.name}</div>
-                  <div className="text-slate-300 mt-0.5">{Number(s.price).toFixed(2)}</div>
+                  <div className="text-white/70 mt-0.5">{Number(s.price).toFixed(2)}</div>
                 </button>
               ))}
             </div>
@@ -212,10 +212,10 @@ function POSContent() {
 
         {/* Mobile sticky pay button — visible on cart and search tabs */}
         {activeTab !== "pay" && cart.length > 0 && (
-          <div className="shrink-0 p-3 border-t border-slate-200 bg-white">
+          <div className="shrink-0 p-3 border-t border-(--ui-border) bg-(--ui-surface)">
             <button
               onClick={openCheckout}
-              className="w-full py-3.5 rounded-xl font-black text-base flex items-center justify-between px-5 bg-[#8066FF] hover:bg-[#7055E6] shadow-[0_10px_20px_-10px_rgba(128,102,255,0.6)] text-white transition-all"
+              className="w-full py-3.5 rounded-xl font-black text-base flex items-center justify-between px-5 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white transition-all"
             >
               <span className="border-r border-white/20 pr-4 tracking-wide">Pay</span>
               <span className="pl-2 flex-1 text-right tracking-tight">{money(total)}</span>
@@ -224,21 +224,21 @@ function POSContent() {
         )}
 
         {/* Mobile tab bar */}
-        <div className="shrink-0 flex items-center border-t border-slate-200 bg-white">
+        <div className="shrink-0 flex items-center border-t border-(--ui-border) bg-(--ui-surface)">
           {MOBILE_TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               className={`relative flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition ${
                 activeTab === key
-                  ? "text-[#8066FF]"
-                  : "text-slate-400"
+                  ? "text-(--ui-text)"
+                  : "text-(--ui-text-muted)"
               }`}
             >
               <Icon size={20} />
               <span>{label}</span>
               {key === "cart" && cart.length > 0 && (
-                <span className="absolute -mt-1 ml-5 bg-[#8066FF] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                <span className="absolute -mt-1 ml-5 bg-(--ui-primary) text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">
                   {cart.length}
                 </span>
               )}
@@ -248,11 +248,11 @@ function POSContent() {
       </div>
 
       {/* Desktop-only status bar — clickable shortcut hints. Mobile gets the
-          bottom tab bar instead, so this is hidden under md. Style matches
-          POS's slate/violet hardcoded palette (NOT design-system tokens).
-          Spans the full POS width (under both the cart column and the dark
-          sidebar) so it reads as a unified app footer, not a column hint. */}
-      <div className="hidden md:flex shrink-0 items-center gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+          bottom tab bar instead, so this is hidden under md. Uses the Square
+          design tokens (flat, near-monochrome). Spans the full POS width (under
+          both the cart column and the sidebar) so it reads as a unified app
+          footer, not a column hint. */}
+      <div className="hidden md:flex shrink-0 items-center gap-1 overflow-x-auto border-t border-(--ui-border) bg-(--ui-muted-surface) px-4 py-2 text-sm text-(--ui-text-muted)">
         <ShortcutHint k="F1" label="Help" onClick={() => setShowShortcutsOverlay((v) => !v)} />
         <ShortcutSep />
         <ShortcutHint k="F2" label="Discount" disabled={cartEmpty} onClick={() => setShowDiscountModal(true)} />

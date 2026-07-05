@@ -53,7 +53,7 @@ export default function POSSearchArea() {
             value={val}
             placeholder={placeholder}
             onChange={(e) => handleSearchChange(e, field)}
-            className="block w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs font-medium placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] transition shadow-sm"
+            className="block w-full px-3 py-2 border border-(--ui-border) rounded-xl bg-(--ui-surface) text-xs font-medium placeholder-(--ui-text-muted) focus:outline-none focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) transition"
           />
         ))}
       </div>
@@ -64,7 +64,7 @@ export default function POSSearchArea() {
       <div className="relative">
         <Search
           size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted) pointer-events-none"
         />
         <input
           ref={searchRef}
@@ -83,16 +83,16 @@ export default function POSSearchArea() {
             }
           }}
           placeholder={`Search ${productsWord} by name, barcode, SKU… (F2)`}
-          className="block w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-white font-medium text-sm placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] transition shadow-sm"
+          className="block w-full pl-9 pr-10 py-2.5 border border-(--ui-border) rounded-xl bg-(--ui-surface) font-medium text-sm placeholder-(--ui-text-muted) focus:outline-none focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) transition"
         />
         {/* View toggle */}
         <button type="button" onClick={toggleView}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-slate-400 hover:text-[#8066FF] transition z-10"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-(--ui-text-muted) hover:text-(--ui-text) transition z-10"
           title={viewMode === "grid" ? "Switch to list view" : "Switch to grid view"}>
           {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
         </button>
         {showResults && results.length > 0 && (
-          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-100 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+          <div className="absolute z-50 left-0 right-0 mt-1 bg-(--ui-surface) border border-(--ui-border) rounded-xl shadow-(--ui-shadow-lg) max-h-64 overflow-y-auto">
             {viewMode === "list" ? (
               results.map((p) => {
                 const stock = Number(p.local_stock ?? p.stock ?? 0);
@@ -103,16 +103,16 @@ export default function POSSearchArea() {
                   <div
                     key={p.id}
                     onClick={() => { if (!soldOut) addToCart(p); }}
-                    className={`flex items-center gap-3 px-3 py-1.5 border-b border-slate-50 last:border-0 transition text-xs ${
-                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-[#8066FF]/5 cursor-pointer"
+                    className={`flex items-center gap-3 px-3 py-1.5 border-b border-(--ui-border) last:border-0 transition text-xs ${
+                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-(--ui-muted-surface) cursor-pointer"
                     }`}>
-                    <span className="flex-1 font-medium text-slate-800 truncate">
+                    <span className="flex-1 font-medium text-(--ui-text) truncate">
                       {p.name}
-                      {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold uppercase">86'd</span>}
+                      {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-(--ui-danger-bg) text-(--ui-danger-fg) text-[10px] font-bold uppercase">86'd</span>}
                     </span>
-                    <span className="text-slate-400 shrink-0">{p.barcode || p.sku || ""}</span>
-                    <span className="font-bold text-[#8066FF] shrink-0 w-16 text-right">{money(p.price)}</span>
-                    <span className={`shrink-0 w-12 text-right font-bold uppercase ${stock > 0 ? "text-emerald-500" : "text-red-400"}`}>
+                    <span className="text-(--ui-text-muted) shrink-0">{p.barcode || p.sku || ""}</span>
+                    <span className="font-bold text-(--ui-text) shrink-0 w-16 text-right">{money(p.price)}</span>
+                    <span className={`shrink-0 w-12 text-right font-bold uppercase ${stock > 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger)"}`}>
                       {stock > 0 ? stock : "—"}
                     </span>
                   </div>
@@ -126,19 +126,19 @@ export default function POSSearchArea() {
                   <div
                     key={p.id}
                     onClick={() => { if (!soldOut) addToCart(p); }}
-                    className={`flex justify-between items-center px-4 py-2.5 border-b border-slate-50 last:border-0 transition ${
-                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-[#8066FF]/5 cursor-pointer"
+                    className={`flex justify-between items-center px-4 py-2.5 border-b border-(--ui-border) last:border-0 transition ${
+                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-(--ui-muted-surface) cursor-pointer"
                     }`}>
                     <div>
-                      <div className="font-bold text-slate-800 text-sm">
+                      <div className="font-bold text-(--ui-text) text-sm">
                         {p.name}
-                        {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold uppercase">86'd</span>}
+                        {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-(--ui-danger-bg) text-(--ui-danger-fg) text-[10px] font-bold uppercase">86'd</span>}
                       </div>
-                      <div className="text-[10px] text-slate-400">{p.barcode || p.sku || "—"}</div>
+                      <div className="text-[10px] text-(--ui-text-muted)">{p.barcode || p.sku || "—"}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-[#8066FF] text-sm">{money(p.price)}</div>
-                      <div className={`text-[10px] font-bold uppercase ${stock > 0 ? "text-emerald-500" : "text-red-400"}`}>
+                      <div className="font-bold text-(--ui-text) text-sm">{money(p.price)}</div>
+                      <div className={`text-[10px] font-bold uppercase ${stock > 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger)"}`}>
                         {stock > 0 ? `${stock} in stock` : "out of stock"}
                       </div>
                     </div>

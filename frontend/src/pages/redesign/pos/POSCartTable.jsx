@@ -22,21 +22,21 @@ export default function POSCartTable() {
   const qtyLabel = labels.quantity_label || "Qty";
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm flex-1 overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-        <span className="text-sm font-bold text-slate-800">{productsLabel} List</span>
+    <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) flex-1 overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-(--ui-border)">
+        <span className="text-sm font-bold text-(--ui-text)">{productsLabel} List</span>
         {cart.length > 0 && (
-          <span className="bg-[#8066FF] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+          <span className="bg-(--ui-primary) text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
             {cart.length} item{cart.length !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
       {cart.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-16">
-          <ShoppingCart size={36} className="mb-3 text-[#8066FF] opacity-30" />
-          <p className="font-bold text-slate-600">Cart is empty</p>
-          <p className="text-xs text-slate-400 mt-1">
+        <div className="flex-1 flex flex-col items-center justify-center text-(--ui-text-muted) py-16">
+          <ShoppingCart size={36} className="mb-3 text-(--ui-text) opacity-30" />
+          <p className="font-bold text-(--ui-text)">Cart is empty</p>
+          <p className="text-xs text-(--ui-text-muted) mt-1">
             Search items above to start a new sale.
           </p>
         </div>
@@ -44,7 +44,7 @@ export default function POSCartTable() {
         <div className="overflow-y-auto flex-1">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[10px] uppercase text-slate-400 tracking-wider border-b border-slate-100 bg-slate-50">
+              <tr className="text-[10px] uppercase text-(--ui-text-muted) tracking-wider border-b border-(--ui-border) bg-(--ui-muted-surface)">
                 <th className="px-3 md:px-4 py-2.5 text-left font-bold">{labels.product || "Product"}</th>
                 <th className="px-2 md:px-3 py-2.5 text-center font-bold">{qtyLabel}</th>
                 <th className="hidden md:table-cell px-3 py-2.5 text-right font-bold">Unit</th>
@@ -56,49 +56,49 @@ export default function POSCartTable() {
               {cart.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition"
+                  className="border-b border-(--ui-border) last:border-0 hover:bg-(--ui-muted-surface) transition"
                 >
                   <td className="px-3 md:px-4 py-3">
-                    <div className="font-bold text-slate-800 text-xs md:text-sm flex items-center gap-1.5">
+                    <div className="font-bold text-(--ui-text) text-xs md:text-sm flex items-center gap-1.5">
                       {item.name}
                       {item.is_bundle && (
-                        <span className="inline-flex items-center gap-0.5 bg-violet-100 text-violet-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        <span className="inline-flex items-center gap-0.5 bg-(--ui-muted-surface) text-(--ui-text) text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
                           <Package size={9} /> Bundle
                         </span>
                       )}
                       {item.originalPrice != null && item.originalPrice !== item.price && !item.price_override && (
-                        <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        <span className="inline-flex items-center gap-0.5 bg-(--ui-success-bg) text-(--ui-success-fg) text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
                           <Tag size={9} /> Special Price
                         </span>
                       )}
                       {item.price_override && (
-                        <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        <span className="inline-flex items-center gap-0.5 bg-(--ui-warning-bg) text-(--ui-warning-fg) text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
                           <ShieldAlert size={9} /> Override
                         </span>
                       )}
                     </div>
-                    <div className="md:hidden text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
+                    <div className="md:hidden text-[10px] text-(--ui-text-muted) mt-0.5 flex items-center gap-2">
                       <span>
                         {item.originalPrice != null && item.originalPrice !== item.price && (
-                          <span className="line-through text-slate-300 mr-1">{money(item.originalPrice)}</span>
+                          <span className="line-through text-(--ui-text-muted) mr-1">{money(item.originalPrice)}</span>
                         )}
                         {money(item.price)} ea
                       </span>
                       <button
                         onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }}
-                        className="text-red-400 hover:text-red-600 p-0.5"
+                        className="text-(--ui-danger) hover:text-(--ui-danger) p-0.5"
                       >
                         <Trash2 size={11} />
                       </button>
                     </div>
                     {item.availableStock > 0 &&
                       item.quantity >= item.availableStock && (
-                        <div className="text-[10px] text-rose-500 font-bold mt-0.5">
+                        <div className="text-[10px] text-(--ui-danger-fg) font-bold mt-0.5">
                           ⚠ Max x stock reached
                         </div>
                       )}
                     {item.availableStock <= 0 && (
-                      <div className="text-[10px] text-amber-500 font-bold mt-0.5">
+                      <div className="text-[10px] text-(--ui-warning-fg) font-bold mt-0.5">
                         ⚠ Override: out of stock
                       </div>
                     )}
@@ -114,17 +114,17 @@ export default function POSCartTable() {
                       <div className="inline-flex items-center gap-0.5 md:gap-1">
                         <button
                           onClick={() => updateQty(item.id, -1)}
-                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
+                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-full font-bold transition"
                         >
                           <Minus size={14} className="md:hidden" />
                           <Minus size={12} className="hidden md:block" />
                         </button>
-                        <span className="w-7 md:w-8 text-center font-bold text-slate-800">
+                        <span className="w-7 md:w-8 text-center font-bold text-(--ui-text)">
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => updateQty(item.id, 1)}
-                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
+                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-full font-bold transition"
                         >
                           <Plus size={14} className="md:hidden" />
                           <Plus size={12} className="hidden md:block" />
@@ -135,16 +135,16 @@ export default function POSCartTable() {
                   <td className="hidden md:table-cell px-3 py-3 text-right font-bold">
                     {item.originalPrice != null && item.originalPrice !== item.price ? (
                       <span>
-                        <span className="line-through text-slate-300 text-xs mr-1">{money(item.originalPrice)}</span>
-                        <span className="text-emerald-600">{money(item.price)}</span>
+                        <span className="line-through text-(--ui-text-muted) text-xs mr-1">{money(item.originalPrice)}</span>
+                        <span className="text-(--ui-success-fg)">{money(item.price)}</span>
                       </span>
                     ) : (
-                      <span className="text-slate-500">{money(item.price)}</span>
+                      <span className="text-(--ui-text-muted)">{money(item.price)}</span>
                     )}
                   </td>
-                  <td className="px-2 md:px-3 py-3 text-right font-black text-slate-900">
+                  <td className="px-2 md:px-3 py-3 text-right font-black text-(--ui-text)">
                     {isWeightedUnit(item.unit) && (
-                      <div className="text-[10px] font-normal text-slate-400">
+                      <div className="text-[10px] font-normal text-(--ui-text-muted)">
                         {Number(item.quantity).toFixed(3)} {item.unit} × {money(item.price)}
                       </div>
                     )}
@@ -156,14 +156,14 @@ export default function POSCartTable() {
                         <button
                           onClick={() => setMenuOpenFor(menuOpenFor === item.id ? null : item.id)}
                           aria-label="Line options"
-                          className="text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 p-1.5 rounded-lg transition"
+                          className="text-(--ui-text-muted) hover:text-(--ui-text) bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) p-1.5 rounded-lg transition"
                         >
                           <MoreHorizontal size={13} />
                         </button>
                       )}
                       {menuOpenFor === item.id && overrideOn && (
                         <div
-                          className="absolute right-0 top-full mt-1 z-10 w-44 bg-white border border-slate-200 rounded-lg shadow-lg text-left"
+                          className="absolute right-0 top-full mt-1 z-10 w-44 bg-(--ui-surface) border border-(--ui-border-strong) rounded-lg shadow-(--ui-shadow-lg) text-left"
                           onMouseLeave={() => setMenuOpenFor(null)}
                         >
                           <button
@@ -171,16 +171,16 @@ export default function POSCartTable() {
                               setMenuOpenFor(null);
                               setPriceOverrideLineId(item.id);
                             }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-muted-surface)"
                           >
-                            <ShieldAlert size={12} className="text-[#8066FF]" />
+                            <ShieldAlert size={12} className="text-(--ui-text)" />
                             Override price…
                           </button>
                         </div>
                       )}
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg transition"
+                        className="text-(--ui-danger) hover:text-(--ui-danger) bg-(--ui-danger-bg) hover:bg-(--ui-danger-bg) p-1.5 rounded-lg transition"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -217,19 +217,19 @@ function WeightedQtyCell({ item, setQty, showTare }) {
   return (
     <div className="inline-flex flex-col items-center gap-1">
       <div className="inline-flex items-center gap-1">
-        <Scale size={12} className="text-[#8066FF]" />
+        <Scale size={12} className="text-(--ui-text)" />
         <input
           type="number"
           step="0.001"
           min="0.001"
           value={gross}
           onChange={(e) => commit(e.target.value, tare)}
-          className="w-20 px-2 py-1 text-center text-sm font-bold text-slate-800 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#8066FF]/30 focus:border-[#8066FF]"
+          className="w-20 px-2 py-1 text-center text-sm font-bold text-(--ui-text) border border-(--ui-border-strong) rounded-md focus:outline-none focus:ring-2 focus:ring-(--ui-focus) focus:border-(--ui-focus)"
         />
-        <span className="text-[10px] font-semibold text-slate-500 uppercase">{item.unit}</span>
+        <span className="text-[10px] font-semibold text-(--ui-text-muted) uppercase">{item.unit}</span>
       </div>
       {showTare && (
-        <div className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+        <div className="inline-flex items-center gap-1 text-[10px] text-(--ui-text-muted)">
           <span>Tare:</span>
           <input
             type="number"
@@ -237,7 +237,7 @@ function WeightedQtyCell({ item, setQty, showTare }) {
             min="0"
             value={tare}
             onChange={(e) => commit(gross, e.target.value)}
-            className="w-14 px-1 py-0.5 text-center text-[11px] border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#8066FF]/40"
+            className="w-14 px-1 py-0.5 text-center text-[11px] border border-(--ui-border-strong) rounded focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
           />
           <span>{item.unit}</span>
         </div>
