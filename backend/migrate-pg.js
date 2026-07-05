@@ -7139,6 +7139,72 @@ const MIGRATIONS = [
       await enableRlsOnPublicTables(client);
     },
   },
+  {
+    version: 99,
+    description:
+      "F03 form builder — form_templates + form_responses (intake/waivers/questionnaires) + custom_forms flag",
+    up: async (client) => {
+      // Tenant-scoped tables. Runs against public (template schema, has
+      // customers/patient_subjects) and every active tenant schema uniformly.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS form_templates (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          entity_scope TEXT NOT NULL DEFAULT 'customer'
+            CHECK (entity_scope IN ('customer','appointment','service_ticket','project','membership','patient_subject')),
+          fields JSONB NOT NULL DEFAULT '[]',
+          require_signature BOOLEAN DEFAULT FALSE,
+          auto_attach TEXT,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS form_responses (
+          id SERIAL PRIMARY KEY,
+          form_template_id INTEGER NOT NULL REFERENCES form_templates(id),
+          fields_snapshot JSONB NOT NULL,
+          customer_id INTEGER REFERENCES customers(id),
+          patient_subject_id INTEGER REFERENCES patient_subjects(id),
+          entity_type TEXT,
+          entity_id INTEGER,
+          answers JSONB NOT NULL DEFAULT '{}',
+          signature_url TEXT,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','submitted','void')),
+          public_token TEXT UNIQUE,
+          submitted_via TEXT CHECK (submitted_via IN ('portal','public_link','staff')),
+          submitted_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_form_responses_entity
+           ON form_responses(entity_type, entity_id)`
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_form_responses_customer
+           ON form_responses(customer_id) WHERE status <> 'void'`
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_form_responses_pending_token
+           ON form_responses(public_token) WHERE public_token IS NOT NULL`
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_form_templates_active
+           ON form_templates(is_active) WHERE is_active = TRUE`
+      );
+
+      // Seed the flag OFF; preset seeders (V05/V06/V07/V08) flip it on.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled) VALUES ('custom_forms', false)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 /**

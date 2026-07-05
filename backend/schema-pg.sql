@@ -2377,7 +2377,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements'),
   ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log'),
   ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
-  ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility')
+  ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility'),
+  ('custom_forms', false, 'F03 form builder — custom intake/waivers/questionnaires (flipped on by clinical/gym/photography/repair presets)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -4444,6 +4445,48 @@ CREATE TABLE IF NOT EXISTS patient_subjects (
 );
 CREATE INDEX IF NOT EXISTS idx_patient_subjects_customer
   ON patient_subjects(customer_id) WHERE is_active = TRUE;
+
+-- ── F03 Form builder (intake / waivers / questionnaires) ──────────────
+-- Tenant-defined typed forms, filled by customers (portal / public token)
+-- or staff, optionally signed, attached to any entity.
+CREATE TABLE IF NOT EXISTS form_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  entity_scope TEXT NOT NULL DEFAULT 'customer'
+    CHECK (entity_scope IN ('customer','appointment','service_ticket','project','membership','patient_subject')),
+  fields JSONB NOT NULL DEFAULT '[]',       -- [{key,label,type,options[],required}]
+  require_signature BOOLEAN DEFAULT FALSE,  -- drawn signature (canvas → R2)
+  auto_attach TEXT,                         -- trigger key wired by consumers
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_form_templates_active
+  ON form_templates(is_active) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS form_responses (
+  id SERIAL PRIMARY KEY,
+  form_template_id INTEGER NOT NULL REFERENCES form_templates(id),
+  fields_snapshot JSONB NOT NULL,           -- template fields frozen at send time
+  customer_id INTEGER REFERENCES customers(id),
+  patient_subject_id INTEGER REFERENCES patient_subjects(id),
+  entity_type TEXT,
+  entity_id INTEGER,                         -- polymorphic attach
+  answers JSONB NOT NULL DEFAULT '{}',
+  signature_url TEXT,                        -- R2 key, consent-style
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','submitted','void')),
+  public_token TEXT UNIQUE,                  -- pre-visit fill link; NULL once submitted
+  submitted_via TEXT CHECK (submitted_via IN ('portal','public_link','staff')),
+  submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_form_responses_entity
+  ON form_responses(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_form_responses_customer
+  ON form_responses(customer_id) WHERE status <> 'void';
+CREATE INDEX IF NOT EXISTS idx_form_responses_pending_token
+  ON form_responses(public_token) WHERE public_token IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS treatment_plans (
   id SERIAL PRIMARY KEY,
