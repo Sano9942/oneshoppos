@@ -14,13 +14,13 @@ import { localDateStr } from "../../../utils/dates";
 // dotted border so the host can triage at a glance.
 
 const STATUS_STYLES = {
-  pending: { color: "text-amber-700 bg-amber-100", label: "Pending" },
-  confirmed: { color: "text-emerald-700 bg-emerald-100", label: "Confirmed" },
-  seated: { color: "text-violet-700 bg-violet-100", label: "Seated" },
-  completed: { color: "text-slate-600 bg-slate-100", label: "Done" },
-  no_show: { color: "text-rose-700 bg-rose-100", label: "No show" },
-  cancelled: { color: "text-slate-400 bg-slate-100", label: "Cancelled" },
-  waitlisted: { color: "text-sky-700 bg-sky-100", label: "Waitlisted" },
+  pending: { color: "text-(--ui-warning-fg) bg-(--ui-warning-bg)", label: "Pending" },
+  confirmed: { color: "text-(--ui-success-fg) bg-(--ui-success-bg)", label: "Confirmed" },
+  seated: { color: "text-(--ui-text-muted) bg-(--ui-muted-surface)", label: "Seated" },
+  completed: { color: "text-(--ui-text-muted) bg-(--ui-muted-surface)", label: "Done" },
+  no_show: { color: "text-(--ui-danger-fg) bg-(--ui-danger-bg)", label: "No show" },
+  cancelled: { color: "text-(--ui-text-muted) bg-(--ui-muted-surface)", label: "Cancelled" },
+  waitlisted: { color: "text-(--ui-link) bg-(--ui-muted-surface)", label: "Waitlisted" },
 };
 
 function formatDateIso(d) {
@@ -193,12 +193,12 @@ export default function ReservationsRedesign() {
       <SectionCard>
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-2">
-            <CalendarDays size={18} className="text-[#8066FF]" />
+            <CalendarDays size={18} className="text-(--ui-primary)" />
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#8066FF]/40"
+              className="h-10 px-3 rounded-lg border border-(--ui-border) text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-primary)/40"
             />
           </div>
           <div className="flex-1" />
@@ -234,7 +234,7 @@ export default function ReservationsRedesign() {
                   const style = STATUS_STYLES[r.status] || STATUS_STYLES.pending;
                   return (
                     <tr key={r.id} className="border-b border-(--ui-border)">
-                      <td className="py-2 pr-4 font-mono text-xs text-slate-700">{formatTime(r.reservation_start)}</td>
+                      <td className="py-2 pr-4 font-mono text-xs text-(--ui-text)">{formatTime(r.reservation_start)}</td>
                       <td className="py-2 pr-4 font-medium">{r.customer_name}</td>
                       <td className="py-2 pr-4 text-(--ui-text-muted)">{r.party_size}</td>
                       <td className="py-2 pr-4 text-(--ui-text-muted)">{r.phone || "—"}</td>
@@ -283,14 +283,14 @@ export default function ReservationsRedesign() {
 
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCreating(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-(--ui-surface) rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">New reservation</h3>
             <div className="space-y-3">
               <Field label="Guest name">
                 <input
                   value={form.customer_name}
                   onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                  className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 />
               </Field>
               <div className="grid grid-cols-2 gap-3">
@@ -298,7 +298,7 @@ export default function ReservationsRedesign() {
                   <input
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                    className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                   />
                 </Field>
                 <Field label="Party size">
@@ -307,7 +307,7 @@ export default function ReservationsRedesign() {
                     min="1"
                     value={form.party_size}
                     onChange={(e) => setForm({ ...form, party_size: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                    className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                   />
                 </Field>
               </div>
@@ -315,7 +315,7 @@ export default function ReservationsRedesign() {
                 <input
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                  className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 />
               </Field>
               <Field label="Date/time">
@@ -323,7 +323,7 @@ export default function ReservationsRedesign() {
                   type="datetime-local"
                   value={form.reservation_start}
                   onChange={(e) => setForm({ ...form, reservation_start: e.target.value })}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                  className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 />
               </Field>
               <Field label="Notes">
@@ -331,7 +331,7 @@ export default function ReservationsRedesign() {
                   rows="2"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                  className="w-full px-3 py-2 rounded-lg border border-(--ui-border) text-sm"
                 />
               </Field>
             </div>
@@ -345,18 +345,18 @@ export default function ReservationsRedesign() {
 
       {seatPickerFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !seatSubmitting && setSeatPickerFor(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-(--ui-surface) rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-lg font-bold">Seat {seatPickerFor.customer_name}</h3>
               <button
                 onClick={() => !seatSubmitting && setSeatPickerFor(null)}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-(--ui-text-muted) hover:text-(--ui-text)"
                 disabled={seatSubmitting}
               >
                 <X size={18} />
               </button>
             </div>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-(--ui-text-muted) mb-4">
               Party of {seatPickerFor.party_size} · {formatTime(seatPickerFor.reservation_start)} · pick a table
             </p>
 
@@ -368,8 +368,8 @@ export default function ReservationsRedesign() {
                     onClick={() => switchSeatPlan(p.id)}
                     className={`h-8 px-3 rounded-md text-xs font-semibold ${
                       seatActivePlanId === p.id
-                        ? "bg-[#8066FF] text-white"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                        : "bg-(--ui-muted-surface) text-(--ui-text) hover:bg-(--ui-muted-surface)"
                     }`}
                     disabled={seatSubmitting || seatLoading}
                   >
@@ -380,9 +380,9 @@ export default function ReservationsRedesign() {
             )}
 
             {seatLoading ? (
-              <div className="text-sm text-slate-500 py-12 text-center">Loading tables…</div>
+              <div className="text-sm text-(--ui-text-muted) py-12 text-center">Loading tables…</div>
             ) : seatTables.length === 0 ? (
-              <div className="text-sm text-slate-500 py-12 text-center italic">
+              <div className="text-sm text-(--ui-text-muted) py-12 text-center italic">
                 No tables in this plan. Add tables in Floor Plan first.
               </div>
             ) : (
@@ -404,10 +404,10 @@ export default function ReservationsRedesign() {
                       }
                       className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center transition ${
                         occupied
-                          ? "border-rose-200 bg-rose-50 text-rose-700 cursor-not-allowed"
+                          ? "border-(--ui-danger-bg) bg-(--ui-danger-bg) text-(--ui-danger-fg) cursor-not-allowed"
                           : undersized
-                            ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                            : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                            ? "border-(--ui-warning-bg) bg-(--ui-warning-bg) text-(--ui-warning-fg) hover:bg-(--ui-warning-bg)"
+                            : "border-(--ui-success-bg) bg-(--ui-success-bg) text-(--ui-success-fg) hover:bg-(--ui-success-bg)"
                       }`}
                     >
                       <div className="text-base font-bold">{t.label}</div>
@@ -437,7 +437,7 @@ function RowButton({ children, ...props }) {
   return (
     <button
       {...props}
-      className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50"
+      className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-semibold bg-(--ui-muted-surface) hover:bg-(--ui-muted-surface) text-(--ui-text) disabled:opacity-50"
     >
       {children}
     </button>
@@ -447,7 +447,7 @@ function RowButton({ children, ...props }) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-slate-600 mb-1 block">{label}</span>
+      <span className="text-xs font-semibold text-(--ui-text-muted) mb-1 block">{label}</span>
       {children}
     </label>
   );

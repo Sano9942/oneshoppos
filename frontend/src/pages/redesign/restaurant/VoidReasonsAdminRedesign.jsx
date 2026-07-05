@@ -100,13 +100,13 @@ export default function VoidReasonsAdminRedesign() {
     <PageShell title="Void / Comp Reasons" subtitle="Manage the reason codes staff pick from when adjusting a sale item">
       <SectionCard>
         {loading ? (
-          <div className="p-6 text-slate-500 text-sm">Loading…</div>
+          <div className="p-6 text-(--ui-text-muted) text-sm">Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="p-6 text-slate-500 text-sm">No reason codes configured.</div>
+          <div className="p-6 text-(--ui-text-muted) text-sm">No reason codes configured.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase font-bold text-slate-500 border-b border-slate-200">
+              <tr className="text-left text-xs uppercase font-bold text-(--ui-text-muted) border-b border-(--ui-border)">
                 <th className="py-3 px-4">Code</th>
                 <th className="py-3 px-4">Label</th>
                 <th className="py-3 px-4">Type</th>
@@ -117,30 +117,30 @@ export default function VoidReasonsAdminRedesign() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-3 px-4 font-mono text-xs text-slate-600">{r.code}</td>
-                  <td className="py-3 px-4 font-semibold text-slate-900">{r.label}</td>
+                <tr key={r.id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                  <td className="py-3 px-4 font-mono text-xs text-(--ui-text-muted)">{r.code}</td>
+                  <td className="py-3 px-4 font-semibold text-(--ui-text)">{r.label}</td>
                   <td className="py-3 px-4">{typeBadge(r.adjustment_type)}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => bumpSort(r, -10)}
                         disabled={busyId === r.id}
-                        className="w-7 h-7 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        className="w-7 h-7 rounded border border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface) disabled:opacity-50"
                       >↑</button>
-                      <span className="w-10 text-center text-slate-700">{r.sort_order}</span>
+                      <span className="w-10 text-center text-(--ui-text)">{r.sort_order}</span>
                       <button
                         onClick={() => bumpSort(r, 10)}
                         disabled={busyId === r.id}
-                        className="w-7 h-7 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        className="w-7 h-7 rounded border border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface) disabled:opacity-50"
                       >↓</button>
                     </div>
                   </td>
                   <td className="py-3 px-4">
                     {r.is_active ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-(--ui-success-bg) text-(--ui-success-fg) border border-(--ui-success-bg)">Active</span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-50 text-slate-500 border border-slate-200">Hidden</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-(--ui-muted-surface) text-(--ui-text-muted) border border-(--ui-border)">Hidden</span>
                     )}
                   </td>
                   <td className="py-3 px-4">

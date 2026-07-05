@@ -152,22 +152,22 @@ export default function MenuSchedulesRedesign() {
         {/* Weekly grid */}
         <SectionCard className="lg:col-span-2 p-0 overflow-auto">
           {loading ? (
-            <div className="p-6 text-slate-500 text-sm">Loading…</div>
+            <div className="p-6 text-(--ui-text-muted) text-sm">Loading…</div>
           ) : (
             <div className="min-w-[720px]">
-              <div className="grid grid-cols-8 sticky top-0 bg-white z-10 border-b border-slate-200">
-                <div className="py-2 px-2 text-xs font-bold uppercase text-slate-500">
+              <div className="grid grid-cols-8 sticky top-0 bg-(--ui-surface) z-10 border-b border-(--ui-border)">
+                <div className="py-2 px-2 text-xs font-bold uppercase text-(--ui-text-muted)">
                   <Clock size={12} className="inline" />
                 </div>
                 {DAYS.map((d, i) => (
-                  <div key={i} className="py-2 px-2 text-center text-xs font-bold uppercase text-slate-500">
+                  <div key={i} className="py-2 px-2 text-center text-xs font-bold uppercase text-(--ui-text-muted)">
                     {d}
                   </div>
                 ))}
               </div>
               {HOURS.map((h) => (
-                <div key={h} className="grid grid-cols-8 border-b border-slate-100 hover:bg-slate-50/50">
-                  <div className="py-1 px-2 text-xs font-mono text-slate-400 border-r border-slate-100">
+                <div key={h} className="grid grid-cols-8 border-b border-(--ui-border) hover:bg-(--ui-muted-surface)/50">
+                  <div className="py-1 px-2 text-xs font-mono text-(--ui-text-muted) border-r border-(--ui-border)">
                     {String(h).padStart(2, "0")}:00
                   </div>
                   {DAYS.map((_, dow) => {
@@ -180,12 +180,12 @@ export default function MenuSchedulesRedesign() {
                         key={dow}
                         type="button"
                         onClick={() => cellClick(dow, h)}
-                        className="py-1 px-1 border-l border-slate-100 hover:bg-indigo-50 text-left relative h-7"
+                        className="py-1 px-1 border-l border-(--ui-border) hover:bg-(--ui-muted-surface) text-left relative h-7"
                       >
                         {overlays.map((s) => (
                           <div
                             key={s.id}
-                            className="absolute inset-0 bg-[#8066FF] opacity-70 text-white text-[10px] font-bold px-1 truncate"
+                            className="absolute inset-0 bg-(--ui-primary) opacity-70 text-(--ui-on-primary) text-[10px] font-bold px-1 truncate"
                             style={{ opacity: s.is_active ? 0.7 : 0.25 }}
                             title={`${s.name} (${s.start_time}-${s.end_time})`}
                           >
@@ -206,18 +206,18 @@ export default function MenuSchedulesRedesign() {
           {editing ? (
             <>
               <div className="flex items-center justify-between">
-                <h3 className="font-black text-slate-900 text-base">
+                <h3 className="font-black text-(--ui-text) text-base">
                   {editing.id ? "Edit schedule" : "New schedule"}
                 </h3>
-                <button onClick={() => setEditing(null)} className="text-xs font-bold text-slate-500 hover:text-slate-800">Cancel</button>
+                <button onClick={() => setEditing(null)} className="text-xs font-bold text-(--ui-text-muted) hover:text-(--ui-text)">Cancel</button>
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Name</label>
+                <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">Name</label>
                 <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Day</label>
+                  <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">Day</label>
                   <Select
                     value={editing.day_of_week == null ? "" : String(editing.day_of_week)}
                     onChange={(e) => setEditing({ ...editing, day_of_week: e.target.value === "" ? null : Number(e.target.value) })}
@@ -227,7 +227,7 @@ export default function MenuSchedulesRedesign() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Outlet</label>
+                  <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">Outlet</label>
                   <Select
                     value={editing.outlet_id == null ? "" : String(editing.outlet_id)}
                     onChange={(e) => setEditing({ ...editing, outlet_id: e.target.value === "" ? null : Number(e.target.value) })}
@@ -237,16 +237,16 @@ export default function MenuSchedulesRedesign() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Start</label>
+                  <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">Start</label>
                   <Input type="time" value={editing.start_time?.slice(0, 5) || ""} onChange={(e) => setEditing({ ...editing, start_time: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">End</label>
+                  <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">End</label>
                   <Input type="time" value={editing.end_time?.slice(0, 5) || ""} onChange={(e) => setEditing({ ...editing, end_time: e.target.value })} />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-1">
                   Products ({(editing.product_ids || []).length})
                 </label>
                 <select
@@ -256,13 +256,13 @@ export default function MenuSchedulesRedesign() {
                     const ids = Array.from(e.target.selectedOptions).map((o) => Number(o.value));
                     setEditing({ ...editing, product_ids: ids });
                   }}
-                  className="w-full h-40 px-2 py-1 rounded-lg border border-slate-300 text-sm"
+                  className="w-full h-40 px-2 py-1 rounded-lg border border-(--ui-border-strong) text-sm"
                 >
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple. Products NOT listed here are always available.</p>
+                <p className="text-xs text-(--ui-text-muted) mt-1">Hold Ctrl/Cmd to select multiple. Products NOT listed here are always available.</p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button tone="primary" onClick={save} disabled={saving}>
@@ -272,26 +272,26 @@ export default function MenuSchedulesRedesign() {
             </>
           ) : (
             <>
-              <h3 className="font-black text-slate-900 text-base">Schedules</h3>
+              <h3 className="font-black text-(--ui-text) text-base">Schedules</h3>
               {filtered.length === 0 ? (
                 <EmptyState title="No schedules yet" body="Click a cell in the grid or press New to add one." />
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-(--ui-border)">
                   {filtered.map((s) => (
                     <li key={s.id} className="py-2 flex items-center justify-between">
                       <button
                         onClick={() => setEditing({ ...s, product_ids: s.product_ids || [] })}
                         className="text-left flex-1"
                       >
-                        <div className="font-bold text-slate-900">{s.name}</div>
-                        <div className="text-xs text-slate-500">
+                        <div className="font-bold text-(--ui-text)">{s.name}</div>
+                        <div className="text-xs text-(--ui-text-muted)">
                           {s.day_of_week == null ? "Every day" : DAYS[s.day_of_week]} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
                           {s.outlet_id ? ` · ${outlets.find((o) => o.id === s.outlet_id)?.name || "outlet"}` : ""}
                         </div>
                       </button>
                       <button
                         onClick={() => del(s.id)}
-                        className="text-rose-500 hover:text-rose-700 p-1"
+                        className="text-(--ui-danger-fg) hover:text-(--ui-danger-fg) p-1"
                       >
                         <Trash2 size={14} />
                       </button>

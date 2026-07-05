@@ -12,10 +12,10 @@ import { api } from "../../../api";
 // fires SMS; Seat opens a table-picker; Remove soft-deletes + reorders.
 
 const STATUS_STYLES = {
-  waiting: { color: "text-amber-700 bg-amber-100", label: "Waiting" },
-  notified: { color: "text-sky-700 bg-sky-100", label: "Notified" },
-  seated: { color: "text-violet-700 bg-violet-100", label: "Seated" },
-  removed: { color: "text-slate-500 bg-slate-100", label: "Removed" },
+  waiting: { color: "text-(--ui-warning-fg) bg-(--ui-warning-bg)", label: "Waiting" },
+  notified: { color: "text-(--ui-link) bg-(--ui-muted-surface)", label: "Notified" },
+  seated: { color: "text-(--ui-text-muted) bg-(--ui-muted-surface)", label: "Seated" },
+  removed: { color: "text-(--ui-text-muted) bg-(--ui-muted-surface)", label: "Removed" },
 };
 
 export default function WaitlistRedesign() {
@@ -142,8 +142,8 @@ export default function WaitlistRedesign() {
             {rows.map((r) => {
               const style = STATUS_STYLES[r.status] || STATUS_STYLES.waiting;
               return (
-                <li key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-(--ui-border)">
-                  <div className="h-10 w-10 rounded-full bg-[#8066FF] text-white flex items-center justify-center font-bold">
+                <li key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-(--ui-surface) border border-(--ui-border)">
+                  <div className="h-10 w-10 rounded-full bg-(--ui-primary) text-(--ui-on-primary) flex items-center justify-center font-bold">
                     #{r.position}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -181,20 +181,20 @@ export default function WaitlistRedesign() {
 
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCreating(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-(--ui-surface) rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Add to waitlist</h3>
             <div className="space-y-3">
               <input
                 placeholder="Guest name"
                 value={form.customer_name}
                 onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               />
               <input
                 placeholder="Phone (for SMS notify)"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
               />
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -203,7 +203,7 @@ export default function WaitlistRedesign() {
                   placeholder="Party"
                   value={form.party_size}
                   onChange={(e) => setForm({ ...form, party_size: e.target.value })}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                  className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 />
                 <input
                   type="number"
@@ -211,7 +211,7 @@ export default function WaitlistRedesign() {
                   placeholder="Wait (min)"
                   value={form.quoted_wait_minutes}
                   onChange={(e) => setForm({ ...form, quoted_wait_minutes: e.target.value })}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm"
+                  className="w-full h-10 px-3 rounded-lg border border-(--ui-border) text-sm"
                 />
               </div>
               <textarea
@@ -219,7 +219,7 @@ export default function WaitlistRedesign() {
                 placeholder="Notes (optional)"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-(--ui-border) text-sm"
               />
             </div>
             <div className="flex justify-end gap-2 mt-4">
@@ -232,18 +232,18 @@ export default function WaitlistRedesign() {
 
       {seatPicker.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setSeatPicker({ open: false, entry: null })}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-(--ui-surface) rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-2">Seat {seatPicker.entry?.customer_name}</h3>
-            <p className="text-sm text-slate-600 mb-4">Pick a table, or seat without assigning.</p>
+            <p className="text-sm text-(--ui-text-muted) mb-4">Pick a table, or seat without assigning.</p>
             <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
               {tables.length === 0 && (
-                <div className="col-span-3 text-center text-sm text-slate-500 italic py-4">No tables available</div>
+                <div className="col-span-3 text-center text-sm text-(--ui-text-muted) italic py-4">No tables available</div>
               )}
               {tables.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => seat(t.id)}
-                  className="h-14 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-bold"
+                  className="h-14 rounded-lg bg-(--ui-muted-surface) hover:bg-(--ui-muted-surface) text-(--ui-text) text-sm font-bold"
                 >
                   {t.label || t.name}
                 </button>
