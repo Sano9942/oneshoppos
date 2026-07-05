@@ -16,6 +16,7 @@
 const masterDb = require("../master-db-pg");
 const _logger = require("../services/logger").child({ component: "webhooks" });
 const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
+const depositEngine = require("../services/deposit-engine");
 
 // W32: webhook arrives with no tenant context (mounted before tenant
 // middleware, payload doesn't carry slug). Tenant-scoped tables
@@ -44,10 +45,14 @@ async function resolveTenantDbForGatewayRef(gatewayRef) {
 
   // Try each tenant-scoped table where a payment session might live.
   // First match wins. Order matches the lookup order in processWebhookEvent
-  // below (room → treatment plan → invoice → restaurant → storefront).
+  // below (deposit entities → invoice → restaurant → storefront). The deposit
+  // tables come from deposit-engine.ENTITY_ADAPTERS (F04) so a new deposit
+  // entity is resolved here automatically once it registers an adapter.
   const lookups = [
-    { table: "room_bookings", ref: "deposit_payment_intent_id" },
-    { table: "treatment_plans", ref: "deposit_payment_intent_id" },
+    ...Object.values(depositEngine.ENTITY_ADAPTERS).map((cfg) => ({
+      table: cfg.table,
+      ref: cfg.refColumn,
+    })),
     { table: "customer_invoice_payment_links", ref: "gateway_ref" },
     { table: "restaurant_payment_sessions", ref: "gateway_ref" },
     { table: "storefront_payment_sessions", ref: "provider_ref" },
@@ -205,11 +210,9 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true, message: "Event acknowledged" };
   }
 
-  // ── Context 2: Room deposit pre-auth (tenant schema, M9) ──
+  // ── Context 2: Deposit pre-auth (tenant schema, F04) ──
   // A single webhook endpoint serves every payment-gateway adapter (sandbox,
   // xpay, etc.) because verifyWebhook() is dispatched on adapter up front.
-  // room_bookings.deposit_payment_intent_id is set by room-deposits.js when
-  // a pre-auth is created, and the webhook looks it up here.
   //
   // W32: scope db to the tenant that owns this gateway_ref. Without this,
   // every tenant-scoped lookup below queries the public pool with no
@@ -219,7 +222,7 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
   if (!resolved) {
     _logger.info(
       { transaction_id, provider, event_type },
-      "Webhook gateway_ref not found in any tenant — checked rooms/treatment/invoice/restaurant/storefront contexts"
+      "Webhook gateway_ref not found in any tenant — checked deposit/invoice/restaurant/storefront contexts"
     );
     return { ok: false, statusCode: 404, error: "Payment context not found" };
   }
@@ -228,52 +231,37 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     { transaction_id, tenant: resolved.tenant.slug },
     "Webhook tenant resolved"
   );
-  try {
-    const { rows: [booking] } = await db.query(
-      "SELECT id, deposit_status FROM room_bookings WHERE deposit_payment_intent_id = $1",
-      [transaction_id]
-    );
-    if (booking) {
-      const { handleDepositWebhook } = require("../services/room-deposits");
-      const result = await handleDepositWebhook(db, {
-        gatewayRef: transaction_id,
-        eventType: event_type,
-        status,
-      });
-      _logger.info({ bookingId: booking.id, result }, "Room deposit webhook handled");
-      return { ok: true };
-    }
-  } catch (depositErr) {
-    // Table may not exist for tenants that haven't migrated to v38 yet — fall
-    // through to remaining contexts silently.
-    if (!String(depositErr.message || "").includes("does not exist")) {
-      _logger.error({ err: depositErr, transaction_id }, "Room deposit webhook lookup failed");
-    }
-  }
 
-  // ── Context 2b: Treatment plan deposit pre-auth (tenant schema, M10) ──
-  // Same dispatch pattern as room deposits. treatment_plans.deposit_payment_intent_id
-  // is set by treatment-plan-deposits.js; the webhook looks it up here.
-  try {
-    const { rows: [plan] } = await db.query(
-      "SELECT id, deposit_status FROM treatment_plans WHERE deposit_payment_intent_id = $1",
-      [transaction_id]
-    );
-    if (plan) {
-      const { handleDepositWebhook } = require("../services/treatment-plan-deposits");
-      const result = await handleDepositWebhook(db, {
-        gatewayRef: transaction_id,
-        eventType: event_type,
-        status,
-      });
-      _logger.info({ planId: plan.id, result }, "Treatment plan deposit webhook handled");
-      return { ok: true };
-    }
-  } catch (depositErr) {
-    // Table may not exist for tenants that haven't migrated to v39 yet — fall
-    // through silently.
-    if (!String(depositErr.message || "").includes("does not exist")) {
-      _logger.error({ err: depositErr, transaction_id }, "Treatment plan deposit webhook lookup failed");
+  // Each deposit entity's <table>.<refColumn> is set by deposit-engine.create()
+  // when a pre-auth is created; the webhook looks it up here by iterating the
+  // engine's ENTITY_ADAPTERS registry, so adding a deposit entity (rental,
+  // appointment, ticket, …) needs no webhook edit. Table/column names come
+  // only from the in-code registry — never user input. A table that doesn't
+  // exist for an unmigrated tenant is swallowed silently so remaining contexts
+  // (invoice/restaurant/storefront) still run.
+  for (const entityType of Object.keys(depositEngine.ENTITY_ADAPTERS)) {
+    const cfg = depositEngine.ENTITY_ADAPTERS[entityType];
+    try {
+      const { rows: [hit] } = await db.query(
+        `SELECT id FROM ${cfg.table} WHERE ${cfg.refColumn} = $1`,
+        [transaction_id]
+      );
+      if (hit) {
+        const result = await depositEngine.handleWebhook(db, {
+          entityType,
+          gatewayRef: transaction_id,
+          eventType: event_type,
+          status,
+        });
+        _logger.info({ entityType, entityId: hit.id, result }, "Deposit webhook handled");
+        return { ok: true };
+      }
+    } catch (depositErr) {
+      // Table may not exist for tenants that haven't migrated yet — fall
+      // through to remaining contexts silently.
+      if (!String(depositErr.message || "").includes("does not exist")) {
+        _logger.error({ err: depositErr, transaction_id, entityType }, "Deposit webhook lookup failed");
+      }
     }
   }
 
