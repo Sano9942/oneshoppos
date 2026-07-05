@@ -45,6 +45,7 @@ import {
 import { api } from "../api";
 import { todayLocalStr } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
+import useFeatureFlags from "../hooks/useFeatureFlags";
 import { readContext } from "../auth/authStore";
 import { useToast } from "../contexts/ToastContext";
 import { usePreset } from "../contexts/PresetContext";
@@ -475,9 +476,19 @@ const GROUPS = [
       { id: "replenishment", label: "Replenishment", icon: RotateCcw },
       { id: "dead-stock", label: "Dead Stock", icon: PackageX },
       { id: "stock-aging", label: "Stock Aging", icon: AlertTriangle },
-      { id: "stockout-risk", label: "Stockout Risk", icon: TrendingDown },
+      {
+        id: "stockout-risk",
+        label: "Stockout Risk",
+        icon: TrendingDown,
+        flag: "reports_inventory_health_plus",
+      },
       { id: "forecast-demand", label: "Forecast Demand", icon: TrendingUp },
-      { id: "replenishment-smart", label: "Replenishment Smart", icon: ShoppingCart },
+      {
+        id: "replenishment-smart",
+        label: "Replenishment Smart",
+        icon: ShoppingCart,
+        flag: "reports_inventory_health_plus",
+      },
       { id: "shrinkage", label: "Shrinkage", icon: TrendingDown },
     ],
   },
@@ -785,13 +796,22 @@ const TAB_ALIASES = {
 };
 
 export default function Reports() {
-  const { isBootstrapping } = useAuth();
+  const { isBootstrapping, authHeaders } = useAuth();
   const toast = useToast();
   const { visible_report_groups } = usePreset();
+  const { flags } = useFeatureFlags(authHeaders);
   // Filter groups for sidebar — null = show all, array = show only listed groups
-  const sidebarGroups = visible_report_groups
+  const presetGroups = visible_report_groups
     ? GROUPS.filter((g) => visible_report_groups.includes(g.label))
     : GROUPS;
+  // Drop feature-flagged tabs whose flag is off (e.g. the premium
+  // reports_inventory_health_plus tabs would otherwise render and 403 on click).
+  const sidebarGroups = presetGroups
+    .map((g) => ({
+      ...g,
+      tabs: g.tabs.filter((t) => !t.flag || flags?.[t.flag]),
+    }))
+    .filter((g) => g.tabs.length > 0);
   const _ctx = readContext();
   const ctxOutletIdNum = _ctx?.active_outlet_id && _ctx?.scope_mode !== "all_branches"
     ? Number(_ctx.active_outlet_id)
@@ -883,7 +903,7 @@ export default function Reports() {
     didApplyParams.current = true;
   }, [searchParams]);
 
-  const activeGroup = GROUPS.find((g) =>
+  const activeGroup = sidebarGroups.find((g) =>
     g.tabs.some((t) => t.id === activeTab),
   );
 

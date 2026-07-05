@@ -450,8 +450,8 @@ async function recalcCheckTotals(client, draftOrderId) {
     UPDATE draft_orders SET
       subtotal = COALESCE((SELECT SUM(price * quantity) FROM draft_order_items WHERE draft_order_id = $1), 0),
       discount_total = COALESCE((SELECT SUM(discount * quantity) FROM draft_order_items WHERE draft_order_id = $1), 0),
-      tax_total = COALESCE((SELECT SUM(price * quantity * effective_tax_rate) FROM draft_order_items WHERE draft_order_id = $1), 0),
-      total = COALESCE((SELECT SUM((price - discount) * quantity * (1 + effective_tax_rate)) FROM draft_order_items WHERE draft_order_id = $1), 0),
+      tax_total = COALESCE((SELECT SUM(price * quantity * effective_tax_rate / 100) FROM draft_order_items WHERE draft_order_id = $1), 0),
+      total = COALESCE((SELECT SUM((price - discount) * quantity * (1 + effective_tax_rate / 100)) FROM draft_order_items WHERE draft_order_id = $1), 0),
       updated_at = NOW()
     WHERE id = $1`,
     [draftOrderId]

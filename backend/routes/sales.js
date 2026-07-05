@@ -2,7 +2,9 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
+const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const { verifyManagerPin } = require("../services/manager-pin");
+const kitEngine = require("../services/kit-engine");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -360,31 +362,21 @@ module.exports = function registerSalesRoutes(app, deps) {
             // matching sale_items.quantity — restore with full fractional precision.
             const restoreQtyInt = Number(item.quantity);
 
-            // Check if this item is a bundle — restore component stock instead
+            // F01: if this line is a kit, restore COMPONENT stock (not the kit's,
+            // which holds none). Server-authoritative via bom_type; the engine
+            // keeps outlet_stock + variant_outlet_stock + the variant rollup in
+            // sync, mirroring the sale-time decrement.
             const { rows: [prod] } = await client.query(
-              "SELECT is_bundle FROM products WHERE id = $1",
+              "SELECT COALESCE(bom_type, 'standard') AS bom_type FROM products WHERE id = $1",
               [item.product_id]
             );
 
-            if (prod && prod.is_bundle) {
-              const { rows: comps } = await client.query(
-                "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
-                [item.product_id]
-              );
-              for (const comp of comps) {
-                const restoreQty = comp.quantity * restoreQtyInt;
-                await client.query(
-                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
-                   ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-                  [comp.component_product_id, sale.outlet_id, restoreQty, restoreQty]
-                );
-                if (comp.component_variant_id) {
-                  await client.query(
-                    `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
-                    [restoreQty, comp.component_variant_id]
-                  );
-                }
-              }
+            if (prod && prod.bom_type === "kit") {
+              await kitEngine.restockComponents(client, {
+                productId: item.product_id,
+                outletId: sale.outlet_id,
+                qty: restoreQtyInt,
+              });
             } else {
               await client.query(
                 `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
@@ -1204,227 +1196,58 @@ module.exports = function registerSalesRoutes(app, deps) {
     }
 
     // P8 (3.14) — Per-line tax snapshot resolution (read-only, before tx).
-    // For each cart line, resolve the effective tax rate using the cascade:
-    //   1. outlet_tax_profiles match (when phase2_outlet_tax flag on)
-    //   2. products.tax_id → taxes.rate
-    //   3. products.gst (legacy direct rate)
-    //   4. category-tree inherited tax_id → taxes.rate
-    //   5. 0
-    // tax_mode='none' overrides everything to 0.
+    // The cascade lives in services/tax-snapshot.js — shared with storefront
+    // quotes, layaway settle, pay-at-table, quotation convert, and manual
+    // orders so every sale writer resolves tax identically.
     const taxMode = (req.company && req.company.tax_mode) || "none";
-    const taxInclusiveResolved =
-      taxMode === "none"
-        ? false
-        : typeof tax_inclusive_in === "boolean"
-          ? tax_inclusive_in
-          : taxMode === "inclusive";
-
-    const taxByIndex = new Array(cartItems.length).fill(null);
-    if (taxMode === "none") {
-      for (let i = 0; i < cartItems.length; i++) {
-        taxByIndex[i] = { rate: 0, amount: 0, hsCode: null };
-      }
-    } else {
-      // Pre-fetch product rows for all cart items once.
-      const productIdsForTax = Array.from(
-        new Set(cartItems.map((x) => Number(x.original_product_id || x.id)).filter(Boolean))
-      );
-      let productMap = new Map();
-      if (productIdsForTax.length) {
-        const { rows: pRows } = await db.query(
-          `SELECT p.id, p.gst, p.tax_id, p.category_id,
-                  t.rate AS tax_table_rate
-             FROM products p
-             LEFT JOIN taxes t ON t.id = p.tax_id
-            WHERE p.id = ANY($1::int[])`,
-          [productIdsForTax]
-        );
-        for (const r of pRows) productMap.set(Number(r.id), r);
-      }
-
-      // Outlet tax profile lookup — only if the flag is on AND the table exists.
-      // Build a small in-memory map keyed by (product_id, category_id) → rate.
-      let outletProfileLines = [];
-      try {
-        const flags = await getFeatureFlagsMap(req.tenantId);
-        if (flags.phase2_outlet_tax) {
-          const { rows } = await db.query(
-            `SELECT otpl.product_id, otpl.category_id, otpl.priority, t.rate
-               FROM outlet_tax_profiles otp
-               JOIN outlet_tax_profile_lines otpl ON otpl.profile_id = otp.id
-               LEFT JOIN taxes t ON t.id = otpl.tax_id
-              WHERE otp.outlet_id = $1 AND otp.is_active = TRUE`,
-            [Number(outlet_id)]
-          );
-          outletProfileLines = rows;
-        }
-      } catch { /* outlet_tax_profiles table may not exist on older tenants */ }
-
-      // Lazy-load category indexes for resolveInheritedField (only if needed).
-      let categoryByIdMap = null;
-      const ensureCategoryMap = async () => {
-        if (categoryByIdMap) return categoryByIdMap;
-        try {
-          const { fetchCategoryIndexes } = require("../category-tree");
-          const idx = await fetchCategoryIndexes(db);
-          categoryByIdMap = idx?.byId || new Map();
-        } catch {
-          categoryByIdMap = new Map();
-        }
-        return categoryByIdMap;
-      };
-
-      for (let i = 0; i < cartItems.length; i++) {
-        const item = cartItems[i];
-        const productId = Number(item.original_product_id || item.id) || null;
-        const product = productId ? productMap.get(productId) : null;
-        const categoryId = product?.category_id || null;
-
-        let rate = null;
-
-        // 1. Outlet tax profile (highest priority match wins)
-        if (outletProfileLines.length) {
-          const matches = outletProfileLines
-            .filter(
-              (l) =>
-                (l.product_id != null && Number(l.product_id) === productId) ||
-                (l.category_id != null && Number(l.category_id) === Number(categoryId)) ||
-                (l.product_id == null && l.category_id == null)
-            )
-            .sort((a, b) => (b.priority || 0) - (a.priority || 0));
-          if (matches.length && matches[0].rate != null) {
-            rate = Number(matches[0].rate);
-          }
-        }
-
-        // 2. products.tax_id → taxes.rate
-        if (rate == null && product?.tax_table_rate != null) {
-          rate = Number(product.tax_table_rate);
-        }
-
-        // 3. products.gst direct
-        if (rate == null && product?.gst != null) {
-          rate = Number(product.gst);
-        }
-
-        // 4. Category inheritance via tax_id
-        if (rate == null && categoryId) {
-          const byId = await ensureCategoryMap();
-          const { resolveInheritedField } = require("../category-tree");
-          const inheritedTaxId = resolveInheritedField(byId, categoryId, "tax_id");
-          if (inheritedTaxId) {
-            try {
-              const { rows: [tr] } = await db.query(
-                "SELECT rate FROM taxes WHERE id = $1",
-                [Number(inheritedTaxId)]
-              );
-              if (tr) rate = Number(tr.rate);
-            } catch { /* ignore */ }
-          }
-        }
-
-        if (rate == null || !isFinite(rate)) rate = 0;
-
-        // HS code: product → category inheritance
-        let hsCode = null;
-        if (categoryId) {
-          const byId = await ensureCategoryMap();
-          const { resolveInheritedField } = require("../category-tree");
-          hsCode = resolveInheritedField(byId, categoryId, "hs_code") || null;
-        }
-
-        // Per-line amount
-        const lineGross = Number(item.price) * Number(item.quantity);
-        let amount = 0;
-        if (rate > 0) {
-          if (taxInclusiveResolved) {
-            amount = Math.round((lineGross * rate / (100 + rate)) * 100) / 100;
-          } else {
-            amount = Math.round((lineGross * rate / 100) * 100) / 100;
-          }
-        }
-        taxByIndex[i] = { rate, amount, hsCode };
-      }
-    }
-
-    // Aggregate tax totals for the sale row. Subtotal differs by mode:
-    //   inclusive: subtotal = sum(price*qty) - tax_total (tax was inside)
-    //   exclusive: subtotal = sum(price*qty) (tax sits on top)
-    const taxTotalSnapshot = taxByIndex.reduce(
-      (s, t) => s + Number(t?.amount || 0),
-      0
-    );
-    const grossSnapshot = cartItems.reduce(
-      (s, it) => s + Number(it.price) * Number(it.quantity),
-      0
-    );
-    const subtotalSnapshot = taxInclusiveResolved
-      ? grossSnapshot - taxTotalSnapshot
-      : grossSnapshot;
+    const taxSnapshot = await resolveTaxSnapshot(db, {
+      items: cartItems.map((x) => ({
+        productId: Number(x.original_product_id || x.id) || null,
+        price: x.price,
+        quantity: x.quantity,
+      })),
+      taxMode,
+      taxInclusive:
+        typeof tax_inclusive_in === "boolean" ? tax_inclusive_in : undefined,
+      outletId: Number(outlet_id),
+      tenantId: req.tenantId,
+    });
+    const taxInclusiveResolved = taxSnapshot.taxInclusive;
+    const taxByIndex = taxSnapshot.lines;
+    const taxTotalSnapshot = taxSnapshot.taxTotal;
+    const subtotalSnapshot = taxSnapshot.subtotal;
 
     // Start Transaction Logic
     try {
       const saleId = await db.transaction(async (client) => {
         // Lock and check stock for each item (FOR UPDATE prevents TOCTOU race)
         // Pre-fetch bundle components for any bundle items
-        const bundleComponentsMap = new Map();
-        for (const item of cartItems) {
-          if (item.is_bundle) {
-            const productId = item.original_product_id || item.id;
-            const { rows: comps } = await client.query(
-              "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
-              [productId]
-            );
-            bundleComponentsMap.set(productId, comps);
-          }
-        }
+        // F01: resolve each line's consumption mode from the DB
+        // (server-authoritative — never trust client-sent item.is_bundle). Kits
+        // expand to components via the shared kit-engine; 'assembled'/'standard'
+        // decrement their own stock. Component locking is stable-ordered inside
+        // the engine so concurrent sales of overlapping kits can't deadlock.
+        const kitMap = await kitEngine.loadKitMap(
+          client,
+          cartItems.map((it) => Number(it.original_product_id || it.id))
+        );
+        const kitInfoFor = (item) =>
+          kitMap.get(Number(item.original_product_id || item.id));
+        const isKit = (item) => kitInfoFor(item)?.bomType === "kit";
+        // Locked component decrements per cart line, reused in the deduct pass so
+        // every row is locked+checked before any write.
+        const kitDecrementsByIndex = {};
 
-        for (const item of cartItems) {
-          if (item.is_bundle) {
-            // For bundles: lock and check each component's stock
+        for (let ci = 0; ci < cartItems.length; ci++) {
+          const item = cartItems[ci];
+          if (isKit(item)) {
             const productId = item.original_product_id || item.id;
-            const comps = bundleComponentsMap.get(productId) || [];
-            for (const comp of comps) {
-              const neededQty = comp.quantity * item.quantity;
-              if (comp.component_variant_id) {
-                const { rows: [row] } = await client.query(
-                  `SELECT COALESCE(stock, 0) AS available
-                   FROM product_variants WHERE id = $1 FOR UPDATE`,
-                  [comp.component_variant_id]
-                );
-                if (!row || row.available < neededQty) {
-                  throw Object.assign(
-                    new Error(`Insufficient stock for bundle component variant ${comp.component_variant_id}`),
-                    {
-                      statusCode: 400,
-                      code: "insufficient_stock",
-                      variant_id: comp.component_variant_id,
-                      product_id: comp.component_product_id || null,
-                      available: Number(row?.available ?? 0),
-                      requested: neededQty,
-                    }
-                  );
-                }
-              } else {
-                const { rows: [row] } = await client.query(
-                  `SELECT COALESCE(quantity, 0) AS available
-                   FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
-                  [comp.component_product_id, outlet_id]
-                );
-                if (!row || row.available < neededQty) {
-                  throw Object.assign(
-                    new Error(`Insufficient stock for bundle component ${comp.component_product_id}`),
-                    {
-                      statusCode: 400,
-                      code: "insufficient_stock",
-                      product_id: comp.component_product_id,
-                      available: Number(row?.available ?? 0),
-                      requested: neededQty,
-                    }
-                  );
-                }
-              }
-            }
+            kitDecrementsByIndex[ci] = await kitEngine.reserveComponents(client, {
+              productId,
+              outletId: outlet_id,
+              saleQty: item.quantity,
+              components: kitInfoFor(item).components,
+            });
           } else {
             const variantId = item.variant_id || null;
             if (variantId) {
@@ -1636,23 +1459,12 @@ module.exports = function registerSalesRoutes(app, deps) {
           // no rounding. Weighted sales (e.g. 1.25 kg) deduct 1.25 from stock.
           const stockDeductQty = Number(item.quantity);
 
-          if (item.is_bundle) {
-            // Deduct stock from each component product, not the bundle itself
-            const productId = item.original_product_id || item.id;
-            const comps = bundleComponentsMap.get(productId) || [];
-            for (const comp of comps) {
-              const deductQty = comp.quantity * stockDeductQty;
-              if (comp.component_variant_id) {
-                await client.query(
-                  "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
-                  [deductQty, comp.component_variant_id]
-                );
-              }
-              await client.query(
-                "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-                [deductQty, comp.component_product_id, outlet_id]
-              );
-            }
+          if (isKit(item)) {
+            // Deduct the components locked + verified in the check pass above.
+            await kitEngine.decrementComponents(client, {
+              outletId: outlet_id,
+              decrements: kitDecrementsByIndex[cartIdx] || [],
+            });
           } else if (item.variant_id) {
             // 2-G.1: deduct per-variant outlet stock (upsert creates the row
             // if this variant hasn't been stocked at this outlet yet).

@@ -122,16 +122,15 @@ export default function KioskRedesign() {
   useEffect(() => {
     const tenantSlug = searchParams.get("tenant") || readTenantSlug();
     const outletsQs = tenantSlug ? `?tenant=${tenantSlug}` : "";
-    Promise.all([
-      api.get(`/api/outlets${outletsQs}`),
-      api.get(`/api/feature-flags${outletsQs}`).catch(() => ({ flags: [] })),
-    ]).then(([outData, flagsData]) => {
+    // D3 fix: one narrow public kiosk endpoint (outlet id+name +
+    // kiosk_context_locked). The full /api/outlets is not
+    // ?tenant=-resolvable, and /api/feature-flags requires x-employee-id —
+    // both 401 on a cold kiosk load in multi-tenant production. POST like
+    // the other pin- kiosk endpoints (GET /api/attendance/* is perm-guarded).
+    api.post(`/api/attendance/pin-outlets${outletsQs}`, {}).then((outData) => {
       const outList = outData.outlets || [];
       setOutlets(outList);
-      const locked = (flagsData.flags || []).some(
-        (f) => f.key === "kiosk_context_locked" && Number(f.enabled) === 1,
-      );
-      setKioskLocked(locked);
+      setKioskLocked(Boolean(outData.kiosk_locked));
       // Prefer URL outlet, otherwise inherit current app context outlet.
       const contextOutletId = Number(readContext()?.active_outlet_id || 0) || null;
       const preferredOutletId = urlOutletId || contextOutletId;

@@ -42,6 +42,10 @@ const DEFAULT_FEATURE_FLAGS = {
   customer_messaging: true,
   customer_invoicing: true,
   payment_links: false,
+  // AI insights chat (routes/insights-ai.js). Default OFF — surfaces the flag
+  // in the admin flags editor so it can be toggled on per tenant. Also requires
+  // ANTHROPIC_API_KEY on the server; the route soft-checks both.
+  ai_insights: false,
   // Mode-gated (subscriptions mode): flag default flipped false so retail
   // tenants without the subscriptions mode don't see the Subscriptions nav.
   // Tenants on the subscriptions mode get the flag enabled via v44 backfill.
@@ -136,6 +140,12 @@ const DEFAULT_FEATURE_FLAGS = {
   // distributor invites brand owners (Tapal, Coca-Cola, etc.) to see real-time
   // aggregate onward sales of their brand SKUs. Separate JWT scope. Default false.
   wholesale_secondary_sales: false,
+  // F01 kit/BOM engine. Default false — gates the NEW surfaces (Production
+  // screen, recipe costing report, assembled-product type, theoretical-vs-
+  // actual usage). The core kit sale decrement stays UNGATED (it already
+  // shipped as is_bundle/product_bundles and works on every tenant); seeded
+  // ON by presets that consume it (retail/food-service verticals).
+  kit_bom_engine: false,
 };
 
 // Per-tenant feature flag cache

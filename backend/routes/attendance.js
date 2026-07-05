@@ -208,6 +208,36 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/attendance/pin-outlets — kiosk: outlet picker list (D3 fix)
+  // Intentionally unauthenticated. The kiosk page mounts with only ?tenant=
+  // in the URL, and the full GET /api/outlets is not on the public ?tenant=
+  // allowlist (by design — it returns full outlet objects). The `pin-` path
+  // prefix is already on both PUBLIC_TENANT_PARAM_PATHS and
+  // KIOSK_ALLOWED_PATHS, so this needs no auth-middleware change. POST (not
+  // GET) like the other pin- endpoints: PERMISSION_RULES blanket-guards
+  // GET /api/attendance/* behind view_reports. Exposes id + name only.
+  // ---------------------------------------------------------------------------
+  app.post("/api/attendance/pin-outlets", async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT id, name FROM outlets WHERE is_active = true ORDER BY name"
+      );
+      // kiosk_context_locked rides along because GET /api/feature-flags
+      // requires x-employee-id — a cold kiosk load can't read it there.
+      let kioskLocked = false;
+      try {
+        const { rows: [flag] } = await db.query(
+          "SELECT enabled FROM feature_flags WHERE key = 'kiosk_context_locked'"
+        );
+        kioskLocked = flag?.enabled === true || Number(flag?.enabled) === 1;
+      } catch { /* flag table missing on legacy tenant — leave unlocked */ }
+      res.json({ outlets: rows, kiosk_locked: kioskLocked });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/attendance/pin-status — kiosk: look up employee status by PIN
   // Intentionally unauthenticated — PIN is the authentication
   // ---------------------------------------------------------------------------

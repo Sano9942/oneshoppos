@@ -732,55 +732,11 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
-  // Stock Aging
-  app.get(
-    "/api/reports/stock-aging",
-    requireFeature("reports_inventory_health_plus"),
-    async (req, res) => {
-      try {
-        const where = ["os.quantity > 0"];
-        const params = [];
-        applyOutletFilter(where, params, req.query.outlet_id);
-        await applyInventoryProductFilters(where, params, req.query);
-        const { text: whereText, values } = helpers.pgWhere(where, params);
-        const sql = `
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.barcode,
-          p.category_id,
-          COALESCE(cat.name,'-') AS category,
-          COALESCE(b.name,'-') AS brand,
-          COALESCE(sup.name,'-') AS supplier,
-          o.id AS outlet_id,
-          o.name AS outlet_name,
-          os.quantity AS stock_qty,
-          ROUND(os.quantity * COALESCE(p.cost_price, 0), 2) AS stock_cost_value,
-          MAX(s.timestamp) AS last_sold_at,
-          FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int AS days_since_sale
-        FROM outlet_stock os
-        JOIN products p ON p.id = os.product_id
-        JOIN outlets o ON o.id = os.outlet_id
-        LEFT JOIN categories cat ON cat.id = p.category_id
-        LEFT JOIN brands b ON b.id = p.brand_id
-        LEFT JOIN suppliers sup ON sup.id = p.supplier_id
-        LEFT JOIN sale_items si ON si.product_id = p.id
-        LEFT JOIN sales s ON s.id = si.sale_id AND s.voided = false
-        WHERE ${whereText}
-        GROUP BY p.id, p.name, p.barcode, p.category_id, cat.name, b.name, sup.name,
-                 o.id, o.name, os.quantity, p.cost_price
-        ORDER BY COALESCE(FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int, 99999) DESC, stock_cost_value DESC
-        LIMIT 500
-      `;
-        const { rows } = await db.query(sql, values);
-        const categoryMeta = await buildCategoryMetaMap();
-        const items = withCategoryPaths(rows, categoryMeta);
-        res.json({ items, rows: items });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    },
-  );
+  // NOTE: The /api/reports/stock-aging route lives in reports/stock-aging.js
+  // (Wave 3, ungated — requireAnyPerm(["view_reports","manage_inventory"])).
+  // A shadowing gated duplicate previously lived here and, being registered
+  // first in reports/index.js, prevented the real implementation from serving.
+  // Removed in completion-00 so the ungated report reaches every tenant.
 
   async function buildForecastRows(filters, tz) {
     const lookbackDays = Math.max(

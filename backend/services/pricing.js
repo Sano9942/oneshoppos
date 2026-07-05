@@ -192,9 +192,125 @@ function composeAutoDiscountPercent({
   return { pct, breakdown: components };
 }
 
+/**
+ * Shared price-list resolution — single source of truth for "what does this
+ * buyer pay for this product". Replaces two divergent copies (services/
+ * quote.js + routes/price-list-assignments.js) that both tried outlet scope
+ * BEFORE customer scope, inverting POS semantics (useCart.js: the customer's
+ * price list always beats the outlet list).
+ *
+ * Canonical precedence (customer-most-specific first):
+ *   1. price_list_assignments scope 'customer'
+ *   2. customers.price_list_id (direct — the source POS reads)
+ *   3. price_list_assignments scope 'customer_group'
+ *      (via customers.customer_group_id — the old copies queried a
+ *      customer_group_members table that does not exist in the schema, so
+ *      group scope silently never matched)
+ *   4. price_list_assignments scope 'channel'
+ *   5. price_list_assignments scope 'outlet'
+ *   6. product/variant base price
+ *
+ * Quantity breaks: rows are matched min_qty <= qty, highest qualifying
+ * min_qty wins (same as POS useCart). The old backend copies did
+ * ORDER BY min_qty ASC ignoring qty — handing bulk prices to single-unit
+ * buyers when only a high-min row existed.
+ */
+async function resolvePriceForContext(db, { productId, variantId, qty, outletId, channelId, customerId }) {
+  const now = new Date().toISOString();
+  const quantity = Number(qty) > 0 ? Number(qty) : 1;
+
+  const lookup = async (priceListId) => {
+    const { rows } = await db.query(
+      `SELECT price FROM price_list_items
+        WHERE price_list_id = $1 AND product_id = $2
+          AND (variant_id = $3 OR ($3 IS NULL AND variant_id IS NULL))
+          AND COALESCE(min_qty, 1) <= $4
+        ORDER BY COALESCE(min_qty, 1) DESC LIMIT 1`,
+      [priceListId, productId, variantId || null, quantity],
+    );
+    return rows[0]?.price ?? null;
+  };
+
+  const tryAssignment = async (scopeType, scopeId) => {
+    const { rows: assignments } = await db.query(
+      `SELECT pla.price_list_id
+         FROM price_list_assignments pla
+         JOIN price_lists pl ON pl.id = pla.price_list_id AND pl.is_active = TRUE
+        WHERE pla.scope_type = $1 AND pla.scope_id = $2 AND pla.is_active = TRUE
+          AND (pla.starts_at IS NULL OR pla.starts_at <= $3)
+          AND (pla.ends_at IS NULL OR pla.ends_at >= $4)
+        ORDER BY pla.priority DESC`,
+      [scopeType, scopeId, now, now],
+    );
+    for (const a of assignments) {
+      const price = await lookup(a.price_list_id);
+      if (price != null) {
+        return {
+          price: Number(price),
+          source: `assignment:${scopeType}`,
+          price_list_id: a.price_list_id,
+        };
+      }
+    }
+    return null;
+  };
+
+  if (customerId) {
+    // 1. customer-scoped assignment
+    const byCustomer = await tryAssignment("customer", customerId);
+    if (byCustomer) return byCustomer;
+
+    // 2 + 3. direct price_list_id, then group assignment
+    try {
+      const { rows } = await db.query(
+        "SELECT price_list_id, customer_group_id FROM customers WHERE id = $1",
+        [customerId],
+      );
+      const cust = rows[0];
+      if (cust?.price_list_id) {
+        const price = await lookup(cust.price_list_id);
+        if (price != null) {
+          return { price: Number(price), source: "customer_price_list", price_list_id: cust.price_list_id };
+        }
+      }
+      if (cust?.customer_group_id) {
+        const byGroup = await tryAssignment("customer_group", cust.customer_group_id);
+        if (byGroup) return byGroup;
+      }
+    } catch (_) { /* pre-migration tenant — columns may be missing */ }
+  }
+
+  // 4. channel, 5. outlet
+  if (channelId) {
+    const byChannel = await tryAssignment("channel", channelId);
+    if (byChannel) return byChannel;
+  }
+  if (outletId) {
+    const byOutlet = await tryAssignment("outlet", outletId);
+    if (byOutlet) return byOutlet;
+  }
+
+  // 6. base price
+  const { rows: baseRows } = await db.query(
+    `SELECT p.price AS product_price, pv.price AS variant_price
+       FROM products p
+       LEFT JOIN product_variants pv ON pv.id = $2 AND pv.product_id = p.id
+      WHERE p.id = $1`,
+    [productId, variantId || null],
+  );
+  if (baseRows[0]) {
+    const base = baseRows[0].variant_price != null
+      ? Number(baseRows[0].variant_price)
+      : Number(baseRows[0].product_price);
+    return { price: base, source: "base_price", price_list_id: null };
+  }
+  return { price: 0, source: "not_found", price_list_id: null };
+}
+
 module.exports = {
   resolveCustomerPricing,
   resolveGroupPriceBookOverrides,
   applyPriceBookOverrides,
   composeAutoDiscountPercent,
+  resolvePriceForContext,
 };

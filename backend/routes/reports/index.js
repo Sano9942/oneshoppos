@@ -44,6 +44,9 @@ module.exports = function registerReportsRoutes(app, deps) {
   // Menu engineering (2-R.10) — restaurant mode
   require("./menu-engineering")(app, deps, helpers);
 
+  // F01 recipe costing + theoretical usage — kit_bom_engine
+  require("./recipe-costing")(app, deps, helpers);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:

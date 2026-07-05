@@ -1,4 +1,5 @@
 const express = require("express");
+const kitEngine = require("../../services/kit-engine");
 const nodemailer = require("nodemailer");
 
 // ─── FBR E-INVOICING PLACEHOLDER ───────────────────────────────────────
@@ -646,9 +647,15 @@ module.exports = function createCRMRouter({
           return res.status(400).json({ error: "Quotation has no items" });
 
         const saleId = await db.transaction(async (client) => {
+          // v83 tax snapshot: the quotation is a price commitment, so the
+          // sale carries the QUOTED per-line tax_rate (percent, exclusive
+          // math — see the POST /api/quotations handler above) rather than
+          // re-resolving live rates, which could make tax_total disagree
+          // with the accepted total_amount.
           const { rows: saleRows } = await client.query(
-            `INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, notes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            `INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, notes,
+               subtotal, tax_total, tax_inclusive)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false) RETURNING id`,
             [
               Number(quote.total_amount || 0),
               payment_method,
@@ -658,15 +665,30 @@ module.exports = function createCRMRouter({
               Number(quote.discount_amount || 0),
               quote.discount_type || "fixed",
               `Converted from quotation ${quote.quote_number || quote.id}`,
+              Number(quote.subtotal || 0),
+              Number(quote.tax_total || 0),
             ]
           );
           const sid = saleRows[0].id;
 
           for (const it of items) {
+            // F01: this convert path decrements outlet_stock without FOR UPDATE
+            // (a documented completion-01 concurrency gap — NOT fixed here). It
+            // must not process kits: decrementing a kit's own (empty) row would
+            // silently oversell components. Hard-reject with a clear message.
+            if ((await kitEngine.getBomType(client, it.product_id)) === "kit") {
+              throw Object.assign(
+                new Error("This quotation contains a kit/bundle product — convert it to a sale at POS instead."),
+                { statusCode: 400, code: "kit_not_supported" }
+              );
+            }
             const qty = Number(it.quantity || 0);
+            const lineRate = Number(it.tax_rate || 0);
+            const lineTax =
+              Math.round(Number(it.unit_price || 0) * qty * lineRate) / 100;
             await client.query(
-              "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale) VALUES ($1, $2, $3, $4, $5, $6)",
-              [sid, it.product_id, it.variant_id || null, qty, Number(it.unit_price || 0), 0]
+              "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, tax_rate_at_sale, tax_amount_at_sale) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              [sid, it.product_id, it.variant_id || null, qty, Number(it.unit_price || 0), 0, lineRate, lineTax]
             );
             await client.query(
               "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",

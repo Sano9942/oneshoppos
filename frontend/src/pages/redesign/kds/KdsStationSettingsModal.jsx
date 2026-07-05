@@ -31,8 +31,11 @@ export default function KdsStationSettingsModal({ open, onClose, station, onSave
     if (!open) return;
     (async () => {
       try {
-        const res = await api.get("/api/printer-config");
-        setPrinters(Array.isArray(res) ? res : res?.printers || []);
+        // /api/print/config returns a single printer_config row (id = 1),
+        // not a list — the tenant has one configured printer. Wrap it so the
+        // dropdown can offer it (falls back to "None → default" when unset).
+        const res = await api.get("/api/print/config");
+        setPrinters(res && res.id ? [res] : []);
       } catch {
         setPrinters([]);
       }

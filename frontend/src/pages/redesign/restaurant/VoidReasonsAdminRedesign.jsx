@@ -44,26 +44,19 @@ export default function VoidReasonsAdminRedesign() {
 
   const toggleActive = async (row) => {
     setBusyId(row.id);
+    // Backend only registers PATCH /void-reasons/:id (no PUT); api.js has no
+    // patch() helper, so use the raw-fetch PATCH pattern bumpSort uses below.
     try {
-      await api.put(`/api/restaurant/void-reasons/${row.id}`, {
-        is_active: !row.is_active,
+      const res = await fetch(`/api/restaurant/void-reasons/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !row.is_active }),
       });
+      if (!res.ok) throw new Error((await res.json())?.error || `HTTP ${res.status}`);
       success(`${row.label} ${row.is_active ? "hidden" : "enabled"}`);
       await load();
-    } catch (e) {
-      // api.js lacks PATCH — fall through to raw
-      try {
-        const res = await fetch(`/api/restaurant/void-reasons/${row.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_active: !row.is_active }),
-        });
-        if (!res.ok) throw new Error((await res.json())?.error || `HTTP ${res.status}`);
-        success(`${row.label} ${row.is_active ? "hidden" : "enabled"}`);
-        await load();
-      } catch (err) {
-        error(err?.message || "Failed to toggle");
-      }
+    } catch (err) {
+      error(err?.message || "Failed to toggle");
     } finally {
       setBusyId(null);
     }
