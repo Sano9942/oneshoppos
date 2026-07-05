@@ -14,7 +14,7 @@ function StatCard({ icon: Icon, label, value, color }) {
   return (
     <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
       <div className="flex items-center gap-3">
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-(--ui-radius-sm) ${color}`}>
           <Icon size={20} className="text-white" />
         </div>
         <div>
@@ -116,7 +116,7 @@ function InfrastructurePanel() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-(--ui-primary)">
+            <div className="flex h-10 w-10 items-center justify-center rounded-(--ui-radius-sm) bg-(--ui-primary)">
               <Zap size={20} className="text-white" />
             </div>
             <div>
@@ -136,7 +136,7 @@ function InfrastructurePanel() {
 
         <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-(--ui-primary)">
+            <div className="flex h-10 w-10 items-center justify-center rounded-(--ui-radius-sm) bg-(--ui-primary)">
               <Database size={20} className="text-white" />
             </div>
             <div>
@@ -148,7 +148,7 @@ function InfrastructurePanel() {
 
         <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${cacheOk ? "bg-(--ui-primary)" : "bg-(--ui-danger)"}`}>
+            <div className={`flex h-10 w-10 items-center justify-center rounded-(--ui-radius-sm) ${cacheOk ? "bg-(--ui-primary)" : "bg-(--ui-danger)"}`}>
               <HardDrive size={20} className="text-white" />
             </div>
             <div>
@@ -161,7 +161,7 @@ function InfrastructurePanel() {
 
         <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${th.tables_needing_vacuum > 0 ? "bg-(--ui-warning-fg)" : "bg-(--ui-primary)"}`}>
+            <div className={`flex h-10 w-10 items-center justify-center rounded-(--ui-radius-sm) ${th.tables_needing_vacuum > 0 ? "bg-(--ui-warning-fg)" : "bg-(--ui-primary)"}`}>
               <AlertTriangle size={20} className="text-white" />
             </div>
             <div>
@@ -198,7 +198,7 @@ function InfrastructurePanel() {
           </h3>
           <div className="space-y-2">
             {infra.slow_queries_now.map((q) => (
-              <div key={q.pid} className="rounded-lg bg-(--ui-surface) border border-(--ui-danger-bg) p-3">
+              <div key={q.pid} className="rounded-(--ui-radius-sm) bg-(--ui-surface) border border-(--ui-danger-bg) p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-semibold text-(--ui-danger-fg)">{q.duration_s}s</span>
                   <span className="text-[10px] text-(--ui-text-muted)">PID {q.pid} · {q.username}</span>
@@ -355,7 +355,7 @@ export default function AdminDashboard() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+      <div className="rounded-(--ui-radius-sm) border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
         <p className="text-sm text-(--ui-danger-fg)">{error}</p>
       </div>
     );
@@ -444,7 +444,7 @@ export default function AdminDashboard() {
           <h2 className="mb-4 text-lg font-semibold text-(--ui-text)">Billing Attention</h2>
           <div className="space-y-3">
             {billingAttention.past_grace.length > 0 && (
-              <div className="rounded-lg bg-(--ui-danger-bg) border border-(--ui-danger-bg) p-3">
+              <div className="rounded-(--ui-radius-sm) bg-(--ui-danger-bg) border border-(--ui-danger-bg) p-3">
                 <p className="text-sm font-semibold text-(--ui-danger-fg)">{billingAttention.past_grace.length} tenant(s) past grace period — should be suspended</p>
                 {billingAttention.past_grace.map(t => (
                   <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-(--ui-danger-fg) hover:underline mt-1">{t.name} ({t.slug})</a>
@@ -452,7 +452,7 @@ export default function AdminDashboard() {
               </div>
             )}
             {billingAttention.overdue.length > 0 && (
-              <div className="rounded-lg bg-(--ui-warning-bg) border border-(--ui-border) p-3">
+              <div className="rounded-(--ui-radius-sm) bg-(--ui-warning-bg) border border-(--ui-border) p-3">
                 <p className="text-sm font-semibold text-(--ui-warning-fg)">{billingAttention.overdue.length} tenant(s) overdue — in grace period</p>
                 {billingAttention.overdue.map(t => (
                   <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-(--ui-warning-fg) hover:underline mt-1">{t.name} ({t.slug})</a>
@@ -460,7 +460,7 @@ export default function AdminDashboard() {
               </div>
             )}
             {billingAttention.due_soon.length > 0 && (
-              <div className="rounded-lg bg-(--ui-muted-surface) border border-(--ui-border) p-3">
+              <div className="rounded-(--ui-radius-sm) bg-(--ui-muted-surface) border border-(--ui-border) p-3">
                 <p className="text-sm font-semibold text-(--ui-text)">{billingAttention.due_soon.length} tenant(s) expiring within 7 days</p>
                 {billingAttention.due_soon.map(t => (
                   <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-(--ui-link) hover:underline mt-1">{t.name} ({t.slug})</a>
@@ -468,7 +468,7 @@ export default function AdminDashboard() {
               </div>
             )}
             {billingAttention.pending_upgrades > 0 && (
-              <div className="rounded-lg bg-(--ui-muted-surface) border border-(--ui-border) p-3">
+              <div className="rounded-(--ui-radius-sm) bg-(--ui-muted-surface) border border-(--ui-border) p-3">
                 <p className="text-sm font-semibold text-(--ui-text)">{billingAttention.pending_upgrades} pending upgrade request(s)</p>
               </div>
             )}
@@ -500,7 +500,7 @@ export default function AdminDashboard() {
                 : "bg-(--ui-danger)";
               const stateLabel = !w.enabled ? "disabled" : w.running ? "running" : "stopped";
               return (
-                <div key={name} className="flex items-center justify-between rounded-lg border border-(--ui-border) px-4 py-2.5">
+                <div key={name} className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2.5">
                   <div className="flex items-center gap-3">
                     <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
                     <span className="text-sm font-medium text-(--ui-text)">{name}</span>
@@ -536,7 +536,7 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div>
-              <div className="mb-3 rounded-lg border border-(--ui-border) bg-(--ui-warning-bg) p-3">
+              <div className="mb-3 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-warning-bg) p-3">
                 <p className="text-sm font-semibold text-(--ui-warning-fg)">{orphans.schemas.length} orphaned schema(s) found</p>
               </div>
               <div className="mb-3 space-y-1">
@@ -564,7 +564,7 @@ export default function AdminDashboard() {
                   setCleanupLoading(false);
                 }}
                 disabled={cleanupLoading}
-                className="rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-medium text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
+                className="rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
               >
                 {cleanupLoading ? "Cleaning..." : "Clean Up"}
               </button>
@@ -595,7 +595,7 @@ export default function AdminDashboard() {
               setBackupLoading(false);
             }}
             disabled={backupLoading}
-            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-medium text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             <HardDriveDownload size={14} />
             {backupLoading ? "Backing up..." : "Backup Now"}
@@ -604,7 +604,7 @@ export default function AdminDashboard() {
         {backups && (backups.backups || []).length > 0 ? (
           <div className="space-y-1.5">
             {(backups.backups || []).map((b, i) => (
-              <div key={i} className="flex items-center justify-between rounded-lg border border-(--ui-border) px-4 py-2 text-sm">
+              <div key={i} className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2 text-sm">
                 <span className="font-medium text-(--ui-text)">{b.filename || b.name}</span>
                 <div className="flex items-center gap-3 text-xs text-(--ui-text-muted)">
                   {b.size && <span>{b.size}</span>}
@@ -642,14 +642,14 @@ export default function AdminDashboard() {
               setMigrateLoading(false);
             }}
             disabled={migrateLoading}
-            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-medium text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-white hover:bg-(--ui-primary-strong) disabled:opacity-50"
           >
             <RefreshCw size={14} className={migrateLoading ? "animate-spin" : ""} />
             {migrateLoading ? "Migrating..." : "Migrate All"}
           </button>
         </div>
         {migrateResult && (
-          <div className={`mt-3 rounded-lg p-3 text-sm ${migrateResult.error ? "bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg)" : "bg-(--ui-success-bg) border border-(--ui-border) text-(--ui-success-fg)"}`}>
+          <div className={`mt-3 rounded-(--ui-radius-sm) p-3 text-sm ${migrateResult.error ? "bg-(--ui-danger-bg) border border-(--ui-danger-bg) text-(--ui-danger-fg)" : "bg-(--ui-success-bg) border border-(--ui-border) text-(--ui-success-fg)"}`}>
             {migrateResult.error
               ? migrateResult.error
               : `Done. ${migrateResult.migrated ?? 0} schema(s) migrated, ${migrateResult.skipped ?? 0} already current.${migrateResult.errors?.length ? ` ${migrateResult.errors.length} error(s).` : ""}`
@@ -664,7 +664,7 @@ export default function AdminDashboard() {
           <h2 className="text-lg font-semibold text-(--ui-text)">Announcements</h2>
           <button
             onClick={() => setShowAnnouncementForm(!showAnnouncementForm)}
-            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-medium text-white hover:bg-(--ui-primary-strong)"
+            className="flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-white hover:bg-(--ui-primary-strong)"
           >
             <Megaphone size={14} />
             {showAnnouncementForm ? "Cancel" : "New Announcement"}
@@ -672,19 +672,19 @@ export default function AdminDashboard() {
         </div>
 
         {showAnnouncementForm && (
-          <div className="mb-4 rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-4 space-y-3">
+          <div className="mb-4 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-4 space-y-3">
             <input
               type="text"
               placeholder="Announcement message..."
               value={annForm.message}
               onChange={(e) => setAnnForm({ ...annForm, message: e.target.value })}
-              className="w-full rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
+              className="w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
             />
             <div className="flex items-center gap-3">
               <select
                 value={annForm.type}
                 onChange={(e) => setAnnForm({ ...annForm, type: e.target.value })}
-                className="rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
+                className="rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
               >
                 <option value="info">Info</option>
                 <option value="warning">Warning</option>
@@ -694,7 +694,7 @@ export default function AdminDashboard() {
                 type="datetime-local"
                 value={annForm.ends_at}
                 onChange={(e) => setAnnForm({ ...annForm, ends_at: e.target.value })}
-                className="rounded-lg border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
+                className="rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
                 placeholder="End time (optional)"
               />
               <button
@@ -710,7 +710,7 @@ export default function AdminDashboard() {
                     setShowAnnouncementForm(false);
                   }
                 }}
-                className="rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-medium text-white hover:bg-(--ui-primary-strong)"
+                className="rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-white hover:bg-(--ui-primary-strong)"
               >
                 Create
               </button>
@@ -723,7 +723,7 @@ export default function AdminDashboard() {
         ) : (
           <div className="space-y-2">
             {announcements.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-lg border border-(--ui-border) px-4 py-2.5">
+              <div key={a.id} className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2.5">
                 <div className="flex items-center gap-3">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     a.type === "warning" ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" :
@@ -776,7 +776,7 @@ export default function AdminDashboard() {
             {stats.recent_tenants.map((t) => (
               <div
                 key={t.id}
-                className="flex cursor-pointer items-center justify-between rounded-lg border border-(--ui-border) px-4 py-2.5 transition hover:bg-(--ui-muted-surface)"
+                className="flex cursor-pointer items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2.5 transition hover:bg-(--ui-muted-surface)"
                 onClick={() => navigate(`/admin/tenants/${t.id}`)}
               >
                 <div>

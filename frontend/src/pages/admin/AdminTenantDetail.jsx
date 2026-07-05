@@ -216,7 +216,7 @@ export default function AdminTenantDetail() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
+      <div className="rounded-(--ui-radius-sm) border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-4">
         <p className="text-sm text-(--ui-danger-fg)">{error}</p>
       </div>
     );
@@ -335,7 +335,7 @@ export default function AdminTenantDetail() {
                 <div className="space-y-3">
                   <span className="rounded-full bg-(--ui-warning-bg) px-3 py-1 text-xs font-semibold text-(--ui-warning-fg)">Pending Setup</span>
                   {setupInfo.setup_url && (
-                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-3">
+                    <div className="mt-2 flex items-center gap-2 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-3">
                       <input
                         readOnly
                         value={setupInfo.setup_url}
@@ -483,7 +483,7 @@ export default function AdminTenantDetail() {
 
             {/* Pending Upgrade Requests */}
             {upgradeReqs.length > 0 && (
-              <div className="mb-4 rounded-lg bg-(--ui-muted-surface) border border-(--ui-border) p-3">
+              <div className="mb-4 rounded-(--ui-radius-sm) bg-(--ui-muted-surface) border border-(--ui-border) p-3">
                 <p className="text-sm font-semibold text-(--ui-text) mb-2">Pending Upgrade Requests</p>
                 {upgradeReqs.map(r => (
                   <div key={r.id} className="flex items-center justify-between text-sm mb-1">
@@ -519,7 +519,7 @@ export default function AdminTenantDetail() {
                       ];
                       downloadCsv(headers, payments, "tenant-payments.csv");
                     }}
-                    className="flex items-center gap-1 rounded-full bg-(--ui-muted-surface) px-2 py-1 text-xs font-medium text-(--ui-text) hover:bg-(--ui-border-strong)"
+                    className="flex items-center gap-1 rounded-full bg-(--ui-muted-surface) px-2 py-1 text-xs font-semibold text-(--ui-text) hover:bg-(--ui-border-strong)"
                   >
                     <Download size={12} /> Export
                   </button>
@@ -603,7 +603,7 @@ export default function AdminTenantDetail() {
             {notes.length > 0 ? (
               <div className="max-h-60 space-y-2 overflow-y-auto">
                 {notes.map(n => (
-                  <div key={n.id} className="flex items-start justify-between gap-2 rounded-lg bg-(--ui-muted-surface) p-3">
+                  <div key={n.id} className="flex items-start justify-between gap-2 rounded-(--ui-radius-sm) bg-(--ui-muted-surface) p-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-(--ui-text) whitespace-pre-wrap">{n.note}</p>
                       <p className="mt-1 text-xs text-(--ui-text-muted)">
@@ -631,7 +631,7 @@ export default function AdminTenantDetail() {
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Plan Pricing</h2>
               <div className="space-y-3">
                 {planPricing.map(p => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-(--ui-muted-surface) p-3">
+                  <div key={p.id} className="flex items-center justify-between rounded-(--ui-radius-sm) bg-(--ui-muted-surface) p-3">
                     {editingPricing?.id === p.id ? (
                       <div className="flex flex-1 items-center gap-3">
                         <span className="text-sm font-medium capitalize text-(--ui-text)">{p.plan} / {p.cycle}</span>
@@ -696,19 +696,19 @@ export default function AdminTenantDetail() {
                 <div>
                   <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Activity</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Last Login</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_login)}</p>
                     </div>
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Last Sale</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_sale)}</p>
                     </div>
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Last Shift</p>
                       <p className="text-sm font-semibold">{timeAgo(stats.last_shift_opened)}</p>
                     </div>
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Active Staff (7d / 30d)</p>
                       <p className="text-sm font-semibold">{stats.active_employees_7d} / {stats.active_employees_30d}</p>
                     </div>
@@ -719,7 +719,7 @@ export default function AdminTenantDetail() {
                       { label: "This Week", sales: stats.sales_this_week, rev: stats.revenue_this_week },
                       { label: "This Month", sales: stats.sales_this_month, rev: stats.revenue_this_month },
                     ].map((p) => (
-                      <div key={p.label} className="bg-(--ui-muted-surface) rounded-lg p-3">
+                      <div key={p.label} className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                         <p className="text-xs text-(--ui-text-muted)">{p.label}</p>
                         <p className="text-sm font-bold">{p.sales} sales</p>
                         <p className="text-xs text-(--ui-text-muted)">{p.rev?.toLocaleString()}</p>
@@ -755,15 +755,15 @@ export default function AdminTenantDetail() {
                 <div>
                   <h3 className="text-sm font-semibold text-(--ui-text-muted) uppercase tracking-wider mb-3">Storage & Totals</h3>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Schema Size</p>
                       <p className="text-sm font-bold">{stats.schema_size_mb} MB</p>
                     </div>
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Total Sales</p>
                       <p className="text-sm font-bold">{stats.total_sales?.toLocaleString()}</p>
                     </div>
-                    <div className="bg-(--ui-muted-surface) rounded-lg p-3">
+                    <div className="bg-(--ui-muted-surface) rounded-(--ui-radius-sm) p-3">
                       <p className="text-xs text-(--ui-text-muted)">Customers</p>
                       <p className="text-sm font-bold">{stats.customers?.toLocaleString()}</p>
                     </div>
