@@ -22,7 +22,7 @@ export default function SeatCoursePicker({ asSheet = false }) {
 
   if (asSheet) {
     return (
-      <div className="bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.1)]">
+      <div className="bg-(--ui-surface) border-t border-(--ui-border-strong) px-4 py-3">
         <PickerControls
           seatOptions={seatOptions}
           activeSeat={activeSeat}
@@ -37,7 +37,7 @@ export default function SeatCoursePicker({ asSheet = false }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 mb-3 shadow-sm">
+    <div className="rounded-xl border border-(--ui-border-strong) bg-(--ui-surface) px-4 py-3 mb-3">
       <PickerControls
         seatOptions={seatOptions}
         activeSeat={activeSeat}
@@ -57,7 +57,7 @@ function PickerControls({ seatOptions, activeSeat, setActiveSeat, courseOptions,
         <select
           value={activeSeat || 1}
           onChange={(e) => setActiveSeat(Number(e.target.value))}
-          className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#8066FF] focus:border-[#8066FF]"
+          className="h-10 px-3 rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) text-sm font-bold text-(--ui-text) focus:outline-none focus:ring-2 focus:ring-(--ui-focus) focus:border-(--ui-focus)"
         >
           {seatOptions.map((n) => (
             <option key={n} value={n}>Seat {n}</option>
@@ -74,8 +74,8 @@ function PickerControls({ seatOptions, activeSeat, setActiveSeat, courseOptions,
               onClick={() => setActiveCourse(n)}
               className={`h-10 px-3 rounded-lg text-xs font-bold border transition ${
                 activeCourse === n
-                  ? "bg-[#8066FF] text-white border-[#8066FF] shadow"
-                  : "bg-white text-slate-600 border-slate-300 hover:border-[#8066FF]"
+                  ? "bg-(--ui-primary) text-white border-(--ui-primary)"
+                  : "bg-(--ui-surface) text-(--ui-text-muted) border-(--ui-border-strong) hover:border-(--ui-primary)"
               }`}
               title={COURSE_LABELS[n]}
             >
@@ -92,7 +92,7 @@ function PickerControls({ seatOptions, activeSeat, setActiveSeat, courseOptions,
 function Group({ label, children }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">{label}</span>
+      <span className="text-[10px] uppercase tracking-wider font-semibold text-(--ui-text-muted)">{label}</span>
       {children}
     </div>
   );

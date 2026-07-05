@@ -62,16 +62,16 @@ export default function CounterTileGrid() {
   }, [products, activeTabId]);
 
   if (products === null) {
-    return <div className="text-xs text-slate-500 px-1 py-2">Loading menu…</div>;
+    return <div className="text-xs text-(--ui-text-muted) px-1 py-2">Loading menu…</div>;
   }
 
   if (error) {
-    return <div className="text-xs text-rose-600 px-1 py-2">{error}</div>;
+    return <div className="text-xs text-(--ui-danger-fg) px-1 py-2">{error}</div>;
   }
 
   if (!products.length) {
     return (
-      <div className="text-xs text-slate-500 px-1 py-2">
+      <div className="text-xs text-(--ui-text-muted) px-1 py-2">
         No menu items yet. Add products in Inventory to see them here.
       </div>
     );
@@ -89,8 +89,8 @@ export default function CounterTileGrid() {
                 onClick={() => setActiveTabId(t.id)}
                 className={`shrink-0 px-3 h-9 rounded-lg text-xs font-bold transition ${
                   isActive
-                    ? "bg-[#8066FF] text-white"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    ? "bg-(--ui-primary) text-white"
+                    : "bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text)"
                 }`}
               >
                 {t.name}
@@ -107,7 +107,7 @@ export default function CounterTileGrid() {
       </div>
 
       {visibleProducts.length === 0 && (
-        <div className="text-xs text-slate-500 px-1 py-2">No items in this category.</div>
+        <div className="text-xs text-(--ui-text-muted) px-1 py-2">No items in this category.</div>
       )}
     </div>
   );
@@ -121,9 +121,9 @@ function CounterTile({ product, fmt, onAdd }) {
   return (
     <button
       onClick={onAdd}
-      className="min-h-[100px] rounded-lg bg-white border border-slate-200 hover:border-[#8066FF] hover:shadow-md flex flex-col overflow-hidden transition text-left"
+      className="min-h-[100px] rounded-lg bg-(--ui-surface) border border-(--ui-border-strong) hover:border-(--ui-primary) flex flex-col overflow-hidden transition text-left"
     >
-      <div className="h-12 bg-slate-50 flex items-center justify-center overflow-hidden">
+      <div className="h-12 bg-(--ui-muted-surface) flex items-center justify-center overflow-hidden">
         {showImage ? (
           <img
             src={product.image_url}
@@ -132,16 +132,16 @@ function CounterTile({ product, fmt, onAdd }) {
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+          <span className="text-[10px] uppercase tracking-wider text-(--ui-text-muted) font-bold">
             {(product.name || "?").slice(0, 2)}
           </span>
         )}
       </div>
       <div className="flex-1 px-2 py-1.5 flex flex-col justify-between">
-        <div className="text-xs font-bold text-slate-900 line-clamp-2 leading-tight">
+        <div className="text-xs font-bold text-(--ui-text) line-clamp-2 leading-tight">
           {product.name}
         </div>
-        <div className="text-xs font-black text-[#8066FF] mt-1">{fmt(price)}</div>
+        <div className="text-xs font-black text-(--ui-text) mt-1">{fmt(price)}</div>
       </div>
     </button>
   );

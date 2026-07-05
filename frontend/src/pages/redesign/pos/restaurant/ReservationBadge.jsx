@@ -12,7 +12,7 @@ export default function ReservationBadge({ reservation }) {
     minute: "2-digit",
   });
   return (
-    <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[10px] font-bold shadow">
+    <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-(--ui-warning-bg) text-(--ui-warning-fg) text-[10px] font-bold">
       <Clock size={10} />
       <span>{reservation.customer_name.split(" ")[0]} · {when}</span>
     </div>

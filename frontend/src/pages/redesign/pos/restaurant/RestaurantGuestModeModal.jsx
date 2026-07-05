@@ -55,7 +55,7 @@ export default function RestaurantGuestModeModal() {
     ctx.scale(dpr, dpr);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#0f172a";
+    ctx.strokeStyle = "#101010";
     ctx.lineWidth = 2;
   }, []);
 
@@ -141,7 +141,7 @@ export default function RestaurantGuestModeModal() {
       })
       .join(" ");
     if (!paths) return null;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><path d="${paths}" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><path d="${paths}" fill="none" stroke="#101010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   };
 
   const onDone = () => {
@@ -166,22 +166,22 @@ export default function RestaurantGuestModeModal() {
   const grandTotal = total + numericTip;
 
   return (
-    <div className="fixed inset-0 z-40 bg-slate-950/85 backdrop-blur-sm flex items-stretch justify-stretch">
-      <div className="flex-1 flex flex-col bg-white">
+    <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-stretch justify-stretch">
+      <div className="flex-1 flex flex-col bg-(--ui-surface)">
         {/* Header — large + readable across a counter */}
-        <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-8 py-5 border-b border-(--ui-border) flex items-center justify-between bg-(--ui-muted-surface)">
           <div>
-            <p className="text-xs font-bold text-[#8066FF] uppercase tracking-widest">
+            <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest">
               Confirm with Guest
             </p>
-            <h2 className="text-2xl font-black text-slate-900 mt-1">
+            <h2 className="text-2xl font-black text-(--ui-text) mt-1">
               Review and sign
             </h2>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="h-14 px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center gap-2 transition"
+            className="h-14 px-5 rounded-2xl bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) font-bold text-sm flex items-center gap-2 transition"
           >
             <X size={16} /> Cancel
           </button>
@@ -191,20 +191,20 @@ export default function RestaurantGuestModeModal() {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-6 sm:p-10 space-y-8">
             {/* Totals */}
-            <div className="rounded-3xl bg-slate-50 border border-slate-100 p-6 flex items-center justify-between">
+            <div className="rounded-3xl bg-(--ui-muted-surface) border border-(--ui-border) p-6 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest">
                   Subtotal
                 </p>
-                <p className="text-xl font-black text-slate-800 mt-0.5">
+                <p className="text-xl font-black text-(--ui-text) mt-0.5">
                   {money(total)}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest">
                   Total with tip
                 </p>
-                <p className="text-3xl font-black text-slate-900 mt-0.5">
+                <p className="text-3xl font-black text-(--ui-text) mt-0.5">
                   {money(grandTotal)}
                 </p>
               </div>
@@ -212,7 +212,7 @@ export default function RestaurantGuestModeModal() {
 
             {/* Tip presets — large tap targets */}
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+              <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest mb-3">
                 Add a tip
               </p>
               <div className="grid grid-cols-4 gap-3">
@@ -226,8 +226,8 @@ export default function RestaurantGuestModeModal() {
                       onClick={() => setTipAmount(amt)}
                       className={`min-h-[72px] rounded-2xl border-2 font-bold text-base transition ${
                         active
-                          ? "border-[#8066FF] bg-[#8066FF]/10 text-[#8066FF]"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                          ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                          : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text) hover:border-(--ui-border-strong)"
                       }`}
                     >
                       <div className="text-xl font-black">{pct}%</div>
@@ -245,13 +245,13 @@ export default function RestaurantGuestModeModal() {
                   placeholder="Custom tip"
                   value={tipAmount}
                   onChange={(e) => setTipAmount(e.target.value)}
-                  className="flex-1 min-h-[56px] px-4 bg-white border-2 border-slate-200 rounded-2xl focus:border-[#8066FF] focus:ring-0 outline-none text-lg font-semibold"
+                  className="flex-1 min-h-[56px] px-4 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-2xl focus:border-(--ui-focus) focus:ring-0 outline-none text-lg font-semibold"
                 />
                 {Number(tipAmount) > 0 && (
                   <button
                     type="button"
                     onClick={() => setTipAmount("")}
-                    className="min-h-[56px] px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold"
+                    className="min-h-[56px] px-5 rounded-2xl bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text-muted) text-sm font-bold"
                   >
                     Clear
                   </button>
@@ -266,8 +266,8 @@ export default function RestaurantGuestModeModal() {
                       onClick={() => setTipMethod(m)}
                       className={`min-h-[56px] rounded-xl text-sm font-bold border-2 transition ${
                         tipMethod === m
-                          ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                          : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted) hover:border-(--ui-border-strong)"
                       }`}
                     >
                       Tip via {m}
@@ -280,21 +280,21 @@ export default function RestaurantGuestModeModal() {
             {/* Signature */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <PenLine size={14} className="text-[#8066FF]" />
+                <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest flex items-center gap-1.5">
+                  <PenLine size={14} className="text-(--ui-text-muted)" />
                   Signature
                 </p>
                 {hasInk && (
                   <button
                     type="button"
                     onClick={clearSignature}
-                    className="text-xs font-bold text-slate-500 hover:text-rose-600 flex items-center gap-1"
+                    className="text-xs font-bold text-(--ui-text-muted) hover:text-(--ui-danger) flex items-center gap-1"
                   >
                     <RotateCcw size={13} /> Clear
                   </button>
                 )}
               </div>
-              <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 overflow-hidden">
+              <div className="rounded-3xl border-2 border-dashed border-(--ui-border-strong) bg-(--ui-muted-surface) overflow-hidden">
                 <canvas
                   ref={canvasRef}
                   onPointerDown={handlePointerDown}
@@ -307,7 +307,7 @@ export default function RestaurantGuestModeModal() {
                 />
               </div>
               {!hasInk && (
-                <p className="text-xs text-slate-400 mt-2 text-center">
+                <p className="text-xs text-(--ui-text-muted) mt-2 text-center">
                   Sign above with your finger or stylus.
                 </p>
               )}
@@ -315,7 +315,7 @@ export default function RestaurantGuestModeModal() {
 
             {/* Receipt choice */}
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+              <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest mb-3">
                 Send receipt by
               </p>
               <div className="grid grid-cols-3 gap-3">
@@ -330,8 +330,8 @@ export default function RestaurantGuestModeModal() {
                     onClick={() => setReceiptChoice(id)}
                     className={`min-h-[64px] rounded-2xl border-2 font-bold text-sm transition ${
                       receiptChoice === id
-                        ? "border-[#8066FF] bg-[#8066FF]/10 text-[#8066FF]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                        : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text) hover:border-(--ui-border-strong)"
                     }`}
                   >
                     {label}
@@ -343,18 +343,18 @@ export default function RestaurantGuestModeModal() {
         </div>
 
         {/* Footer — Done */}
-        <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+        <div className="px-8 py-5 border-t border-(--ui-border) bg-(--ui-muted-surface) flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-[56px] px-6 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-100 transition"
+            className="min-h-[56px] px-6 rounded-2xl bg-(--ui-surface) border-2 border-(--ui-border-strong) text-(--ui-text) font-bold text-sm hover:bg-(--ui-muted-surface) transition"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onDone}
-            className="min-h-[56px] px-8 rounded-2xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-black text-base flex items-center gap-2 shadow-[0_10px_20px_-10px_rgba(128,102,255,0.6)] transition"
+            className="min-h-[56px] px-8 rounded-2xl bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white font-black text-base flex items-center gap-2 transition"
           >
             <Check size={18} /> Done
           </button>

@@ -82,45 +82,45 @@ export default function RestaurantAvailabilityModal({ open, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="bg-(--ui-surface) rounded-2xl shadow-(--ui-shadow-lg) w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border-strong)">
           <div className="flex items-center gap-2">
-            <Ban size={18} className="text-rose-500" />
-            <h2 className="text-lg font-black text-slate-900">86 an Item</h2>
+            <Ban size={18} className="text-(--ui-danger)" />
+            <h2 className="text-lg font-black text-(--ui-text)">86 an Item</h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X size={20} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {!selected ? (
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Product</label>
+              <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Product</label>
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)" />
                 <input
                   autoFocus
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search menu item…"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                 />
               </div>
-              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-                {searching && <div className="p-3 text-sm text-slate-500">Searching…</div>}
+              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-(--ui-border-strong) divide-y divide-(--ui-border)">
+                {searching && <div className="p-3 text-sm text-(--ui-text-muted)">Searching…</div>}
                 {!searching && results.length === 0 && query.length >= 2 && (
-                  <div className="p-3 text-sm text-slate-500">No matches.</div>
+                  <div className="p-3 text-sm text-(--ui-text-muted)">No matches.</div>
                 )}
                 {results.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => setSelected(p)}
-                    className="w-full text-left px-3 py-2.5 hover:bg-slate-50 flex items-center justify-between"
+                    className="w-full text-left px-3 py-2.5 hover:bg-(--ui-muted-surface) flex items-center justify-between"
                   >
-                    <span className="font-semibold text-slate-800">{p.name}</span>
+                    <span className="font-semibold text-(--ui-text)">{p.name}</span>
                     {p.is_sold_out && (
-                      <span className="text-xs font-bold uppercase text-rose-500">Already 86'd</span>
+                      <span className="text-xs font-bold uppercase text-(--ui-danger)">Already 86'd</span>
                     )}
                   </button>
                 ))}
@@ -128,21 +128,21 @@ export default function RestaurantAvailabilityModal({ open, onClose }) {
             </div>
           ) : (
             <>
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between">
+              <div className="rounded-xl bg-(--ui-muted-surface) border border-(--ui-border-strong) p-3 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-slate-500 font-semibold uppercase">Selected</div>
-                  <div className="text-base font-black text-slate-900">{selected.name}</div>
+                  <div className="text-xs text-(--ui-text-muted) font-semibold uppercase">Selected</div>
+                  <div className="text-base font-black text-(--ui-text)">{selected.name}</div>
                 </div>
                 <button
                   onClick={() => setSelected(null)}
-                  className="text-xs font-bold text-[#8066FF] hover:underline"
+                  className="text-xs font-bold text-(--ui-link) hover:underline"
                 >
                   Change
                 </button>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Reason</label>
+                <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">Reason</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {QUICK_REASONS.map((r) => (
                     <button
@@ -151,8 +151,8 @@ export default function RestaurantAvailabilityModal({ open, onClose }) {
                       onClick={() => setReason(r)}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
                         reason === r
-                          ? "bg-[#8066FF] text-white border-[#8066FF]"
-                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                          ? "bg-(--ui-primary) text-white border-(--ui-primary)"
+                          : "bg-(--ui-surface) text-(--ui-text) border-(--ui-border-strong) hover:bg-(--ui-muted-surface)"
                       }`}
                     >
                       {r}
@@ -164,39 +164,39 @@ export default function RestaurantAvailabilityModal({ open, onClose }) {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="Or type a custom reason…"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+                  className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                   maxLength={200}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-2">
-                  Auto-clear at <span className="normal-case font-medium text-slate-400">(optional)</span>
+                <label className="block text-xs font-bold uppercase text-(--ui-text-muted) mb-2">
+                  Auto-clear at <span className="normal-case font-medium text-(--ui-text-muted)">(optional)</span>
                 </label>
                 <input
                   type="datetime-local"
                   value={until}
                   onChange={(e) => setUntil(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+                  className="w-full px-3 py-2.5 rounded-xl border border-(--ui-border-strong) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
                 />
               </div>
 
-              {error && <div className="text-sm text-rose-600 font-semibold">{error}</div>}
+              {error && <div className="text-sm text-(--ui-danger-fg) font-semibold">{error}</div>}
             </>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
+        <div className="px-5 py-3 border-t border-(--ui-border-strong) flex justify-end gap-2 bg-(--ui-muted-surface)">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-200"
+            className="px-4 py-2 rounded-xl text-sm font-bold text-(--ui-text) hover:bg-(--ui-border-strong)"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={busy || !selected || !reason.trim()}
-            className="px-4 py-2 rounded-xl text-sm font-bold bg-rose-500 text-white hover:bg-rose-600 disabled:bg-slate-300 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-xl text-sm font-bold bg-(--ui-danger) text-white hover:opacity-90 disabled:bg-(--ui-muted-surface) disabled:cursor-not-allowed"
           >
             {busy ? "Saving…" : "Mark Sold Out"}
           </button>
