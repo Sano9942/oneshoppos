@@ -24,13 +24,13 @@ export default function PortalForgotPassword() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
       <h1 className="text-xl font-semibold mb-1">Reset your password</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-(--ui-text-muted) mb-6">
         Enter your email — if it's registered, we'll send a reset link.
       </p>
       {sent ? (
-        <div className="text-emerald-700 text-sm">
+        <div className="text-(--ui-success-fg) text-sm">
           Check your inbox for the password reset link. You can close this page.
         </div>
       ) : (
@@ -40,21 +40,21 @@ export default function PortalForgotPassword() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2 mb-4"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2 mb-4"
             autoComplete="email"
           />
-          {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
+          {error && <div className="text-sm text-(--ui-danger-fg) mb-3">{error}</div>}
           <button
             type="submit"
             disabled={sending}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-medium disabled:opacity-50"
+            className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) py-2 rounded font-medium disabled:opacity-50"
           >
             {sending ? "Sending…" : "Send reset link"}
           </button>
         </form>
       )}
       <div className="mt-4 text-sm text-center">
-        <Link to={`/portal/${tenantSlug}/login`} className="text-emerald-700 hover:underline">
+        <Link to={`/portal/${tenantSlug}/login`} className="text-(--ui-link) hover:underline">
           Back to sign in
         </Link>
       </div>

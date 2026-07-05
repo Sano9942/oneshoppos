@@ -118,24 +118,24 @@ export default function SignupPage() {
   if (result?.success) {
     if (result.verificationRequired) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-            <CheckCircle size={40} className="mx-auto text-emerald-500 mb-3" />
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Check your email</h2>
-            <p className="text-sm text-slate-600 mb-2">
+        <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+          <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+            <CheckCircle size={40} className="mx-auto text-(--ui-text) mb-3" />
+            <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Check your email</h2>
+            <p className="text-sm text-(--ui-text-muted) mb-2">
               We sent a confirmation link to{" "}
-              <span className="font-semibold text-slate-800">{result.email}</span>.
+              <span className="font-semibold text-(--ui-text)">{result.email}</span>.
               Click the link to verify your email and finish setup.
             </p>
-            <p className="text-xs text-slate-500 mb-4">
-              Your store code is: <span className="font-mono font-bold text-slate-800">{result.slug}</span>
+            <p className="text-xs text-(--ui-text-muted) mb-4">
+              Your store code is: <span className="font-mono font-bold text-(--ui-text)">{result.slug}</span>
             </p>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-(--ui-text-muted) mb-4">
               Didn&apos;t get it? Check spam or contact support.
             </p>
             <button
               onClick={() => navigate("/login")}
-              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg py-2 font-semibold transition-colors cursor-pointer text-sm"
+              className="w-full bg-(--ui-muted-surface) hover:bg-(--ui-muted-surface) text-(--ui-text) rounded-lg py-2 font-semibold transition-colors cursor-pointer text-sm"
             >
               Back to login
             </button>
@@ -144,17 +144,17 @@ export default function SignupPage() {
       );
     }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-          <CheckCircle size={40} className="mx-auto text-emerald-500 mb-3" />
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Store Created!</h2>
-          <p className="text-sm text-slate-600 mb-2">{result.message}</p>
-          <p className="text-xs text-slate-500 mb-4">
-            Your store code is: <span className="font-mono font-bold text-slate-800">{result.slug}</span>
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+        <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+          <CheckCircle size={40} className="mx-auto text-(--ui-text) mb-3" />
+          <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Store Created!</h2>
+          <p className="text-sm text-(--ui-text-muted) mb-2">{result.message}</p>
+          <p className="text-xs text-(--ui-text-muted) mb-4">
+            Your store code is: <span className="font-mono font-bold text-(--ui-text)">{result.slug}</span>
           </p>
           <button
             onClick={() => navigate("/login")}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
+            className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
           >
             Go to Login
           </button>
@@ -165,14 +165,14 @@ export default function SignupPage() {
 
   if (result && !result.success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-          <XCircle size={40} className="mx-auto text-red-500 mb-3" />
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Signup Failed</h2>
-          <p className="text-sm text-slate-600 mb-4">{result.message}</p>
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+        <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+          <XCircle size={40} className="mx-auto text-(--ui-danger-fg) mb-3" />
+          <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Signup Failed</h2>
+          <p className="text-sm text-(--ui-text-muted) mb-4">{result.message}</p>
           <button
             onClick={() => setResult(null)}
-            className="w-full bg-slate-600 hover:bg-slate-700 text-white rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
+            className="w-full bg-(--ui-muted-surface) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
           >
             Try Again
           </button>
@@ -182,75 +182,75 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+    <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) p-4">
+      <div className="bg-(--ui-surface) rounded-xl shadow-lg w-full max-w-md p-6">
         <div className="text-center mb-6">
-          <Store size={36} className="mx-auto text-emerald-600 mb-2" />
-          <h1 className="text-xl font-bold text-slate-900">Create your store</h1>
-          <p className="text-sm text-slate-500 mt-1">Get started with SanoPOS in minutes</p>
+          <Store size={36} className="mx-auto text-(--ui-text) mb-2" />
+          <h1 className="text-xl font-bold text-(--ui-text)">Create your store</h1>
+          <p className="text-sm text-(--ui-text-muted) mt-1">Get started with SanoPOS in minutes</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Store Name</label>
+            <label className="block text-sm font-medium text-(--ui-text) mb-1">Store Name</label>
             <input
               type="text"
               value={form.store_name}
               onChange={set("store_name")}
               placeholder="My Awesome Store"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
               required
               minLength={3}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Your Name</label>
+            <label className="block text-sm font-medium text-(--ui-text) mb-1">Your Name</label>
             <input
               type="text"
               value={form.owner_name}
               onChange={set("owner_name")}
               placeholder="John Doe"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-(--ui-text) mb-1">Email</label>
             <input
               type="email"
               value={form.email}
               onChange={set("email")}
               placeholder="you@example.com"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-(--ui-text) mb-1">Password</label>
             <input
               type="password"
               value={form.password}
               onChange={set("password")}
               placeholder="Min 8 characters"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20 focus:border-(--ui-focus)"
               required
               minLength={8}
             />
           </div>
 
-          <p className="text-xs text-slate-500 text-center">
-            You'll start on our <span className="font-semibold text-emerald-700">Free plan</span> — 1 outlet, 3 employees, 100 products. Upgrade to Pro anytime from your dashboard.
+          <p className="text-xs text-(--ui-text-muted) text-center">
+            You'll start on our <span className="font-semibold text-(--ui-text)">Free plan</span> — 1 outlet, 3 employees, 100 products. Upgrade to Pro anytime from your dashboard.
           </p>
 
-          <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+          <label className="flex items-start gap-2 text-xs text-(--ui-text-muted) cursor-pointer">
             <input
               type="checkbox"
               checked={tosAccepted}
               onChange={(e) => setTosAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-(--ui-border-strong) text-(--ui-text) focus:ring-(--ui-focus)"
             />
             <span>
               I agree to the{" "}
@@ -258,7 +258,7 @@ export default function SignupPage() {
                 href="/terms"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium text-emerald-700 hover:underline"
+                className="font-medium text-(--ui-text) hover:underline"
               >
                 Terms of Service
               </a>{" "}
@@ -267,7 +267,7 @@ export default function SignupPage() {
                 href="/privacy"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium text-emerald-700 hover:underline"
+                className="font-medium text-(--ui-text) hover:underline"
               >
                 Privacy Policy
               </a>
@@ -280,17 +280,17 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={!valid || loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
+            className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 text-(--ui-on-primary) rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
           >
             {loading ? "Creating store..." : "Create Store"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
+        <p className="mt-4 text-center text-sm text-(--ui-text-muted)">
           Already have an account?{" "}
           <button
             onClick={() => navigate("/login")}
-            className="font-medium text-emerald-600 hover:text-emerald-700 cursor-pointer"
+            className="font-medium text-(--ui-text) hover:text-(--ui-link) cursor-pointer"
           >
             Sign in
           </button>

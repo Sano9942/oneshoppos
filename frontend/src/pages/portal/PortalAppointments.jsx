@@ -66,34 +66,34 @@ export default function PortalAppointments() {
         <button
           type="button"
           onClick={() => setBookingOpen(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-medium"
+          className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) px-4 py-2 rounded font-medium"
         >
           Book appointment
         </button>
       </div>
 
-      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {error && <div className="text-(--ui-danger-fg) text-sm">{error}</div>}
 
       <section>
         <h2 className="font-semibold mb-3">Upcoming</h2>
         {loading ? (
-          <div className="text-slate-500">Loading…</div>
+          <div className="text-(--ui-text-muted)">Loading…</div>
         ) : upcoming.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-slate-500">
+          <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6 text-center text-(--ui-text-muted)">
             No upcoming appointments.
           </div>
         ) : (
           <div className="space-y-3">
             {upcoming.map((a) => (
-              <div key={a.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex justify-between items-center">
+              <div key={a.id} className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-4 flex justify-between items-center">
                 <div>
                   <div className="font-medium">{a.service_name || "Service"}</div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-(--ui-text-muted)">
                     {fmtDateTime(a.start_at)}
                     {a.employee_name ? ` • ${a.employee_name}` : ""}
                   </div>
                   <div className="text-xs mt-1">
-                    <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                    <span className="inline-block px-2 py-0.5 rounded bg-(--ui-success-bg) text-(--ui-success-fg)">
                       {a.status}
                     </span>
                   </div>
@@ -102,14 +102,14 @@ export default function PortalAppointments() {
                   <button
                     type="button"
                     onClick={() => setRescheduleId(a.id)}
-                    className="text-sm text-slate-700 hover:text-slate-900 border border-slate-300 rounded px-3 py-1"
+                    className="text-sm text-(--ui-text) hover:text-(--ui-text) border border-(--ui-border-strong) rounded px-3 py-1"
                   >
                     Reschedule
                   </button>
                   <button
                     type="button"
                     onClick={() => cancel(a.id)}
-                    className="text-sm text-red-700 hover:text-red-900 border border-red-200 rounded px-3 py-1"
+                    className="text-sm text-(--ui-danger-fg) hover:text-(--ui-danger-fg) border border-(--ui-danger-bg) rounded px-3 py-1"
                   >
                     Cancel
                   </button>
@@ -123,13 +123,13 @@ export default function PortalAppointments() {
       <section>
         <h2 className="font-semibold mb-3">Past</h2>
         {past.length === 0 ? (
-          <div className="text-slate-500 text-sm">No past appointments.</div>
+          <div className="text-(--ui-text-muted) text-sm">No past appointments.</div>
         ) : (
           <div className="space-y-2">
             {past.slice(0, 10).map((a) => (
-              <div key={a.id} className="bg-white rounded border border-slate-200 p-3 text-sm flex justify-between">
+              <div key={a.id} className="bg-(--ui-surface) rounded border border-(--ui-border) p-3 text-sm flex justify-between">
                 <span>{a.service_name || "Service"}</span>
-                <span className="text-slate-500">{fmtDateTime(a.start_at)}</span>
+                <span className="text-(--ui-text-muted)">{fmtDateTime(a.start_at)}</span>
               </div>
             ))}
           </div>
@@ -199,14 +199,14 @@ function BookingModal({ tenantSlug, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4">
+      <div className="bg-(--ui-surface) rounded-xl max-w-lg w-full p-6 space-y-4">
         <h2 className="text-lg font-semibold">Book an appointment</h2>
         <div>
           <label className="block text-sm font-medium mb-1">Service</label>
           <select
             value={selected?.id || ""}
             onChange={(e) => setSelected(services.find((s) => s.id === Number(e.target.value)))}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
           >
             <option value="">Choose a service…</option>
             {services.map((s) => (
@@ -223,15 +223,15 @@ function BookingModal({ tenantSlug, onClose }) {
             value={date}
             min={todayStr()}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
           />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Time</label>
           {!selected ? (
-            <div className="text-sm text-slate-500">Pick a service first.</div>
+            <div className="text-sm text-(--ui-text-muted)">Pick a service first.</div>
           ) : slots.length === 0 ? (
-            <div className="text-sm text-slate-500">No slots available on this date.</div>
+            <div className="text-sm text-(--ui-text-muted)">No slots available on this date.</div>
           ) : (
             <div className="grid grid-cols-3 gap-2 max-h-40 overflow-auto">
               {slots.map((s, idx) => (
@@ -241,8 +241,8 @@ function BookingModal({ tenantSlug, onClose }) {
                   onClick={() => setSlot(s)}
                   className={`px-2 py-1 rounded border text-sm ${
                     slot === s
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                      : "border-slate-300 hover:border-slate-500"
+                      ? "border-(--ui-success-bg) bg-(--ui-success-bg) text-(--ui-success-fg)"
+                      : "border-(--ui-border-strong) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   {new Date(s.start_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -256,20 +256,20 @@ function BookingModal({ tenantSlug, onClose }) {
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             rows={2}
           />
         </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg)">{error}</div>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:text-slate-900">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-(--ui-text-muted) hover:text-(--ui-text)">
             Cancel
           </button>
           <button
             type="button"
             disabled={!selected || !slot || submitting}
             onClick={submit}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-medium disabled:opacity-50"
+            className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) px-5 py-2 rounded font-medium disabled:opacity-50"
           >
             {submitting ? "Booking…" : "Confirm booking"}
           </button>
@@ -300,7 +300,7 @@ function RescheduleModal({ tenantSlug, appointmentId, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
+      <div className="bg-(--ui-surface) rounded-xl max-w-md w-full p-6 space-y-4">
         <h2 className="text-lg font-semibold">Reschedule</h2>
         <div>
           <label className="block text-sm font-medium mb-1">New date & time</label>
@@ -308,20 +308,20 @@ function RescheduleModal({ tenantSlug, appointmentId, onClose }) {
             type="datetime-local"
             value={datetime}
             onChange={(e) => setDatetime(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
           />
-          <p className="text-xs text-slate-500 mt-1">Must be at least 15 minutes from now.</p>
+          <p className="text-xs text-(--ui-text-muted) mt-1">Must be at least 15 minutes from now.</p>
         </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg)">{error}</div>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:text-slate-900">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-(--ui-text-muted) hover:text-(--ui-text)">
             Cancel
           </button>
           <button
             type="button"
             disabled={!datetime || submitting}
             onClick={submit}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-medium disabled:opacity-50"
+            className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) px-5 py-2 rounded font-medium disabled:opacity-50"
           >
             {submitting ? "Saving…" : "Save change"}
           </button>

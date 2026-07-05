@@ -33,19 +33,19 @@ export default function ManufacturerPortalForgotPassword() {
 
   if (sent) {
     return (
-      <div className="max-w-sm mx-auto bg-white border border-slate-200 rounded-lg p-6 mt-4">
+      <div className="max-w-sm mx-auto bg-(--ui-surface) border border-(--ui-border) rounded-lg p-6 mt-4">
         <h1 className="text-xl font-semibold mb-2">Check your email</h1>
-        <p className="text-sm text-slate-600 mb-4">
+        <p className="text-sm text-(--ui-text-muted) mb-4">
           If an account with that email exists, a reset link has been sent.
           The link expires in 1 hour.
         </p>
-        <p className="text-sm text-slate-500 mb-6">
+        <p className="text-sm text-(--ui-text-muted) mb-6">
           Didn't receive it? Check your spam folder, or contact your
           distributor admin to re-issue the invitation.
         </p>
         <Link
           to={`/manufacturer-portal/${tenantSlug}/login`}
-          className="text-sm text-indigo-600 hover:text-indigo-700"
+          className="text-sm text-(--ui-link) hover:text-(--ui-link)"
         >
           ← Back to sign in
         </Link>
@@ -54,15 +54,15 @@ export default function ManufacturerPortalForgotPassword() {
   }
 
   return (
-    <div className="max-w-sm mx-auto bg-white border border-slate-200 rounded-lg p-6 mt-4">
+    <div className="max-w-sm mx-auto bg-(--ui-surface) border border-(--ui-border) rounded-lg p-6 mt-4">
       <h1 className="text-xl font-semibold mb-1">Reset your password</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-(--ui-text-muted) mb-6">
         Enter the email you use to sign in to the <strong>{tenantSlug}</strong>{" "}
         manufacturer portal.
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-(--ui-text) mb-1">
             Email
           </label>
           <input
@@ -70,27 +70,27 @@ export default function ManufacturerPortalForgotPassword() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full px-3 py-2 border border-(--ui-border-strong) rounded focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
             placeholder="you@brand.com"
           />
         </div>
         {err && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <div className="text-sm text-(--ui-danger-fg) bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded px-3 py-2">
             {err}
           </div>
         )}
         <button
           type="submit"
           disabled={busy || !email}
-          className="w-full bg-indigo-600 text-white py-2 rounded font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="w-full bg-(--ui-primary) text-(--ui-on-primary) py-2 rounded font-medium hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           {busy ? "Sending…" : "Send reset link"}
         </button>
       </form>
-      <p className="text-sm text-slate-500 mt-6">
+      <p className="text-sm text-(--ui-text-muted) mt-6">
         <Link
           to={`/manufacturer-portal/${tenantSlug}/login`}
-          className="text-indigo-600 hover:text-indigo-700"
+          className="text-(--ui-link) hover:text-(--ui-link)"
         >
           ← Back to sign in
         </Link>

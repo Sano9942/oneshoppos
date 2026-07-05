@@ -46,32 +46,32 @@ function ForgotPasswordModal({ storeCode, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-      <div className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-xl">
-        <h2 className="text-xl font-extrabold text-neutral-950">Reset Password</h2>
+      <div className="w-full max-w-sm rounded-lg border border-(--ui-border) bg-(--ui-surface) p-6 shadow-xl">
+        <h2 className="text-xl font-extrabold text-(--ui-text)">Reset Password</h2>
         {submitted ? (
           <>
-            <p className="mt-3 text-sm leading-6 text-neutral-600">
+            <p className="mt-3 text-sm leading-6 text-(--ui-text-muted)">
               If that username exists and has an email address, a reset link has been sent.
             </p>
             <button
               type="button"
               onClick={onClose}
-              className="mt-5 w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+              className="mt-5 w-full rounded-lg bg-(--ui-primary) px-4 py-3 text-sm font-bold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
             >
               Back To Login
             </button>
           </>
         ) : (
           <form onSubmit={onSubmit} className="mt-4 space-y-4">
-            <p className="text-sm leading-6 text-neutral-600">
+            <p className="text-sm leading-6 text-(--ui-text-muted)">
               Enter your username and we will send a reset link to your email.
             </p>
             <label className="block">
-              <span className="text-sm font-semibold text-neutral-800">Username</span>
+              <span className="text-sm font-semibold text-(--ui-text)">Username</span>
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-3 text-sm text-neutral-950 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                className="mt-2 w-full rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-3 text-sm text-(--ui-text) outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus)/20"
                 placeholder="Employee username"
                 autoFocus
               />
@@ -80,14 +80,14 @@ function ForgotPasswordModal({ storeCode, onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-lg border border-neutral-300 px-4 py-3 text-sm font-bold text-neutral-800 hover:bg-neutral-50"
+                className="flex-1 rounded-lg border border-(--ui-border-strong) px-4 py-3 text-sm font-bold text-(--ui-text) hover:bg-(--ui-muted-surface)"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !username.trim()}
-                className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-(--ui-primary) px-4 py-3 text-sm font-bold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
               >
                 {loading ? "Sending..." : "Send Link"}
               </button>
@@ -140,16 +140,16 @@ function LoginForm() {
       <form onSubmit={onSubmit} className="space-y-4">
         {IS_MULTI_TENANT && (
           <label className="block">
-            <span className="text-sm font-semibold text-neutral-800">Store Code</span>
+            <span className="text-sm font-semibold text-(--ui-text)">Store Code</span>
             <div className="relative mt-2">
               <Store
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
               />
               <input
                 value={storeCode}
                 onChange={(event) => setStoreCode(event.target.value)}
-                className="w-full rounded-lg border border-neutral-300 bg-white py-3 pl-10 pr-3 text-sm text-neutral-950 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                className="w-full rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) py-3 pl-10 pr-3 text-sm text-(--ui-text) outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus)/20"
                 placeholder="e.g. aceshardware"
                 autoComplete="organization"
                 autoFocus
@@ -159,16 +159,16 @@ function LoginForm() {
         )}
 
         <label className="block">
-          <span className="text-sm font-semibold text-neutral-800">Username</span>
+          <span className="text-sm font-semibold text-(--ui-text)">Username</span>
           <div className="relative mt-2">
             <User
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
             />
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="w-full rounded-lg border border-neutral-300 bg-white py-3 pl-10 pr-3 text-sm text-neutral-950 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+              className="w-full rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) py-3 pl-10 pr-3 text-sm text-(--ui-text) outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus)/20"
               placeholder="Employee username"
               autoComplete="username"
               autoFocus={!IS_MULTI_TENANT}
@@ -177,17 +177,17 @@ function LoginForm() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-neutral-800">Password</span>
+          <span className="text-sm font-semibold text-(--ui-text)">Password</span>
           <div className="relative mt-2">
             <Lock
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted)"
             />
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-neutral-300 bg-white py-3 pl-10 pr-3 text-sm text-neutral-950 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+              className="w-full rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) py-3 pl-10 pr-3 text-sm text-(--ui-text) outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus)/20"
               placeholder="Enter your password"
               autoComplete="current-password"
             />
@@ -195,18 +195,18 @@ function LoginForm() {
         </label>
 
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-neutral-500">You will choose your branch after sign in.</p>
+          <p className="text-xs text-(--ui-text-muted)">You will choose your branch after sign in.</p>
           <button
             type="button"
             onClick={() => setShowForgot(true)}
-            className="shrink-0 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+            className="shrink-0 text-sm font-semibold text-(--ui-text) hover:text-(--ui-link)"
           >
             Forgot password?
           </button>
         </div>
 
         {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+          <p className="rounded-lg border border-(--ui-danger-bg) bg-(--ui-danger-bg) px-3 py-2 text-sm font-semibold text-(--ui-danger-fg)">
             {error}
           </p>
         )}
@@ -214,7 +214,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading || !canSubmit}
-          className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center rounded-lg bg-(--ui-primary) px-4 py-3 text-sm font-bold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           {loading ? "Signing In..." : "Sign In"}
           {!loading && <ArrowRight className="ml-2" size={17} />}
@@ -232,7 +232,7 @@ export default function LoginPage() {
   const { isAuthenticated, isBootstrapping } = useAuth();
 
   if (isBootstrapping) {
-    return <div className="min-h-screen bg-neutral-950" />;
+    return <div className="min-h-screen bg-(--ui-primary)" />;
   }
 
   if (isAuthenticated) {
@@ -240,18 +240,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7faf9] text-neutral-950">
-      <nav className="border-b border-neutral-200 bg-white">
+    <div className="min-h-screen bg-(--ui-muted-surface) text-(--ui-text)">
+      <nav className="border-b border-(--ui-border) bg-(--ui-surface)">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
-          <a href="/" className="flex items-center gap-2 text-lg font-bold text-neutral-950">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+          <a href="/" className="flex items-center gap-2 text-lg font-bold text-(--ui-text)">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-(--ui-primary) text-(--ui-on-primary)">
               <Zap size={17} />
             </span>
             SanoPOS
           </a>
           <a
             href="/"
-            className="inline-flex items-center rounded-lg border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-800 hover:bg-neutral-50"
+            className="inline-flex items-center rounded-lg border border-(--ui-border-strong) px-4 py-2 text-sm font-bold text-(--ui-text) hover:bg-(--ui-muted-surface)"
           >
             <ArrowLeft className="mr-2" size={16} />
             Home
@@ -266,9 +266,9 @@ export default function LoginPage() {
             alt="Business team reviewing sales and operations"
             className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-neutral-950/58" />
-          <div className="relative flex h-full flex-col justify-end p-10 text-white">
-            <p className="mb-4 inline-flex w-fit rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-sm font-bold backdrop-blur">
+          <div className="absolute inset-0 bg-(--ui-primary)/58" />
+          <div className="relative flex h-full flex-col justify-end p-10 text-(--ui-on-primary)">
+            <p className="mb-4 inline-flex w-fit rounded-lg border border-white/30 bg-(--ui-surface)/10 px-3 py-2 text-sm font-bold backdrop-blur">
               One login for sales, stock, staff, branches, and reports
             </p>
             <h1 className="max-w-2xl text-5xl font-extrabold leading-tight">
@@ -280,8 +280,8 @@ export default function LoginPage() {
                 { icon: WifiOff, text: "Offline sales stay protected" },
                 { icon: BadgeCheck, text: "Admin permissions respected" },
               ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-2 text-sm font-semibold text-white/86">
-                  <Icon size={17} className="text-emerald-300" />
+                <div key={text} className="flex items-center gap-2 text-sm font-semibold text-(--ui-on-primary)/86">
+                  <Icon size={17} className="text-(--ui-text)" />
                   {text}
                 </div>
               ))}
@@ -289,14 +289,14 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center bg-white px-0 py-8 sm:px-6 lg:rounded-r-lg lg:border-y lg:border-r lg:border-neutral-200 lg:px-10">
+        <section className="flex items-center justify-center bg-(--ui-surface) px-0 py-8 sm:px-6 lg:rounded-r-lg lg:border-y lg:border-r lg:border-(--ui-border) lg:px-10">
           <div className="w-full max-w-md">
             <div className="mb-7">
-              <p className="mb-3 text-sm font-bold text-emerald-700">Secure Store Login</p>
-              <h2 className="text-3xl font-extrabold leading-tight text-neutral-950">
+              <p className="mb-3 text-sm font-bold text-(--ui-text)">Secure Store Login</p>
+              <h2 className="text-3xl font-extrabold leading-tight text-(--ui-text)">
                 Sign in to SanoPOS
               </h2>
-              <p className="mt-3 text-sm leading-6 text-neutral-600">
+              <p className="mt-3 text-sm leading-6 text-(--ui-text-muted)">
                 {IS_MULTI_TENANT
                   ? "Enter your store code, username, and password."
                   : "Enter your username and password."}
@@ -305,9 +305,9 @@ export default function LoginPage() {
 
             <LoginForm />
 
-            <p className="mt-6 text-center text-sm text-neutral-600">
+            <p className="mt-6 text-center text-sm text-(--ui-text-muted)">
               New to SanoPOS?{" "}
-              <a href="/signup?plan=free" className="font-bold text-emerald-700 hover:text-emerald-800">
+              <a href="/signup?plan=free" className="font-bold text-(--ui-text) hover:text-(--ui-link)">
                 Start free
               </a>
             </p>

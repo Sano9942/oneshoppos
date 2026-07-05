@@ -40,17 +40,17 @@ export default function PortalTreatments() {
     }
   }
 
-  if (loading) return <div className="p-6 text-slate-500">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (loading) return <div className="p-6 text-(--ui-text-muted)">Loading…</div>;
+  if (error) return <div className="p-6 text-(--ui-danger-fg)">{error}</div>;
 
   if (selected && detail) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <button onClick={() => { setSelected(null); setDetail(null); }} className="text-sm text-blue-600 mb-4">
+        <button onClick={() => { setSelected(null); setDetail(null); }} className="text-sm text-(--ui-link) mb-4">
           ← Back to plans
         </button>
         <h1 className="text-2xl font-bold mb-2">{detail.plan.title}</h1>
-        <div className="text-sm text-slate-600 mb-6">
+        <div className="text-sm text-(--ui-text-muted) mb-6">
           <span className="font-mono">{detail.plan.plan_number}</span>
           {detail.plan.subject_name && <> · {detail.plan.subject_name}</>}
           {detail.plan.provider_name && <> · Dr. {detail.plan.provider_name}</>}
@@ -69,12 +69,12 @@ export default function PortalTreatments() {
                     <div>
                       <div className="font-medium">
                         Session #{s.session_number}
-                        <span className="ml-2 text-xs text-slate-500">[{s.status}]</span>
+                        <span className="ml-2 text-xs text-(--ui-text-muted)">[{s.status}]</span>
                       </div>
-                      <div className="text-sm text-slate-600">{fmtDateTime(s.scheduled_at)}</div>
-                      {s.provider_name && <div className="text-xs text-slate-500">Dr. {s.provider_name}</div>}
+                      <div className="text-sm text-(--ui-text-muted)">{fmtDateTime(s.scheduled_at)}</div>
+                      {s.provider_name && <div className="text-xs text-(--ui-text-muted)">Dr. {s.provider_name}</div>}
                       {s.soap_subjective && (
-                        <div className="text-sm mt-2 text-slate-700 bg-slate-50 rounded p-2">{s.soap_subjective}</div>
+                        <div className="text-sm mt-2 text-(--ui-text) bg-(--ui-muted-surface) rounded p-2">{s.soap_subjective}</div>
                       )}
                     </div>
                   </div>
@@ -92,14 +92,14 @@ export default function PortalTreatments() {
               {detail.prescriptions.map((p) => (
                 <li key={p.id} className="py-2 text-sm">
                   <div className="font-medium">
-                    {p.medication_name} {p.strength && <span className="text-slate-600">{p.strength}</span>}
+                    {p.medication_name} {p.strength && <span className="text-(--ui-text-muted)">{p.strength}</span>}
                   </div>
-                  <div className="text-slate-600">
+                  <div className="text-(--ui-text-muted)">
                     {p.dosage && <>Dose: {p.dosage}. </>}
                     {p.frequency && <>Frequency: {p.frequency}. </>}
                     {p.duration && <>Duration: {p.duration}.</>}
                   </div>
-                  {p.instructions && <div className="text-xs text-slate-500">{p.instructions}</div>}
+                  {p.instructions && <div className="text-xs text-(--ui-text-muted)">{p.instructions}</div>}
                 </li>
               ))}
             </ul>
@@ -112,7 +112,7 @@ export default function PortalTreatments() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left border-b text-slate-600">
+                <tr className="text-left border-b text-(--ui-text-muted)">
                   <th className="py-2">Area</th>
                   <th>Condition</th>
                   <th>Severity</th>
@@ -125,7 +125,7 @@ export default function PortalTreatments() {
                     <td className="py-2 font-mono">{c.area_code}</td>
                     <td>{c.condition_code}</td>
                     <td>{c.severity || "—"}</td>
-                    <td className="text-slate-600">{c.notes || "—"}</td>
+                    <td className="text-(--ui-text-muted)">{c.notes || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -141,11 +141,11 @@ export default function PortalTreatments() {
               {detail.lab_orders.map((l) => (
                 <li key={l.id} className="py-2 text-sm">
                   <div className="font-medium">{l.test_name}</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-(--ui-text-muted)">
                     {l.lab_vendor || "—"} · {l.status}
                     {l.result_received_at && <> · Received {fmtDateTime(l.result_received_at)}</>}
                   </div>
-                  {l.result_summary && <div className="text-sm mt-1 bg-slate-50 rounded p-2">{l.result_summary}</div>}
+                  {l.result_summary && <div className="text-sm mt-1 bg-(--ui-muted-surface) rounded p-2">{l.result_summary}</div>}
                 </li>
               ))}
             </ul>
@@ -160,11 +160,11 @@ export default function PortalTreatments() {
               {detail.consents.map((c) => (
                 <li key={c.id} className="py-2 text-sm">
                   <div className="font-medium">{c.title}</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-(--ui-text-muted)">
                     Signed by {c.signed_by_name} ({c.signed_by_relation}) on {fmtDateTime(c.signed_at)}
                   </div>
                   {c.document_pdf_url && (
-                    <a href={c.document_pdf_url} target="_blank" rel="noreferrer" className="text-blue-600 text-xs">
+                    <a href={c.document_pdf_url} target="_blank" rel="noreferrer" className="text-(--ui-link) text-xs">
                       Download PDF
                     </a>
                   )}
@@ -179,10 +179,10 @@ export default function PortalTreatments() {
             <ul className="divide-y">
               {detail.documents.map((d) => (
                 <li key={d.id} className="py-2 text-sm">
-                  <a href={d.file_url} target="_blank" rel="noreferrer" className="text-blue-600 font-medium">
+                  <a href={d.file_url} target="_blank" rel="noreferrer" className="text-(--ui-link) font-medium">
                     {d.title}
                   </a>
-                  <span className="text-xs text-slate-500 ml-2">[{d.document_type}]</span>
+                  <span className="text-xs text-(--ui-text-muted) ml-2">[{d.document_type}]</span>
                 </li>
               ))}
             </ul>
@@ -194,7 +194,7 @@ export default function PortalTreatments() {
             <div className="text-sm">
               <div>Invoice <span className="font-mono">{detail.plan.invoice_number}</span></div>
               {detail.plan.balance_due > 0 && (
-                <div className="text-red-600">Balance due: {detail.plan.balance_due}</div>
+                <div className="text-(--ui-danger-fg)">Balance due: {detail.plan.balance_due}</div>
               )}
             </div>
           </Section>
@@ -207,23 +207,23 @@ export default function PortalTreatments() {
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">My Treatment Plans</h1>
       {plans.length === 0 ? (
-        <div className="text-sm text-slate-500">No treatment plans on file.</div>
+        <div className="text-sm text-(--ui-text-muted)">No treatment plans on file.</div>
       ) : (
         <ul className="space-y-3">
           {plans.map((p) => (
-            <li key={p.id} className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer" onClick={() => openDetail(p.id)}>
+            <li key={p.id} className="p-4 border rounded-lg hover:bg-(--ui-muted-surface) cursor-pointer" onClick={() => openDetail(p.id)}>
               <div className="flex justify-between items-start">
                 <div>
                   <div className="font-semibold">{p.title}</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-(--ui-text-muted)">
                     <span className="font-mono">{p.plan_number}</span>
                     {p.subject_name && <> · {p.subject_name}</>}
                     {p.provider_name && <> · Dr. {p.provider_name}</>}
                   </div>
                 </div>
                 <div className="text-sm text-right">
-                  <div className="text-slate-600">{p.sessions_completed || 0} / {p.total_sessions_planned} sessions</div>
-                  <div className="text-xs text-slate-500 uppercase">{p.status}</div>
+                  <div className="text-(--ui-text-muted)">{p.sessions_completed || 0} / {p.total_sessions_planned} sessions</div>
+                  <div className="text-xs text-(--ui-text-muted) uppercase">{p.status}</div>
                 </div>
               </div>
             </li>
@@ -238,11 +238,11 @@ function Section({ title, children }) {
   return (
     <div className="mb-6">
       <h2 className="text-lg font-semibold mb-2">{title}</h2>
-      <div className="bg-white rounded-lg border border-slate-200 p-4">{children}</div>
+      <div className="bg-(--ui-surface) rounded-lg border border-(--ui-border) p-4">{children}</div>
     </div>
   );
 }
 
 function Empty({ children }) {
-  return <div className="text-sm text-slate-400 italic">{children}</div>;
+  return <div className="text-sm text-(--ui-text-muted) italic">{children}</div>;
 }

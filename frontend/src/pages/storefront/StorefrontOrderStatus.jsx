@@ -80,10 +80,10 @@ export default function StorefrontOrderStatus() {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-1/2" />
-          <div className="h-4 bg-gray-200 rounded w-1/3" />
-          <div className="h-24 bg-gray-200 rounded" />
-          <div className="h-48 bg-gray-200 rounded" />
+          <div className="h-8 bg-(--ui-muted-surface) rounded w-1/2" />
+          <div className="h-4 bg-(--ui-muted-surface) rounded w-1/3" />
+          <div className="h-24 bg-(--ui-muted-surface) rounded" />
+          <div className="h-48 bg-(--ui-muted-surface) rounded" />
         </div>
       </div>
     );
@@ -92,11 +92,11 @@ export default function StorefrontOrderStatus() {
   if (error || !order) {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Order Not Found</h2>
-        <p className="text-gray-500 mb-6">{error || "This order does not exist or has expired."}</p>
+        <h2 className="text-xl font-bold text-(--ui-text) mb-2">Order Not Found</h2>
+        <p className="text-(--ui-text-muted) mb-6">{error || "This order does not exist or has expired."}</p>
         <Link
           to={`/store/${tenantSlug}`}
-          className="text-indigo-600 hover:text-indigo-700 font-medium"
+          className="text-(--ui-link) hover:text-(--ui-link) font-medium"
         >
           Back to Store
         </Link>
@@ -112,20 +112,20 @@ export default function StorefrontOrderStatus() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link to={`/store/${tenantSlug}`} className="hover:text-indigo-600">Store</Link>
+      <nav className="flex items-center gap-2 text-sm text-(--ui-text-muted) mb-6">
+        <Link to={`/store/${tenantSlug}`} className="hover:text-(--ui-link)">Store</Link>
         <span>/</span>
-        <span className="text-gray-900 font-medium">Order Status</span>
+        <span className="text-(--ui-text) font-medium">Order Status</span>
       </nav>
 
       {/* Order header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-(--ui-text)">
             Order {order.order_number || `#${order.id}`}
           </h1>
           {order.created_at && (
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-(--ui-text-muted) mt-1">
               Placed on {new Date(order.created_at).toLocaleDateString(undefined, {
                 year: "numeric", month: "long", day: "numeric",
               })}
@@ -137,8 +137,8 @@ export default function StorefrontOrderStatus() {
 
       {/* Progress timeline */}
       {!isCancelled && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h2 className="text-sm font-medium text-gray-700 mb-4">Order Progress</h2>
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6 mb-6">
+          <h2 className="text-sm font-medium text-(--ui-text) mb-4">Order Progress</h2>
           <div className="flex items-center justify-between">
             {steps.map((step, idx) => {
               const isCompleted = idx <= currentStepIdx;
@@ -149,7 +149,7 @@ export default function StorefrontOrderStatus() {
                   {idx > 0 && (
                     <div
                       className={`absolute top-3.5 right-1/2 w-full h-0.5 ${
-                        idx <= currentStepIdx ? "bg-indigo-600" : "bg-gray-200"
+                        idx <= currentStepIdx ? "bg-(--ui-primary)" : "bg-(--ui-muted-surface)"
                       }`}
                       style={{ zIndex: 0 }}
                     />
@@ -158,9 +158,9 @@ export default function StorefrontOrderStatus() {
                   <div
                     className={`relative z-10 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${
                       isCompleted
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-200 text-gray-500"
-                    } ${isCurrent ? "ring-4 ring-indigo-100" : ""}`}
+                        ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                        : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
+                    } ${isCurrent ? "ring-4 ring-(--ui-focus)" : ""}`}
                   >
                     {isCompleted ? (
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
@@ -171,7 +171,7 @@ export default function StorefrontOrderStatus() {
                     )}
                   </div>
                   <span className={`text-xs mt-2 text-center ${
-                    isCurrent ? "text-indigo-600 font-semibold" : "text-gray-500"
+                    isCurrent ? "text-(--ui-link) font-semibold" : "text-(--ui-text-muted)"
                   }`}>
                     {STATUS_LABELS[step]}
                   </span>
@@ -184,47 +184,47 @@ export default function StorefrontOrderStatus() {
 
       {/* Cancelled banner */}
       {isCancelled && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <p className="text-sm font-medium text-red-700">This order has been cancelled.</p>
+        <div className="bg-(--ui-danger-bg) border border-(--ui-danger-bg) rounded-xl p-4 mb-6">
+          <p className="text-sm font-medium text-(--ui-danger-fg)">This order has been cancelled.</p>
         </div>
       )}
 
       {/* I've Arrived button */}
       {isPickup && order.status === "ready_for_pickup" && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6 text-center">
-          <p className="text-sm text-green-800 mb-3">
+        <div className="bg-(--ui-success-bg) border border-(--ui-success-bg) rounded-xl p-6 mb-6 text-center">
+          <p className="text-sm text-(--ui-success-fg) mb-3">
             Your order is ready! Let the store know when you arrive.
           </p>
           <button
             onClick={handleArrive}
             disabled={arriving}
-            className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            className="px-6 py-2.5 bg-(--ui-primary) text-(--ui-on-primary) font-medium rounded-lg hover:bg-(--ui-primary-strong) transition-colors disabled:opacity-50"
           >
             {arriving ? "Notifying..." : "I've Arrived"}
           </button>
           {arriveMsg && (
-            <p className="text-sm text-green-700 mt-3">{arriveMsg}</p>
+            <p className="text-sm text-(--ui-success-fg) mt-3">{arriveMsg}</p>
           )}
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
         {/* Items */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-medium text-gray-700 mb-4">Items</h2>
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
+          <h2 className="text-sm font-medium text-(--ui-text) mb-4">Items</h2>
           <div className="space-y-3">
             {(order.items || []).map((item, idx) => (
               <div key={item.id || idx} className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-(--ui-text)">
                     {item.product_name || item.name}
                   </p>
                   {item.variant_name && (
-                    <p className="text-xs text-gray-500">{item.variant_name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">{item.variant_name}</p>
                   )}
-                  <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+                  <p className="text-xs text-(--ui-text-muted)">Qty: {item.quantity}</p>
                 </div>
-                <span className="text-sm font-medium text-gray-900 shrink-0">
+                <span className="text-sm font-medium text-(--ui-text) shrink-0">
                   {currencySymbol} {(Number(item.unit_price || item.price || 0) * item.quantity).toLocaleString()}
                 </span>
               </div>
@@ -233,24 +233,24 @@ export default function StorefrontOrderStatus() {
         </div>
 
         {/* Delivery info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-medium text-gray-700 mb-4">
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
+          <h2 className="text-sm font-medium text-(--ui-text) mb-4">
             {isPickup ? "Pickup Location" : "Shipping Address"}
           </h2>
           {isPickup ? (
             <div>
               {order.pickup_outlet_name && (
-                <p className="text-sm font-medium text-gray-900">{order.pickup_outlet_name}</p>
+                <p className="text-sm font-medium text-(--ui-text)">{order.pickup_outlet_name}</p>
               )}
               {order.pickup_outlet_address && (
-                <p className="text-sm text-gray-500 mt-1">{order.pickup_outlet_address}</p>
+                <p className="text-sm text-(--ui-text-muted) mt-1">{order.pickup_outlet_address}</p>
               )}
               {!order.pickup_outlet_name && (
-                <p className="text-sm text-gray-500">Pickup details will be confirmed.</p>
+                <p className="text-sm text-(--ui-text-muted)">Pickup details will be confirmed.</p>
               )}
             </div>
           ) : (
-            <div className="text-sm text-gray-700 space-y-0.5">
+            <div className="text-sm text-(--ui-text) space-y-0.5">
               {order.shipping_address ? (
                 <>
                   <p>{order.shipping_address.address_line_1}</p>
@@ -265,46 +265,46 @@ export default function StorefrontOrderStatus() {
                   )}
                 </>
               ) : (
-                <p className="text-gray-500">Address details will be confirmed.</p>
+                <p className="text-(--ui-text-muted)">Address details will be confirmed.</p>
               )}
             </div>
           )}
 
           {/* Contact */}
           {(order.customer_name || order.customer_phone || order.customer_email) && (
-            <div className="border-t border-gray-200 mt-4 pt-4">
-              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Contact</h3>
-              {order.customer_name && <p className="text-sm text-gray-900">{order.customer_name}</p>}
-              {order.customer_phone && <p className="text-sm text-gray-500">{order.customer_phone}</p>}
-              {order.customer_email && <p className="text-sm text-gray-500">{order.customer_email}</p>}
+            <div className="border-t border-(--ui-border) mt-4 pt-4">
+              <h3 className="text-xs font-medium text-(--ui-text-muted) uppercase tracking-wide mb-2">Contact</h3>
+              {order.customer_name && <p className="text-sm text-(--ui-text)">{order.customer_name}</p>}
+              {order.customer_phone && <p className="text-sm text-(--ui-text-muted)">{order.customer_phone}</p>}
+              {order.customer_email && <p className="text-sm text-(--ui-text-muted)">{order.customer_email}</p>}
             </div>
           )}
         </div>
       </div>
 
       {/* Order totals */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-sm font-medium text-gray-700 mb-4">Order Totals</h2>
+      <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
+        <h2 className="text-sm font-medium text-(--ui-text) mb-4">Order Totals</h2>
         <div className="space-y-2">
           {order.subtotal != null && (
-            <div className="flex justify-between text-sm text-gray-600">
+            <div className="flex justify-between text-sm text-(--ui-text-muted)">
               <span>Subtotal</span>
               <span>{currencySymbol} {Number(order.subtotal).toLocaleString()}</span>
             </div>
           )}
           {Number(order.tax || 0) > 0 && (
-            <div className="flex justify-between text-sm text-gray-600">
+            <div className="flex justify-between text-sm text-(--ui-text-muted)">
               <span>Tax</span>
               <span>{currencySymbol} {Number(order.tax).toLocaleString()}</span>
             </div>
           )}
           {Number(order.shipping_fee || 0) > 0 && (
-            <div className="flex justify-between text-sm text-gray-600">
+            <div className="flex justify-between text-sm text-(--ui-text-muted)">
               <span>Shipping</span>
               <span>{currencySymbol} {Number(order.shipping_fee).toLocaleString()}</span>
             </div>
           )}
-          <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-base font-bold text-gray-900">
+          <div className="border-t border-(--ui-border) pt-2 mt-2 flex justify-between text-base font-bold text-(--ui-text)">
             <span>Total</span>
             <span>{currencySymbol} {Number(order.total || 0).toLocaleString()}</span>
           </div>
@@ -315,7 +315,7 @@ export default function StorefrontOrderStatus() {
       <div className="mt-8 text-center">
         <Link
           to={`/store/${tenantSlug}`}
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+          className="text-sm text-(--ui-link) hover:text-(--ui-link) font-medium"
         >
           Continue Shopping
         </Link>
@@ -326,16 +326,16 @@ export default function StorefrontOrderStatus() {
 
 function StatusBadge({ status }) {
   const colors = {
-    ordered: "bg-blue-100 text-blue-700",
-    processing: "bg-yellow-100 text-yellow-700",
-    ready_for_pickup: "bg-green-100 text-green-700",
-    shipped: "bg-purple-100 text-purple-700",
-    completed: "bg-green-100 text-green-700",
-    cancelled: "bg-red-100 text-red-700",
+    ordered: "bg-(--ui-muted-surface) text-(--ui-link)",
+    processing: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+    ready_for_pickup: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+    shipped: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+    completed: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+    cancelled: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
   };
 
   return (
-    <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full ${colors[status] || "bg-gray-100 text-gray-700"}`}>
+    <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full ${colors[status] || "bg-(--ui-muted-surface) text-(--ui-text)"}`}>
       {STATUS_LABELS[status] || status}
     </span>
   );

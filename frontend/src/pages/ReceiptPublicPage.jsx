@@ -30,7 +30,7 @@ function FbrQrImage({ value }) {
     <img
       src={dataUrl}
       alt="FBR QR code"
-      className="mx-auto mt-2 h-28 w-28 border border-gray-200 bg-white p-1"
+      className="mx-auto mt-2 h-28 w-28 border border-(--ui-border) bg-(--ui-surface) p-1"
     />
   );
 }
@@ -114,10 +114,10 @@ export default function ReceiptPublicPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface)">
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-emerald-600" />
-          <p className="mt-3 text-sm text-gray-500">Loading receipt...</p>
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-(--ui-border-strong) border-t-emerald-600" />
+          <p className="mt-3 text-sm text-(--ui-text-muted)">Loading receipt...</p>
         </div>
       </div>
     );
@@ -125,15 +125,15 @@ export default function ReceiptPublicPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50">
-            <svg className="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface) px-4">
+        <div className="w-full max-w-sm rounded-xl border border-(--ui-border) bg-(--ui-surface) p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-(--ui-danger-bg)">
+            <svg className="h-7 w-7 text-(--ui-danger-fg)" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">Receipt Not Found</h2>
-          <p className="mt-2 text-sm text-gray-500">{error}</p>
+          <h2 className="text-lg font-semibold text-(--ui-text)">Receipt Not Found</h2>
+          <p className="mt-2 text-sm text-(--ui-text-muted)">{error}</p>
         </div>
       </div>
     );
@@ -160,48 +160,48 @@ export default function ReceiptPublicPage() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-gray-50 px-4 py-8">
-        <div className="receipt-card mx-auto max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="min-h-screen bg-(--ui-muted-surface) px-4 py-8">
+        <div className="receipt-card mx-auto max-w-md overflow-hidden rounded-xl border border-(--ui-border) bg-(--ui-surface)">
           {/* Store header — prefers template logo over global company logo (Bucket F) */}
-          <div className="bg-emerald-600 px-6 py-5 text-center text-white">
+          <div className="bg-(--ui-primary) px-6 py-5 text-center text-(--ui-on-primary)">
             {headerLogo && (
               <img
                 src={headerLogo}
                 alt={store.name}
-                className="mx-auto mb-3 h-14 w-14 rounded-full border-2 border-white/30 bg-white object-contain p-1"
+                className="mx-auto mb-3 h-14 w-14 rounded-full border-2 border-white/30 bg-(--ui-surface) object-contain p-1"
               />
             )}
             <h1 className="text-xl font-bold">{store.name || "Store"}</h1>
-            {store.address && <p className="mt-1 text-sm text-emerald-100">{store.address}</p>}
-            {store.phone && <p className="mt-0.5 text-sm text-emerald-100">{store.phone}</p>}
+            {store.address && <p className="mt-1 text-sm text-(--ui-success-fg)">{store.address}</p>}
+            {store.phone && <p className="mt-0.5 text-sm text-(--ui-success-fg)">{store.phone}</p>}
           </div>
 
           <div className="px-6 py-5">
             {/* Invoice info */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <div className="flex items-center justify-between border-b border-(--ui-border) pb-4">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Invoice</p>
-                <p className="mt-0.5 font-mono text-sm font-semibold text-gray-900">{sale.invoice_number}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">Invoice</p>
+                <p className="mt-0.5 font-mono text-sm font-semibold text-(--ui-text)">{sale.invoice_number}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Date</p>
-                <p className="mt-0.5 text-sm text-gray-700">{fmtDate(sale.timestamp)}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">Date</p>
+                <p className="mt-0.5 text-sm text-(--ui-text)">{fmtDate(sale.timestamp)}</p>
               </div>
             </div>
 
             {/* Customer / served by */}
             {(sale.customer_name || sale.employee_name) && (
-              <div className="flex items-center justify-between border-b border-gray-100 py-3">
+              <div className="flex items-center justify-between border-b border-(--ui-border) py-3">
                 {sale.customer_name && (
                   <div>
-                    <p className="text-xs text-gray-400">Customer</p>
-                    <p className="text-sm font-medium text-gray-800">{sale.customer_name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">Customer</p>
+                    <p className="text-sm font-medium text-(--ui-text)">{sale.customer_name}</p>
                   </div>
                 )}
                 {sale.employee_name && (
                   <div className={sale.customer_name ? "text-right" : ""}>
-                    <p className="text-xs text-gray-400">Served by</p>
-                    <p className="text-sm font-medium text-gray-800">{sale.employee_name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">Served by</p>
+                    <p className="text-sm font-medium text-(--ui-text)">{sale.employee_name}</p>
                   </div>
                 )}
               </div>
@@ -211,7 +211,7 @@ export default function ReceiptPublicPage() {
             <div className="mt-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <tr className="border-b border-(--ui-border) text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">
                     <th className="pb-2 text-left">Item</th>
                     <th className="pb-2 text-center">Qty</th>
                     <th className="pb-2 text-right">Price</th>
@@ -220,11 +220,11 @@ export default function ReceiptPublicPage() {
                 </thead>
                 <tbody>
                   {items.map((item, i) => (
-                    <tr key={i} className="border-b border-gray-50">
-                      <td className="py-2 pr-2 text-gray-800">{item.name}</td>
-                      <td className="py-2 text-center text-gray-600">{item.quantity}</td>
-                      <td className="py-2 text-right text-gray-600">{fmtMoney(item.price, sym)}</td>
-                      <td className="py-2 text-right font-medium text-gray-800">{fmtMoney(item.total, sym)}</td>
+                    <tr key={i} className="border-b border-(--ui-border)">
+                      <td className="py-2 pr-2 text-(--ui-text)">{item.name}</td>
+                      <td className="py-2 text-center text-(--ui-text-muted)">{item.quantity}</td>
+                      <td className="py-2 text-right text-(--ui-text-muted)">{fmtMoney(item.price, sym)}</td>
+                      <td className="py-2 text-right font-medium text-(--ui-text)">{fmtMoney(item.total, sym)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -233,9 +233,9 @@ export default function ReceiptPublicPage() {
 
             {/* Discount */}
             {Number(sale.discount_amount) > 0 && (
-              <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                <span className="text-sm text-gray-500">Discount</span>
-                <span className="text-sm font-medium text-red-600">-{fmtMoney(sale.discount_amount, sym)}</span>
+              <div className="mt-3 flex items-center justify-between border-t border-(--ui-border) pt-3">
+                <span className="text-sm text-(--ui-text-muted)">Discount</span>
+                <span className="text-sm font-medium text-(--ui-danger-fg)">-{fmtMoney(sale.discount_amount, sym)}</span>
               </div>
             )}
 
@@ -243,20 +243,20 @@ export default function ReceiptPublicPage() {
                 Inclusive: "Tax included in total" hint above the rate rows.
                 Exclusive: shows Subtotal first, then each rate as +Rs X. */}
             {showTaxBreakdown && tax_breakdown.length > 0 && (
-              <div className="mt-3 border-t border-gray-100 pt-3">
+              <div className="mt-3 border-t border-(--ui-border) pt-3">
                 {sale.tax_inclusive === false && sale.subtotal != null && (
                   <div className="flex items-center justify-between py-0.5">
-                    <span className="text-sm text-gray-500">Subtotal</span>
-                    <span className="text-sm font-medium text-gray-700">{fmtMoney(sale.subtotal, sym)}</span>
+                    <span className="text-sm text-(--ui-text-muted)">Subtotal</span>
+                    <span className="text-sm font-medium text-(--ui-text)">{fmtMoney(sale.subtotal, sym)}</span>
                   </div>
                 )}
                 {sale.tax_inclusive ? (
-                  <p className="mb-1 text-xs text-gray-400">Tax included in total</p>
+                  <p className="mb-1 text-xs text-(--ui-text-muted)">Tax included in total</p>
                 ) : null}
                 {tax_breakdown.map((b) => (
                   <div key={b.rate} className="flex items-center justify-between py-0.5">
-                    <span className="text-sm text-gray-500">GST {Number(b.rate).toFixed(0)}%</span>
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-sm text-(--ui-text-muted)">GST {Number(b.rate).toFixed(0)}%</span>
+                    <span className="text-sm font-medium text-(--ui-text)">
                       {sale.tax_inclusive ? "" : "+"}{fmtMoney(b.amount, sym)}
                     </span>
                   </div>
@@ -265,19 +265,19 @@ export default function ReceiptPublicPage() {
             )}
 
             {/* Total */}
-            <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-              <span className="text-base font-semibold text-gray-700">Total</span>
-              <span className="text-xl font-bold text-gray-900">{fmtMoney(sale.total_amount, sym)}</span>
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-(--ui-muted-surface) px-4 py-3">
+              <span className="text-base font-semibold text-(--ui-text)">Total</span>
+              <span className="text-xl font-bold text-(--ui-text)">{fmtMoney(sale.total_amount, sym)}</span>
             </div>
 
             {/* Payments */}
             {payments.length > 0 && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Payment</p>
+              <div className="mt-4 border-t border-(--ui-border) pt-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">Payment</p>
                 {payments.map((p, i) => (
                   <div key={i} className="flex items-center justify-between py-1">
-                    <span className="text-sm text-gray-600">{formatPaymentMethodLabel(p.method)}</span>
-                    <span className="text-sm font-medium text-gray-800">{fmtMoney(p.amount, sym)}</span>
+                    <span className="text-sm text-(--ui-text-muted)">{formatPaymentMethodLabel(p.method)}</span>
+                    <span className="text-sm font-medium text-(--ui-text)">{fmtMoney(p.amount, sym)}</span>
                   </div>
                 ))}
               </div>
@@ -286,9 +286,9 @@ export default function ReceiptPublicPage() {
             {/* FBR digital invoice (Bucket F) — only when sale has an IRN and
                 template has show_fbr !== false. QR shown only when show_qr too. */}
             {fbr?.irn && showFbr && (
-              <div className="mt-4 border-t border-gray-100 pt-4 text-center">
-                <p className="text-xs uppercase tracking-wide text-gray-400">FBR Digital Invoice</p>
-                <p className="mt-1 font-mono text-xs font-semibold text-gray-800 break-all">{fbr.irn}</p>
+              <div className="mt-4 border-t border-(--ui-border) pt-4 text-center">
+                <p className="text-xs uppercase tracking-wide text-(--ui-text-muted)">FBR Digital Invoice</p>
+                <p className="mt-1 font-mono text-xs font-semibold text-(--ui-text) break-all">{fbr.irn}</p>
                 {showQr && fbr.qr_code && <FbrQrImage value={fbr.qr_code} />}
               </div>
             )}
@@ -296,23 +296,23 @@ export default function ReceiptPublicPage() {
             {/* Template footer override (Bucket F) — sits inside the card,
                 distinct from the fixed "Powered by SanoPOS" strip below. */}
             {footerText && (
-              <div className="mt-4 border-t border-gray-100 pt-3 text-center">
-                <p className="whitespace-pre-wrap text-xs text-gray-500">{footerText}</p>
+              <div className="mt-4 border-t border-(--ui-border) pt-3 text-center">
+                <p className="whitespace-pre-wrap text-xs text-(--ui-text-muted)">{footerText}</p>
               </div>
             )}
 
             {/* Print button */}
             <button
               onClick={() => window.print()}
-              className="no-print mt-6 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              className="no-print mt-6 w-full rounded-lg bg-(--ui-primary) px-4 py-2.5 text-sm font-semibold text-(--ui-on-primary) transition-colors hover:bg-(--ui-primary-strong)"
             >
               Print Receipt
             </button>
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-100 py-3 text-center">
-            <p className="text-xs text-gray-400">Powered by <span className="font-medium text-gray-500">SanoPOS</span></p>
+          <div className="border-t border-(--ui-border) py-3 text-center">
+            <p className="text-xs text-(--ui-text-muted)">Powered by <span className="font-medium text-(--ui-text-muted)">SanoPOS</span></p>
           </div>
         </div>
       </div>

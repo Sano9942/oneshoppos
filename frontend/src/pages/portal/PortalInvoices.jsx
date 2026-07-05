@@ -5,15 +5,15 @@ import { portalApi } from "../../api/portalApi";
 function statusColor(status) {
   switch (status) {
     case "paid":
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-(--ui-success-bg) text-(--ui-success-fg)";
     case "overdue":
-      return "bg-red-100 text-red-700";
+      return "bg-(--ui-danger-bg) text-(--ui-danger-fg)";
     case "partial":
-      return "bg-amber-100 text-amber-700";
+      return "bg-(--ui-warning-bg) text-(--ui-warning-fg)";
     case "void":
-      return "bg-slate-200 text-slate-600";
+      return "bg-(--ui-muted-surface) text-(--ui-text-muted)";
     default:
-      return "bg-slate-100 text-slate-600";
+      return "bg-(--ui-muted-surface) text-(--ui-text-muted)";
   }
 }
 
@@ -45,7 +45,7 @@ export default function PortalInvoices() {
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="border border-slate-300 rounded px-3 py-1 text-sm"
+          className="border border-(--ui-border-strong) rounded px-3 py-1 text-sm"
         >
           <option value="all">All</option>
           <option value="unpaid">Unpaid</option>
@@ -56,15 +56,15 @@ export default function PortalInvoices() {
       </div>
 
       {loading ? (
-        <div className="text-slate-500">Loading…</div>
+        <div className="text-(--ui-text-muted)">Loading…</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-8 text-center text-(--ui-text-muted)">
           No invoices to show.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border)">
               <tr>
                 <th className="text-left font-medium px-4 py-3">Invoice #</th>
                 <th className="text-left font-medium px-4 py-3">Status</th>
@@ -76,7 +76,7 @@ export default function PortalInvoices() {
             </thead>
             <tbody>
               {filtered.map((inv) => (
-                <tr key={inv.id} className="border-b border-slate-100 last:border-0">
+                <tr key={inv.id} className="border-b border-(--ui-border) last:border-0">
                   <td className="px-4 py-3 font-medium">{inv.invoice_number}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusColor(inv.status)}`}>
@@ -89,13 +89,13 @@ export default function PortalInvoices() {
                   <td className="px-4 py-3 text-right">
                     {Number(inv.balance_due).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-(--ui-text-muted)">
                     {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
                       to={`/portal/${tenantSlug}/invoices/${inv.id}`}
-                      className="text-emerald-700 hover:underline"
+                      className="text-(--ui-success-fg) hover:underline"
                     >
                       View
                     </Link>

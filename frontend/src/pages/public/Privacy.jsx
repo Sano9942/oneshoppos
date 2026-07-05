@@ -7,14 +7,14 @@ export const PRIVACY_VERSION = "1.0";
 
 export default function Privacy() {
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Privacy Policy</h1>
-        <p className="mt-1 text-xs text-slate-500">
+    <div className="min-h-screen bg-(--ui-muted-surface) px-4 py-10">
+      <div className="mx-auto max-w-3xl rounded-2xl bg-(--ui-surface) p-8">
+        <h1 className="text-2xl font-bold text-(--ui-text)">Privacy Policy</h1>
+        <p className="mt-1 text-xs text-(--ui-text-muted)">
           Version {PRIVACY_VERSION} &middot; Effective Date: [Effective Date] &middot; Last Updated: [Last Updated Date]
         </p>
 
-        <div className="prose prose-sm prose-slate mt-6 max-w-none leading-relaxed text-slate-700">
+        <div className="prose prose-sm prose-slate mt-6 max-w-none leading-relaxed text-(--ui-text)">
           <p>
             This Privacy Policy explains how <strong>[Legal Entity Name]</strong>
             ("SanoPOS", "we", "us", or "our") collects, uses, shares, and protects
@@ -145,7 +145,7 @@ export default function Privacy() {
           <h2>14. Contact Us</h2>
           <p>For any questions, requests, or complaints regarding this Privacy Policy or our handling of your personal data, contact us at <strong>[Legal Entity Name]</strong>, <strong>[Registered Address]</strong>, email <strong>support@sanopos.com</strong>. We aim to respond within 30 days.</p>
 
-          <p className="mt-8 text-xs italic text-slate-500">
+          <p className="mt-8 text-xs italic text-(--ui-text-muted)">
             By using the Service, you acknowledge that you have read and understood this
             Privacy Policy.
           </p>

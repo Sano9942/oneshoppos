@@ -98,9 +98,9 @@ export default function PortalLogin() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
       <h1 className="text-xl font-semibold mb-1">Sign in</h1>
-      <p className="text-sm text-slate-500 mb-6">{subtitle}</p>
+      <p className="text-sm text-(--ui-text-muted) mb-6">{subtitle}</p>
 
       <form onSubmit={mode === "password" ? submitPassword : (e) => { e.preventDefault(); requestOtp(); }}>
         <label className="block text-sm font-medium mb-1">Email</label>
@@ -109,7 +109,7 @@ export default function PortalLogin() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border border-slate-300 rounded px-3 py-2 mb-4"
+          className="w-full border border-(--ui-border-strong) rounded px-3 py-2 mb-4"
           autoComplete="email"
         />
 
@@ -121,19 +121,19 @@ export default function PortalLogin() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2 mb-4"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2 mb-4"
               autoComplete="current-password"
             />
           </>
         )}
 
-        {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
-        {info && <div className="text-sm text-emerald-700 mb-3">{info}</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg) mb-3">{error}</div>}
+        {info && <div className="text-sm text-(--ui-success-fg) mb-3">{info}</div>}
 
         <button
           type="submit"
           disabled={sending}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-medium disabled:opacity-50"
+          className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) py-2 rounded font-medium disabled:opacity-50"
         >
           {sending ? "Please wait…" : mode === "password" ? "Sign in" : "Email me a code"}
         </button>
@@ -142,7 +142,7 @@ export default function PortalLogin() {
       <div className="flex items-center justify-between mt-4 text-sm">
         <button
           type="button"
-          className="text-slate-600 hover:text-slate-900"
+          className="text-(--ui-text-muted) hover:text-(--ui-text)"
           onClick={() => {
             setMode(mode === "password" ? "otp" : "password");
             setError(null);
@@ -151,15 +151,15 @@ export default function PortalLogin() {
           {mode === "password" ? "Email me a code instead" : "Use my password"}
         </button>
         {mode === "password" && (
-          <Link to={`/portal/${tenantSlug}/forgot`} className="text-emerald-700 hover:underline">
+          <Link to={`/portal/${tenantSlug}/forgot`} className="text-(--ui-link) hover:underline">
             Forgot password?
           </Link>
         )}
       </div>
 
-      <div className="border-t border-slate-200 mt-6 pt-4 text-sm text-slate-600 text-center">
+      <div className="border-t border-(--ui-border) mt-6 pt-4 text-sm text-(--ui-text-muted) text-center">
         New here?{" "}
-        <Link to={`/portal/${tenantSlug}/signup`} className="text-emerald-700 font-medium hover:underline">
+        <Link to={`/portal/${tenantSlug}/signup`} className="text-(--ui-link) font-medium hover:underline">
           Create an account
         </Link>
       </div>

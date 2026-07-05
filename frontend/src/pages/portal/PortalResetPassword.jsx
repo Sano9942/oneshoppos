@@ -32,9 +32,9 @@ export default function PortalResetPassword() {
 
   if (!token) {
     return (
-      <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <p className="text-red-600">Reset link is missing a token.</p>
-        <Link to={`/portal/${tenantSlug}/login`} className="text-emerald-700 hover:underline">
+      <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
+        <p className="text-(--ui-danger-fg)">Reset link is missing a token.</p>
+        <Link to={`/portal/${tenantSlug}/login`} className="text-(--ui-link) hover:underline">
           Back to sign in
         </Link>
       </div>
@@ -42,11 +42,11 @@ export default function PortalResetPassword() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div className="max-w-md mx-auto bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6">
       <h1 className="text-xl font-semibold mb-1">Choose a new password</h1>
-      <p className="text-sm text-slate-500 mb-6">This will sign you out of other devices.</p>
+      <p className="text-sm text-(--ui-text-muted) mb-6">This will sign you out of other devices.</p>
       {done ? (
-        <div className="text-emerald-700 text-sm">Password updated. Redirecting to sign-in…</div>
+        <div className="text-(--ui-success-fg) text-sm">Password updated. Redirecting to sign-in…</div>
       ) : (
         <form onSubmit={submit}>
           <label className="block text-sm font-medium mb-1">New password</label>
@@ -56,14 +56,14 @@ export default function PortalResetPassword() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2 mb-4"
+            className="w-full border border-(--ui-border-strong) rounded px-3 py-2 mb-4"
             autoComplete="new-password"
           />
-          {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
+          {error && <div className="text-sm text-(--ui-danger-fg) mb-3">{error}</div>}
           <button
             type="submit"
             disabled={sending}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded font-medium disabled:opacity-50"
+            className="w-full bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) py-2 rounded font-medium disabled:opacity-50"
           >
             {sending ? "Saving…" : "Save new password"}
           </button>

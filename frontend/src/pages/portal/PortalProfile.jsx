@@ -61,20 +61,20 @@ export default function PortalProfile() {
     reload();
   }
 
-  if (!me) return <div className="text-slate-500">Loading…</div>;
+  if (!me) return <div className="text-(--ui-text-muted)">Loading…</div>;
 
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold">Profile</h1>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+      <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="block">
             <span className="block text-sm font-medium mb-1">Name</span>
             <input
               value={form.name}
               onChange={(e) => update("name", e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             />
           </label>
           <label className="block">
@@ -82,7 +82,7 @@ export default function PortalProfile() {
             <input
               value={form.mobile}
               onChange={(e) => update("mobile", e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             />
           </label>
           <label className="block md:col-span-2">
@@ -90,7 +90,7 @@ export default function PortalProfile() {
             <input
               value={form.address}
               onChange={(e) => update("address", e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             />
           </label>
           <label className="block">
@@ -98,7 +98,7 @@ export default function PortalProfile() {
             <input
               value={form.city}
               onChange={(e) => update("city", e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             />
           </label>
           <label className="block">
@@ -107,7 +107,7 @@ export default function PortalProfile() {
               type="date"
               value={form.date_of_birth || ""}
               onChange={(e) => update("date_of_birth", e.target.value || null)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             />
           </label>
           <label className="block">
@@ -115,7 +115,7 @@ export default function PortalProfile() {
             <select
               value={form.gender || ""}
               onChange={(e) => update("gender", e.target.value || null)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             >
               <option value="">Prefer not to say</option>
               <option value="male">Male</option>
@@ -128,7 +128,7 @@ export default function PortalProfile() {
             <select
               value={form.preferred_contact || ""}
               onChange={(e) => update("preferred_contact", e.target.value || null)}
-              className="w-full border border-slate-300 rounded px-3 py-2"
+              className="w-full border border-(--ui-border-strong) rounded px-3 py-2"
             >
               <option value="">No preference</option>
               <option value="email">Email</option>
@@ -139,7 +139,7 @@ export default function PortalProfile() {
           </label>
         </div>
 
-        <fieldset className="border border-slate-200 rounded p-4">
+        <fieldset className="border border-(--ui-border) rounded p-4">
           <legend className="text-sm font-medium px-2">Marketing consent</legend>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-sm">
             {[
@@ -159,15 +159,15 @@ export default function PortalProfile() {
           </div>
         </fieldset>
 
-        {error && <div className="text-sm text-red-600">{error}</div>}
-        {saved && <div className="text-sm text-emerald-700">Saved.</div>}
+        {error && <div className="text-sm text-(--ui-danger-fg)">{error}</div>}
+        {saved && <div className="text-sm text-(--ui-success-fg)">Saved.</div>}
 
         <div className="flex justify-end">
           <button
             type="button"
             disabled={saving}
             onClick={save}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-medium disabled:opacity-50"
+            className="bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) px-5 py-2 rounded font-medium disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save changes"}
           </button>
@@ -177,25 +177,25 @@ export default function PortalProfile() {
       <section>
         <h2 className="text-lg font-semibold mb-3">Saved addresses</h2>
         {addresses.length === 0 ? (
-          <div className="text-sm text-slate-500">No saved addresses yet.</div>
+          <div className="text-sm text-(--ui-text-muted)">No saved addresses yet.</div>
         ) : (
           <ul className="space-y-2">
             {addresses.map((a) => (
               <li
                 key={a.id}
-                className="bg-white rounded border border-slate-200 p-4 text-sm flex justify-between items-start"
+                className="bg-(--ui-surface) rounded border border-(--ui-border) p-4 text-sm flex justify-between items-start"
               >
                 <div>
                   <div className="font-medium">{a.label || "Address"}</div>
-                  <div className="text-slate-600">
+                  <div className="text-(--ui-text-muted)">
                     {a.address_line_1}
                     {a.address_line_2 ? `, ${a.address_line_2}` : ""}
                   </div>
-                  <div className="text-slate-600">
+                  <div className="text-(--ui-text-muted)">
                     {[a.city, a.province, a.postal_code, a.country_code].filter(Boolean).join(", ")}
                   </div>
                   {a.is_default && (
-                    <span className="inline-block mt-1 text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
+                    <span className="inline-block mt-1 text-xs bg-(--ui-success-bg) text-(--ui-success-fg) px-2 py-0.5 rounded">
                       Default
                     </span>
                   )}
@@ -203,7 +203,7 @@ export default function PortalProfile() {
                 <button
                   type="button"
                   onClick={() => deleteAddress(a.id)}
-                  className="text-sm text-red-600 hover:text-red-800"
+                  className="text-sm text-(--ui-danger-fg) hover:text-(--ui-danger-fg)"
                 >
                   Delete
                 </button>
