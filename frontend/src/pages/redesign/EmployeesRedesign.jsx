@@ -231,7 +231,7 @@ export default function EmployeesRedesign() {
       }
     >
       {error ? (
-        <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <SectionCard className="mb-3 border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3 text-sm text-(--ui-danger-fg)">
           {error}
         </SectionCard>
       ) : null}
@@ -495,7 +495,7 @@ export default function EmployeesRedesign() {
                               type="button"
                               title={isPrimary ? "Primary outlet" : "Set as primary"}
                               onClick={(e) => { e.preventDefault(); setPrimaryOutletId(o.id); }}
-                              className={`p-0.5 rounded ${isPrimary ? "text-amber-500" : "text-(--ui-text-muted) hover:text-amber-400"}`}
+                              className={`p-0.5 rounded ${isPrimary ? "text-(--ui-warning-fg)" : "text-(--ui-text-muted) hover:text-(--ui-warning-fg)"}`}
                             >
                               <Star size={13} fill={isPrimary ? "currentColor" : "none"} />
                             </button>
@@ -568,10 +568,10 @@ export default function EmployeesRedesign() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
               {newPassword && confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-xs text-red-600">Passwords do not match</p>
+                <p className="text-xs text-(--ui-danger-fg)">Passwords do not match</p>
               )}
               {newPassword && newPassword.length < 8 && (
-                <p className="text-xs text-red-600">Min 8 characters</p>
+                <p className="text-xs text-(--ui-danger-fg)">Min 8 characters</p>
               )}
             </div>
             <ModalFooter>
