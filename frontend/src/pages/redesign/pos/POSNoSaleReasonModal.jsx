@@ -55,19 +55,19 @@ export default function POSNoSaleReasonModal({ open, outletId, onClose, onDone }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-md p-6 text-(--ui-text)">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Unlock className="h-5 w-5 text-[#8066FF]" />
+            <Unlock className="h-5 w-5 text-(--ui-text)" />
             <h3 className="text-lg font-semibold">Open Drawer (No-Sale)</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="text-sm text-slate-300 mb-4">
+        <p className="text-sm text-(--ui-text-muted) mb-4">
           Pick a reason so this drawer open is logged for the day.
         </p>
 
@@ -80,8 +80,8 @@ export default function POSNoSaleReasonModal({ open, outletId, onClose, onDone }
                 onClick={() => setSelected(r.code)}
                 className={`rounded-lg border px-3 py-3 text-sm font-medium transition ${
                   selected === r.code
-                    ? "border-[#8066FF] bg-[#8066FF]/20 text-white"
-                    : "border-slate-600 bg-slate-700 text-slate-200 hover:border-slate-500"
+                    ? "border-(--ui-text) bg-(--ui-muted-surface) text-(--ui-text)"
+                    : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text) hover:border-(--ui-text)"
                 }`}
               >
                 {r.label}
@@ -89,32 +89,32 @@ export default function POSNoSaleReasonModal({ open, outletId, onClose, onDone }
             ))}
           </div>
 
-          <label className="block text-sm text-slate-300 mb-1">Note (optional)</label>
+          <label className="block text-sm text-(--ui-text-muted) mb-1">Note (optional)</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
             maxLength={500}
             placeholder="e.g. customer needs PKR 500 change"
-            className="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#8066FF]"
+            className="w-full rounded-lg bg-(--ui-surface) border border-(--ui-border-strong) px-3 py-2 text-sm placeholder:text-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
           />
 
           {error && (
-            <div className="mt-2 text-sm text-rose-400">{error}</div>
+            <div className="mt-2 text-sm text-(--ui-danger-fg)">{error}</div>
           )}
 
           <div className="mt-4 flex gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-slate-600 bg-slate-700 hover:bg-slate-600 py-2.5 font-medium transition"
+              className="flex-1 rounded-lg border border-(--ui-border-strong) bg-(--ui-surface) hover:bg-(--ui-muted-surface) py-2.5 font-medium transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!selected || loading}
-              className="flex-1 rounded-lg bg-[#8066FF] hover:bg-[#6b55d9] disabled:opacity-50 py-2.5 font-semibold transition"
+              className="flex-1 rounded-lg bg-(--ui-primary) text-white hover:bg-(--ui-primary-strong) disabled:opacity-50 py-2.5 font-semibold transition"
             >
               {loading ? "Opening…" : "Open Drawer"}
             </button>

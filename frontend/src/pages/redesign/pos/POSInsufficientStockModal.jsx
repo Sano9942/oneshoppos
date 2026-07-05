@@ -46,23 +46,23 @@ export default function POSInsufficientStockModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-md p-6 text-(--ui-text)">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-400" />
+            <AlertTriangle className="h-5 w-5 text-(--ui-warning-fg)" />
             <h3 className="text-lg font-semibold">Not enough stock</h3>
           </div>
-          <button type="button" onClick={handleCancel} className="text-slate-400 hover:text-white">
+          <button type="button" onClick={handleCancel} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="text-sm text-slate-300 mb-3">
-          Only <span className="font-semibold text-white">{Number(prompt.available || 0)}</span> left
-          for <span className="font-semibold text-white">{prompt.product_name}</span>
+        <p className="text-sm text-(--ui-text-muted) mb-3">
+          Only <span className="font-semibold text-(--ui-text)">{Number(prompt.available || 0)}</span> left
+          for <span className="font-semibold text-(--ui-text)">{prompt.product_name}</span>
           {prompt.requested != null && (
-            <> — you're trying to sell <span className="font-semibold text-white">{Number(prompt.requested)}</span>.</>
+            <> — you're trying to sell <span className="font-semibold text-(--ui-text)">{Number(prompt.requested)}</span>.</>
           )}
         </p>
 
@@ -71,7 +71,7 @@ export default function POSInsufficientStockModal({
             type="button"
             onClick={handleAdjust}
             disabled={Number(prompt.available || 0) <= 0}
-            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#8066FF] hover:bg-[#6b55d9] disabled:opacity-50 px-3 py-3 text-sm font-semibold transition"
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-(--ui-primary) text-white hover:bg-(--ui-primary-strong) disabled:opacity-50 px-3 py-3 text-sm font-semibold transition"
           >
             <Scale className="h-4 w-4" />
             Adjust to {Number(prompt.available || 0)}
@@ -80,7 +80,7 @@ export default function POSInsufficientStockModal({
             <button
               type="button"
               onClick={handleOversell}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-amber-400 text-amber-200 hover:bg-amber-500/20 px-3 py-3 text-sm font-semibold transition"
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-(--ui-warning-fg) text-(--ui-warning-fg) hover:bg-(--ui-warning-bg) px-3 py-3 text-sm font-semibold transition"
             >
               <Check className="h-4 w-4" />
               Oversell anyway
@@ -89,7 +89,7 @@ export default function POSInsufficientStockModal({
           <button
             type="button"
             onClick={handleCancel}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-700 px-3 py-3 text-sm font-semibold transition"
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) px-3 py-3 text-sm font-semibold transition"
           >
             <PackageX className="h-4 w-4" />
             Cancel
