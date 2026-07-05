@@ -45,15 +45,20 @@ async function createAppointment(db, data, source = "admin", options = {}) {
 
   const status = (source === "public" && service.requires_confirmation) ? "pending" : "confirmed";
 
+  // F04 no-show protection: store the gateway card token only when the service
+  // opts into card-on-file. The token is write-only — never returned by any
+  // GET (see route serializers); the no-show flow charges it directly.
+  const cardToken = service.require_card_on_file ? (data.card_token || null) : null;
+
   const { rows: [appt] } = await db.query(
     `INSERT INTO appointments (service_id, variant_id, customer_id, employee_id, outlet_id,
-       status, start_at, end_at, customer_name, customer_phone, customer_email, notes, source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+       status, start_at, end_at, customer_name, customer_phone, customer_email, notes, source, card_token)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
     [data.service_id, data.variant_id || null, data.customer_id || null,
      data.employee_id || null, data.outlet_id || service.outlet_id || null,
      status, startAt.toISOString(), endAt.toISOString(),
      data.customer_name || null, data.customer_phone || null, data.customer_email || null,
-     data.notes || null, source]
+     data.notes || null, source, cardToken]
   );
 
   // Schedule reminder
@@ -168,4 +173,63 @@ async function cancelAppointment(db, appointmentId, reason) {
   return appt;
 }
 
-module.exports = { createAppointment, rescheduleAppointment, cancelAppointment };
+/**
+ * F04 no-show protection. Marks an appointment 'no_show' and, when the booked
+ * service opts into card-on-file and carries a no-show fee, charges the saved
+ * instrument once (chargeSavedInstrument). Idempotent: guarded on
+ * no_show_fee_charged IS NULL under FOR UPDATE so a retried click never
+ * double-charges. Charging is best-effort — the status change always commits;
+ * a gateway decline is reported back but the appointment stays no_show.
+ *
+ * @returns {Promise<{ appointment, charge: null | { amount, ref } | { error } }>}
+ */
+async function markNoShow(db, appointmentId) {
+  return db.transaction(async (client) => {
+    const { rows: [appt] } = await client.query(
+      `SELECT a.*, s.no_show_fee, s.require_card_on_file, s.name AS service_name
+       FROM appointments a
+       JOIN booking_services s ON s.id = a.service_id
+       WHERE a.id = $1 FOR UPDATE`,
+      [appointmentId]
+    );
+    if (!appt) throw Object.assign(new Error("Appointment not found"), { statusCode: 404 });
+    if (["cancelled", "completed"].includes(appt.status)) {
+      throw Object.assign(new Error(`Cannot mark a ${appt.status} appointment as no-show`), { statusCode: 400 });
+    }
+
+    // Flip status first — the no-show record is the primary outcome.
+    await client.query(
+      "UPDATE appointments SET status = 'no_show', updated_at = NOW() WHERE id = $1",
+      [appointmentId]
+    );
+
+    const fee = Number(appt.no_show_fee || 0);
+    const alreadyCharged = appt.no_show_fee_charged != null;
+    if (!appt.require_card_on_file || !appt.card_token || fee <= 0 || alreadyCharged) {
+      return { appointment: { ...appt, status: "no_show" }, charge: null };
+    }
+
+    const gateway = require("./payment-gateway");
+    try {
+      const result = await gateway.chargeSavedInstrument({
+        token: appt.card_token,
+        amount: fee,
+        currency: "PKR",
+        reference: `no-show-${appt.id}-${Date.now()}`,
+      });
+      if (result.status !== "completed") {
+        return { appointment: { ...appt, status: "no_show" }, charge: { error: result.error || "declined" } };
+      }
+      await client.query(
+        "UPDATE appointments SET no_show_fee_charged = $1, no_show_charge_ref = $2, updated_at = NOW() WHERE id = $3",
+        [fee, result.gateway_ref, appointmentId]
+      );
+      return { appointment: { ...appt, status: "no_show" }, charge: { amount: fee, ref: result.gateway_ref } };
+    } catch (err) {
+      // Charge failed — status stays no_show, surface the error to the caller.
+      return { appointment: { ...appt, status: "no_show" }, charge: { error: err.message } };
+    }
+  });
+}
+
+module.exports = { createAppointment, rescheduleAppointment, cancelAppointment, markNoShow };

@@ -74,6 +74,20 @@ export default function AppointmentsRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  // F04: no-show goes through the dedicated endpoint so a card-on-file service
+  // can charge its no-show fee. Uses the correct /api/ prefix (the rest of this
+  // page is missing it — tracked separately).
+  const markNoShow = async (id) => {
+    try {
+      const res = await api.post(`/api/appointments/${id}/no-show`, {});
+      if (res?.charge?.ref) toast.success(`No-show — fee charged (${res.charge.amount})`);
+      else if (res?.charge?.error) toast.warning(`Marked no-show; fee charge failed: ${res.charge.error}`);
+      else toast.success("Appointment marked no-show");
+      setSelected(null);
+      loadAppointments();
+    } catch (err) { toast.error(err.message); }
+  };
+
   const doCancel = async (id) => {
     try {
       await api.post(`/appointments/${id}/cancel`, { reason: cancelReason || undefined });
@@ -202,7 +216,7 @@ export default function AppointmentsRedesign() {
                   {selected.status === "pending" && <Button size="sm" onClick={() => updateStatus(selected.id, "confirmed")}>Confirm</Button>}
                   {selected.status === "confirmed" && <Button size="sm" onClick={() => updateStatus(selected.id, "in_progress")}>Start</Button>}
                   {selected.status === "in_progress" && <Button size="sm" onClick={() => updateStatus(selected.id, "completed")}>Complete</Button>}
-                  <Button size="sm" variant="ghost" onClick={() => updateStatus(selected.id, "no_show")}>No-Show</Button>
+                  <Button size="sm" variant="ghost" onClick={() => markNoShow(selected.id)}>No-Show</Button>
                 </div>
 
                 {/* Reschedule */}

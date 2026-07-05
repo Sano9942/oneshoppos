@@ -9,6 +9,9 @@ const createServiceSchema = z.object({
   outlet_id: z.number().int().positive().optional(),
   requires_confirmation: z.boolean().default(false),
   max_advance_days: z.number().int().positive().default(90),
+  // F04 no-show protection
+  no_show_fee: z.number().min(0).optional(),
+  require_card_on_file: z.boolean().optional(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 
@@ -20,6 +23,8 @@ const updateServiceSchema = z.object({
   price: z.number().min(0).optional(),
   is_active: z.boolean().optional(),
   requires_confirmation: z.boolean().optional(),
+  no_show_fee: z.number().min(0).optional(),
+  require_card_on_file: z.boolean().optional(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 
@@ -34,6 +39,9 @@ const createAppointmentSchema = z.object({
   customer_phone: z.string().optional(),
   customer_email: z.string().email().optional(),
   notes: z.string().optional(),
+  // F04: gateway card token for no-show protection (only stored when the
+  // service opts into card-on-file).
+  card_token: z.string().max(255).optional(),
 });
 
 const rescheduleSchema = z.object({
@@ -60,6 +68,8 @@ const publicBookingSchema = z.object({
   customer_phone: z.string().min(1),
   customer_email: z.string().email().optional(),
   notes: z.string().optional(),
+  // F04: gateway card token captured client-side for no-show protection.
+  card_token: z.string().max(255).optional(),
 });
 
 module.exports = {
