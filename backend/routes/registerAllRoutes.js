@@ -492,6 +492,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- F01: PRODUCTION / DISASSEMBLY RUNS (kit/BOM engine) ---
   require("./stock-conversions")(app, deps);
 
+  // --- F07: BATCH / EXPIRY / LOT surfaces (expiring-soon, drift, write-off) ---
+  require("./batches")(app, deps);
+
   // --- REPORTS ---
   const { processPendingReportSchedules } =
     require("./reports/index")(app, deps) || {};

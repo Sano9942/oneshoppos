@@ -23,6 +23,7 @@ const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const dbpg = require("../../db-pg");
 const batchStock = require("../../services/batch-stock");
+const { runExpiryScanForDb } = require("../../workers/expiry-alert-worker-boss");
 
 describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
   let app, db, deps, cleanup, schemaName;
@@ -112,6 +113,7 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     require("../../routes/returns")(app, deps);
     require("../../routes/inventory")(app, deps);
     require("../../routes/purchase-orders")(app, deps);
+    require("../../routes/batches")(app, deps);
     app.use(require("../../routes/tier4/crm")(deps));
 
     await db.query(
@@ -369,6 +371,63 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     // CHECK (remaining_qty >= 0) never violated → no batch went negative
     const { rows } = await db.query("SELECT MIN(remaining_qty) AS m FROM stock_batches WHERE product_id=$1", [pid]);
     expect(Number(rows[0].m)).toBeGreaterThanOrEqual(0);
+  });
+
+  // ── batch surfaces: expiring-soon, drill-down, drift, write-off ────────
+  it("GET /api/batches/expiring lists batches within the window with days_to_expiry", async () => {
+    const pid = await makeTrackedProduct("Expiring Yogurt");
+    const soon = new Date(); soon.setDate(soon.getDate() + 3);
+    const soonStr = soon.toISOString().slice(0, 10);
+    const far = new Date(); far.setDate(far.getDate() + 90);
+    await seedBatch(pid, 1, { batchNumber: "EXP-SOON", expiry: soonStr, qty: 4 });
+    await seedBatch(pid, 1, { batchNumber: "EXP-FAR", expiry: far.toISOString().slice(0, 10), qty: 4 });
+
+    const res = await request(app).get("/api/batches/expiring?days=7").set("x-employee-id", "1");
+    expect(res.status).toBe(200);
+    const mine = res.body.batches.filter((b) => b.product_id === pid);
+    expect(mine).toHaveLength(1); // only the soon one falls in the 7-day window
+    expect(mine[0].batch_number).toBe("EXP-SOON");
+    expect(mine[0].days_to_expiry).toBe(3);
+  });
+
+  it("GET /api/products/:id/batches drills down to active batches", async () => {
+    const pid = await makeTrackedProduct("Drilldown Milk");
+    await seedBatch(pid, 1, { batchNumber: "DD1", expiry: "2026-07-30", qty: 5 });
+    await seedBatch(pid, 1, { batchNumber: "DD2", expiry: "2026-08-30", qty: 5 });
+    const res = await request(app).get(`/api/products/${pid}/batches?outlet_id=1`).set("x-employee-id", "1");
+    expect(res.status).toBe(200);
+    expect(res.body.batches).toHaveLength(2);
+    expect(res.body.batches[0].batch_number).toBe("DD1"); // FEFO order
+  });
+
+  it("POST /api/batches/:id/write-off removes the batch's stock; invariant holds", async () => {
+    const pid = await makeTrackedProduct("Expired Cheese");
+    const bid = await seedBatch(pid, 1, { batchNumber: "OLD1", expiry: "2020-01-01", qty: 6 });
+    const res = await request(app).post(`/api/batches/${bid}/write-off`).set("x-employee-id", "1")
+      .send({ reason: "expired stock" });
+    expect(res.status).toBe(200);
+    expect(res.body.written_off).toBe(6);
+    expect(await stockOf(pid, 1)).toBe(0);
+    await assertInvariant(pid, 1);
+    const { rows: [b] } = await db.query("SELECT status FROM stock_batches WHERE id=$1", [bid]);
+    expect(b.status).toBe("written_off");
+  });
+
+  it("GET /api/batches/drift is clean (invariant enforcer)", async () => {
+    const res = await request(app).get("/api/batches/drift").set("x-employee-id", "1");
+    expect(res.status).toBe(200);
+    expect(res.body.clean).toBe(true);
+  });
+
+  it("expiry worker raises a near-expiry notification for expiring batches", async () => {
+    const pid = await makeTrackedProduct("Worker Milk");
+    const soon = new Date(); soon.setDate(soon.getDate() + 2);
+    await seedBatch(pid, 1, { batchNumber: "WK1", expiry: soon.toISOString().slice(0, 10), qty: 3 });
+    const before = (await db.query("SELECT COUNT(*) AS c FROM notifications WHERE type='batch_expiring'")).rows[0].c;
+    const found = await runExpiryScanForDb({ db, windowDays: 7 });
+    expect(found).toBeGreaterThan(0);
+    const after = (await db.query("SELECT COUNT(*) AS c FROM notifications WHERE type='batch_expiring'")).rows[0].c;
+    expect(Number(after)).toBeGreaterThan(Number(before));
   });
 
   // ── final drift check ─────────────────────────────────────────────────
