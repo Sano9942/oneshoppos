@@ -54,6 +54,7 @@ const ParkedSalesRedesign = lazy(() => import("../pages/redesign/ParkedSalesRede
 const HoldsRoute = lazy(() => import("../pages/HoldsRoute"));
 const RetailRiskRoute = lazy(() => import("../pages/RetailRiskRoute"));
 const ReorderAlertsRedesign = lazy(() => import("../pages/redesign/ReorderAlertsRedesign"));
+const ExpiringSoonRedesign = lazy(() => import("../pages/redesign/ExpiringSoonRedesign"));
 const InventoryIntelligenceRoute = lazy(() => import("../pages/InventoryIntelligenceRoute"));
 const NotificationsRedesign = lazy(() => import("../pages/redesign/NotificationsRedesign"));
 const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
@@ -160,6 +161,7 @@ export const appRoutes = [
     <Route path="/products/new" element={perm("manage_inventory", <ProductFormPage />)} />
     <Route path="/products/:id" element={perm("manage_inventory", <ProductFormPage />)} />
     <Route path="/reorder-alerts" element={perm("manage_inventory", <ReorderAlertsRedesign />)} />
+    <Route path="/inventory/expiring" element={perm("manage_inventory", <ExpiringSoonRedesign />)} />
     <Route path="/inventory-intelligence" element={perm("manage_inventory", <InventoryIntelligenceRoute />)} />
     <Route path="/adjustments" element={perm("manage_inventory", <StockAdjustmentsRoute />)} />
     <Route path="/transfers" element={perm("manage_inventory", <TransfersRoute />)} />

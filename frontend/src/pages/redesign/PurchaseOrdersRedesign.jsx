@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtDate, fmtDateTime, todayLocalStr } from "../../utils/dates";
 import {
@@ -61,7 +62,8 @@ function exportCSV(rows) {
 }
 
 export default function PurchaseOrdersRedesign() {
-  const { employee, hasPerm } = useAuth();
+  const { employee, hasPerm, authHeaders } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const [view, setView] = useState("list");
   const [rows, setRows] = useState([]);
@@ -94,6 +96,10 @@ export default function PurchaseOrdersRedesign() {
   const [grnReceivedBy, setGrnReceivedBy] = useState("");
   const [grnNotes, setGrnNotes] = useState("");
   const [grnQtys, setGrnQtys] = useState({});
+  // F07: per-line batch number + expiry at receive (only sent for tracked products;
+  // the backend ignores them for untracked SKUs and auto-suggests expiry from
+  // shelf_life_days when the field is left blank).
+  const [grnBatches, setGrnBatches] = useState({});
 
   // Scan & Receive state
   const [scanMode, setScanMode] = useState(false);
@@ -494,6 +500,7 @@ export default function PurchaseOrdersRedesign() {
       initial[item.product_id] = Number(item.quantity || 0);
     });
     setGrnQtys(initial);
+    setGrnBatches({});
     setGrnOutletId(String(outlets[0]?.id || ""));
     setGrnReceivedBy("");
     setGrnNotes("");
@@ -517,6 +524,8 @@ export default function PurchaseOrdersRedesign() {
         items: (selectedPo.items || []).map((item) => ({
           product_id: item.product_id,
           qty_received: Number(grnQtys[item.product_id] ?? item.quantity ?? 0),
+          batch_number: grnBatches[item.product_id]?.batch_number || null,
+          expiry_date: grnBatches[item.product_id]?.expiry_date || null,
         })),
       };
       const data = await api.post(`/api/purchase-orders/${selectedPo.purchaseOrder.id}/receive`, payload);
@@ -1040,26 +1049,52 @@ export default function PurchaseOrdersRedesign() {
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-(--ui-border) p-2"
+                className="rounded border border-(--ui-border) p-2"
               >
-                <div>
-                  <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
-                  <p className="text-xs text-(--ui-text-muted)">
-                    Ordered: {item.quantity} | {item.barcode || "-"}
-                  </p>
+                <div className="grid grid-cols-[1fr_140px] items-center gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">
+                      Ordered: {item.quantity} | {item.barcode || "-"}
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={item.quantity}
+                    value={grnQtys[item.product_id] ?? item.quantity}
+                    onChange={(e) =>
+                      setGrnQtys((prev) => ({
+                        ...prev,
+                        [item.product_id]: e.target.value,
+                      }))
+                    }
+                  />
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  max={item.quantity}
-                  value={grnQtys[item.product_id] ?? item.quantity}
-                  onChange={(e) =>
-                    setGrnQtys((prev) => ({
-                      ...prev,
-                      [item.product_id]: e.target.value,
-                    }))
-                  }
-                />
+                {flags?.batch_expiry_tracking && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Batch / lot no. (optional)"
+                      value={grnBatches[item.product_id]?.batch_number || ""}
+                      onChange={(e) =>
+                        setGrnBatches((prev) => ({
+                          ...prev,
+                          [item.product_id]: { ...prev[item.product_id], batch_number: e.target.value },
+                        }))
+                      }
+                    />
+                    <Input
+                      type="date"
+                      value={grnBatches[item.product_id]?.expiry_date || ""}
+                      onChange={(e) =>
+                        setGrnBatches((prev) => ({
+                          ...prev,
+                          [item.product_id]: { ...prev[item.product_id], expiry_date: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

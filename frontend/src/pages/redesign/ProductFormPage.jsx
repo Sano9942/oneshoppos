@@ -66,6 +66,10 @@ const BLANK_FORM = {
   // 0/empty for min = no minimum; 1/empty for increment = no case-pack rule.
   min_order_qty: "",
   order_increment: "",
+  // F07 batch/expiry — opt this SKU into batch decomposition of outlet_stock.
+  // shelf_life_days pre-fills the expiry suggestion at GRN receive.
+  track_batches: false,
+  shelf_life_days: "",
   // Tier 2.11 wholesale visibility — 'all' (everyone, default) or 'restricted'
   // (only customers in listed groups can see this SKU). customer_group_ids
   // is the whitelist; only used when visibility === 'restricted'.
@@ -210,6 +214,11 @@ export default function ProductFormPage() {
           form.min_order_qty !== "" ? Number(form.min_order_qty) : null,
         order_increment:
           form.order_increment !== "" ? Number(form.order_increment) : null,
+        // F07 batch/expiry — per-product opt-in + default shelf life for the
+        // GRN expiry auto-suggest. Untracked stays on the plain outlet_stock path.
+        track_batches: !!form.track_batches,
+        shelf_life_days:
+          form.shelf_life_days !== "" ? Number(form.shelf_life_days) : null,
         // Tier 2.11 — only include the whitelist when visibility is restricted.
         // Sending an empty array still replaces the existing mapping (correct
         // for the case where user just removed every group).
@@ -368,6 +377,8 @@ export default function ProductFormPage() {
               p.order_increment != null && Number(p.order_increment) > 1
                 ? p.order_increment
                 : "",
+            track_batches: !!p.track_batches,
+            shelf_life_days: p.shelf_life_days != null ? p.shelf_life_days : "",
             visibility: p.visibility === "restricted" ? "restricted" : "all",
             customer_group_ids: Array.isArray(p.customer_group_ids)
               ? p.customer_group_ids.map(Number)
@@ -1103,6 +1114,47 @@ export default function ProductFormPage() {
               </p>
             </div>
           </SectionCard>
+
+          {/* F07 batch / expiry / lot tracking — opt-in per SKU. When on, GRN
+              receive captures a batch number + expiry, and sales consume FEFO. */}
+          {flags?.batch_expiry_tracking && (
+            <SectionCard>
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                  Batch &amp; expiry tracking
+                </p>
+                <label className="flex items-center gap-2 text-sm text-(--ui-text)">
+                  <input
+                    type="checkbox"
+                    checked={!!form.track_batches}
+                    onChange={(e) => upd("track_batches", e.target.checked)}
+                  />
+                  Track batches / lots &amp; expiry for this product
+                </label>
+                {form.track_batches && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">
+                      Default shelf life (days)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.shelf_life_days}
+                      onChange={(e) => upd("shelf_life_days", e.target.value)}
+                      placeholder="Blank = enter expiry manually at receive"
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-(--ui-text-muted)">
+                  When enabled, receiving stock (GRN) captures a batch number and
+                  expiry, sales consume first-expiry-first-out, and near-expiry
+                  batches surface on the Expiring Soon page. Leaving this off keeps
+                  the product on the standard stock path — nothing changes.
+                </p>
+              </div>
+            </SectionCard>
+          )}
 
           {/* Tier 2.11 — Catalog visibility. Controls who can see this SKU on
               the storefront, customer portal, and field-rep app. Admin

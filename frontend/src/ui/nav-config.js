@@ -118,6 +118,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
       { name: "Production", path: "/production", icon: Factory, requiredPerm: "manage_inventory", requiredFlag: "kit_bom_engine" },
       { name: "Reorder Alerts", path: "/reorder-alerts", icon: AlertTriangle, requiredPerm: "manage_inventory" },
+      { name: "Expiring Soon", path: "/inventory/expiring", icon: Clock, requiredPerm: "manage_inventory", requiredFlag: "batch_expiry_tracking" },
       { name: "Intelligence", path: "/inventory-intelligence", icon: BarChart2, requiredPerm: "manage_inventory", requiredFlag: "phase2g_inventory_intelligence" },
     ],
   },
