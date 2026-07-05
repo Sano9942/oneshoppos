@@ -14,8 +14,9 @@ const { createTestApp } = require("../helpers/createTestApp-pg");
 
 // Supabase network latency can push individual network-heavy tests past the
 // default 5s budget; raise per-test timeout to 30s so lifecycle steps that
-// chain multiple requests have headroom.
-jest.setTimeout(30000);
+// chain multiple requests have headroom. (Vitest — vi.setConfig, not
+// jest.setTimeout; the stray jest call made the whole suite fail collection.)
+vi.setConfig({ testTimeout: 30000 });
 
 describe("M9 Room Management — full lifecycle", () => {
   let app, db, deps, cleanup;
