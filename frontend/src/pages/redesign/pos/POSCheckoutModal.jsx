@@ -241,15 +241,15 @@ export default function POSCheckoutModal() {
   if (!checkoutOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-100/20 max-h-[92vh]">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Banknote className="text-[#8066FF]" size={20} /> Complete Payment
+    <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-(--ui-surface) rounded-3xl shadow-(--ui-shadow-lg) w-full max-w-lg flex flex-col border border-(--ui-border) max-h-[92vh]">
+        <div className="px-6 py-4 border-b border-(--ui-border) flex items-center justify-between bg-(--ui-muted-surface) rounded-t-3xl shrink-0">
+          <h2 className="text-lg font-bold text-(--ui-text) flex items-center gap-2">
+            <Banknote className="text-(--ui-text)" size={20} /> Complete Payment
           </h2>
           <button
             onClick={() => setCheckoutOpen(false)}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200"
+            className="text-(--ui-text-muted) hover:text-(--ui-text) p-1.5 rounded-full hover:bg-(--ui-border-strong)"
           >
             <X size={18} />
           </button>
@@ -257,11 +257,11 @@ export default function POSCheckoutModal() {
 
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
           {/* Total due */}
-          <div className="text-center bg-slate-50 border border-slate-100 rounded-2xl py-5">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+          <div className="text-center bg-(--ui-muted-surface) border border-(--ui-border) rounded-2xl py-5">
+            <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-widest mb-1">
               Total Due
             </p>
-            <p className="text-4xl font-black text-slate-900">
+            <p className="text-4xl font-black text-(--ui-text)">
               {money(remaining)}
             </p>
           </div>
@@ -269,13 +269,13 @@ export default function POSCheckoutModal() {
           {/* M9 — Charge to room (room_management mode only) */}
           {roomManagementOn && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                 Charge to room (optional)
               </label>
               <select
                 value={chargeToRoomFolioId || ""}
                 onChange={(e) => setChargeToRoomFolioId(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
+                className="w-full px-3 py-2.5 text-sm font-medium border border-(--ui-border-strong) rounded-xl focus:outline-none focus:border-(--ui-focus)"
                 disabled={openBookingsLoading}
               >
                 <option value="">— Pay now (cash / card / etc.) —</option>
@@ -288,7 +288,7 @@ export default function POSCheckoutModal() {
                   ))}
               </select>
               {chargeToRoomFolioId && (
-                <p className="text-xs text-violet-600 mt-1.5">
+                <p className="text-xs text-(--ui-text-muted) mt-1.5">
                   This sale will be added to the folio — no payment is collected now.
                 </p>
               )}
@@ -300,14 +300,14 @@ export default function POSCheckoutModal() {
               walk-in patients with no active plan (B4 fallback). */}
           {treatmentPlansOn && checkoutCustomerId && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                 Charge to treatment plan (optional)
               </label>
               {(openTreatmentPlans || []).length > 0 ? (
                 <select
                   value={chargeToTreatmentFolioId || ""}
                   onChange={(e) => setChargeToTreatmentFolioId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
+                  className="w-full px-3 py-2.5 text-sm font-medium border border-(--ui-border-strong) rounded-xl focus:outline-none focus:border-(--ui-focus)"
                 >
                   <option value="">— Pay now (cash / card / etc.) —</option>
                   {(openTreatmentPlans || [])
@@ -322,18 +322,18 @@ export default function POSCheckoutModal() {
                 <button
                   type="button"
                   onClick={() => setQuickPlanOpen(true)}
-                  className="w-full px-3 py-2.5 text-sm font-medium border border-dashed border-[#8066FF] text-[#8066FF] rounded-xl hover:bg-violet-50 transition"
+                  className="w-full px-3 py-2.5 text-sm font-medium border border-dashed border-(--ui-border-strong) text-(--ui-text) rounded-xl hover:bg-(--ui-muted-surface) transition"
                 >
                   <Plus size={14} className="inline mr-1" /> Create new treatment plan
                 </button>
               ) : (
-                <div className="space-y-2 p-3 rounded-xl border border-violet-200 bg-violet-50/40">
+                <div className="space-y-2 p-3 rounded-xl border border-(--ui-border-strong) bg-(--ui-muted-surface)">
                   <input
                     type="text"
                     placeholder="Plan title (e.g. Root canal — upper molar)"
                     value={quickPlanTitle}
                     onChange={(e) => setQuickPlanTitle(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                    className="w-full px-3 py-2 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:border-(--ui-focus)"
                   />
                   <div className="flex gap-2">
                     <input
@@ -342,24 +342,24 @@ export default function POSCheckoutModal() {
                       placeholder="Sessions"
                       value={quickPlanSessions}
                       onChange={(e) => setQuickPlanSessions(e.target.value)}
-                      className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                      className="w-24 px-3 py-2 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:border-(--ui-focus)"
                     />
                     <input
                       type="text"
                       placeholder="Notes (optional)"
                       value={quickPlanNotes}
                       onChange={(e) => setQuickPlanNotes(e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                      className="flex-1 px-3 py-2 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:border-(--ui-focus)"
                     />
                   </div>
                   {quickPlanError && (
-                    <p className="text-xs text-red-600">{quickPlanError}</p>
+                    <p className="text-xs text-(--ui-danger-fg)">{quickPlanError}</p>
                   )}
                   <div className="flex gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => { setQuickPlanOpen(false); setQuickPlanError(""); }}
-                      className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
+                      className="px-3 py-1.5 text-xs font-medium text-(--ui-text-muted) hover:text-(--ui-text)"
                     >
                       Cancel
                     </button>
@@ -367,7 +367,7 @@ export default function POSCheckoutModal() {
                       type="button"
                       onClick={submitQuickPlan}
                       disabled={quickPlanBusy || !quickPlanTitle.trim()}
-                      className="px-3 py-1.5 text-xs font-bold text-white bg-[#8066FF] rounded-lg hover:bg-[#6d55e6] disabled:opacity-50"
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-(--ui-primary) rounded-lg hover:bg-(--ui-primary-strong) disabled:opacity-50"
                     >
                       {quickPlanBusy ? "Creating…" : "Create plan"}
                     </button>
@@ -375,7 +375,7 @@ export default function POSCheckoutModal() {
                 </div>
               )}
               {chargeToTreatmentFolioId && (
-                <p className="text-xs text-violet-600 mt-1.5">
+                <p className="text-xs text-(--ui-text-muted) mt-1.5">
                   This sale will be added to the plan folio — no payment is collected now.
                 </p>
               )}
@@ -384,20 +384,20 @@ export default function POSCheckoutModal() {
 
           {/* Customer at checkout — quick search + create */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
               {customerLabel} (optional)
             </label>
 
             {checkoutCustomerId ? (
-              <div className="flex items-center justify-between px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl">
+              <div className="flex items-center justify-between px-3 py-2.5 bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-xl">
                 <div className="flex items-center gap-2">
-                  <User size={14} className="text-violet-500 shrink-0" />
+                  <User size={14} className="text-(--ui-text-muted) shrink-0" />
                   <div>
-                    <span className="text-sm font-bold text-violet-800">
+                    <span className="text-sm font-bold text-(--ui-text)">
                       {checkoutCustSearch}
                     </span>
                     {checkoutCustomerTier?.name && (
-                      <span className="inline-flex items-center gap-0.5 ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: (checkoutCustomerTier.color || "#8066FF") + "33", color: checkoutCustomerTier.color || "#8066FF" }}>
+                      <span className="inline-flex items-center gap-0.5 ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: (checkoutCustomerTier.color || "#101010") + "33", color: checkoutCustomerTier.color || "#101010" }}>
                         <Award size={9} />{checkoutCustomerTier.name}
                         {checkoutCustomerTier.multiplier > 1 && <span className="opacity-70">{checkoutCustomerTier.multiplier}x</span>}
                       </span>
@@ -405,7 +405,7 @@ export default function POSCheckoutModal() {
                     {customers.find(
                       (c) => String(c.id) === String(checkoutCustomerId),
                     )?.mobile && (
-                      <span className="text-xs text-violet-500 ml-2">
+                      <span className="text-xs text-(--ui-text-muted) ml-2">
                         ·{" "}
                         {
                           customers.find(
@@ -421,17 +421,17 @@ export default function POSCheckoutModal() {
                     setCheckoutCustomerId("");
                     setCheckoutCustSearch("");
                   }}
-                  className="text-violet-400 hover:text-violet-700 p-1 rounded-lg hover:bg-violet-100 transition"
+                  className="text-(--ui-text-muted) hover:text-(--ui-text) p-1 rounded-lg hover:bg-(--ui-border-strong) transition"
                 >
                   <X size={14} />
                 </button>
               </div>
             ) : custMode === "search" ? (
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="border border-(--ui-border-strong) rounded-xl overflow-hidden">
                 <div className="relative">
                   <User
                     size={13}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-muted) pointer-events-none"
                   />
                   <input
                     type="text"
@@ -446,7 +446,7 @@ export default function POSCheckoutModal() {
                       setCheckoutCustSearch(e.target.value);
                       setShowCheckoutCustDD(true);
                     }}
-                    className="w-full pl-8 pr-3 py-2.5 text-sm font-medium focus:outline-none border-b border-slate-100"
+                    className="w-full pl-8 pr-3 py-2.5 text-sm font-medium focus:outline-none border-b border-(--ui-border)"
                   />
                 </div>
                 <div className="max-h-36 overflow-y-auto">
@@ -456,7 +456,7 @@ export default function POSCheckoutModal() {
                       setCheckoutCustSearch("");
                       setShowCheckoutCustDD(false);
                     }}
-                    className="px-3 py-2 text-slate-400 text-xs font-semibold cursor-pointer hover:bg-slate-50 border-b border-slate-50"
+                    className="px-3 py-2 text-(--ui-text-muted) text-xs font-semibold cursor-pointer hover:bg-(--ui-muted-surface) border-b border-(--ui-border)"
                   >
                     Walk-in (no customer)
                   </div>
@@ -468,19 +468,19 @@ export default function POSCheckoutModal() {
                         setCheckoutCustSearch(c.name || "");
                         setShowCheckoutCustDD(false);
                       }}
-                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-violet-50 border-b border-slate-50 last:border-0"
+                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-(--ui-muted-surface) border-b border-(--ui-border) last:border-0"
                     >
-                      <span className="font-bold text-sm text-slate-800">
+                      <span className="font-bold text-sm text-(--ui-text)">
                         {c.name}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-(--ui-text-muted)">
                         {c.mobile || ""}
                       </span>
                     </div>
                   ))}
                   {filteredCheckoutCustomers.length === 0 &&
                     checkoutCustSearch && (
-                      <p className="text-xs text-slate-400 text-center py-2">
+                      <p className="text-xs text-(--ui-text-muted) text-center py-2">
                         No match found
                       </p>
                     )}
@@ -493,14 +493,14 @@ export default function POSCheckoutModal() {
                     setNewCustMobile("");
                     setNewCustError("");
                   }}
-                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-violet-600 hover:bg-violet-50 border-t border-slate-100 transition"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-(--ui-text) hover:bg-(--ui-muted-surface) border-t border-(--ui-border) transition"
                 >
                   <Plus size={13} /> New Customer
                 </button>
               </div>
             ) : (
-              <div className="border-2 border-violet-300 rounded-xl overflow-hidden">
-                <div className="px-3 py-2 bg-violet-600 flex items-center justify-between">
+              <div className="border-2 border-(--ui-border-strong) rounded-xl overflow-hidden">
+                <div className="px-3 py-2 bg-(--ui-primary) flex items-center justify-between">
                   <span className="text-xs font-bold text-white uppercase tracking-wide">
                     New Customer
                   </span>
@@ -510,29 +510,29 @@ export default function POSCheckoutModal() {
                       setCustMode("search");
                       setNewCustError("");
                     }}
-                    className="text-violet-200 hover:text-white transition"
+                    className="text-white/70 hover:text-white transition"
                   >
                     <X size={14} />
                   </button>
                 </div>
-                <div className="p-3 space-y-2 bg-white">
+                <div className="p-3 space-y-2 bg-(--ui-surface)">
                   <input
                     type="text"
                     autoFocus
                     value={newCustName}
                     onChange={(e) => setNewCustName(e.target.value)}
                     placeholder="Full name *"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-violet-400 focus:outline-none"
+                    className="w-full px-3 py-2 border border-(--ui-border-strong) rounded-lg text-sm focus:border-(--ui-focus) focus:outline-none"
                   />
                   <input
                     type="tel"
                     value={newCustMobile}
                     onChange={(e) => setNewCustMobile(e.target.value)}
                     placeholder="Phone (optional)"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-violet-400 focus:outline-none"
+                    className="w-full px-3 py-2 border border-(--ui-border-strong) rounded-lg text-sm focus:border-(--ui-focus) focus:outline-none"
                   />
                   {newCustError && (
-                    <p className="text-xs text-red-500 font-semibold">
+                    <p className="text-xs text-(--ui-danger-fg) font-semibold">
                       {newCustError}
                     </p>
                   )}
@@ -540,7 +540,7 @@ export default function POSCheckoutModal() {
                     type="button"
                     onClick={handleQuickCreateCustomer}
                     disabled={newCustSaving}
-                    className="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold rounded-lg transition disabled:opacity-50"
+                    className="w-full py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white text-sm font-bold rounded-lg transition disabled:opacity-50"
                   >
                     {newCustSaving ? "Saving…" : "Create & Attach to Sale"}
                   </button>
@@ -551,27 +551,27 @@ export default function POSCheckoutModal() {
 
           {/* Loyalty & Wallet panel — shown only when a customer is selected */}
           {checkoutCustomerId && (
-            <div className="rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3 space-y-3">
+            <div className="rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3 space-y-3">
               {/* Balance summary */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-violet-700 uppercase tracking-wide">
-                  <Star size={13} className="text-amber-500" />
+                <div className="flex items-center gap-1.5 text-xs font-bold text-(--ui-text) uppercase tracking-wide">
+                  <Star size={13} className="text-(--ui-warning-fg)" />
                   Points & Wallet
                 </div>
                 {checkoutWalletLoading && (
-                  <span className="text-xs text-violet-400">Loading…</span>
+                  <span className="text-xs text-(--ui-text-muted)">Loading…</span>
                 )}
               </div>
               <div className="flex gap-3">
-                <div className="flex-1 bg-white rounded-xl px-3 py-2 text-center border border-violet-100">
-                  <p className="text-xs text-slate-500 mb-0.5">Points</p>
-                  <p className="text-lg font-black text-violet-700">
+                <div className="flex-1 bg-(--ui-surface) rounded-xl px-3 py-2 text-center border border-(--ui-border)">
+                  <p className="text-xs text-(--ui-text-muted) mb-0.5">Points</p>
+                  <p className="text-lg font-black text-(--ui-text)">
                     {checkoutCustomerPoints}
                   </p>
                 </div>
-                <div className="flex-1 bg-white rounded-xl px-3 py-2 text-center border border-violet-100">
-                  <p className="text-xs text-slate-500 mb-0.5">Wallet</p>
-                  <p className="text-lg font-black text-emerald-600">
+                <div className="flex-1 bg-(--ui-surface) rounded-xl px-3 py-2 text-center border border-(--ui-border)">
+                  <p className="text-xs text-(--ui-text-muted) mb-0.5">Wallet</p>
+                  <p className="text-lg font-black text-(--ui-success-fg)">
                     {money(checkoutWalletBalance)}
                   </p>
                 </div>
@@ -586,23 +586,23 @@ export default function POSCheckoutModal() {
                   title={isOffline ? "Points redemption requires connectivity" : ""}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
                     isOffline
-                      ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                      ? "border-(--ui-border-strong) bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
                       : redeemPointsOn
-                        ? "border-amber-400 bg-amber-50 text-amber-800"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        ? "border-(--ui-warning-fg) bg-(--ui-warning-bg) text-(--ui-warning-fg)"
+                        : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Star size={14} className="text-amber-500" />
+                    <Star size={14} className="text-(--ui-warning-fg)" />
                     Redeem {Math.floor(checkoutCustomerPoints / 100) * 100} pts
-                    <span className="text-xs text-slate-400 font-normal">
+                    <span className="text-xs text-(--ui-text-muted) font-normal">
                       = {money(pointsDiscount)} off
                     </span>
                   </span>
                   {redeemPointsOn ? (
-                    <ToggleRight size={20} className="text-amber-500" />
+                    <ToggleRight size={20} className="text-(--ui-warning-fg)" />
                   ) : (
-                    <ToggleLeft size={20} className="text-slate-400" />
+                    <ToggleLeft size={20} className="text-(--ui-text-muted)" />
                   )}
                 </button>
               )}
@@ -616,23 +616,23 @@ export default function POSCheckoutModal() {
                   title={isOffline ? "Wallet payment requires connectivity" : ""}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
                     isOffline
-                      ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                      ? "border-(--ui-border-strong) bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
                       : payWithWalletOn
-                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        ? "border-(--ui-success-fg) bg-(--ui-success-bg) text-(--ui-success-fg)"
+                        : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted) hover:border-(--ui-border-strong)"
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Wallet size={14} className="text-emerald-600" />
+                    <Wallet size={14} className="text-(--ui-success-fg)" />
                     Pay with Wallet
-                    <span className="text-xs text-slate-400 font-normal">
+                    <span className="text-xs text-(--ui-text-muted) font-normal">
                       ({money(checkoutWalletBalance)} available)
                     </span>
                   </span>
                   {payWithWalletOn ? (
-                    <ToggleRight size={20} className="text-emerald-500" />
+                    <ToggleRight size={20} className="text-(--ui-success-fg)" />
                   ) : (
-                    <ToggleLeft size={20} className="text-slate-400" />
+                    <ToggleLeft size={20} className="text-(--ui-text-muted)" />
                   )}
                 </button>
               )}
@@ -641,9 +641,9 @@ export default function POSCheckoutModal() {
 
           {/* Phase 2.1 C1 — Tip + Server (restaurant mode only) */}
           {restaurantOn && (
-            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-3">
+            <div className="space-y-3 rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) p-3">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                   Tip
                 </label>
                 <div className="flex gap-2">
@@ -657,8 +657,8 @@ export default function POSCheckoutModal() {
                         onClick={() => setTipAmount(amt)}
                         className={`flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition ${
                           active
-                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text) hover:border-(--ui-border-strong)"
                         }`}
                       >
                         {pct}%
@@ -672,14 +672,14 @@ export default function POSCheckoutModal() {
                     inputMode="decimal"
                     value={tipAmount}
                     onChange={(e) => setTipAmount(e.target.value)}
-                    className="w-28 px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-sm font-semibold"
+                    className="w-28 px-3 py-2 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-xl focus:border-(--ui-focus) focus:ring-0 outline-none text-sm font-semibold"
                     placeholder="Custom"
                   />
                   {Number(tipAmount) > 0 && (
                     <button
                       type="button"
                       onClick={() => setTipAmount("")}
-                      className="px-2 text-xs text-slate-500 hover:text-rose-600"
+                      className="px-2 text-xs text-(--ui-text-muted) hover:text-(--ui-danger)"
                     >
                       Clear
                     </button>
@@ -694,8 +694,8 @@ export default function POSCheckoutModal() {
                         onClick={() => setTipMethod(m)}
                         className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${
                           tipMethod === m
-                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted) hover:border-(--ui-border-strong)"
                         }`}
                       >
                         Tip via {m}
@@ -706,13 +706,13 @@ export default function POSCheckoutModal() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
                   Server
                 </label>
                 <select
                   value={serverId}
                   onChange={(e) => setServerId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-sm font-medium"
+                  className="w-full px-3 py-2 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-xl focus:border-(--ui-focus) focus:ring-0 outline-none text-sm font-medium"
                 >
                   <option value="">— Not assigned —</option>
                   {(employeesList || []).map((e) => (
@@ -731,8 +731,8 @@ export default function POSCheckoutModal() {
                 onClick={() => setShowGuestMode?.(true)}
                 className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition ${
                   signatureSvg
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    : "border-[#8066FF] bg-white text-[#8066FF] hover:bg-[#8066FF]/5"
+                    ? "border-(--ui-success-fg) bg-(--ui-success-bg) text-(--ui-success-fg) hover:bg-(--ui-success-bg)"
+                    : "border-(--ui-primary) bg-(--ui-surface) text-(--ui-text) hover:bg-(--ui-muted-surface)"
                 }`}
               >
                 <PenLine size={15} />
@@ -743,7 +743,7 @@ export default function POSCheckoutModal() {
 
           {/* Payment method */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
               Payment Method
             </label>
             {(() => {
@@ -783,10 +783,10 @@ export default function POSCheckoutModal() {
                         }}
                         className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold text-sm transition border-2 ${
                           disabled
-                            ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                            ? "border-(--ui-border) bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
                             : paymentMethod === id
-                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
-                            : "border-slate-100 bg-white hover:border-slate-200 text-slate-600"
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border) bg-(--ui-surface) hover:border-(--ui-border-strong) text-(--ui-text-muted)"
                         }`}
                       >
                         {icon} {label || id}
@@ -798,8 +798,8 @@ export default function POSCheckoutModal() {
             })()}
 
             {paymentMethod === "gift_card" && (
-              <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+              <div className="mt-3 p-3 bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-xl space-y-2">
+                <label className="block text-[11px] font-bold text-(--ui-text-muted) uppercase tracking-wide">
                   Gift Card Code
                 </label>
                 <div className="flex gap-2">
@@ -812,13 +812,13 @@ export default function POSCheckoutModal() {
                       setGiftCardError("");
                     }}
                     placeholder="Scan or paste code"
-                    className="flex-1 px-3 py-2 bg-white border-2 border-slate-200 rounded-lg focus:border-[#8066FF] outline-none font-mono text-sm"
+                    className="flex-1 px-3 py-2 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-lg focus:border-(--ui-focus) outline-none font-mono text-sm"
                   />
                   <button
                     type="button"
                     onClick={lookupGiftCardBalance}
                     disabled={giftCardLookupBusy || !giftCardCode.trim()}
-                    className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-800 disabled:opacity-30 transition"
+                    className="bg-(--ui-primary) text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-(--ui-primary-strong) disabled:opacity-30 transition"
                   >
                     {giftCardLookupBusy ? "…" : "Check"}
                   </button>
@@ -827,8 +827,8 @@ export default function POSCheckoutModal() {
                   <div
                     className={`text-sm px-3 py-2 rounded-lg ${
                       giftCardBalance.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                        ? "bg-(--ui-success-bg) text-(--ui-success-fg) border border-(--ui-success-fg)/30"
+                        : "bg-(--ui-warning-bg) text-(--ui-warning-fg) border border-(--ui-warning-fg)/30"
                     }`}
                   >
                     Balance: <strong>{money(giftCardBalance.remaining)}</strong>
@@ -836,7 +836,7 @@ export default function POSCheckoutModal() {
                   </div>
                 )}
                 {giftCardError && (
-                  <div className="text-sm px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                  <div className="text-sm px-3 py-2 rounded-lg bg-(--ui-danger-bg) text-(--ui-danger-fg) border border-(--ui-danger-fg)/30">
                     {giftCardError}
                   </div>
                 )}
@@ -874,7 +874,7 @@ export default function POSCheckoutModal() {
               addPayment(e);
             }}
           >
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
               Amount
             </label>
             <div className="flex gap-2">
@@ -885,13 +885,13 @@ export default function POSCheckoutModal() {
                 min="0.01"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
-                className="flex-1 px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-lg font-bold shadow-sm"
+                className="flex-1 px-4 py-3 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-xl focus:border-(--ui-focus) focus:ring-0 outline-none text-lg font-bold"
                 placeholder="0.00"
               />
               <button
                 type="submit"
                 disabled={!paymentAmount || Number(paymentAmount) <= 0}
-                className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-md"
+                className="bg-(--ui-primary) text-white px-6 py-2 rounded-xl font-bold hover:bg-(--ui-primary-strong) disabled:opacity-30 disabled:cursor-not-allowed transition"
               >
                 Add
               </button>
@@ -900,7 +900,7 @@ export default function POSCheckoutModal() {
               <button
                 type="button"
                 onClick={() => setPaymentAmount(remaining.toFixed(2))}
-                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition"
+                className="px-2.5 py-1 bg-(--ui-success-bg) hover:bg-(--ui-success-bg) text-(--ui-success-fg) border border-(--ui-success-fg)/30 rounded-lg text-xs font-bold transition"
               >
                 Exact
               </button>
@@ -913,7 +913,7 @@ export default function POSCheckoutModal() {
                       (Math.ceil(remaining / amt) * amt).toFixed(2),
                     )
                   }
-                  className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold transition"
+                  className="px-2.5 py-1 bg-(--ui-muted-surface) hover:bg-(--ui-muted-surface) text-(--ui-text-muted) border border-(--ui-border-strong) rounded-lg text-xs font-bold transition"
                 >
                   +{amt}
                 </button>
@@ -923,35 +923,35 @@ export default function POSCheckoutModal() {
 
           {/* Tenders */}
           {payments.length > 0 && (
-            <div className="border-t border-slate-100 pt-4">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+            <div className="border-t border-(--ui-border) pt-4">
+              <p className="text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-3">
                 Tenders
               </p>
               <div className="space-y-2">
                 {payments.map((p, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between py-2 px-3 bg-slate-50 border border-slate-100 rounded-xl"
+                    className="flex items-center justify-between py-2 px-3 bg-(--ui-muted-surface) border border-(--ui-border) rounded-xl"
                   >
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <div className="flex items-center gap-2 text-sm font-bold text-(--ui-text)">
                       {p.method === "Cash" ? (
-                        <Banknote size={14} className="text-[#8066FF]" />
+                        <Banknote size={14} className="text-(--ui-text-muted)" />
                       ) : p.method === "Wallet" ? (
-                        <Wallet size={14} className="text-[#8066FF]" />
+                        <Wallet size={14} className="text-(--ui-text-muted)" />
                       ) : (
-                        <CreditCard size={14} className="text-[#8066FF]" />
+                        <CreditCard size={14} className="text-(--ui-text-muted)" />
                       )}
                       {p.method}
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-black text-slate-900 text-sm">
+                      <span className="font-black text-(--ui-text) text-sm">
                         {money(p.amount)}
                       </span>
                       <button
                         onClick={() =>
                           setPayments((prev) => prev.filter((_, j) => j !== i))
                         }
-                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-lg transition"
+                        className="text-(--ui-text-muted) hover:text-(--ui-danger) hover:bg-(--ui-danger-bg) p-1 rounded-lg transition"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -960,7 +960,7 @@ export default function POSCheckoutModal() {
                 ))}
               </div>
               {change > 0 && (
-                <div className="mt-3 flex justify-between items-center text-sm font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                <div className="mt-3 flex justify-between items-center text-sm font-bold text-(--ui-success-fg) bg-(--ui-success-bg) border border-(--ui-success-fg)/20 rounded-xl px-3 py-2">
                   <span>Change Due</span>
                   <span>{money(change)}</span>
                 </div>
@@ -973,8 +973,8 @@ export default function POSCheckoutModal() {
             disabled={remaining > 0 || submitting}
             className={`w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 transition-all ${
               remaining > 0 || submitting
-                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                : "bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] hover:scale-[1.01]"
+                ? "bg-(--ui-muted-surface) text-(--ui-text-muted) cursor-not-allowed"
+                : "bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white hover:scale-[1.01]"
             }`}
           >
             <CheckCircle2

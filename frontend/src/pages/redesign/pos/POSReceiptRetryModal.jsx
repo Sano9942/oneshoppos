@@ -109,33 +109,33 @@ export default function POSReceiptRetryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45">
+      <div className="bg-(--ui-surface) rounded-xl shadow-(--ui-shadow-lg) w-full max-w-md p-6 text-(--ui-text)">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-400" />
+            <AlertTriangle className="h-5 w-5 text-(--ui-warning-fg)" />
             <h3 className="text-lg font-semibold">Print failed</h3>
           </div>
-          <button onClick={skip} className="text-slate-400 hover:text-white">
+          <button onClick={skip} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="text-sm text-slate-300 mb-1">
+        <p className="text-sm text-(--ui-text-muted) mb-1">
           The receipt printer didn't respond for invoice{" "}
-          <span className="font-semibold text-white">
+          <span className="font-semibold text-(--ui-text)">
             {slip.invoiceNumber || "—"}
           </span>.
         </p>
-        {error && <p className="text-xs text-amber-300 mb-3">{error}</p>}
-        {retryError && <p className="text-xs text-rose-400 mb-3">{retryError}</p>}
+        {error && <p className="text-xs text-(--ui-warning-fg) mb-3">{error}</p>}
+        {retryError && <p className="text-xs text-(--ui-danger-fg) mb-3">{retryError}</p>}
 
         <div className="grid grid-cols-2 gap-2 mt-4">
           <button
             type="button"
             onClick={retry}
             disabled={retrying}
-            className="flex items-center justify-center gap-2 rounded-lg bg-[#8066FF] hover:bg-[#6b55d9] disabled:opacity-50 px-3 py-3 text-sm font-semibold transition"
+            className="flex items-center justify-center gap-2 rounded-lg bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-white disabled:opacity-50 px-3 py-3 text-sm font-semibold transition"
           >
             <Printer className="h-4 w-4" />
             {retrying ? "Retrying…" : "Print Again"}
@@ -144,7 +144,7 @@ export default function POSReceiptRetryModal({
             <button
               type="button"
               onClick={() => setShowEmail(true)}
-              className="flex items-center justify-center gap-2 rounded-lg border border-blue-400 text-blue-200 hover:bg-blue-500/20 px-3 py-3 text-sm font-semibold transition"
+              className="flex items-center justify-center gap-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) px-3 py-3 text-sm font-semibold transition"
             >
               <Mail className="h-4 w-4" />
               Email
@@ -153,7 +153,7 @@ export default function POSReceiptRetryModal({
           <button
             type="button"
             onClick={shareWhatsApp}
-            className="flex items-center justify-center gap-2 rounded-lg border border-green-400 text-green-200 hover:bg-green-500/20 px-3 py-3 text-sm font-semibold transition"
+            className="flex items-center justify-center gap-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) px-3 py-3 text-sm font-semibold transition"
           >
             <MessageCircle className="h-4 w-4" />
             WhatsApp
@@ -161,7 +161,7 @@ export default function POSReceiptRetryModal({
           <button
             type="button"
             onClick={browserFallback}
-            className="flex items-center justify-center gap-2 rounded-lg border border-slate-500 text-slate-200 hover:bg-slate-700 px-3 py-3 text-sm font-semibold transition"
+            className="flex items-center justify-center gap-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) px-3 py-3 text-sm font-semibold transition"
           >
             <Printer className="h-4 w-4" />
             Browser
@@ -171,7 +171,7 @@ export default function POSReceiptRetryModal({
         <button
           type="button"
           onClick={skip}
-          className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 px-3 py-2 text-sm font-medium transition"
+          className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface) px-3 py-2 text-sm font-medium transition"
         >
           <SkipForward className="h-4 w-4" />
           Skip
