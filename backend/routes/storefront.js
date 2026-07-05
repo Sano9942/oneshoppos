@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const kitEngine = require("./../services/kit-engine");
 const { getOrCreateCart, addItem, updateItem, removeItem, getCartWithItems } = require("../services/storefront-cart");
 const { calculateQuote } = require("../services/quote");
 const { allocateOrder } = require("../services/allocation");
@@ -801,6 +802,16 @@ module.exports = function mountStorefrontRoutes(app, deps) {
               );
             }
             stockOutletId = stockRows[0].outlet_id;
+          }
+
+          // F01: kits hold no stock of their own — the public storefront
+          // checkout is not kit-aware yet, so hard-reject with a clear message
+          // rather than the misleading "insufficient stock" (kit rows are empty).
+          if ((await kitEngine.getBomType(client, qi.productId)) === "kit") {
+            throw Object.assign(
+              new Error(`"${qi.productName}" is a kit/bundle and can't be ordered online yet.`),
+              { statusCode: 400, code: "kit_not_supported_online" }
+            );
           }
 
           // Lock and decrement outlet_stock

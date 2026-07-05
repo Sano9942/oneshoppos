@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const kitEngine = require("../services/kit-engine");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 
 module.exports = function registerOrderRoutes(app, deps) {
@@ -1270,6 +1271,16 @@ module.exports = function registerOrderRoutes(app, deps) {
              RETURNING *`,
             [order.id, item.webOrderItemId, fulfillmentOutletId, deliveryMethod, item.qty]
           );
+
+          // F01: kits hold no stock of their own — online fulfillment allocation
+          // is not kit-aware yet, so hard-reject with a clear message rather than
+          // silently mis-decrementing the kit's (empty) row or oversell components.
+          if ((await kitEngine.getBomType(client, item.productId)) === "kit") {
+            throw Object.assign(
+              new Error(`"${item.title}" is a kit/bundle and can't be fulfilled online yet — sell it in-store.`),
+              { statusCode: 400, code: "kit_not_supported_online" }
+            );
+          }
 
           // Lock and decrement outlet_stock
           const { rows: [stock] } = await client.query(

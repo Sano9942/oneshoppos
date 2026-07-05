@@ -7139,6 +7139,138 @@ const MIGRATIONS = [
       await enableRlsOnPublicTables(client);
     },
   },
+  {
+    version: 99,
+    description:
+      "F01 Kit/BOM engine — bom_type discriminator, product_bundles recipe columns (decimal qty + combo choice slots), stock_conversions for production/disassembly runs",
+    up: async (client) => {
+      // Tenant-schema only. Guarded by SAVEPOINT try/catch so running against
+      // the public schema (no products table) is a harmless skip, matching the
+      // v95/v96 tenant-column pattern.
+
+      // ── products.bom_type ──────────────────────────────────────────────
+      // Single discriminator for the three consumption modes. NOTE: the column
+      // name `product_type` is already taken by a free-text Shopify category
+      // label (smart-collections, reports, scheduled-changes read it), so the
+      // kit/BOM discriminator lives on its own `bom_type` column instead.
+      //   standard  — decrement own stock (default; unchanged behavior)
+      //   kit       — decrement COMPONENTS at sale; holds no stock of its own
+      //   assembled — holds own stock, created by production runs
+      // Backfilled from the pre-existing `is_bundle` flag so every current
+      // bundle becomes a `kit` with zero behavior change. `is_bundle` is kept
+      // as a synced legacy mirror (is_bundle = bom_type='kit') for the reads
+      // that still key on it; `bom_type` is authoritative going forward.
+      try {
+        await client.query("SAVEPOINT v99_bom_type");
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS bom_type TEXT NOT NULL DEFAULT 'standard'`
+        );
+        await client.query(
+          `ALTER TABLE products
+             DROP CONSTRAINT IF EXISTS products_bom_type_valid`
+        );
+        await client.query(
+          `ALTER TABLE products
+             ADD CONSTRAINT products_bom_type_valid
+             CHECK (bom_type IN ('standard','kit','assembled'))`
+        );
+        await client.query(
+          `UPDATE products SET bom_type = 'kit'
+             WHERE is_bundle = true AND bom_type = 'standard'`
+        );
+        await client.query("RELEASE SAVEPOINT v99_bom_type");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_bom_type");
+        console.warn(`[migrate-pg v99] products.bom_type skipped: ${err.message}`);
+      }
+
+      // ── product_bundles: recipe/combo columns ─────────────────────────
+      // Widen quantity INTEGER → NUMERIC(12,4) for decimal recipes (0.25 kg
+      // flour). Add unit (display only — the stock unit is the component's),
+      // is_substitutable + modifier_group_id for QSR combo choice slots.
+      try {
+        await client.query("SAVEPOINT v99_bundle_cols");
+        await client.query(
+          `ALTER TABLE product_bundles
+             ALTER COLUMN quantity TYPE NUMERIC(12,4)`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles
+             ALTER COLUMN quantity SET DEFAULT 1`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles
+             DROP CONSTRAINT IF EXISTS product_bundles_quantity_positive`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles
+             ADD CONSTRAINT product_bundles_quantity_positive CHECK (quantity > 0)`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles ADD COLUMN IF NOT EXISTS unit TEXT`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles
+             ADD COLUMN IF NOT EXISTS is_substitutable BOOLEAN DEFAULT FALSE`
+        );
+        await client.query(
+          `ALTER TABLE product_bundles
+             ADD COLUMN IF NOT EXISTS modifier_group_id INTEGER REFERENCES modifier_groups(id)`
+        );
+        await client.query("RELEASE SAVEPOINT v99_bundle_cols");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_bundle_cols");
+        console.warn(`[migrate-pg v99] product_bundles cols skipped: ${err.message}`);
+      }
+
+      // ── stock_conversions + lines: production/disassembly runs ─────────
+      // assembly:    consume components → produce output stock (pre-made trays)
+      // disassembly: consume 1 source (carcass) → produce N outputs (cuts) with
+      //              per-line yield qty + optional unit_cost allocation.
+      try {
+        await client.query("SAVEPOINT v99_conversions");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS stock_conversions (
+            id SERIAL PRIMARY KEY,
+            conversion_type TEXT NOT NULL CHECK (conversion_type IN ('assembly','disassembly')),
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            employee_id INTEGER REFERENCES employees(id),
+            source_product_id INTEGER REFERENCES products(id),
+            source_qty NUMERIC(12,4),
+            output_product_id INTEGER REFERENCES products(id),
+            output_qty NUMERIC(12,4),
+            notes TEXT,
+            status TEXT NOT NULL DEFAULT 'completed',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS stock_conversion_lines (
+            id SERIAL PRIMARY KEY,
+            conversion_id INTEGER NOT NULL REFERENCES stock_conversions(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            variant_id INTEGER REFERENCES product_variants(id),
+            quantity NUMERIC(12,4) NOT NULL,
+            direction TEXT NOT NULL CHECK (direction IN ('consume','produce')),
+            unit_cost NUMERIC(12,4)
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_stock_conversions_outlet
+             ON stock_conversions(outlet_id, created_at DESC)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_stock_conversion_lines_conv
+             ON stock_conversion_lines(conversion_id)`
+        );
+        await client.query("RELEASE SAVEPOINT v99_conversions");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v99_conversions");
+        console.warn(`[migrate-pg v99] stock_conversions skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

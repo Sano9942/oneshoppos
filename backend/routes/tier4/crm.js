@@ -1,4 +1,5 @@
 const express = require("express");
+const kitEngine = require("../../services/kit-engine");
 const nodemailer = require("nodemailer");
 
 // ─── FBR E-INVOICING PLACEHOLDER ───────────────────────────────────────
@@ -671,6 +672,16 @@ module.exports = function createCRMRouter({
           const sid = saleRows[0].id;
 
           for (const it of items) {
+            // F01: this convert path decrements outlet_stock without FOR UPDATE
+            // (a documented completion-01 concurrency gap — NOT fixed here). It
+            // must not process kits: decrementing a kit's own (empty) row would
+            // silently oversell components. Hard-reject with a clear message.
+            if ((await kitEngine.getBomType(client, it.product_id)) === "kit") {
+              throw Object.assign(
+                new Error("This quotation contains a kit/bundle product — convert it to a sale at POS instead."),
+                { statusCode: 400, code: "kit_not_supported" }
+              );
+            }
             const qty = Number(it.quantity || 0);
             const lineRate = Number(it.tax_rate || 0);
             const lineTax =

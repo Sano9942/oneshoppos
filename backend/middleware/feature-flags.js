@@ -140,6 +140,12 @@ const DEFAULT_FEATURE_FLAGS = {
   // distributor invites brand owners (Tapal, Coca-Cola, etc.) to see real-time
   // aggregate onward sales of their brand SKUs. Separate JWT scope. Default false.
   wholesale_secondary_sales: false,
+  // F01 kit/BOM engine. Default false — gates the NEW surfaces (Production
+  // screen, recipe costing report, assembled-product type, theoretical-vs-
+  // actual usage). The core kit sale decrement stays UNGATED (it already
+  // shipped as is_bundle/product_bundles and works on every tenant); seeded
+  // ON by presets that consume it (retail/food-service verticals).
+  kit_bom_engine: false,
 };
 
 // Per-tenant feature flag cache

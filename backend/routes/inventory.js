@@ -1,5 +1,6 @@
 const { validate } = require("../middleware/validate");
 const { CreateTransferSchema, CreateAdjustmentSchema } = require("../schemas/inventory");
+const kitEngine = require("../services/kit-engine");
 
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -81,6 +82,13 @@ module.exports = function registerInventoryRoutes(app, deps) {
       return res
         .status(400)
         .json({ error: "Quantity must be greater than zero" });
+    }
+    // F01: kits hold no stock of their own — transfer the components instead.
+    if ((await kitEngine.getBomType(db, product_id)) === "kit") {
+      return res.status(400).json({
+        error: "Kits have no stock of their own — transfer their components instead.",
+        code: "kit_no_stock",
+      });
     }
 
     try {
@@ -293,6 +301,13 @@ module.exports = function registerInventoryRoutes(app, deps) {
       return res
         .status(400)
         .json({ error: "Missing required fields for stock adjustment" });
+    }
+    // F01: kits hold no stock of their own — adjust the components instead.
+    if ((await kitEngine.getBomType(db, product_id)) === "kit") {
+      return res.status(400).json({
+        error: "Kits have no stock of their own — adjust their components instead.",
+        code: "kit_no_stock",
+      });
     }
 
     try {

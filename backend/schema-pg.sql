@@ -158,6 +158,10 @@ CREATE TABLE IF NOT EXISTS products (
   deleted_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_bundle BOOLEAN DEFAULT false,
+  -- F01 kit/BOM discriminator (migrate-pg v99). standard=own stock,
+  -- kit=decrement components at sale, assembled=own stock via production runs.
+  -- is_bundle is kept as a synced legacy mirror (is_bundle = bom_type='kit').
+  bom_type TEXT NOT NULL DEFAULT 'standard' CHECK (bom_type IN ('standard','kit','assembled')),
   avg_rating NUMERIC(3,2) DEFAULT 0,
   review_count INTEGER DEFAULT 0,
   -- 2-R.1: 86'd items (sold-out) tracking for restaurant mode
@@ -322,14 +326,54 @@ CREATE TABLE IF NOT EXISTS price_list_items (
 
 -- ── Product Bundles ──────────────────────────────────────────────────
 
+-- F01: the component→product entity for kits/bundles AND recipes. quantity is
+-- NUMERIC (0.25 kg flour); unit is display-only (stock unit is the component's);
+-- modifier_group_id turns a component row into a QSR combo choice slot.
 CREATE TABLE IF NOT EXISTS product_bundles (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   component_product_id INTEGER NOT NULL REFERENCES products(id),
   component_variant_id INTEGER REFERENCES product_variants(id),
-  quantity INTEGER NOT NULL DEFAULT 1,
+  quantity NUMERIC(12,4) NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit TEXT,
+  is_substitutable BOOLEAN DEFAULT FALSE,
+  -- FK to modifier_groups is added by ALTER after that table is defined below
+  -- (modifier_groups is created much later in this file); migrate-pg v99 adds
+  -- the FK inline for existing tenants where both tables already exist.
+  modifier_group_id INTEGER,
   UNIQUE(product_id, component_product_id, component_variant_id)
 );
+
+-- F01: production (assembly) + disassembly runs. assembly consumes components →
+-- produces output stock; disassembly consumes 1 source → produces N outputs
+-- with per-line yield qty + optional unit_cost allocation for yield accounting.
+CREATE TABLE IF NOT EXISTS stock_conversions (
+  id SERIAL PRIMARY KEY,
+  conversion_type TEXT NOT NULL CHECK (conversion_type IN ('assembly','disassembly')),
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  employee_id INTEGER REFERENCES employees(id),
+  source_product_id INTEGER REFERENCES products(id),
+  source_qty NUMERIC(12,4),
+  output_product_id INTEGER REFERENCES products(id),
+  output_qty NUMERIC(12,4),
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'completed',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stock_conversion_lines (
+  id SERIAL PRIMARY KEY,
+  conversion_id INTEGER NOT NULL REFERENCES stock_conversions(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  quantity NUMERIC(12,4) NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('consume','produce')),
+  unit_cost NUMERIC(12,4)
+);
+CREATE INDEX IF NOT EXISTS idx_stock_conversions_outlet
+  ON stock_conversions(outlet_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stock_conversion_lines_conv
+  ON stock_conversion_lines(conversion_id);
 
 -- ── Customer Groups ──────────────────────────────────────────────────
 
@@ -2377,7 +2421,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('wholesale_credit_controls', false, 'Tier 0 wholesale — customer credit limit enforcement, AR aging, statements'),
   ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log'),
   ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
-  ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility')
+  ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility'),
+  ('kit_bom_engine', false, 'F01 kit/BOM engine — recipe costing, production/disassembly runs, assembled products (kit sale decrement itself stays ungated)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -2507,6 +2552,22 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- F01: product_bundles.modifier_group_id FK (combo choice slot). Added here via
+-- ALTER because product_bundles is created far earlier than modifier_groups.
+-- Idempotent guard so repeated schema loads / partial applies don't error.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'product_bundles_modifier_group_fk'
+      AND table_name = 'product_bundles'
+      AND table_schema = current_schema()
+  ) THEN
+    ALTER TABLE product_bundles
+      ADD CONSTRAINT product_bundles_modifier_group_fk
+      FOREIGN KEY (modifier_group_id) REFERENCES modifier_groups(id);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS modifier_options (
   id SERIAL PRIMARY KEY,

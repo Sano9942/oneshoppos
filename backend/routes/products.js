@@ -3,6 +3,7 @@ const {
   getCategoryById,
   getDescendantLeafIds,
 } = require("../category-tree");
+const kitEngine = require("../services/kit-engine");
 
 module.exports = function registerProductRoutes(app, deps) {
   const { db, multer, requirePerm, requireAnyPerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
@@ -11,6 +12,30 @@ module.exports = function registerProductRoutes(app, deps) {
 
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
+
+  // F01: kits hold no stock of their own — their sellable quantity is
+  // min(floor(component_stock / qty_per)) at the outlet. Enrich kit rows in POS
+  // list/search/scan responses so the stock badge reflects what can actually be
+  // sold. Cheap: only touches rows whose bom_type is 'kit' (rare).
+  async function enrichKitAvailability(rows, outletId) {
+    if (!outletId || !Array.isArray(rows)) return rows;
+    for (const row of rows) {
+      if (row && row.bom_type === "kit") {
+        try {
+          const avail = await kitEngine.kitAvailability(db, {
+            productId: row.id,
+            outletId: Number(outletId),
+          });
+          row.available_qty = avail;
+          if ("local_stock" in row) row.local_stock = avail;
+          if ("total_stock" in row) row.total_stock = avail;
+        } catch {
+          /* leave stock as-is on failure */
+        }
+      }
+    }
+    return rows;
+  }
 
   function normalizeProductMediaInput(media, image_urls) {
     const normalized = [];
@@ -272,6 +297,7 @@ module.exports = function registerProductRoutes(app, deps) {
       `;
 
       const { rows } = await db.query(sql, params);
+      await enrichKitAvailability(rows, outlet_id);
       res.json({ products: await decorateProductsWithCategoryPaths(rows) });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -339,6 +365,7 @@ module.exports = function registerProductRoutes(app, deps) {
         };
       });
 
+      await enrichKitAvailability(productsWithTax, outlet_id);
       res.json({ products: productsWithTax });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -383,6 +410,7 @@ module.exports = function registerProductRoutes(app, deps) {
         effectiveTaxName,
       };
 
+      await enrichKitAvailability([productWithTax], outlet_id);
       res.json({ product: productWithTax });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -444,8 +472,9 @@ module.exports = function registerProductRoutes(app, deps) {
         row.customer_group_ids = [];
       }
 
-      // Attach bundle components if this is a bundle product
-      if (row.is_bundle) {
+      // Attach components if this is a kit or assembled product (F01: assembled
+      // products carry a recipe too — the components a production run consumes).
+      if (row.is_bundle || row.bom_type === "kit" || row.bom_type === "assembled") {
         const { rows: components } = await db.query(
           `SELECT pb.id, pb.component_product_id, pb.component_variant_id, pb.quantity,
                   p.name as component_name, p.price as component_price, p.sku as component_sku,
@@ -554,6 +583,69 @@ module.exports = function registerProductRoutes(app, deps) {
       res.json({ components: rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // F01: canonical component/recipe endpoints (mirror the variant endpoints).
+  // GET returns bom_type + the rich component set (with component cost for the
+  // live plate-cost sum). PUT replaces the set through the shared engine, which
+  // rejects self-reference / nested kits / non-positive qty.
+  app.get("/api/products/:id/components", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: [prod] } = await db.query(
+        "SELECT COALESCE(bom_type, 'standard') AS bom_type FROM products WHERE id = $1",
+        [id]
+      );
+      if (!prod) return res.status(404).json({ error: "Product not found" });
+      const { rows } = await db.query(
+        `SELECT pb.id, pb.component_product_id, pb.component_variant_id, pb.quantity,
+                pb.unit, pb.is_substitutable, pb.modifier_group_id,
+                p.name AS component_name, p.sku AS component_sku, p.unit AS component_unit,
+                p.cost_price AS component_cost, p.price AS component_price,
+                pv.sku AS variant_sku,
+                COALESCE(SUM(os.quantity), 0) AS component_stock
+           FROM product_bundles pb
+           JOIN products p ON pb.component_product_id = p.id
+           LEFT JOIN product_variants pv ON pb.component_variant_id = pv.id
+           LEFT JOIN outlet_stock os ON pb.component_product_id = os.product_id
+          WHERE pb.product_id = $1
+          GROUP BY pb.id, p.name, p.sku, p.unit, p.cost_price, p.price, pv.sku
+          ORDER BY pb.component_product_id, pb.component_variant_id`,
+        [id]
+      );
+      res.json({ bom_type: prod.bom_type, components: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/products/:id/components", requirePerm("manage_inventory"), async (req, res) => {
+    const { id } = req.params;
+    const { components } = req.body || {};
+    try {
+      await db.transaction(async (client) => {
+        const { rows: [prod] } = await client.query(
+          "SELECT COALESCE(bom_type, 'standard') AS bom_type FROM products WHERE id = $1 FOR UPDATE",
+          [id]
+        );
+        if (!prod) {
+          throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+        }
+        if (prod.bom_type === "standard") {
+          throw Object.assign(
+            new Error("Set the product type to kit or assembled before editing its recipe/components"),
+            { statusCode: 400, code: "not_a_kit" }
+          );
+        }
+        await kitEngine.replaceComponents(client, {
+          parentProductId: Number(id),
+          components: components || [],
+        });
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 
@@ -744,14 +836,22 @@ module.exports = function registerProductRoutes(app, deps) {
           }
         }
 
-        // 1a. If it's a bundle, insert component rows
-        if (is_bundle && Array.isArray(bundle_components) && bundle_components.length > 0) {
-          for (const comp of bundle_components) {
-            await client.query(
-              `INSERT INTO product_bundles (product_id, component_product_id, component_variant_id, quantity)
-               VALUES ($1, $2, $3, $4)`,
-              [newProductId, comp.product_id, comp.variant_id || null, comp.quantity || 1]
-            );
+        // 1a. F01: resolve consumption mode + write components through the shared
+        // kit-engine (validates: no self-ref, no nested kits, qty > 0). is_bundle
+        // stays synced as the legacy mirror (is_bundle = bom_type='kit').
+        const resolvedBomType = ["standard", "kit", "assembled"].includes(req.body.bom_type)
+          ? req.body.bom_type
+          : (is_bundle ? "kit" : "standard");
+        if (resolvedBomType !== "standard") {
+          await client.query(
+            "UPDATE products SET bom_type = $1, is_bundle = $2 WHERE id = $3",
+            [resolvedBomType, resolvedBomType === "kit", newProductId]
+          );
+          if (Array.isArray(bundle_components) && bundle_components.length > 0) {
+            await kitEngine.replaceComponents(client, {
+              parentProductId: newProductId,
+              components: bundle_components,
+            });
           }
         }
 
@@ -809,7 +909,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      // Honor validation errors thrown by the kit-engine (nested kits, cycles).
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 
@@ -1098,6 +1199,22 @@ module.exports = function registerProductRoutes(app, deps) {
           updateParams.push(visibility === "restricted" ? "restricted" : "all");
           nextParam++;
         }
+        // F01: bom_type + is_bundle sync. Patch only when the caller sends
+        // bom_type or is_bundle so a partial update never clobbers the type.
+        if (
+          Object.prototype.hasOwnProperty.call(req.body || {}, "bom_type") ||
+          Object.prototype.hasOwnProperty.call(req.body || {}, "is_bundle")
+        ) {
+          const resolvedBomType = ["standard", "kit", "assembled"].includes(req.body.bom_type)
+            ? req.body.bom_type
+            : (req.body.is_bundle ? "kit" : "standard");
+          updateFields.push(`bom_type = $${nextParam}`);
+          updateParams.push(resolvedBomType);
+          nextParam++;
+          updateFields.push(`is_bundle = $${nextParam}`);
+          updateParams.push(resolvedBomType === "kit");
+          nextParam++;
+        }
         updateParams.push(id);
         const idParam = `$${nextParam}`;
 
@@ -1163,16 +1280,13 @@ module.exports = function registerProductRoutes(app, deps) {
           }
         }
 
-        // 3. Update bundle components if provided (delete + re-insert)
+        // 3. F01: replace components through the shared engine (validates
+        // self-ref / nested kits / qty) when the caller sends bundle_components.
         if (Array.isArray(bundle_components)) {
-          await client.query("DELETE FROM product_bundles WHERE product_id = $1", [id]);
-          for (const comp of bundle_components) {
-            await client.query(
-              `INSERT INTO product_bundles (product_id, component_product_id, component_variant_id, quantity)
-               VALUES ($1, $2, $3, $4)`,
-              [id, comp.product_id, comp.variant_id || null, comp.quantity || 1]
-            );
-          }
+          await kitEngine.replaceComponents(client, {
+            parentProductId: Number(id),
+            components: bundle_components,
+          });
         }
 
         // Log price/cost changes to action_history if either changed
@@ -1208,7 +1322,8 @@ module.exports = function registerProductRoutes(app, deps) {
       if (err.statusCode === 404) {
         return res.status(404).json({ error: err.message });
       }
-      res.status(500).json({ error: err.message });
+      // Honor kit-engine validation errors (nested kits, cycles, bad qty).
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 

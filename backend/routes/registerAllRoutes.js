@@ -489,6 +489,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- INVENTORY TRANSFERS & ADJUSTMENTS ---
   require("./inventory")(app, deps);
 
+  // --- F01: PRODUCTION / DISASSEMBLY RUNS (kit/BOM engine) ---
+  require("./stock-conversions")(app, deps);
+
   // --- REPORTS ---
   const { processPendingReportSchedules } =
     require("./reports/index")(app, deps) || {};

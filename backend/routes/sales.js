@@ -4,6 +4,7 @@ const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const { verifyManagerPin } = require("../services/manager-pin");
+const kitEngine = require("../services/kit-engine");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -361,31 +362,21 @@ module.exports = function registerSalesRoutes(app, deps) {
             // matching sale_items.quantity — restore with full fractional precision.
             const restoreQtyInt = Number(item.quantity);
 
-            // Check if this item is a bundle — restore component stock instead
+            // F01: if this line is a kit, restore COMPONENT stock (not the kit's,
+            // which holds none). Server-authoritative via bom_type; the engine
+            // keeps outlet_stock + variant_outlet_stock + the variant rollup in
+            // sync, mirroring the sale-time decrement.
             const { rows: [prod] } = await client.query(
-              "SELECT is_bundle FROM products WHERE id = $1",
+              "SELECT COALESCE(bom_type, 'standard') AS bom_type FROM products WHERE id = $1",
               [item.product_id]
             );
 
-            if (prod && prod.is_bundle) {
-              const { rows: comps } = await client.query(
-                "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
-                [item.product_id]
-              );
-              for (const comp of comps) {
-                const restoreQty = comp.quantity * restoreQtyInt;
-                await client.query(
-                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
-                   ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-                  [comp.component_product_id, sale.outlet_id, restoreQty, restoreQty]
-                );
-                if (comp.component_variant_id) {
-                  await client.query(
-                    `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
-                    [restoreQty, comp.component_variant_id]
-                  );
-                }
-              }
+            if (prod && prod.bom_type === "kit") {
+              await kitEngine.restockComponents(client, {
+                productId: item.product_id,
+                outletId: sale.outlet_id,
+                qty: restoreQtyInt,
+              });
             } else {
               await client.query(
                 `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
@@ -1231,64 +1222,32 @@ module.exports = function registerSalesRoutes(app, deps) {
       const saleId = await db.transaction(async (client) => {
         // Lock and check stock for each item (FOR UPDATE prevents TOCTOU race)
         // Pre-fetch bundle components for any bundle items
-        const bundleComponentsMap = new Map();
-        for (const item of cartItems) {
-          if (item.is_bundle) {
-            const productId = item.original_product_id || item.id;
-            const { rows: comps } = await client.query(
-              "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
-              [productId]
-            );
-            bundleComponentsMap.set(productId, comps);
-          }
-        }
+        // F01: resolve each line's consumption mode from the DB
+        // (server-authoritative — never trust client-sent item.is_bundle). Kits
+        // expand to components via the shared kit-engine; 'assembled'/'standard'
+        // decrement their own stock. Component locking is stable-ordered inside
+        // the engine so concurrent sales of overlapping kits can't deadlock.
+        const kitMap = await kitEngine.loadKitMap(
+          client,
+          cartItems.map((it) => Number(it.original_product_id || it.id))
+        );
+        const kitInfoFor = (item) =>
+          kitMap.get(Number(item.original_product_id || item.id));
+        const isKit = (item) => kitInfoFor(item)?.bomType === "kit";
+        // Locked component decrements per cart line, reused in the deduct pass so
+        // every row is locked+checked before any write.
+        const kitDecrementsByIndex = {};
 
-        for (const item of cartItems) {
-          if (item.is_bundle) {
-            // For bundles: lock and check each component's stock
+        for (let ci = 0; ci < cartItems.length; ci++) {
+          const item = cartItems[ci];
+          if (isKit(item)) {
             const productId = item.original_product_id || item.id;
-            const comps = bundleComponentsMap.get(productId) || [];
-            for (const comp of comps) {
-              const neededQty = comp.quantity * item.quantity;
-              if (comp.component_variant_id) {
-                const { rows: [row] } = await client.query(
-                  `SELECT COALESCE(stock, 0) AS available
-                   FROM product_variants WHERE id = $1 FOR UPDATE`,
-                  [comp.component_variant_id]
-                );
-                if (!row || row.available < neededQty) {
-                  throw Object.assign(
-                    new Error(`Insufficient stock for bundle component variant ${comp.component_variant_id}`),
-                    {
-                      statusCode: 400,
-                      code: "insufficient_stock",
-                      variant_id: comp.component_variant_id,
-                      product_id: comp.component_product_id || null,
-                      available: Number(row?.available ?? 0),
-                      requested: neededQty,
-                    }
-                  );
-                }
-              } else {
-                const { rows: [row] } = await client.query(
-                  `SELECT COALESCE(quantity, 0) AS available
-                   FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
-                  [comp.component_product_id, outlet_id]
-                );
-                if (!row || row.available < neededQty) {
-                  throw Object.assign(
-                    new Error(`Insufficient stock for bundle component ${comp.component_product_id}`),
-                    {
-                      statusCode: 400,
-                      code: "insufficient_stock",
-                      product_id: comp.component_product_id,
-                      available: Number(row?.available ?? 0),
-                      requested: neededQty,
-                    }
-                  );
-                }
-              }
-            }
+            kitDecrementsByIndex[ci] = await kitEngine.reserveComponents(client, {
+              productId,
+              outletId: outlet_id,
+              saleQty: item.quantity,
+              components: kitInfoFor(item).components,
+            });
           } else {
             const variantId = item.variant_id || null;
             if (variantId) {
@@ -1500,23 +1459,12 @@ module.exports = function registerSalesRoutes(app, deps) {
           // no rounding. Weighted sales (e.g. 1.25 kg) deduct 1.25 from stock.
           const stockDeductQty = Number(item.quantity);
 
-          if (item.is_bundle) {
-            // Deduct stock from each component product, not the bundle itself
-            const productId = item.original_product_id || item.id;
-            const comps = bundleComponentsMap.get(productId) || [];
-            for (const comp of comps) {
-              const deductQty = comp.quantity * stockDeductQty;
-              if (comp.component_variant_id) {
-                await client.query(
-                  "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
-                  [deductQty, comp.component_variant_id]
-                );
-              }
-              await client.query(
-                "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-                [deductQty, comp.component_product_id, outlet_id]
-              );
-            }
+          if (isKit(item)) {
+            // Deduct the components locked + verified in the check pass above.
+            await kitEngine.decrementComponents(client, {
+              outletId: outlet_id,
+              decrements: kitDecrementsByIndex[cartIdx] || [],
+            });
           } else if (item.variant_id) {
             // 2-G.1: deduct per-variant outlet stock (upsert creates the row
             // if this variant hasn't been stocked at this outlet yet).

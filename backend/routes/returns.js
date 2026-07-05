@@ -2,6 +2,7 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 const { validate } = require("../middleware/validate");
 const { CreateReturnSchema } = require("../schemas/returns");
+const kitEngine = require("../services/kit-engine");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { verifyManagerPin } = require("../services/manager-pin");
 const { recordApprovalEvent } = require("../services/approval-policy");
@@ -466,29 +467,39 @@ module.exports = function registerReturnsRoutes(app, deps) {
           // units fall through to shrinkage (captured separately in the
           // returns-by-reason report + inventory/shrinkage variance).
           if (effectiveRestock) {
-            // Restock outlet_stock
-            await client.query(
-              `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-              [item.product_id, outlet_id, item.quantity, item.quantity],
-            );
-            // Restock variant stock if applicable.
-            // 2-G.1: also restock per-variant outlet stock. Keeping the legacy
-            // product_variants.stock column in sync preserves reads that aren't
-            // outlet-aware (reports, barcode scans with no outlet context).
-            if (item.variant_id) {
+            // F01: returning a kit restocks its COMPONENTS (the kit holds no
+            // stock of its own), mirroring the sale-time component decrement.
+            if ((await kitEngine.getBomType(client, item.product_id)) === "kit") {
+              await kitEngine.restockComponents(client, {
+                productId: item.product_id,
+                outletId: outlet_id,
+                qty: Number(item.quantity),
+              });
+            } else {
+              // Restock outlet_stock
               await client.query(
-                "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
-                [item.quantity, item.variant_id],
+                `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+                [item.product_id, outlet_id, item.quantity, item.quantity],
               );
-              await client.query(
-                `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (variant_id, outlet_id)
-                   DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
-                [item.variant_id, outlet_id, item.quantity],
-              );
+              // Restock variant stock if applicable.
+              // 2-G.1: also restock per-variant outlet stock. Keeping the legacy
+              // product_variants.stock column in sync preserves reads that aren't
+              // outlet-aware (reports, barcode scans with no outlet context).
+              if (item.variant_id) {
+                await client.query(
+                  "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
+                  [item.quantity, item.variant_id],
+                );
+                await client.query(
+                  `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (variant_id, outlet_id)
+                     DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
+                  [item.variant_id, outlet_id, item.quantity],
+                );
+              }
             }
           }
 

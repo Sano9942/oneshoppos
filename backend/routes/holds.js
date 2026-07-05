@@ -15,6 +15,7 @@
 //   GET  /api/holds/expiring?days=7      → dashboard widget feed
 const { validate } = require("../middleware/validate");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
+const kitEngine = require("../services/kit-engine");
 const {
   CreateHoldSchema,
   AddPaymentSchema,
@@ -406,6 +407,17 @@ module.exports = function registerHoldRoutes(app, deps) {
           [`hold:${holdId}:%`],
         );
         for (const hi of heldItems) {
+          // F01: a held kit decrements its COMPONENTS at settle (the kit holds no
+          // stock of its own). The engine locks components in stable order and
+          // throws insufficient_stock if a component sold out during the layaway.
+          if ((await kitEngine.getBomType(client, hi.product_id)) === "kit") {
+            await kitEngine.reserveAndDecrement(client, {
+              productId: hi.product_id,
+              outletId: hold.outlet_id,
+              saleQty: Number(hi.quantity),
+            });
+            continue;
+          }
           if (hi.variant_id) {
             await client.query(
               `UPDATE product_variants SET stock = GREATEST(0, COALESCE(stock,0) - $1)
