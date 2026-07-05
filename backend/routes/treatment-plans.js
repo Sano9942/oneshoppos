@@ -149,8 +149,13 @@ module.exports = function registerTreatmentPlanRoutes(app, deps) {
 
   app.post("/api/treatment-plans/:id/discontinue", ...gate, validate(planStatusTransitionSchema), async (req, res) => {
     try {
-      const row = await tp.transitionPlanStatus(deps.db, Number(req.params.id), "discontinued", req.employee?.id, req.body?.reason);
+      const id = Number(req.params.id);
+      const row = await tp.transitionPlanStatus(deps.db, id, "discontinued", req.employee?.id, req.body?.reason);
       if (!row) return res.status(404).json({ error: "Plan not found" });
+      // F04: a discontinued plan must not keep the patient's deposit frozen —
+      // release any authorized hold (no-op if none). Non-fatal.
+      try { await deposits.captureDepositOnSettle(deps.db, id, { capture: false }); }
+      catch (depErr) { console.warn("[treatment/discontinue] deposit release failed:", depErr.message); }
       res.json(row);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });

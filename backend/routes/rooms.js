@@ -244,16 +244,25 @@ module.exports = function registerRoomRoutes(app, deps) {
 
   app.post("/api/room-bookings/:id/cancel", ...gate, validate(cancelBookingSchema), async (req, res) => {
     try {
-      const booking = await rooms.cancelBooking(deps.db, Number(req.params.id), req.body);
+      const id = Number(req.params.id);
+      const booking = await rooms.cancelBooking(deps.db, id, req.body);
       if (!booking) return res.status(404).json({ error: "Booking not found" });
+      // F04: a cancelled booking must not keep the guest's deposit frozen —
+      // release any authorized hold (no-op if none). Non-fatal.
+      try { await deposits.captureDepositOnCheckout(deps.db, id, { capture: false }); }
+      catch (depErr) { console.warn("[rooms/cancel] deposit release failed:", depErr.message); }
       res.json(booking);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 
   app.post("/api/room-bookings/:id/noshow", ...gate, async (req, res) => {
     try {
-      const booking = await rooms.markNoShow(deps.db, Number(req.params.id));
+      const id = Number(req.params.id);
+      const booking = await rooms.markNoShow(deps.db, id);
       if (!booking) return res.status(404).json({ error: "Booking not found" });
+      // F04: no stay → no damage → release the security-deposit hold. Non-fatal.
+      try { await deposits.captureDepositOnCheckout(deps.db, id, { capture: false }); }
+      catch (depErr) { console.warn("[rooms/noshow] deposit release failed:", depErr.message); }
       res.json(booking);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });

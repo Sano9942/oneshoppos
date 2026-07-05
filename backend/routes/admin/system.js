@@ -37,6 +37,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     reservation_reminder: "reservation-reminder-check",
     abc: "abc-daily",
     hold_expiry: "hold-expiry-sweep",
+    deposit_hold_expiry: "deposit-hold-expiry-sweep",
     anomaly: "anomaly-daily",
     retail_digest: "retail-weekly-digest",
     shift_auto_close: "shift-auto-close",
@@ -67,6 +68,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const abcStatus = global.__abcWorkerStatus || null;
       // 2-G.9 Holds — hourly expiry sweep.
       const holdExpiryStatus = global.__holdExpiryWorkerStatus || null;
+      // F04 — hourly release of lapsed gateway deposit holds.
+      const depositHoldExpiryStatus = global.__depositHoldExpiryWorkerStatus || null;
       // 2-G.17 Anti-theft — nightly anomaly scan at 02:30 UTC.
       const anomalyStatus = global.__anomalyWorkerStatus || null;
       // 2-G.16 Merchant home — weekly digest email (Monday 08:00 UTC).
@@ -136,6 +139,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         reservation_reminder: workerInfo("reservation_reminder", reservationReminderStatus, 15 * 60_000),
         abc: workerInfo("abc", abcStatus, 24 * 60 * 60 * 1000),
         hold_expiry: workerInfo("hold_expiry", holdExpiryStatus, 60 * 60 * 1000),
+        deposit_hold_expiry: workerInfo("deposit_hold_expiry", depositHoldExpiryStatus, 60 * 60 * 1000),
         anomaly: workerInfo("anomaly", anomalyStatus, 24 * 60 * 60 * 1000),
         retail_digest: workerInfo("retail_digest", retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
         shift_auto_close: workerInfo("shift_auto_close", shiftAutoCloseStatus, 60 * 60 * 1000),
