@@ -235,8 +235,21 @@ module.exports = function registerBookingRoutes(app, deps) {
     }
   });
 
+  const APPOINTMENT_STATUSES = ["pending", "confirmed", "in_progress", "completed", "no_show", "cancelled"];
+
   app.put("/api/appointments/:id", ...gate, async (req, res) => {
     try {
+      if (req.body.status !== undefined && !APPOINTMENT_STATUSES.includes(req.body.status)) {
+        return res.status(400).json({ error: `status must be one of: ${APPOINTMENT_STATUSES.join(", ")}` });
+      }
+      // Cancels must go through the ONE cancel path so the waitlist ripple,
+      // cancelled_at, and cancellation bookkeeping all fire ([[F06 harden]]:
+      // every cancel call site routes through cancelAppointment).
+      if (req.body.status === "cancelled") {
+        const appt = await cancelAppointment(deps.db, Number(req.params.id), req.body.notes || null, { notifyCtx: notifyCtxFrom(req) });
+        return res.json(appt);
+      }
+
       const sets = []; const params = []; let idx = 0;
       for (const [key, val] of Object.entries(req.body)) {
         if (val !== undefined && ["status", "notes", "employee_id"].includes(key)) {
@@ -250,6 +263,15 @@ module.exports = function registerBookingRoutes(app, deps) {
         `UPDATE appointments SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`, params
       );
       if (!appt) return res.status(404).json({ error: "Appointment not found" });
+
+      // A pre-start no-show frees the slot (overlap checks + EXCLUDE ignore
+      // no_show) — same waitlist ripple duty as a cancel. Fire-and-forget.
+      if (req.body.status === "no_show" && new Date(appt.start_at) > new Date()) {
+        try {
+          const { offerForFreedAppointmentSlot } = require("../services/waitlist");
+          offerForFreedAppointmentSlot(deps.db, appt, notifyCtxFrom(req)).catch(() => {});
+        } catch { /* waitlist module optional */ }
+      }
       res.json(appt);
     } catch (err) {
       // employee_id reassignment never ran checkOverlap — the v100 EXCLUDE

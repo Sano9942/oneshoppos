@@ -2059,27 +2059,16 @@ module.exports = function registerSalesRoutes(app, deps) {
             });
         }
 
-        // Auto-calculate commissions (fire-and-forget, don't block sale response)
+        // Auto-calculate commissions (fire-and-forget, don't block sale
+        // response). F06 fix: the shared per-line engine attributes each
+        // sale line to its staff_id (stylist/provider) and falls back to
+        // the cashier — the old inline INSERT credited the cashier with
+        // the whole sale, so salon color+cut commissions went to whoever
+        // rang up the sale instead of the stylists on the lines.
         if (authenticatedEmployeeId) {
-          db.query(
-            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
-             SELECT $1, $2, cpr.plan_id, cpr.id, $3,
-               CASE cp.type
-                 WHEN 'percentage' THEN LEAST($3 * cpr.rate / 100, COALESCE(cpr.max_cap, $3 * cpr.rate / 100))
-                 WHEN 'fixed_per_sale' THEN LEAST(cpr.rate, COALESCE(cpr.max_cap, cpr.rate))
-                 ELSE 0
-               END
-             FROM employees e
-             JOIN commission_plans cp ON cp.id = e.commission_plan_id
-             JOIN commission_plan_rules cpr ON cpr.plan_id = cp.id
-             WHERE e.id = $1 AND e.commission_plan_id IS NOT NULL AND cp.is_active = TRUE
-               AND (cp.starts_at IS NULL OR cp.starts_at <= NOW())
-               AND (cp.ends_at IS NULL OR cp.ends_at >= NOW())
-               AND $3 >= cpr.min_threshold
-             ORDER BY cpr.priority DESC
-             LIMIT 1`,
-            [authenticatedEmployeeId, saleId, totalAmount]
-          ).catch(err => console.error("[commission] auto-calc error:", err.message));
+          const { calculateCommissionsForSale } = require("../services/commission-calc");
+          calculateCommissionsForSale(db, saleId)
+            .catch(err => console.error("[commission] auto-calc error:", err.message));
         }
 
         res.json({

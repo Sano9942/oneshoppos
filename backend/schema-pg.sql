@@ -2379,7 +2379,9 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
   ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility'),
   ('customer_notifications', false, 'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules'),
-  ('phase4_appointments_resources', false, 'F06 — bookable resources (chairs/beds/bays) required alongside staff availability')
+  ('phase4_appointments_resources', false, 'F06 — bookable resources (chairs/beds/bays) required alongside staff availability'),
+  ('phase4_appointments_classes', false, 'F06 — group class sessions: timetable, capacity, member booking'),
+  ('phase4_appointments_waitlists', false, 'F06 — waitlists for full classes/slots with offer + claim flow')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)

@@ -137,7 +137,9 @@ async function cancelClassBooking(db, bookingId, options = {}) {
     return updated;
   });
 
-  if (options.notifyCtx && options.notifyCtx.tenantSlug) {
+  // Offer fires even without a tenantSlug (single-tenant mode) — only the
+  // notification sub-step needs the slug, and it gates itself.
+  if (options.notifyCtx) {
     try {
       const { offerNextForClassSession } = require("./waitlist");
       offerNextForClassSession(db, booking.class_session_id, options.notifyCtx).catch(() => {});
@@ -146,17 +148,46 @@ async function cancelClassBooking(db, bookingId, options = {}) {
   return booking;
 }
 
-/** Roster status flip (no capacity effect): confirmed ↔ no_show. */
+/**
+ * Roster status flip: confirmed ↔ no_show.
+ * Re-confirming a no-show RE-TAKES a capacity spot (a waitlist claim may
+ * have refilled it in the meantime), so the confirmed direction runs the
+ * same locked capacity check as bookIntoSession. no_show frees a spot —
+ * the caller (routes/classes.js) fires the waitlist ripple.
+ */
 async function setClassBookingStatus(db, bookingId, status) {
   if (!["confirmed", "no_show"].includes(status)) {
     throw httpError("status must be 'confirmed' or 'no_show'", 400);
   }
-  const { rows: [b] } = await db.query(
-    `UPDATE class_session_bookings SET status = $2 WHERE id = $1 AND status <> 'cancelled' RETURNING *`,
-    [Number(bookingId), status]
-  );
-  if (!b) throw httpError("Class booking not found (or cancelled)", 404);
-  return b;
+  return db.transaction(async (client) => {
+    const { rows: [b] } = await client.query(
+      "SELECT * FROM class_session_bookings WHERE id = $1 FOR UPDATE",
+      [Number(bookingId)]
+    );
+    if (!b || b.status === "cancelled") throw httpError("Class booking not found (or cancelled)", 404);
+    if (b.status === status) return b;
+
+    if (status === "confirmed" && b.status !== "confirmed") {
+      const { rows: [session] } = await client.query(
+        "SELECT * FROM class_sessions WHERE id = $1 FOR UPDATE",
+        [b.class_session_id]
+      );
+      const { rows: [{ n: confirmedCount }] } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM class_session_bookings
+         WHERE class_session_id = $1 AND status = 'confirmed'`,
+        [b.class_session_id]
+      );
+      if (session && confirmedCount >= session.max_capacity) {
+        throw httpError("Class is full", 409, { code: "CLASS_FULL", capacity: session.max_capacity });
+      }
+    }
+
+    const { rows: [updated] } = await client.query(
+      "UPDATE class_session_bookings SET status = $2 WHERE id = $1 RETURNING *",
+      [b.id, status]
+    );
+    return updated;
+  });
 }
 
 /** Local day-of-week (0=Sun..6=Sat) of a UTC instant in an IANA timezone. */

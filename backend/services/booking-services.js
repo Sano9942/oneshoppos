@@ -354,8 +354,10 @@ async function cancelAppointment(db, appointmentId, reason, options = {}) {
 
   // Waitlist ripple (F06): every cancel path funnels through here, so this is
   // the ONE place a freed slot triggers the offer flow. Fire-and-forget — the
-  // cancel must never fail because an offer couldn't be made.
-  if (options.notifyCtx && options.notifyCtx.tenantSlug) {
+  // cancel must never fail because an offer couldn't be made. The offer runs
+  // even without a tenantSlug (single-tenant mode) — only the notification
+  // sub-step needs the slug, and it gates itself.
+  if (options.notifyCtx) {
     try {
       const { offerForFreedAppointmentSlot } = require("./waitlist");
       offerForFreedAppointmentSlot(db, appt, options.notifyCtx).catch(() => {});

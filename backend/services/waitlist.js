@@ -191,6 +191,18 @@ async function offerNextForClassSession(db, classSessionId, notifyCtx, { entryId
  */
 async function offerForFreedAppointmentSlot(db, appt, notifyCtx) {
   if (!appt || !appt.service_id) return null;
+  // Multi-segment visits don't map to a single-service waitlist entry: the
+  // parent's employee_id is NULL, so a claim would create a staff-less
+  // appointment that blocks nobody's calendar (ghost booking). Skip the
+  // ripple for segmented appointments. (expireEntry passes a synthetic slot
+  // snapshot without an id — those are always single-service, so they pass.)
+  if (appt.id) {
+    const { rows: [seg] } = await db.query(
+      "SELECT 1 FROM appointment_segments WHERE appointment_id = $1 LIMIT 1",
+      [appt.id]
+    );
+    if (seg) return null;
+  }
   const result = await db.transaction(async (client) => {
     const { rows: [entry] } = await client.query(
       `UPDATE appointment_waitlist_entries SET

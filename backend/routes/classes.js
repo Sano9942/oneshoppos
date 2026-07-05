@@ -186,7 +186,15 @@ module.exports = function registerClassRoutes(app, deps) {
 
   app.post("/api/classes/bookings/:id/no-show", ...gate, async (req, res) => {
     try {
-      res.json(await classBookings.setClassBookingStatus(deps.db, Number(req.params.id), "no_show"));
+      const booking = await classBookings.setClassBookingStatus(deps.db, Number(req.params.id), "no_show");
+      // A no-show frees a capacity spot — same waitlist ripple duty as a
+      // cancel (offerNext refuses started sessions, so post-start no-shows
+      // are a safe no-op). Fire-and-forget.
+      try {
+        const { offerNextForClassSession } = require("../services/waitlist");
+        offerNextForClassSession(deps.db, booking.class_session_id, notifyCtxFrom(req)).catch(() => {});
+      } catch { /* waitlist module optional */ }
+      res.json(booking);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

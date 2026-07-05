@@ -620,4 +620,165 @@ describe("F06 — scheduling engine (Postgres)", () => {
       expect(appt.status).toBe("in_progress");
     }, 15000);
   });
+
+  // ─── Verifier-found defect fixes ────────────────────────────────────────
+
+  describe("verifier fixes", () => {
+    it("commission auto-calc attributes per-line staff_id, not the cashier", async () => {
+      // 10% percentage plan for the two stylists; the cashier (emp 1) has none.
+      const { rows: [plan] } = await db.query(
+        "INSERT INTO commission_plans (name, type) VALUES ('Stylist 10%', 'percentage') RETURNING id"
+      );
+      await db.query(
+        "INSERT INTO commission_plan_rules (plan_id, scope_type, rate) VALUES ($1, 'all', 10)",
+        [plan.id]
+      );
+      await db.query("UPDATE employees SET commission_plan_id = $1 WHERE id IN (2, 3)", [plan.id]);
+
+      const res = await request(app)
+        .post("/api/sales")
+        .set("x-employee-id", "1")
+        .set("x-outlet-id", "1")
+        .send({
+          outlet_id: 1,
+          employee_id: 1,
+          cartItems: [
+            { id: 1, name: "Cut", price: 100, quantity: 1, staff_id: 2 },
+            { id: 2, name: "Color", price: 200, quantity: 1, staff_id: 3 },
+          ],
+          payments: [{ method: "cash", amount: 300 }],
+          idempotency_key: "f06-comm-" + Date.now(),
+        });
+      expect(res.status).toBe(200);
+      const saleId = res.body.saleId;
+
+      // Auto-calc is fire-and-forget post-commit — poll for both rows.
+      const earnings = await pollFor(async () => {
+        const { rows } = await db.query(
+          "SELECT * FROM commission_earnings WHERE sale_id = $1 ORDER BY employee_id",
+          [saleId]
+        );
+        return rows.length >= 2 ? rows : null;
+      });
+      expect(earnings).toBeTruthy();
+      expect(earnings.map((e) => e.employee_id)).toEqual([2, 3]);
+      expect(Number(earnings[0].sale_amount)).toBeCloseTo(100, 2);
+      expect(Number(earnings[0].commission_amount)).toBeCloseTo(10, 2);
+      expect(Number(earnings[1].sale_amount)).toBeCloseTo(200, 2);
+      expect(Number(earnings[1].commission_amount)).toBeCloseTo(20, 2);
+      // The cashier earned nothing — attribution followed the lines.
+      expect(earnings.some((e) => e.employee_id === 1)).toBe(false);
+    }, 15000);
+
+    it("PUT /api/appointments/:id rejects unknown statuses (400)", async () => {
+      const { createAppointment } = require("../../services/booking-services");
+      const service = await makeService("Whitelist Check", 30);
+      const appt = await createAppointment(db, {
+        service_id: service.id, start_at: hoursFromNow(240).toISOString(), customer_name: "W",
+      }, "admin");
+      const res = await request(app)
+        .put(`/api/appointments/${appt.id}`)
+        .set("x-employee-id", "1")
+        .send({ status: "bogus" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT status=cancelled routes through cancelAppointment (bookkeeping + ripple)", async () => {
+      const { createAppointment } = require("../../services/booking-services");
+      const { joinAppointmentWaitlist } = require("../../services/waitlist");
+      const service = await makeService("Put Cancel", 30);
+      const startAt = hoursFromNow(250).toISOString();
+      const appt = await createAppointment(db, {
+        service_id: service.id, employee_id: 2, start_at: startAt, customer_name: "PC",
+      }, "admin");
+      const waiter = await makeCustomer("Put Cancel Waiter", "0300-0000040");
+      await joinAppointmentWaitlist(db, { serviceId: service.id, customerId: waiter });
+
+      const res = await request(app)
+        .put(`/api/appointments/${appt.id}`)
+        .set("x-employee-id", "1")
+        .send({ status: "cancelled" });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("cancelled");
+      expect(res.body.cancelled_at).toBeTruthy();
+
+      const offered = await pollFor(async () => {
+        const { rows: [e] } = await db.query(
+          "SELECT * FROM appointment_waitlist_entries WHERE service_id = $1 AND customer_id = $2 AND status = 'offered'",
+          [service.id, waiter]
+        );
+        return e || null;
+      });
+      expect(offered).toBeTruthy();
+    }, 15000);
+
+    it("pre-start appointment no-show frees the slot and ripples an offer", async () => {
+      const { createAppointment } = require("../../services/booking-services");
+      const { joinAppointmentWaitlist } = require("../../services/waitlist");
+      const service = await makeService("NoShow Ripple", 30);
+      const appt = await createAppointment(db, {
+        service_id: service.id, employee_id: 3, start_at: hoursFromNow(260).toISOString(), customer_name: "NS",
+      }, "admin");
+      const waiter = await makeCustomer("NoShow Waiter", "0300-0000041");
+      await joinAppointmentWaitlist(db, { serviceId: service.id, customerId: waiter });
+
+      const res = await request(app)
+        .put(`/api/appointments/${appt.id}`)
+        .set("x-employee-id", "1")
+        .send({ status: "no_show" });
+      expect(res.status).toBe(200);
+
+      const offered = await pollFor(async () => {
+        const { rows: [e] } = await db.query(
+          "SELECT * FROM appointment_waitlist_entries WHERE service_id = $1 AND customer_id = $2 AND status = 'offered'",
+          [service.id, waiter]
+        );
+        return e || null;
+      });
+      expect(offered).toBeTruthy();
+    }, 15000);
+
+    it("re-confirming a no-show cannot exceed class capacity (409 CLASS_FULL)", async () => {
+      const { createClassSession, bookIntoSession, setClassBookingStatus } = require("../../services/class-bookings");
+      const service = await makeService("Reconfirm Cap", 60);
+      const { session } = await createClassSession(db, {
+        service_id: service.id,
+        start_at: hoursFromNow(270).toISOString(),
+        end_at: hoursFromNow(271).toISOString(),
+        max_capacity: 1,
+      });
+      const cA = await makeCustomer("Reconfirm A", "0300-0000042");
+      const cB = await makeCustomer("Reconfirm B", "0300-0000043");
+      const { booking: bookingA } = await bookIntoSession(db, { classSessionId: session.id, customerId: cA });
+      await setClassBookingStatus(db, bookingA.id, "no_show");
+      await bookIntoSession(db, { classSessionId: session.id, customerId: cB }); // refills the spot
+
+      await expect(setClassBookingStatus(db, bookingA.id, "confirmed"))
+        .rejects.toMatchObject({ statusCode: 409, code: "CLASS_FULL" });
+    });
+
+    it("cancelling a multi-segment appointment does NOT offer the slot (no ghost claim)", async () => {
+      const { createAppointment, cancelAppointment } = require("../../services/booking-services");
+      const { joinAppointmentWaitlist } = require("../../services/waitlist");
+      const svcA = await makeService("Ghost Cut", 30);
+      const svcB = await makeService("Ghost Color", 45);
+      const appt = await createAppointment(db, {
+        service_id: svcA.id, employee_id: 2, start_at: hoursFromNow(280).toISOString(),
+        customer_name: "Ghost",
+        segments: [{ service_id: svcB.id, employee_id: 3 }],
+      }, "admin");
+      const waiter = await makeCustomer("Ghost Waiter", "0300-0000044");
+      await joinAppointmentWaitlist(db, { serviceId: svcA.id, customerId: waiter });
+
+      await cancelAppointment(db, appt.id, "ghost test", { notifyCtx: { tenantSlug: "test-tenant" } });
+
+      // Negative poll: give the fire-and-forget ripple time to (not) fire.
+      await new Promise((r) => setTimeout(r, 1200));
+      const { rows: [entry] } = await db.query(
+        "SELECT status FROM appointment_waitlist_entries WHERE service_id = $1 AND customer_id = $2",
+        [svcA.id, waiter]
+      );
+      expect(entry.status).toBe("waiting");
+    }, 15000);
+  });
 });
