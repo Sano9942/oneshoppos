@@ -430,6 +430,33 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     expect(Number(after)).toBeGreaterThan(Number(before));
   });
 
+  // ── P1: textile rolls (manual batch pick, decimal length) ──────────────
+  it("POS sale of a partial roll decrements the CHOSEN roll (manual batch pick); invariant holds", async () => {
+    const pid = await makeTrackedProduct("Lawn Fabric");
+    const roll1 = await seedBatch(pid, 1, { batchNumber: "ROLL-1", expiry: null, qty: 25, unitCost: 30, lotType: "roll" });
+    const roll2 = await seedBatch(pid, 1, { batchNumber: "ROLL-2", expiry: null, qty: 18, unitCost: 30, lotType: "roll" });
+    // Cashier cuts 3.5 m off ROLL-2 specifically (not FEFO — manual pick).
+    const res = await sale([{ id: pid, name: "Lawn Fabric", price: 200, quantity: 3.5, cost_price: 30, batch_id: roll2 }]);
+    expect(res.status).toBe(200);
+    const bs = await batches(pid, 1);
+    expect(Number(bs.find((b) => b.id === roll1).remaining_qty)).toBe(25);   // untouched
+    expect(Number(bs.find((b) => b.id === roll2).remaining_qty)).toBe(14.5); // 18 - 3.5 (remnant)
+    await assertInvariant(pid, 1);
+  });
+
+  it("GET /api/batches/cost-flow reports actual batch COGS for tracked products", async () => {
+    const pid = await makeTrackedProduct("CostFlow Milk");
+    await seedBatch(pid, 1, { batchNumber: "CF1", expiry: "2026-07-28", qty: 10, unitCost: 42 });
+    await sale([{ id: pid, name: "CostFlow Milk", price: 100, quantity: 4, cost_price: 40 }]);
+    const res = await request(app).get("/api/batches/cost-flow").set("x-employee-id", "1");
+    expect(res.status).toBe(200);
+    const row = res.body.rows.find((r) => r.product_id === pid);
+    expect(row).toBeTruthy();
+    expect(row.qty_consumed).toBe(4);
+    expect(row.actual_cogs).toBe(168); // 4 × 42 (actual batch cost, not the 40 product cost)
+    expect(row.avg_actual_unit_cost).toBe(42);
+  });
+
   // ── final drift check ─────────────────────────────────────────────────
   it("drift-check report is clean after the whole walkthrough", async () => {
     const drift = await batchStock.getDrift(db, {});

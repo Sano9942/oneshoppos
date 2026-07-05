@@ -105,6 +105,61 @@ module.exports = function registerBatchRoutes(app, deps) {
     }
   });
 
+  // ── FEFO cost-flow report (P1) ─────────────────────────────────────────
+  // Per tracked product: ACTUAL cost of goods consumed from the batch ledger
+  // (Σ consumed_qty × batch.unit_cost via batch_movements) vs the product-level
+  // `cost_price`. Report-only — surfaces true batch COGS for margin analysis;
+  // no accounting change. Optional from/to on the movement date.
+  app.get("/api/batches/cost-flow", VIEW, FLAG, async (req, res) => {
+    try {
+      const params = [];
+      const where = [
+        "bm.movement_type = 'sale'",
+        "sb.unit_cost IS NOT NULL",
+      ];
+      if (req.query.from) {
+        params.push(req.query.from);
+        where.push(`bm.created_at >= $${params.length}::date`);
+      }
+      if (req.query.to) {
+        params.push(req.query.to);
+        where.push(`bm.created_at < ($${params.length}::date + 1)`);
+      }
+      const { rows } = await db.query(
+        `SELECT sb.product_id, p.name AS product_name, p.cost_price AS product_cost,
+                SUM(-bm.quantity) AS qty_consumed,
+                SUM(-bm.quantity * sb.unit_cost) AS actual_cogs,
+                SUM(-bm.quantity * p.cost_price) AS standard_cogs
+           FROM batch_movements bm
+           JOIN stock_batches sb ON sb.id = bm.batch_id
+           JOIN products p ON p.id = sb.product_id
+          WHERE ${where.join(" AND ")}
+          GROUP BY sb.product_id, p.name, p.cost_price
+          ORDER BY actual_cogs DESC`,
+        params
+      );
+      res.json({
+        rows: rows.map((r) => {
+          const qty = Number(r.qty_consumed) || 0;
+          const actual = Number(r.actual_cogs) || 0;
+          const standard = Number(r.standard_cogs) || 0;
+          return {
+            product_id: Number(r.product_id),
+            product_name: r.product_name,
+            product_cost: r.product_cost != null ? Number(r.product_cost) : null,
+            qty_consumed: qty,
+            actual_cogs: Math.round(actual * 100) / 100,
+            standard_cogs: Math.round(standard * 100) / 100,
+            variance: Math.round((actual - standard) * 100) / 100,
+            avg_actual_unit_cost: qty > 0 ? Math.round((actual / qty) * 10000) / 10000 : null,
+          };
+        }),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Write off a batch (expired / damaged) ──────────────────────────────
   // Writes off `qty` (default: the whole remaining batch) as a reason-coded
   // stock adjustment: creates the stock_adjustments audit row, decrements
