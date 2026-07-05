@@ -593,12 +593,18 @@ function NewContractModal({ onClose, onSaved }) {
   );
 }
 
+const GATEWAY_DEPOSIT_TONES = {
+  none: "default", pending: "warning", authorized: "primary",
+  captured: "success", partially_captured: "success", released: "default", failed: "danger",
+};
+
 function ContractDetailModal({ id, onClose, onChanged }) {
   const { fmt } = useCurrency();
   const toast = useToast();
   const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionOpen, setActionOpen] = useState(null);
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -613,6 +619,28 @@ function ContractDetailModal({ id, onClose, onChanged }) {
   }, [id, toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Gateway deposit buttons only render when the tenant has an online payment
+  // gateway configured (billing status payment_enabled). Non-fatal.
+  useEffect(() => {
+    let alive = true;
+    api.get("/api/billing/status")
+      .then((s) => { if (alive) setPaymentEnabled(!!s?.payment_enabled); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const takeGatewayDeposit = async () => {
+    try {
+      const res = await api.post(`/api/rental-contracts/${id}/deposit/preauth`, {});
+      if (res?.checkout_url) window.open(res.checkout_url, "_blank", "noopener");
+      toast.success("Deposit checkout opened — status updates after payment");
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(err.message || "Failed to start deposit");
+    }
+  };
 
   const runAction = async (action, body = {}) => {
     try {
@@ -656,6 +684,32 @@ function ContractDetailModal({ id, onClose, onChanged }) {
         <InfoRow label="Discount" value={fmt(Number(contract.discount_amount || 0))} />
         <InfoRow label="Payment Policy" value={contract.payment_policy === "upfront" ? "Upfront" : "On Return"} />
       </div>
+
+      {/* F04: gateway security-deposit hold (separate from the manual deposit
+          above). Only shown when an online payment gateway is configured. */}
+      {paymentEnabled && (
+        <div className="mt-3 p-3 bg-(--ui-muted-surface) rounded text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <strong>Security Deposit (Gateway):</strong>
+              <Badge tone={GATEWAY_DEPOSIT_TONES[contract.deposit_status] || "default"}>
+                {(contract.deposit_status || "none").replace("_", " ")}
+              </Badge>
+              {Number(contract.deposit_authorized_amount || 0) > 0 && (
+                <span className="text-(--ui-text-muted)">
+                  held {fmt(Number(contract.deposit_authorized_amount))}
+                  {Number(contract.deposit_captured_amount || 0) > 0 &&
+                    ` · captured ${fmt(Number(contract.deposit_captured_amount))}`}
+                </span>
+              )}
+            </div>
+            {["none", "failed", null, undefined].includes(contract.deposit_status) &&
+              !["invoiced", "cancelled", "completed"].includes(contract.status) && (
+              <Button size="sm" onClick={takeGatewayDeposit}>Take Deposit</Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {contract.notes && (
         <div className="mt-3 p-3 bg-(--ui-muted-surface) rounded text-sm">
@@ -732,6 +786,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
       )}
       {actionOpen === "return" && (
         <ReturnActionModal
+          hasGatewayHold={contract.deposit_status === "authorized"}
           onClose={() => setActionOpen(null)}
           onConfirm={(body) => { setActionOpen(null); runAction("return", body); }}
         />
@@ -761,9 +816,10 @@ function CheckoutActionModal({ onClose, onConfirm }) {
   );
 }
 
-function ReturnActionModal({ onClose, onConfirm }) {
+function ReturnActionModal({ onClose, onConfirm, hasGatewayHold }) {
   const [conditionNotes, setConditionNotes] = useState("");
   const [overrideLateFee, setOverrideLateFee] = useState("");
+  const [captureAmount, setCaptureAmount] = useState("");
   return (
     <Modal title="Return" onClose={onClose} size="md" open>
       <Field label="Condition Notes">
@@ -772,11 +828,17 @@ function ReturnActionModal({ onClose, onConfirm }) {
       <Field label="Override Late Fee (leave blank for auto-calc)">
         <Input type="number" step="0.01" value={overrideLateFee} onChange={e => setOverrideLateFee(e.target.value)} />
       </Field>
+      {hasGatewayHold && (
+        <Field label="Capture from security deposit (damage/late fee — blank/0 releases the hold)">
+          <Input type="number" step="0.01" value={captureAmount} onChange={e => setCaptureAmount(e.target.value)} />
+        </Field>
+      )}
       <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button tone="primary" onClick={() => onConfirm({
           condition_notes: conditionNotes || undefined,
           late_fee: overrideLateFee === "" ? undefined : Number(overrideLateFee),
+          deposit_capture_amount: captureAmount === "" ? undefined : Number(captureAmount),
         })}>Confirm Return</Button>
       </ModalFooter>
     </Modal>
