@@ -457,6 +457,24 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     expect(row.avg_actual_unit_cost).toBe(42);
   });
 
+  // ── products API persists the opt-in (ProductForm wiring) ──────────────
+  it("POST/PUT /api/products persists track_batches + shelf_life_days", async () => {
+    const created = await request(app).post("/api/products").set("x-employee-id", "1").send({
+      name: "API Tracked Milk", price: 120, cost_price: 40,
+      track_batches: true, shelf_life_days: 5,
+    });
+    expect([200, 201]).toContain(created.status);
+    const pid = created.body.id;
+    let detail = await request(app).get(`/api/products/${pid}`).set("x-employee-id", "1");
+    expect(detail.body.product.track_batches).toBe(true);
+    expect(Number(detail.body.product.shelf_life_days)).toBe(5);
+
+    const upd = await request(app).put(`/api/products/${pid}`).set("x-employee-id", "1").send({ track_batches: false });
+    expect(upd.status).toBe(200);
+    detail = await request(app).get(`/api/products/${pid}`).set("x-employee-id", "1");
+    expect(detail.body.product.track_batches).toBe(false);
+  });
+
   // ── final drift check ─────────────────────────────────────────────────
   it("drift-check report is clean after the whole walkthrough", async () => {
     const drift = await batchStock.getDrift(db, {});
