@@ -11,25 +11,27 @@ const STATUS_TABS = [
   { key: "broadcasts", label: "Broadcasts" },
 ];
 
+// Categorical email types collapse to the near-monochrome palette; only the
+// billing-lifecycle types keep a status hue (they read as real state).
 const TYPE_COLORS = {
-  receipt: "bg-blue-100 text-blue-700",
-  digest: "bg-blue-100 text-blue-700",
-  drip_getting_started: "bg-violet-100 text-violet-700",
-  drip_features: "bg-violet-100 text-violet-700",
-  billing_payment_recorded: "bg-emerald-100 text-emerald-700",
-  billing_plan_changed: "bg-emerald-100 text-emerald-700",
-  billing_expiry_warning: "bg-amber-100 text-amber-700",
-  billing_overdue: "bg-red-100 text-red-700",
-  support_received: "bg-sky-100 text-sky-700",
-  support_resolved: "bg-sky-100 text-sky-700",
-  downtime: "bg-orange-100 text-orange-700",
-  announcement: "bg-indigo-100 text-indigo-700",
+  receipt: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  digest: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  drip_getting_started: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  drip_features: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  billing_payment_recorded: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+  billing_plan_changed: "bg-(--ui-success-bg) text-(--ui-success-fg)",
+  billing_expiry_warning: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  billing_overdue: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
+  support_received: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  support_resolved: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
+  downtime: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  announcement: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
 };
 
 function statusBadge(email) {
-  if (email.sent_at) return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Sent</span>;
-  if (email.attempts >= email.max_attempts) return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">Failed</span>;
-  return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Pending</span>;
+  if (email.sent_at) return <span className="rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-success-fg)">Sent</span>;
+  if (email.attempts >= email.max_attempts) return <span className="rounded-full bg-(--ui-danger-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-danger-fg)">Failed</span>;
+  return <span className="rounded-full bg-(--ui-warning-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-warning-fg)">Pending</span>;
 }
 
 function truncate(str, len = 50) {
@@ -175,9 +177,9 @@ export default function AdminEmails() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Email Queue</h1>
+        <h1 className="text-2xl font-bold text-(--ui-text)">Email Queue</h1>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Auto-refresh 30s</span>
+          <span className="text-[10px] font-medium text-(--ui-text-muted) uppercase tracking-wider">Auto-refresh 30s</span>
           {filter !== "broadcasts" && (
             <button
               onClick={() => {
@@ -191,14 +193,14 @@ export default function AdminEmails() {
                 ];
                 downloadCsv(headers, emails, "admin-emails.csv");
               }}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="ui-focus-ring flex items-center gap-1.5 rounded-full bg-(--ui-muted-surface) px-4 py-1.5 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)"
             >
               <Download size={14} /> Export
             </button>
           )}
           <button
             onClick={() => setShowBroadcast((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+            className="ui-focus-ring flex items-center gap-1.5 rounded-full bg-(--ui-primary) px-4 py-1.5 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong)"
           >
             <Send size={14} />
             Broadcast
@@ -208,67 +210,67 @@ export default function AdminEmails() {
 
       {/* Summary cards */}
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-400 uppercase">Pending</p>
-          <p className="mt-1 text-2xl font-bold text-amber-600">{counts.pending}</p>
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-medium text-(--ui-text-muted) uppercase">Pending</p>
+          <p className="mt-1 text-2xl font-bold text-(--ui-warning-fg)">{counts.pending}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-400 uppercase">Sent</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-600">{counts.sent}</p>
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-medium text-(--ui-text-muted) uppercase">Sent</p>
+          <p className="mt-1 text-2xl font-bold text-(--ui-success-fg)">{counts.sent}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-400 uppercase">Failed</p>
-          <p className="mt-1 text-2xl font-bold text-red-600">{counts.failed}</p>
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-4">
+          <p className="text-xs font-medium text-(--ui-text-muted) uppercase">Failed</p>
+          <p className="mt-1 text-2xl font-bold text-(--ui-danger-fg)">{counts.failed}</p>
         </div>
       </div>
 
       {/* Broadcast form */}
       {showBroadcast && (
-        <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-violet-800">Send Broadcast Email</h2>
+        <div className="mb-4 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-muted-surface) p-4">
+          <h2 className="mb-3 text-sm font-semibold text-(--ui-text)">Send Broadcast Email</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Type</label>
               <select
                 value={bcType}
                 onChange={(e) => setBcType(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-2 text-sm text-(--ui-text)"
               >
                 <option value="downtime">Downtime Notice</option>
                 <option value="announcement">Announcement</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Subject</label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Subject</label>
               <input
                 type="text"
                 value={bcSubject}
                 onChange={(e) => setBcSubject(e.target.value)}
                 placeholder="e.g. Scheduled Maintenance Tonight"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-2 text-sm text-(--ui-text)"
               />
             </div>
           </div>
           <div className="mt-3">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Message (HTML supported)</label>
+            <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Message (HTML supported)</label>
             <textarea
               value={bcMessage}
               onChange={(e) => setBcMessage(e.target.value)}
               placeholder="<p>We will be performing maintenance from 2am to 3am PKT.</p>"
               rows={3}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-2 text-sm text-(--ui-text)"
             />
           </div>
           <div className="mt-3 flex items-center gap-3">
             <button
               disabled={bcSending || !bcSubject.trim() || !bcMessage.trim()}
               onClick={sendBroadcast}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              className="ui-focus-ring rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:opacity-50"
             >
               {bcSending ? "Sending..." : "Send to All Tenants"}
             </button>
             {bcResult && (
-              <span className={`text-sm font-medium ${bcResult.ok ? "text-emerald-600" : "text-red-600"}`}>
+              <span className={`text-sm font-medium ${bcResult.ok ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                 {bcResult.ok ? `Enqueued ${bcResult.enqueued} email(s)` : bcResult.error}
               </span>
             )}
@@ -283,10 +285,10 @@ export default function AdminEmails() {
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              className={`ui-focus-ring rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                 filter === tab.key
-                  ? "bg-slate-800 text-white"
-                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted) hover:bg-(--ui-border-strong) hover:text-(--ui-text)"
               }`}
             >
               {tab.label}
@@ -295,34 +297,34 @@ export default function AdminEmails() {
         </div>
         <button
           onClick={purgeDeleted}
-          className="ml-auto flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+          className="ui-focus-ring ml-auto flex items-center gap-1 rounded-full bg-(--ui-danger-bg) px-3.5 py-1.5 text-xs font-semibold text-(--ui-danger-fg) transition hover:opacity-80"
         >
           <Trash2 size={12} />
           Purge Deleted Tenants
         </button>
-        {purgeMsg && <span className="text-xs font-medium text-emerald-600">{purgeMsg}</span>}
+        {purgeMsg && <span className="text-xs font-medium text-(--ui-success-fg)">{purgeMsg}</span>}
       </div>
 
       {error && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="mb-3 rounded-(--ui-radius-md) border border-(--ui-danger-bg) bg-(--ui-danger-bg) p-3">
+          <p className="text-sm text-(--ui-danger-fg)">{error}</p>
         </div>
       )}
 
       {filter === "broadcasts" ? (
         /* ── Broadcasts tab ── */
         broadcastsLoading ? (
-          <p className="text-sm text-slate-400">Loading...</p>
+          <p className="text-sm text-(--ui-text-muted)">Loading...</p>
         ) : broadcasts.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <p className="text-sm font-medium text-slate-400">No broadcasts yet</p>
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-8 text-center">
+            <p className="text-sm font-medium text-(--ui-text-muted)">No broadcasts yet</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface)">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                  <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs text-(--ui-text-muted)">
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Admin</th>
                     <th className="px-4 py-3 font-medium">Type</th>
@@ -332,18 +334,18 @@ export default function AdminEmails() {
                 </thead>
                 <tbody>
                   {broadcasts.map((b, i) => (
-                    <tr key={b.id || i} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    <tr key={b.id || i} className="border-b border-(--ui-border) last:border-0">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) whitespace-nowrap">
                         {new Date(b.created_at).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{b.admin_name || b.admin_email || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{b.admin_name || b.admin_email || "—"}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[b.type] || "bg-slate-100 text-slate-600"}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[b.type] || "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
                           {b.type}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{b.subject}</td>
-                      <td className="px-4 py-3 text-right text-xs text-slate-500">{b.recipient_count ?? "—"}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{b.subject}</td>
+                      <td className="px-4 py-3 text-right text-xs text-(--ui-text-muted)">{b.recipient_count ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -352,19 +354,19 @@ export default function AdminEmails() {
           </div>
         )
       ) : loading ? (
-        <p className="text-sm text-slate-400">Loading...</p>
+        <p className="text-sm text-(--ui-text-muted)">Loading...</p>
       ) : emails.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm font-medium text-slate-400">
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-8 text-center">
+          <p className="text-sm font-medium text-(--ui-text-muted)">
             {filter ? `No ${filter} emails` : "Email queue is empty"}
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface)">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left text-xs text-(--ui-text-muted)">
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium">Tenant</th>
@@ -382,32 +384,32 @@ export default function AdminEmails() {
                   const isFailed = !e.sent_at && e.attempts >= e.max_attempts;
                   const busy = actionInFlight === e.id || retrying === e.id;
                   return (
-                    <tr key={e.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-4 py-3 text-xs text-slate-400">#{e.id}</td>
+                    <tr key={e.id} className="border-b border-(--ui-border) last:border-0">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted)">#{e.id}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[e.email_type] || "bg-slate-100 text-slate-600"}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[e.email_type] || "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
                           {e.email_type}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         {e.tenant_name ? (
                           <>
-                            <span className="font-medium text-slate-700">{e.tenant_name}</span>
-                            <span className="ml-1 text-xs text-slate-400">({e.tenant_slug})</span>
+                            <span className="font-medium text-(--ui-text)">{e.tenant_name}</span>
+                            <span className="ml-1 text-xs text-(--ui-text-muted)">({e.tenant_slug})</span>
                           </>
                         ) : (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-(--ui-text-muted)">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{e.to_email}</td>
+                      <td className="px-4 py-3 text-xs text-(--ui-text)">{e.to_email}</td>
                       <td className="px-4 py-3 max-w-xs">
-                        <span className="text-xs text-slate-600">{truncate(e.subject, 40)}</span>
+                        <span className="text-xs text-(--ui-text)">{truncate(e.subject, 40)}</span>
                       </td>
                       <td className="px-4 py-3">{statusBadge(e)}</td>
-                      <td className="px-4 py-3 text-right text-xs text-slate-500">
+                      <td className="px-4 py-3 text-right text-xs text-(--ui-text-muted)">
                         {e.attempts}/{e.max_attempts}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-(--ui-text-muted) whitespace-nowrap">
                         {e.sent_at
                           ? new Date(e.sent_at).toLocaleString()
                           : e.send_at
@@ -421,7 +423,7 @@ export default function AdminEmails() {
                               disabled={busy}
                               onClick={() => sendNow(e.id)}
                               title="Send now"
-                              className="rounded p-1 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                              className="ui-focus-ring rounded-full p-1.5 text-(--ui-text-muted) transition hover:bg-(--ui-muted-surface) hover:text-(--ui-text) disabled:opacity-50"
                             >
                               <Send size={14} />
                             </button>
@@ -431,7 +433,7 @@ export default function AdminEmails() {
                               disabled={busy}
                               onClick={() => retryOne(e.id)}
                               title="Retry"
-                              className="rounded p-1 text-violet-600 hover:bg-violet-50 disabled:opacity-50"
+                              className="ui-focus-ring rounded-full p-1.5 text-(--ui-text-muted) transition hover:bg-(--ui-muted-surface) hover:text-(--ui-text) disabled:opacity-50"
                             >
                               <RotateCcw size={14} />
                             </button>
@@ -441,13 +443,13 @@ export default function AdminEmails() {
                               disabled={busy}
                               onClick={() => deleteOne(e.id)}
                               title="Delete"
-                              className="rounded p-1 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                              className="ui-focus-ring rounded-full p-1.5 text-(--ui-text-muted) transition hover:bg-(--ui-danger-bg) hover:text-(--ui-danger-fg) disabled:opacity-50"
                             >
                               <Trash2 size={14} />
                             </button>
                           )}
                           {e.error && (
-                            <span className="ml-1 text-[10px] text-red-500" title={e.error}>
+                            <span className="ml-1 text-[10px] text-(--ui-danger-fg)" title={e.error}>
                               {truncate(e.error, 30)}
                             </span>
                           )}

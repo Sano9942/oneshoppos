@@ -37,19 +37,19 @@ export default function AdminLayout() {
   if (!token) return <Navigate to="/admin/login" replace />;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100">
-      <aside className="flex w-64 flex-col border-r border-slate-200 bg-slate-900">
-        <div className="border-b border-slate-700 px-4 py-4">
+    <div className="flex h-screen overflow-hidden bg-(--ui-bg) text-(--ui-text)">
+      <aside className="flex w-64 flex-col border-r border-(--ui-border) bg-(--ui-sidebar)">
+        <div className="border-b border-(--ui-border) px-5 py-5">
           <div className="flex items-center gap-2">
-            <Shield size={18} className="text-violet-400" />
-            <span className="text-sm font-bold tracking-wide text-slate-300">
-              SANOPOS
+            <Shield size={18} className="text-(--ui-text)" />
+            <span className="text-sm font-bold tracking-tight text-(--ui-text)">
+              SanoPOS
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">Super Admin</p>
+          <p className="mt-0.5 text-xs text-(--ui-text-muted)">Super Admin</p>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-0.5 p-3">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -58,17 +58,17 @@ export default function AdminLayout() {
                 to={item.path}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  `flex items-center gap-2.5 rounded-(--ui-radius-sm) px-3 py-2 text-sm font-medium transition ${
                     isActive
-                      ? "bg-violet-600 text-white"
-                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      ? "bg-(--ui-muted-surface) text-(--ui-text)"
+                      : "text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
                   }`
                 }
               >
                 <Icon size={16} />
                 <span>{item.name}</span>
                 {item.badge && openTicketCount > 0 && (
-                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-(--ui-danger) px-1.5 text-[10px] font-bold text-white">
                     {openTicketCount}
                   </span>
                 )}
@@ -77,19 +77,19 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        <div className="border-t border-slate-700 p-3">
+        <div className="border-t border-(--ui-border) p-3">
           <button
             onClick={() => {
               clearAdminSession();
               navigate("/admin/login", { replace: true });
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
+            className="flex w-full items-center gap-2.5 rounded-(--ui-radius-sm) px-3 py-2 text-sm font-medium text-(--ui-text-muted) transition hover:bg-(--ui-muted-surface) hover:text-(--ui-danger)"
           >
             <LogOut size={16} />
             <span>Logout</span>
           </button>
           {admin && (
-            <p className="mt-2 truncate px-3 text-xs text-slate-600">
+            <p className="mt-2 truncate px-3 text-xs text-(--ui-text-muted)">
               {admin.email}
             </p>
           )}
@@ -97,7 +97,7 @@ export default function AdminLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="min-h-0 flex-1 overflow-auto p-6">
+        <main className="min-h-0 flex-1 overflow-auto bg-(--ui-bg) p-8">
           <Outlet />
         </main>
       </div>
