@@ -4156,7 +4156,8 @@ CREATE TABLE IF NOT EXISTS service_ticket_activities (
   actor_id INTEGER REFERENCES employees(id),
   activity_type TEXT NOT NULL
     CHECK (activity_type IN ('note','status_change','assignment','deposit_recorded','invoice_generated',
-      'device_added','device_updated','device_removed','passcode_revealed')),
+      'device_added','device_updated','device_removed','passcode_revealed',
+      'part_added','part_removed')),
   description TEXT,
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -4191,6 +4192,25 @@ SELECT * FROM (VALUES
   ('Water Damage', '["Powers on","Liquid indicator triggered","Corrosion visible","Screen functional","Speaker/mic working"]'::jsonb, 0, 3)
 ) AS v(name, checklist_template, default_warranty_days, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM ticket_types);
+
+-- V06 repair depth: parts/labor/fee lines on a ticket. Parts decrement stock
+-- at add (stock_decremented guards double-decrement at invoice); product_serial_id
+-- links a serialized part to its chosen serial.
+CREATE TABLE IF NOT EXISTS service_ticket_items (
+  id SERIAL PRIMARY KEY,
+  service_ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+  item_type TEXT NOT NULL CHECK (item_type IN ('part','labor','fee')),
+  product_id INTEGER REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  product_serial_id INTEGER REFERENCES product_serial_numbers(id),
+  description TEXT NOT NULL,
+  quantity NUMERIC(12,4) NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12,2) NOT NULL,
+  unit_cost NUMERIC(12,4),
+  stock_decremented BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_service_ticket_items_ticket ON service_ticket_items(service_ticket_id);
 
 -- ── Customer Notifications (F05 status-change engine) ───────────────
 

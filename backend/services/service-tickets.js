@@ -9,7 +9,7 @@
  * and services/customer-invoicing.js (invoice number generation).
  */
 
-const { generateInvoiceNumber } = require("./customer-invoicing");
+const { generateInvoiceNumber, computeInvoiceTotals, recomputeBalance } = require("./customer-invoicing");
 const { encryptSecret, decryptSecret } = require("./crypto");
 
 // ── Ticket numbering ──────────────────────────────────────────────
@@ -85,59 +85,69 @@ async function createTicket(db, data, employeeId) {
 }
 
 async function updateTicket(db, id, data, employeeId) {
-  // Fetch current ticket to detect changes
-  const { rows: [current] } = await db.query(
-    "SELECT * FROM service_tickets WHERE id = $1", [id]
-  );
-  if (!current) return null;
+  // Transactional: a cancel must restock its un-invoiced parts atomically.
+  return await db.transaction(async (client) => {
+    const { rows: [current] } = await client.query(
+      "SELECT * FROM service_tickets WHERE id = $1 FOR UPDATE", [id]
+    );
+    if (!current) return null;
 
-  const allowed = [
-    "title", "description", "notes", "customer_id", "outlet_id",
-    "assigned_to", "ticket_type_id", "expected_completion", "status",
-  ];
-  const sets = [];
-  const params = [];
-  let idx = 0;
+    const allowed = [
+      "title", "description", "notes", "customer_id", "outlet_id",
+      "assigned_to", "ticket_type_id", "expected_completion", "status",
+    ];
+    const sets = [];
+    const params = [];
+    let idx = 0;
 
-  for (const key of allowed) {
-    if (data[key] !== undefined) {
-      idx++;
-      sets.push(`${key} = $${idx}`);
-      params.push(data[key]);
+    for (const key of allowed) {
+      if (data[key] !== undefined) {
+        idx++;
+        sets.push(`${key} = $${idx}`);
+        params.push(data[key]);
+      }
     }
-  }
-  if (!sets.length) return current;
+    if (!sets.length) {
+      current.previous_status = current.status;
+      return current;
+    }
 
-  sets.push("updated_at = NOW()");
-  if (data.status === "completed") sets.push("actual_completion = NOW()");
+    sets.push("updated_at = NOW()");
+    if (data.status === "completed") sets.push("actual_completion = NOW()");
 
-  idx++;
-  params.push(id);
+    idx++;
+    params.push(id);
 
-  const { rows: [ticket] } = await db.query(
-    `UPDATE service_tickets SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
-    params
-  );
+    const { rows: [ticket] } = await client.query(
+      `UPDATE service_tickets SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+      params
+    );
 
-  // Log status change
-  if (data.status && data.status !== current.status) {
-    await logActivity(db, id, employeeId, "status_change",
-      `Status changed from ${current.status} to ${data.status}`);
-  }
+    // Log status change
+    if (data.status && data.status !== current.status) {
+      await logActivity(client, id, employeeId, "status_change",
+        `Status changed from ${current.status} to ${data.status}`);
+    }
 
-  // Log assignment change
-  if (data.assigned_to !== undefined && data.assigned_to !== current.assigned_to) {
-    await logActivity(db, id, employeeId, "assignment",
-      data.assigned_to
-        ? `Assigned to employee #${data.assigned_to}`
-        : "Assignment removed",
-      { previous: current.assigned_to, assigned_to: data.assigned_to });
-  }
+    // Log assignment change
+    if (data.assigned_to !== undefined && data.assigned_to !== current.assigned_to) {
+      await logActivity(client, id, employeeId, "assignment",
+        data.assigned_to
+          ? `Assigned to employee #${data.assigned_to}`
+          : "Assignment removed",
+        { previous: current.assigned_to, assigned_to: data.assigned_to });
+    }
 
-  // Expose the pre-update status so the route can fire a customer notification
-  // only on an actual transition (not on every field edit that re-sends status).
-  ticket.previous_status = current.status;
-  return ticket;
+    // Cancelling a not-yet-invoiced ticket restocks its consumed parts.
+    if (data.status === "cancelled" && current.status !== "cancelled" && current.status !== "invoiced") {
+      await restockTicketParts(client, id, current.outlet_id, employeeId);
+    }
+
+    // Expose the pre-update status so the route can fire a customer notification
+    // only on an actual transition (not on every field edit that re-sends status).
+    ticket.previous_status = current.status;
+    return ticket;
+  });
 }
 
 async function getTicket(db, id) {
@@ -168,8 +178,9 @@ async function getTicket(db, id) {
   );
 
   const devices = await getDevices(db, id);
+  const items = await getItems(db, id);
 
-  return { ...ticket, activities, devices };
+  return { ...ticket, activities, devices, items };
 }
 
 async function listTickets(db, filters = {}) {
@@ -429,6 +440,193 @@ async function getDeviceHistory(db, { imei, serial_number, excludeTicketId } = {
   return rows;
 }
 
+// ── Parts / labor / fee lines (a NEW stock writer) ─────────────────
+
+// Decrement outlet stock for a part (mirrors the sales.js FOR UPDATE
+// discipline). Serialized parts flip their chosen serial to 'sold'.
+async function decrementPartStock(client, { productId, variantId, outletId, qty, serialId }) {
+  if (variantId) {
+    const { rows: [row] } = await client.query(
+      `SELECT COALESCE(quantity, 0) AS available FROM variant_outlet_stock
+       WHERE variant_id = $1 AND outlet_id = $2 FOR UPDATE`,
+      [variantId, outletId]
+    );
+    if (!row || Number(row.available) < qty) {
+      throw Object.assign(new Error("Insufficient stock for this part"), { statusCode: 400, code: "insufficient_stock" });
+    }
+    await client.query(
+      `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+         VALUES ($1, $2, 0 - $3::numeric)
+         ON CONFLICT (variant_id, outlet_id)
+         DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
+      [variantId, outletId, qty]
+    );
+    await client.query("UPDATE product_variants SET stock = stock - $1 WHERE id = $2", [qty, variantId]);
+    await client.query("UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
+  } else {
+    const { rows: [row] } = await client.query(
+      `SELECT COALESCE(quantity, 0) AS available FROM outlet_stock
+       WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
+      [productId, outletId]
+    );
+    if (!row || Number(row.available) < qty) {
+      throw Object.assign(new Error("Insufficient stock for this part"), { statusCode: 400, code: "insufficient_stock" });
+    }
+    await client.query("UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
+  }
+  if (serialId) {
+    await client.query("UPDATE product_serial_numbers SET status = 'sold' WHERE id = $1", [serialId]);
+  }
+}
+
+// Reverse of decrementPartStock — used by remove-part and cancel-restock.
+async function restockPartStock(client, { productId, variantId, outletId, qty, serialId }) {
+  if (variantId) {
+    await client.query(
+      `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+         VALUES ($1, $2, $3::numeric)
+         ON CONFLICT (variant_id, outlet_id)
+         DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
+      [variantId, outletId, qty]
+    );
+    await client.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [qty, variantId]);
+    await client.query("UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
+  } else if (productId) {
+    await client.query("UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
+  }
+  if (serialId) {
+    await client.query("UPDATE product_serial_numbers SET status = 'available', sale_id = NULL WHERE id = $1", [serialId]);
+  }
+}
+
+async function getItems(db, ticketId) {
+  const { rows } = await db.query(
+    `SELECT sti.*, p.name AS product_name, psn.serial_number
+     FROM service_ticket_items sti
+     LEFT JOIN products p ON p.id = sti.product_id
+     LEFT JOIN product_serial_numbers psn ON psn.id = sti.product_serial_id
+     WHERE sti.service_ticket_id = $1
+     ORDER BY sti.id`,
+    [ticketId]
+  );
+  return rows;
+}
+
+async function addPart(db, ticketId, data, employeeId) {
+  return await db.transaction(async (client) => {
+    const { rows: [ticket] } = await client.query(
+      "SELECT id, outlet_id, status FROM service_tickets WHERE id = $1 FOR UPDATE", [ticketId]
+    );
+    if (!ticket) throw Object.assign(new Error("Ticket not found"), { statusCode: 404 });
+    if (["invoiced", "cancelled"].includes(ticket.status)) {
+      throw Object.assign(new Error(`Cannot add items to a ${ticket.status} ticket`), { statusCode: 400 });
+    }
+
+    const itemType = data.item_type;
+    const qty = Number(data.quantity ?? 1);
+    let unitPrice = data.unit_price != null ? Number(data.unit_price) : null;
+    let unitCost = data.unit_cost != null ? Number(data.unit_cost) : null;
+    let description = data.description || null;
+    let stockDecremented = false;
+    let serialId = data.product_serial_id ? Number(data.product_serial_id) : null;
+
+    if (itemType === "part" && data.product_id) {
+      const outletId = ticket.outlet_id;
+      if (!outletId) {
+        throw Object.assign(new Error("Assign an outlet to the ticket before adding parts from inventory"), { statusCode: 400 });
+      }
+      const { rows: [prod] } = await client.query(
+        "SELECT name, price, cost_price FROM products WHERE id = $1", [data.product_id]
+      );
+      if (!prod) throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+      if (unitPrice == null) unitPrice = Number(prod.price);
+      if (unitCost == null) unitCost = Number(prod.cost_price || 0);
+      if (!description) description = prod.name;
+
+      if (serialId) {
+        const { rows: [sr] } = await client.query(
+          "SELECT id, status, product_id FROM product_serial_numbers WHERE id = $1 FOR UPDATE", [serialId]
+        );
+        if (!sr || sr.product_id !== data.product_id) {
+          throw Object.assign(new Error("Serial does not match the selected part"), { statusCode: 400 });
+        }
+        if (sr.status !== "available") {
+          throw Object.assign(new Error("That serial is not available"), { statusCode: 400 });
+        }
+      }
+
+      await decrementPartStock(client, {
+        productId: data.product_id, variantId: data.variant_id || null, outletId, qty, serialId,
+      });
+      stockDecremented = true;
+    } else {
+      // labor / fee (or a part with no inventory link) — no stock movement.
+      if (unitPrice == null) throw Object.assign(new Error("unit_price is required"), { statusCode: 400 });
+      if (!description) throw Object.assign(new Error("description is required"), { statusCode: 400 });
+      serialId = null;
+    }
+
+    const { rows: [line] } = await client.query(
+      `INSERT INTO service_ticket_items
+         (service_ticket_id, item_type, product_id, variant_id, product_serial_id,
+          description, quantity, unit_price, unit_cost, stock_decremented)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [ticketId, itemType, data.product_id || null, data.variant_id || null, serialId,
+       description, qty, unitPrice, unitCost, stockDecremented]
+    );
+    await logActivity(client, ticketId, employeeId, "part_added",
+      `${itemType} added: ${description} × ${qty}`,
+      { item_id: line.id, item_type: itemType, product_id: data.product_id || null, quantity: qty });
+    return line;
+  });
+}
+
+async function removePart(db, ticketId, itemId, employeeId) {
+  return await db.transaction(async (client) => {
+    const { rows: [ticket] } = await client.query(
+      "SELECT id, outlet_id, status FROM service_tickets WHERE id = $1 FOR UPDATE", [ticketId]
+    );
+    if (!ticket) throw Object.assign(new Error("Ticket not found"), { statusCode: 404 });
+    if (ticket.status === "invoiced") {
+      throw Object.assign(new Error("Cannot modify items on an invoiced ticket"), { statusCode: 400 });
+    }
+    const { rows: [line] } = await client.query(
+      "SELECT * FROM service_ticket_items WHERE id = $1 AND service_ticket_id = $2", [itemId, ticketId]
+    );
+    if (!line) return null;
+
+    if (line.stock_decremented) {
+      await restockPartStock(client, {
+        productId: line.product_id, variantId: line.variant_id, outletId: ticket.outlet_id,
+        qty: Number(line.quantity), serialId: line.product_serial_id,
+      });
+    }
+    await client.query("DELETE FROM service_ticket_items WHERE id = $1", [itemId]);
+    await logActivity(client, ticketId, employeeId, "part_removed",
+      `${line.item_type} removed: ${line.description}`, { item_id: itemId, item_type: line.item_type });
+    return { deleted: true };
+  });
+}
+
+// Restock every still-decremented part on a ticket (cancel path). Caller owns
+// the transaction. Flips stock_decremented off so it can't double-restock.
+async function restockTicketParts(client, ticketId, outletId, employeeId) {
+  const { rows: parts } = await client.query(
+    "SELECT * FROM service_ticket_items WHERE service_ticket_id = $1 AND stock_decremented = TRUE", [ticketId]
+  );
+  for (const line of parts) {
+    await restockPartStock(client, {
+      productId: line.product_id, variantId: line.variant_id, outletId,
+      qty: Number(line.quantity), serialId: line.product_serial_id,
+    });
+    await client.query("UPDATE service_ticket_items SET stock_decremented = FALSE WHERE id = $1", [line.id]);
+  }
+  if (parts.length) {
+    await logActivity(client, ticketId, employeeId, "part_removed",
+      `${parts.length} part(s) restocked on cancellation`, { restocked: parts.length });
+  }
+}
+
 // ── Invoice generation ────────────────────────────────────────────
 
 async function generateInvoiceFromTicket(db, ticketId, employeeId) {
@@ -442,40 +640,66 @@ async function generateInvoiceFromTicket(db, ticketId, employeeId) {
       throw Object.assign(new Error("Only completed tickets can generate an invoice"), { statusCode: 400 });
     }
 
-    const invoiceNumber = await generateInvoiceNumber(client);
+    // Itemized: one invoice line per ticket item (parts + labor + fees). Tax
+    // per line from the product's tax rate (labor/fee → 0), matching the
+    // customer-invoicing shape. Stock is NOT touched here — parts already
+    // decremented at add (stock_decremented guards against double-decrement).
+    const { rows: lines } = await client.query(
+      `SELECT sti.item_type, sti.product_id, sti.variant_id, sti.description,
+              sti.quantity, sti.unit_price, COALESCE(tx.rate, 0) AS tax_rate
+       FROM service_ticket_items sti
+       LEFT JOIN products p ON p.id = sti.product_id
+       LEFT JOIN taxes tx ON tx.id = p.tax_id
+       WHERE sti.service_ticket_id = $1
+       ORDER BY sti.id`,
+      [ticketId]
+    );
+
     const deposit = Number(ticket.deposit_amount || 0);
 
-    // Estimate total as deposit (minimum) — in practice the staff should set a proper total.
-    // For now, we create the invoice shell; staff can edit the amount on the invoice page.
-    // NOTE (V06): the parts-P0 rewrite replaces this with itemized parts+labor
-    // lines minus the deposit (services/service-tickets.js, task 6).
-    const totalAmount = deposit > 0 ? deposit : 0;
-    const balanceDue = Math.max(0, totalAmount - deposit);
+    let invoiceItems = lines.map((l) => ({
+      product_id: l.product_id, variant_id: l.variant_id, description: l.description,
+      quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate: Number(l.tax_rate),
+    }));
+    // Deposit-only fallback: a plain service job with no itemized parts/labor
+    // bills the ticket title at the deposit amount (preserves pre-V06 behavior).
+    if (invoiceItems.length === 0) {
+      invoiceItems = [{ product_id: null, variant_id: null, description: ticket.title, quantity: 1, unit_price: deposit, tax_rate: 0 }];
+    }
+
+    const totals = computeInvoiceTotals(invoiceItems, 0);
+    const invoiceNumber = await generateInvoiceNumber(client);
 
     const { rows: [invoice] } = await client.query(
       `INSERT INTO customer_invoices
          (invoice_number, customer_id, outlet_id, employee_id, status,
           subtotal, tax_total, discount_amount, total_amount, balance_due, notes)
-       VALUES ($1, $2, $3, $4, 'sent', $5, 0, 0, $5, $6, $7) RETURNING *`,
+       VALUES ($1, $2, $3, $4, 'sent', $5, $6, 0, $7, $7, $8) RETURNING *`,
       [
-        invoiceNumber,
-        ticket.customer_id,
-        ticket.outlet_id,
-        employeeId,
-        totalAmount,
-        balanceDue,
+        invoiceNumber, ticket.customer_id, ticket.outlet_id, employeeId,
+        totals.subtotal, totals.tax_total, totals.total_amount,
         `Invoice for service ticket ${ticket.ticket_number}: ${ticket.title}`,
       ]
     );
 
-    // Create line item
-    await client.query(
-      `INSERT INTO customer_invoice_items (invoice_id, description, quantity, unit_price, line_total)
-       VALUES ($1, $2, 1, $3, $3)`,
-      [invoice.id, ticket.title, totalAmount]
-    );
+    for (const it of totals.items) {
+      await client.query(
+        `INSERT INTO customer_invoice_items (invoice_id, product_id, variant_id, description, quantity, unit_price, tax_rate, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [invoice.id, it.product_id || null, it.variant_id || null, it.description, it.quantity, it.unit_price, it.tax_rate, it.line_total]
+      );
+    }
 
-    // Link invoice to ticket
+    // Net the deposit as a prepayment → balance_due = total − deposit.
+    if (deposit > 0) {
+      await client.query(
+        `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, notes, recorded_by)
+         VALUES ($1, $2, $3, 'deposit', $4, $5)`,
+        [invoice.id, deposit, ticket.deposit_method || "cash", `Deposit from ticket ${ticket.ticket_number}`, employeeId]
+      );
+      await recomputeBalance(client, invoice.id);
+    }
+
     await client.query(
       `UPDATE service_tickets
        SET final_invoice_id = $1, status = 'invoiced', actual_completion = COALESCE(actual_completion, NOW()), updated_at = NOW()
@@ -483,7 +707,6 @@ async function generateInvoiceFromTicket(db, ticketId, employeeId) {
       [invoice.id, ticketId]
     );
 
-    // Log activities
     await client.query(
       `INSERT INTO service_ticket_activities (ticket_id, actor_id, activity_type, description, metadata)
        VALUES ($1, $2, 'invoice_generated', $3, $4)`,
@@ -496,7 +719,10 @@ async function generateInvoiceFromTicket(db, ticketId, employeeId) {
       [ticketId, employeeId]
     );
 
-    return { ticket_id: ticketId, invoice };
+    const { rows: [finalInvoice] } = await client.query(
+      "SELECT * FROM customer_invoices WHERE id = $1", [invoice.id]
+    );
+    return { ticket_id: ticketId, invoice: finalInvoice };
   });
 }
 
@@ -531,4 +757,8 @@ module.exports = {
   revealPasscode,
   getDeviceHistory,
   publicDevice,
+  // parts / labor / fee
+  addPart,
+  removePart,
+  getItems,
 };

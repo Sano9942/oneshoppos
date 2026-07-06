@@ -8,7 +8,7 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
   const {
     createTicketSchema, updateTicketSchema, addNoteSchema,
     deviceInputSchema, updateDeviceSchema,
-    createTicketTypeSchema, updateTicketTypeSchema,
+    createTicketTypeSchema, updateTicketTypeSchema, addItemSchema,
   } = require("../schemas/service-tickets");
   const tickets = require("../services/service-tickets");
   const customerNotify = require("../services/customer-notify");
@@ -212,6 +212,24 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
         res.status(500).json({ error: err.message });
       }
     });
+  });
+
+  // ── Parts / labor / fee lines on a ticket ───────────────────────
+  app.post("/api/service-tickets/:id/items", ...gate, validate(addItemSchema), async (req, res) => {
+    try {
+      const line = await tickets.addPart(deps.db, Number(req.params.id), req.body, req.employee.id);
+      res.status(201).json(line);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message, code: err.code }); }
+  });
+
+  app.delete("/api/service-tickets/:ticketId/items/:itemId", ...gate, async (req, res) => {
+    try {
+      const result = await tickets.removePart(
+        deps.db, Number(req.params.ticketId), Number(req.params.itemId), req.employee.id
+      );
+      if (!result) return res.status(404).json({ error: "Item not found" });
+      res.json(result);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 
   // Generate invoice from completed ticket

@@ -63,6 +63,20 @@ const addNoteSchema = z.object({
   description: z.string().min(1).max(2000),
 });
 
+// ── Parts / labor / fee lines (V06) ──────────────────────────────
+// For a `part` with product_id, description/unit_price/unit_cost default from
+// the product; for labor/fee the service requires description + unit_price.
+const addItemSchema = z.object({
+  item_type: z.enum(["part", "labor", "fee"]),
+  product_id: z.number().int().positive().optional(),
+  variant_id: z.number().int().positive().optional(),
+  product_serial_id: z.number().int().positive().optional(),
+  description: z.string().max(300).optional(),
+  quantity: z.number().positive().optional(),
+  unit_price: z.number().min(0).optional(),
+  unit_cost: z.number().min(0).optional(),
+});
+
 module.exports = {
   createTicketSchema,
   updateTicketSchema,
@@ -71,5 +85,6 @@ module.exports = {
   updateDeviceSchema,
   createTicketTypeSchema,
   updateTicketTypeSchema,
+  addItemSchema,
   STATUSES,
 };

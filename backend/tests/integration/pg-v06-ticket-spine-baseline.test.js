@@ -156,17 +156,16 @@ describe("V06 pre-flight — resolve → invoice (documents the money-drop P0)",
     expect(full.body.status).toBe("invoiced");
     expect(full.body.final_invoice_id).toBe(res.body.invoice.id);
 
-    // ── BASELINE of the known P0 (services/service-tickets.js:186-214) ──
-    // The current invoice has NO parts/labor breakdown — it bills a single
-    // line at the deposit amount, so a Rs 4,500 repair with a Rs 1,000 deposit
-    // invoices as Rs 1,000. The V06 parts-P0 rewrite REPLACES this: itemized
-    // parts+labor lines minus the deposit, tax-snapshotted. Update these two
-    // assertions in the same commit as that rewrite.
-    expect(Number(res.body.invoice.total_amount)).toBe(1000); // == deposit, not the real repair total
+    // ── Deposit-only fallback (post parts-P0 rewrite) ──
+    // This ticket has NO parts/labor lines, so the itemized rewrite falls back
+    // to a single line at the deposit amount — which is the CORRECT total for a
+    // plain deposit-only service job (total == deposit, balance nets to 0). The
+    // WITH-parts itemization is covered by pg-v06-parts-invoice.test.js.
+    expect(Number(res.body.invoice.total_amount)).toBe(1000); // deposit-only job → total == deposit
     const lines = await db.query(
       "SELECT count(*)::int c FROM customer_invoice_items WHERE invoice_id = $1",
       [res.body.invoice.id]
     );
-    expect(lines.rows[0].c).toBe(1); // one opaque line today; parts-P0 makes this N
+    expect(lines.rows[0].c).toBe(1); // one fallback line for a no-items ticket
   });
 });

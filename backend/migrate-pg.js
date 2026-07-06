@@ -7501,6 +7501,66 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 102,
+    description:
+      "V06 repair depth (parts on tickets) — service_ticket_items (part/labor/fee lines, serialized-part FK, stock_decremented guard), widened activity_type CHECK for part mutations",
+    up: async (client) => {
+      // Tenant-schema only. SAVEPOINT-guarded so a public-schema run is a skip.
+
+      // 1. service_ticket_items — parts (from inventory) + labor + fee lines.
+      //    stock_decremented guards against double-decrement (taken at add,
+      //    NOT again at invoice). product_serial_id links a serialized part to
+      //    its chosen serial (one serial per line).
+      try {
+        await client.query("SAVEPOINT v102_ticket_items");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS service_ticket_items (
+            id SERIAL PRIMARY KEY,
+            service_ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+            item_type TEXT NOT NULL CHECK (item_type IN ('part','labor','fee')),
+            product_id INTEGER REFERENCES products(id),
+            variant_id INTEGER REFERENCES product_variants(id),
+            product_serial_id INTEGER REFERENCES product_serial_numbers(id),
+            description TEXT NOT NULL,
+            quantity NUMERIC(12,4) NOT NULL DEFAULT 1,
+            unit_price NUMERIC(12,2) NOT NULL,
+            unit_cost NUMERIC(12,4),
+            stock_decremented BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_service_ticket_items_ticket ON service_ticket_items(service_ticket_id)`
+        );
+        await client.query("RELEASE SAVEPOINT v102_ticket_items");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_ticket_items");
+        console.warn(`[migrate-pg v102] service_ticket_items skipped: ${err.message}`);
+      }
+
+      // 2. widen the activity_type CHECK for part mutations (audit coverage).
+      try {
+        await client.query("SAVEPOINT v102_activity_check");
+        await client.query(
+          `ALTER TABLE service_ticket_activities DROP CONSTRAINT IF EXISTS service_ticket_activities_activity_type_check`
+        );
+        await client.query(`
+          ALTER TABLE service_ticket_activities
+            ADD CONSTRAINT service_ticket_activities_activity_type_check
+            CHECK (activity_type IN (
+              'note','status_change','assignment','deposit_recorded','invoice_generated',
+              'device_added','device_updated','device_removed','passcode_revealed',
+              'part_added','part_removed'
+            ))
+        `);
+        await client.query("RELEASE SAVEPOINT v102_activity_check");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_activity_check");
+        console.warn(`[migrate-pg v102] activity_type CHECK skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**
