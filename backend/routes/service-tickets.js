@@ -232,6 +232,34 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 
+  // Send the estimate to the customer (totals ticket items, fires notification).
+  app.post("/api/service-tickets/:id/send-estimate", ...gate, async (req, res) => {
+    try {
+      const { ticket, total } = await tickets.sendEstimate(deps.db, Number(req.params.id), req.employee.id);
+      if (ticket.customer_id) {
+        const company = req.company || {};
+        customerNotify.notify(deps.db, {
+          event: "ticket.estimate_ready",
+          customerId: ticket.customer_id,
+          entityType: "ticket",
+          entityId: ticket.id,
+          tenantSlug: req.tenantSlug,
+          tenant: { slug: req.tenantSlug, name: company.company_name },
+          data: {
+            storeName: company.trading_name || company.company_name || "our store",
+            storePhone: company.phone || "",
+            ticketNumber: ticket.ticket_number,
+            ticketTitle: ticket.title,
+            estimateTotal: total.toFixed(2),
+          },
+        }).catch((err) => {
+          try { req.log?.warn({ err: err.message, ticketId: ticket.id }, "estimate notification failed"); } catch {}
+        });
+      }
+      res.json({ ok: true, total });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
   // Generate invoice from completed ticket
   app.post("/api/service-tickets/:id/generate-invoice", ...gate, async (req, res) => {
     try {

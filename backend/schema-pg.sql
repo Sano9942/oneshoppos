@@ -4254,6 +4254,8 @@ INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
   ('ticket.status_changed:completed',   'sms',   'ticket_completed',   true),
   ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
   ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
+  ('ticket.estimate_ready',             'sms',   'ticket_estimate',    true),
+  ('ticket.estimate_ready',             'email', 'ticket_estimate',    true),
   ('appointment.reminder',              'sms',   'appointment_reminder', true)
 ON CONFLICT (event, channel) DO NOTHING;
 

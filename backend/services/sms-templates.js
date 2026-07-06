@@ -34,6 +34,8 @@ const SMS_TEMPLATES = {
     fill("{{storeName}}: Your item ({{ticketNumber}}) is ready for pickup. {{storePhone}}", d),
   ticket_invoiced: (d) =>
     fill("{{storeName}}: Your invoice for {{ticketNumber}} is ready. {{storePhone}}", d),
+  ticket_estimate: (d) =>
+    fill("{{storeName}}: Your repair estimate for {{ticketNumber}} is {{estimateTotal}}. Please approve so we can begin. {{storePhone}}", d),
 
   // Appointment reminders (shared by the reminders engine)
   appointment_reminder: (d) =>

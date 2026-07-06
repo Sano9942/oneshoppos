@@ -968,6 +968,26 @@ const ticketInProgress = ticketStatusEmail("Your repair is in progress", "Work h
 const ticketCompleted = ticketStatusEmail("Your item is ready for pickup", "Your service request is complete and ready for collection");
 const ticketInvoiced = ticketStatusEmail("Your invoice is ready", "An invoice has been prepared for your completed service request");
 
+// -- V06: repair estimate ready for customer approval --------------------
+function ticketEstimate(data) {
+  const { storeName, customerName, ticketNumber, ticketTitle, storePhone, estimateTotal } = data || {};
+  return {
+    subject: `Your repair estimate${ticketNumber ? ` — ${ticketNumber}` : ""}`,
+    html: wrapEmailHtml(
+      "Your repair estimate",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Here is the estimate for your service request at <strong>${storeName || "our store"}</strong>. Please approve so we can begin.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+         ${ticketNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Reference</td><td style="padding:10px 16px;font-weight:600">${ticketNumber}</td></tr>` : ""}
+         ${ticketTitle ? `<tr><td style="padding:10px 16px;color:#64748b">Item</td><td style="padding:10px 16px">${ticketTitle}</td></tr>` : ""}
+         ${estimateTotal != null ? `<tr><td style="padding:10px 16px;color:#64748b">Estimate</td><td style="padding:10px 16px;font-weight:700">${estimateTotal}</td></tr>` : ""}
+       </table>
+       ${storePhone ? `<p style="color:#64748b;font-size:14px">To approve or ask a question, call us at ${storePhone}.</p>` : ""}
+       ${footer("This is an automated estimate for your service request.")}`
+    ),
+  };
+}
+
 // -- F05: appointment reminder (email channel of the reminders engine) ----
 function appointmentReminder(data) {
   const { storeName, customerName, serviceName, staffName, apptStart } = data || {};
@@ -996,6 +1016,7 @@ const TEMPLATES = {
   ticket_in_progress: ticketInProgress,
   ticket_completed: ticketCompleted,
   ticket_invoiced: ticketInvoiced,
+  ticket_estimate: ticketEstimate,
   appointment_reminder: appointmentReminder,
   campaign_test: campaignTest,
   customer_invoice: customerInvoice,

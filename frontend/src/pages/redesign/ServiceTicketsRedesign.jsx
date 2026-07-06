@@ -709,6 +709,16 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
     finally { setSubmitting(false); }
   };
 
+  const sendEstimate = async () => {
+    setSubmitting(true);
+    try {
+      const r = await api.post(`/api/service-tickets/${ticketId}/send-estimate`);
+      toast.success(`Estimate sent to customer (${fmt(r.total)})`);
+      load();
+    } catch (err) { toast.error(err.message); }
+    finally { setSubmitting(false); }
+  };
+
   const addNote = async () => {
     if (!noteText.trim()) return;
     try {
@@ -745,6 +755,11 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
             {ticket.customer_name && <p className="text-sm text-(--ui-text-muted) mt-1"><User className="w-3.5 h-3.5 inline mr-1" />{ticket.customer_name}</p>}
           </div>
           <div className="flex gap-2 flex-wrap">
+            {ticket.status === "intake" && (
+              <Button tone="default" size="sm" disabled={submitting} onClick={sendEstimate}>
+                <FileText className="w-3.5 h-3.5 mr-1" /> Send Estimate
+              </Button>
+            )}
             {actions.map(a => (
               <Button key={a.status} tone={a.tone} size="sm" disabled={submitting} onClick={() => changeStatus(a.status)}>
                 {a.label}

@@ -7585,6 +7585,34 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 104,
+    description:
+      "V06 repair depth (estimates) — seed ticket.estimate_ready notification rules (sms + email) so 'Send Estimate' dispatches via the F05 engine",
+    up: async (client) => {
+      // Idempotent seed, same shape/guard as the v100 default rules. INERT until
+      // the customer_notifications flag is on AND staff clicks Send Estimate.
+      try {
+        await client.query("SAVEPOINT v104_estimate_rules");
+        const { rows } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (rows.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('ticket.estimate_ready', 'sms',   'ticket_estimate', true),
+              ('ticket.estimate_ready', 'email', 'ticket_estimate', true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v104_estimate_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v104_estimate_rules");
+        console.warn(`[migrate-pg v104] estimate notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

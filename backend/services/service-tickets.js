@@ -647,6 +647,27 @@ async function restockTicketParts(client, ticketId, outletId, employeeId) {
   }
 }
 
+// ── Estimates ──────────────────────────────────────────────────────
+// The estimate IS the ticket's itemized lines (quotation_items can't hold
+// labor — products-only). "Send Estimate" totals service_ticket_items and logs
+// the send; the route fires the customer notification. Approval = the existing
+// intake→approved transition (staff, or a future portal self-approve).
+async function sendEstimate(db, ticketId, employeeId) {
+  return await db.transaction(async (client) => {
+    const { rows: [ticket] } = await client.query(
+      "SELECT id, customer_id, ticket_number, title FROM service_tickets WHERE id = $1", [ticketId]
+    );
+    if (!ticket) throw Object.assign(new Error("Ticket not found"), { statusCode: 404 });
+    const { rows: [{ total }] } = await client.query(
+      "SELECT COALESCE(SUM(quantity * unit_price), 0) AS total FROM service_ticket_items WHERE service_ticket_id = $1",
+      [ticketId]
+    );
+    await logActivity(client, ticketId, employeeId, "note",
+      `Estimate sent to customer (total ${Number(total).toFixed(2)})`);
+    return { ticket, total: Number(total) };
+  });
+}
+
 // ── Invoice generation ────────────────────────────────────────────
 
 async function generateInvoiceFromTicket(db, ticketId, employeeId) {
@@ -781,4 +802,6 @@ module.exports = {
   addPart,
   removePart,
   getItems,
+  // estimates
+  sendEstimate,
 };
