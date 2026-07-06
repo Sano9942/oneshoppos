@@ -41,6 +41,7 @@ const PublicBookingPage = lazy(() => import("../pages/public/PublicBookingPage")
 const PublicRestaurantMenuPage = lazy(() => import("../pages/public/PublicRestaurantMenuPage"));
 const RestaurantPayPage = lazy(() => import("../pages/public/RestaurantPayPage"));
 const ReservationBookingPage = lazy(() => import("../pages/public/ReservationBookingPage"));
+const FormFillPublic = lazy(() => import("../pages/public/FormFillPublic"));
 
 // M8 — Customer portal (lazy, isolated chunk). Portal is NOT wrapped in
 // the main AuthProvider; it uses its own PortalAuthProvider via PortalLayout.
@@ -58,6 +59,7 @@ const PortalAppointments = lazy(() => import("../pages/portal/PortalAppointments
 const PortalTreatments = lazy(() => import("../pages/portal/PortalTreatments"));
 const PortalStays = lazy(() => import("../pages/portal/PortalStays"));
 const PortalPackages = lazy(() => import("../pages/portal/PortalPackages"));
+const PortalForms = lazy(() => import("../pages/portal/PortalForms"));
 const PortalOrders = lazy(() => import("../pages/portal/PortalOrders"));
 const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
 const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
@@ -206,6 +208,11 @@ export const publicRoutes = [
     element={<Suspense fallback={<RouteLoading />}><ReservationBookingPage /></Suspense>}
   />,
   <Route
+    key="form-fill"
+    path="/forms/fill/:token"
+    element={<Suspense fallback={<RouteLoading />}><FormFillPublic /></Suspense>}
+  />,
+  <Route
     key="portal"
     path="/portal/:tenantSlug"
     element={
@@ -227,6 +234,7 @@ export const publicRoutes = [
     <Route path="invoice-paid" element={<Suspense fallback={<RouteLoading />}><PortalInvoicePaidPage /></Suspense>} />
     <Route path="appointments" element={<Suspense fallback={<RouteLoading />}><PortalAppointments /></Suspense>} />
     <Route path="treatments" element={<Suspense fallback={<RouteLoading />}><PortalTreatments /></Suspense>} />
+    <Route path="forms" element={<Suspense fallback={<RouteLoading />}><PortalForms /></Suspense>} />
     <Route path="stays" element={<Suspense fallback={<RouteLoading />}><PortalStays /></Suspense>} />
     <Route path="packages" element={<Suspense fallback={<RouteLoading />}><PortalPackages /></Suspense>} />
     <Route path="orders" element={<Suspense fallback={<RouteLoading />}><PortalOrders /></Suspense>} />

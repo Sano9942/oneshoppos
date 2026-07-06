@@ -180,6 +180,10 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public booking page — no auth required, manually resolves tenant DB
   require("./public-bookings")(app, deps);
 
+  // F03 — Public tokenized form fill (intake/waivers). No auth; single-use
+  // token; resolves tenant via resolvePublicTenantDb; rate-limited.
+  require("./public-forms")(app, deps);
+
   // M8 — Customer portal (end-customer app). Mounted BEFORE tenant
   // middleware; each route resolves the tenant via resolvePublicTenantDb()
   // and verifies the portal JWT separately (scope="customer").
@@ -190,6 +194,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/stays")(app, deps);
   require("./customer-portal/treatments")(app, deps);
   require("./customer-portal/packages")(app, deps);
+  require("./customer-portal/forms")(app, deps);
 
   // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
   // BEFORE tenant middleware; each route resolves tenant via
@@ -685,6 +690,9 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- F05 customer notifications: per-event channel rules + delivery log ---
   require("./notification-settings")(app, deps);
+  // F03 — Form builder (intake/waivers/questionnaires). Cross-vertical;
+  // gated by custom_forms flag + manage_forms perm inside the route.
+  require("./forms")(app, deps);
 
   // --- Tier 1.1 wholesale: field rep mobile app ---
   require("./field")(app, deps);

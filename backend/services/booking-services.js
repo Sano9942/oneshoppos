@@ -260,6 +260,24 @@ async function createAppointment(db, data, source = "admin", options = {}) {
     }
   }
 
+  // F03 — auto-attach any active intake/waiver form templates flagged to fire
+  // on appointment creation. Non-fatal: a form-attach failure must never roll
+  // back the booking. This is the one wired auto_attach example; other
+  // verticals wire their own triggers via services/forms.js:autoAttachForms.
+  try {
+    const { autoAttachForms } = require("./forms");
+    await autoAttachForms(db, "appointment_created", {
+      customerId: appt.customer_id || null,
+      entityType: "appointment",
+      entityId: appt.id,
+    });
+  } catch (err) {
+    try {
+      // eslint-disable-next-line no-console
+      console.warn("[booking] auto-attach forms failed:", err.message);
+    } catch { /* ignore */ }
+  }
+
   return appt;
 }
 

@@ -122,6 +122,7 @@ const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
 const RoomManagementRoute = lazy(() => import("../pages/RoomManagementRoute"));
 const TreatmentPlansRoute = lazy(() => import("../pages/TreatmentPlansRoute"));
 const OrderKiosksRoute = lazy(() => import("../pages/OrderKiosksRoute"));
+const FormsRoute = lazy(() => import("../pages/FormsRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -301,6 +302,9 @@ export const appRoutes = [
     <Route path="/treatment-plans/templates" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/chart/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+
+    {/* F03 — Form builder (intake/waivers/questionnaires). Flag check inline. */}
+    <Route path="/settings/forms" element={perm("manage_forms", wrap(FormsRoute))} />
 
     {/* Tier 1.1 wholesale field sales — feature flag check is inline inside each page. */}
     <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />

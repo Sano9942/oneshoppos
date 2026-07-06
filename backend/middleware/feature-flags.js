@@ -99,6 +99,9 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (M10): flipped ON only when a dental_clinic / veterinary /
   // physiotherapy preset is selected. Keeps Clinical nav hidden otherwise.
   phase4_treatment_plans: false,
+  // F03 form builder — custom intake/waivers/questionnaires. Flipped ON by
+  // clinical/gym/photography/repair presets (V05/V06/V07/V08).
+  custom_forms: false,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,

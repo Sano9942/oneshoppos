@@ -263,6 +263,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Integrations", path: "/settings/integrations", icon: Plug, requiredPerm: "manage_inventory" },
       { name: "Customer Notifications", path: "/settings/notifications", icon: Bell, requiredPerm: "manage_inventory", requiredFlag: "customer_notifications" },
       { name: "Manufacturer Partners", path: "/settings/manufacturer-partners", icon: Briefcase, requiredPerm: "manage_inventory", requiredFlag: "wholesale_secondary_sales" },
+      { name: "Forms", path: "/settings/forms", icon: ClipboardList, requiredPerm: "manage_forms", requiredFlag: "custom_forms" },
       { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
       { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },

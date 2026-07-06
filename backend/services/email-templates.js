@@ -1075,6 +1075,20 @@ function subscriptionPaused(data) {
   };
 }
 
+// F03 — form fill link (intake / waiver / questionnaire)
+function formLink({ storeName, customerName, formName, fillUrl }) {
+  return {
+    subject: `Please complete: ${formName || "a form"} — ${storeName || "your visit"}`,
+    html: wrapEmailHtml("Complete Your Form", `
+      <p>Hi ${customerName || "there"},</p>
+      <p><strong>${storeName || "We"}</strong> ${formName ? `need you to complete <strong>${formName}</strong>` : "have a form for you to complete"} before your visit.</p>
+      ${fillUrl ? btn("Open the form", fillUrl) : ""}
+      <p style="color:#64748b">This link is personal to you and can only be submitted once. If you weren't expecting this, you can safely ignore the email.</p>
+      ${footer("Sent by your service provider via SanoPOS.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   // F05 customer notifications (status-change engine)
@@ -1141,6 +1155,8 @@ const TEMPLATES = {
   // Tier 1.4 Manufacturer Portal
   manufacturer_partner_invite: manufacturerPartnerInvite,
   manufacturer_partner_password_reset: manufacturerPartnerPasswordReset,
+  // F03 Form builder
+  form_link: formLink,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

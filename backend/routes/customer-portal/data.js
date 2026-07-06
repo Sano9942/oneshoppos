@@ -93,6 +93,12 @@ module.exports = function registerCustomerPortalData(app, deps) {
         return !!flags[requiredFlag];
       });
 
+      // F03 — the Forms tab is cross-vertical (intake/waivers/questionnaires),
+      // not tied to any one preset. Surface it for any tenant with the flag on.
+      if (flags.custom_forms && !enabledTabs.includes("forms")) {
+        enabledTabs.push("forms");
+      }
+
       res.json({
         tenant: { slug: tenant.slug, name: profile?.company_name || tenant.name || tenant.slug },
         branding: {

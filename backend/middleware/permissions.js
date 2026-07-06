@@ -68,6 +68,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "override_credit_limit",
     // Tier 1.1 wholesale — owner-side field sales visibility + route assignment.
     "manage_field_sales",
+    // F03 — form builder (intake/waivers/questionnaires) across verticals.
+    "manage_forms",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
   // Tier 1.1 wholesale — minimal role for mobile order bookers / DSRs.
