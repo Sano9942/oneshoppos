@@ -57,6 +57,7 @@ const updateTicketSchema = z.object({
   expected_completion: z.string().nullable().optional(),
   notes: z.string().max(2000).optional(),
   status: z.enum(STATUSES).optional(),
+  warranty_days: z.number().int().min(0).nullable().optional(),
 }).strict();
 
 const addNoteSchema = z.object({

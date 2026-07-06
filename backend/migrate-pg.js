@@ -7561,6 +7561,30 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 103,
+    description:
+      "V06 repair depth (estimates + warranty) — service_tickets.quotation_id (estimate link), warranty_days + warranty_until (set at completion)",
+    up: async (client) => {
+      // Tenant-schema only, additive columns. SAVEPOINT-guarded skip on public.
+      try {
+        await client.query("SAVEPOINT v103_ticket_cols");
+        await client.query(
+          `ALTER TABLE service_tickets ADD COLUMN IF NOT EXISTS quotation_id INTEGER REFERENCES quotations(id)`
+        );
+        await client.query(
+          `ALTER TABLE service_tickets ADD COLUMN IF NOT EXISTS warranty_days INTEGER`
+        );
+        await client.query(
+          `ALTER TABLE service_tickets ADD COLUMN IF NOT EXISTS warranty_until DATE`
+        );
+        await client.query("RELEASE SAVEPOINT v103_ticket_cols");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v103_ticket_cols");
+        console.warn(`[migrate-pg v103] service_tickets estimate/warranty cols skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

@@ -4141,8 +4141,11 @@ CREATE TABLE IF NOT EXISTS service_tickets (
   deposit_paid_at TIMESTAMPTZ,
   deposit_method TEXT,
   final_invoice_id INTEGER REFERENCES customer_invoices(id),
+  quotation_id INTEGER REFERENCES quotations(id),
   expected_completion DATE,
   actual_completion TIMESTAMPTZ,
+  warranty_days INTEGER,
+  warranty_until DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

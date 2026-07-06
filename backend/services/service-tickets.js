@@ -94,7 +94,7 @@ async function updateTicket(db, id, data, employeeId) {
 
     const allowed = [
       "title", "description", "notes", "customer_id", "outlet_id",
-      "assigned_to", "ticket_type_id", "expected_completion", "status",
+      "assigned_to", "ticket_type_id", "expected_completion", "status", "warranty_days",
     ];
     const sets = [];
     const params = [];
@@ -107,6 +107,25 @@ async function updateTicket(db, id, data, employeeId) {
         params.push(data[key]);
       }
     }
+
+    // Warranty is stamped at completion: resolve the days (explicit override →
+    // already-set → ticket-type default) and compute warranty_until = today + days.
+    const completing = data.status === "completed" && current.status !== "completed";
+    if (completing) {
+      let warrantyDays = data.warranty_days != null ? Number(data.warranty_days)
+        : (current.warranty_days != null ? Number(current.warranty_days) : null);
+      if (warrantyDays == null && current.ticket_type_id) {
+        const { rows: [tt] } = await client.query(
+          "SELECT default_warranty_days FROM ticket_types WHERE id = $1", [current.ticket_type_id]
+        );
+        if (tt && tt.default_warranty_days != null) warrantyDays = Number(tt.default_warranty_days);
+      }
+      if (warrantyDays != null) {
+        if (data.warranty_days === undefined) { idx++; sets.push(`warranty_days = $${idx}`); params.push(warrantyDays); }
+        idx++; sets.push(`warranty_until = CURRENT_DATE + $${idx}::int`); params.push(warrantyDays);
+      }
+    }
+
     if (!sets.length) {
       current.previous_status = current.status;
       return current;
@@ -429,7 +448,8 @@ async function getDeviceHistory(db, { imei, serial_number, excludeTicketId } = {
 
   const { rows } = await db.query(
     `SELECT st.id AS ticket_id, st.ticket_number, st.status, st.title,
-            st.created_at, st.actual_completion,
+            st.created_at, st.actual_completion, st.warranty_until,
+            (st.warranty_until IS NOT NULL AND st.warranty_until >= CURRENT_DATE) AS in_warranty,
             td.brand, td.model, td.imei, td.serial_number
      FROM ticket_devices td
      JOIN service_tickets st ON st.id = td.service_ticket_id

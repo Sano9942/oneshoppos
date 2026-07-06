@@ -60,15 +60,20 @@ function accessoriesToArray(str) {
 
 function DeviceHistoryBanner({ matches }) {
   if (!matches || matches.length === 0) return null;
+  const warrantyMatch = matches.find(m => m.in_warranty);
   return (
     <div className="rounded-lg border border-(--ui-warning) bg-(--ui-warning-bg) px-3 py-2 text-xs text-(--ui-warning-fg)">
       <div className="flex items-center gap-1.5 font-medium mb-1">
-        <History className="w-3.5 h-3.5" /> Seen before — {matches.length} prior ticket{matches.length > 1 ? "s" : ""}
+        <History className="w-3.5 h-3.5" />
+        {warrantyMatch
+          ? `Warranty return — under warranty until ${fmtDate(warrantyMatch.warranty_until)}`
+          : `Seen before — ${matches.length} prior ticket${matches.length > 1 ? "s" : ""}`}
       </div>
-      <ul className="space-y-0.5 text-(--ui-text-muted)">
+      <ul className="space-y-0.5 text-(--ui-warning-fg)">
         {matches.slice(0, 3).map(m => (
           <li key={m.ticket_id}>
             {m.ticket_number} · {m.title} · {fmtDate(m.created_at)}
+            {m.in_warranty && <span className="font-semibold"> · under warranty</span>}
           </li>
         ))}
       </ul>
@@ -847,6 +852,7 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
               <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Assigned To</dt><dd className="text-(--ui-text)">{ticket.assigned_to_name || "Unassigned"}</dd></div>
               <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Expected</dt><dd className="text-(--ui-text)">{fmtDate(ticket.expected_completion)}</dd></div>
               {ticket.actual_completion && <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Completed</dt><dd className="text-(--ui-text)">{fmtDateTime(ticket.actual_completion)}</dd></div>}
+              {ticket.warranty_until && <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Warranty until</dt><dd className="text-(--ui-text)">{fmtDate(ticket.warranty_until)}</dd></div>}
             </dl>
           </SectionCard>
 
