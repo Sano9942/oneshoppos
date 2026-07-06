@@ -477,6 +477,189 @@ function AddDeviceForm({ ticketId, onAdded, onCancel }) {
   );
 }
 
+/* ── Parts & labor section (detail view) ─────────────────────────── */
+
+const ITEM_TYPE_TONES = { part: "success", labor: "warning", fee: "default" };
+
+function PartsSection({ ticketId, items, ticketStatus, fmt, onChanged }) {
+  const toast = useToast();
+  const editable = !["invoiced", "cancelled"].includes(ticketStatus);
+  const [mode, setMode] = useState("part");
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [serials, setSerials] = useState([]);
+  const [serialId, setSerialId] = useState("");
+  const [qty, setQty] = useState("1");
+  const [price, setPrice] = useState("");
+  const [desc, setDesc] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const search = async (text) => {
+    setQ(text); setPicked(null); setSerials([]); setSerialId("");
+    if (!text.trim()) { setResults([]); return; }
+    try {
+      const d = await api.get("/api/products/search", { query: text });
+      setResults((d.products || []).slice(0, 6));
+    } catch { setResults([]); }
+  };
+
+  const pick = async (p) => {
+    setPicked(p); setResults([]); setQ(p.name);
+    setPrice(String(p.price ?? ""));
+    if (p.serial_required) {
+      try {
+        const d = await api.get(`/api/products/${p.id}/serials`, { status: "available" });
+        setSerials(d.serials || []);
+      } catch { setSerials([]); }
+    }
+  };
+
+  const addPart = async () => {
+    if (!picked) { toast.error("Pick a product"); return; }
+    if (picked.serial_required && !serialId) { toast.error("Select a serial"); return; }
+    setBusy(true);
+    try {
+      await api.post(`/api/service-tickets/${ticketId}/items`, {
+        item_type: "part",
+        product_id: picked.id,
+        quantity: Number(qty) || 1,
+        unit_price: price !== "" ? Number(price) : undefined,
+        product_serial_id: serialId ? Number(serialId) : undefined,
+      });
+      toast.success("Part added");
+      setQ(""); setPicked(null); setSerials([]); setSerialId(""); setQty("1"); setPrice("");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const addLine = async (type) => {
+    if (!desc.trim() || amount === "") { toast.error("Description and amount required"); return; }
+    setBusy(true);
+    try {
+      await api.post(`/api/service-tickets/${ticketId}/items`, {
+        item_type: type, description: desc, unit_price: Number(amount), quantity: 1,
+      });
+      toast.success(`${type} added`);
+      setDesc(""); setAmount("");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (itemId) => {
+    try {
+      await api.del(`/api/service-tickets/${ticketId}/items/${itemId}`);
+      toast.success("Removed");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const subtotal = (items || []).reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+
+  return (
+    <SectionCard>
+      <h4 className="text-sm font-semibold text-(--ui-text) mb-3">Parts &amp; Labor</h4>
+      {(items || []).length === 0 ? (
+        <p className="text-sm text-(--ui-text-muted) mb-3">No parts or labor added yet.</p>
+      ) : (
+        <table className="w-full text-sm mb-3">
+          <tbody>
+            {items.map(it => (
+              <tr key={it.id} className="border-b border-(--ui-border)">
+                <td className="py-1.5"><Badge tone={ITEM_TYPE_TONES[it.item_type]}>{it.item_type}</Badge></td>
+                <td className="py-1.5 text-(--ui-text)">
+                  {it.description}
+                  {it.serial_number && <span className="text-xs text-(--ui-text-muted)"> · SN {it.serial_number}</span>}
+                </td>
+                <td className="py-1.5 text-right text-(--ui-text-muted) whitespace-nowrap">{Number(it.quantity)} × {fmt(it.unit_price)}</td>
+                <td className="py-1.5 text-right text-(--ui-text) font-medium whitespace-nowrap">{fmt(Number(it.quantity) * Number(it.unit_price))}</td>
+                <td className="py-1.5 text-right pl-2">
+                  {editable && <button onClick={() => remove(it.id)} className="text-(--ui-text-muted) hover:text-(--ui-danger)"><X className="w-3.5 h-3.5" /></button>}
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={3} className="py-2 text-right text-(--ui-text-muted) font-medium">Subtotal</td>
+              <td className="py-2 text-right text-(--ui-text) font-bold whitespace-nowrap">{fmt(subtotal)}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      {editable && (
+        <div className="border-t border-(--ui-border) pt-3">
+          <div className="flex gap-1 mb-3">
+            {["part", "labor", "fee"].map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className={`px-3 py-1 rounded text-xs capitalize ${mode === m ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          {mode === "part" ? (
+            <div className="space-y-2">
+              <div className="relative">
+                <Input value={q} onChange={e => search(e.target.value)} placeholder="Search a part by name / SKU / barcode..." />
+                {results.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-(--ui-surface) border border-(--ui-border) rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {results.map(p => (
+                      <button key={p.id} onClick={() => pick(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) flex justify-between gap-2">
+                        <span className="text-(--ui-text)">{p.name}</span>
+                        <span className="text-(--ui-text-muted) whitespace-nowrap">{fmt(p.price)} · {Number(p.local_stock)} in stock</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {picked && (
+                <div className="grid grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="text-xs text-(--ui-text-muted) mb-1 block">Qty</label>
+                    <Input type="number" min="0.0001" step="any" value={qty} onChange={e => setQty(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-(--ui-text-muted) mb-1 block">Unit Price</label>
+                    <Input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} />
+                  </div>
+                  {picked.serial_required ? (
+                    <div>
+                      <label className="text-xs text-(--ui-text-muted) mb-1 block">Serial</label>
+                      <Select value={serialId} onChange={e => setSerialId(e.target.value)}>
+                        <option value="">-- Select --</option>
+                        {serials.map(s => <option key={s.id} value={s.id}>{s.serial_number}</option>)}
+                      </Select>
+                    </div>
+                  ) : <div />}
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button tone="primary" size="sm" disabled={busy || !picked} onClick={addPart}>Add Part</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+              <div>
+                <label className="text-xs text-(--ui-text-muted) mb-1 block">Description</label>
+                <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder={mode === "labor" ? "Repair labor" : "Service fee"} />
+              </div>
+              <div>
+                <label className="text-xs text-(--ui-text-muted) mb-1 block">Amount</label>
+                <Input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="w-28" />
+              </div>
+              <Button tone="primary" size="sm" disabled={busy} onClick={() => addLine(mode)}>Add</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 /* ── Ticket Detail View ──────────────────────────────────────────── */
 
 function TicketDetail({ ticketId, onBack, onRefresh }) {
@@ -601,6 +784,15 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
               )}
             </div>
           </SectionCard>
+
+          {/* Parts & Labor */}
+          <PartsSection
+            ticketId={ticketId}
+            items={ticket.items}
+            ticketStatus={ticket.status}
+            fmt={fmt}
+            onChanged={load}
+          />
 
           {ticket.description && (
             <SectionCard>
