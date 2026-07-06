@@ -69,6 +69,7 @@ const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
 const CourierSettingsRedesign = lazy(() => import("../pages/redesign/CourierSettingsRedesign"));
+const NotificationSettingsRoute = lazy(() => import("../pages/NotificationSettingsRoute"));
 const MarketingCampaignsRoute = lazy(() => import("../pages/MarketingCampaignsRoute"));
 const MessagingInboxRoute = lazy(() => import("../pages/MessagingInboxRoute"));
 const CustomerInvoicesRoute = lazy(() => import("../pages/CustomerInvoicesRoute"));
@@ -197,6 +198,7 @@ export const appRoutes = [
     <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
     <Route path="/printer-settings" element={perm("all_access", <PrinterSettingsRedesign />)} />
     <Route path="/courier-settings" element={perm("all_access", <CourierSettingsRedesign />)} />
+    <Route path="/settings/notifications" element={perm("manage_inventory", wrap(NotificationSettingsRoute))} />
     <Route path="/billing" element={perm("all_access", <BillingRoute />)} />
     <Route path="/settings/fbr" element={perm("all_access", <FBRSettingsRoute />)} />
     <Route path="/fbr" element={perm("all_access", <FBRDashboardRoute />)} />

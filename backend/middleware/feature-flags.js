@@ -41,6 +41,9 @@ const DEFAULT_FEATURE_FLAGS = {
   marketing_campaigns: true,
   customer_messaging: true,
   customer_invoicing: true,
+  // F05 — status-change customer notifications (SMS/email/WhatsApp). Default OFF;
+  // consumers (repair tickets, booking reminders) only dispatch when flipped on.
+  customer_notifications: false,
   payment_links: false,
   // AI insights chat (routes/insights-ai.js). Default OFF — surfaces the flag
   // in the admin flags editor so it can be toggled on per tenant. Also requires

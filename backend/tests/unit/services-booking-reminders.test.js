@@ -136,22 +136,53 @@ describe("processPendingReminders", () => {
     expect(updateSent).toBeUndefined();
   });
 
-  it("skips email enqueue for non-email channels but still marks row as sent", async () => {
-    // Pre-existing behavior: SMS channel has no send code path, so the
-    // function falls through to the 'sent' update without actually
-    // delivering anything. Tracked as pre-existing issue, not fixed here.
+  // F05 fix: the SMS channel now routes through the notification engine and is
+  // marked truthfully. Previously it fell through to a false 'sent' without
+  // delivering anything (completion-03 verdict: real latent bug). These cases
+  // replace the old bug-documenting test deliberately.
+  it("routes SMS-channel reminders through the engine and marks 'sent' on real delivery", async () => {
     const reminders = [
-      { id: 9, channel: "sms", customer_phone: "+100", customer_name: "X", service_name: "Svc", appt_start: "2026-05-01T10:00:00Z" },
+      { id: 9, channel: "sms", customer_id: 3, appointment_id: 55, customer_phone: "03001234567", customer_name: "X", service_name: "Svc", appt_start: "2026-05-01T10:00:00Z" },
     ];
     const db = fakeDb({ reminders });
     const boss = fakeBoss();
+    const notify = vi.fn(async () => ({ dispatched: [{ channel: "sms", status: "sent", provider_ref: "p1" }] }));
 
-    await processPendingReminders(db, boss);
+    await processPendingReminders(db, boss, "acme", { notify });
 
+    // Did NOT use the email queue for an sms reminder.
     expect(boss.send).not.toHaveBeenCalled();
-    const updateSent = db.queries.find(
-      (q) => q.sql.includes("UPDATE appointment_reminders SET status = 'sent'")
-    );
+    // Called the engine with the sms channel hint + slug + appointment entity.
+    expect(notify).toHaveBeenCalledTimes(1);
+    const arg = notify.mock.calls[0][1];
+    expect(arg.event).toBe("appointment.reminder");
+    expect(arg.channelHints).toEqual(["sms"]);
+    expect(arg.tenantSlug).toBe("acme");
+    expect(arg.entityId).toBe(55);
+    // Marked 'sent' (truthfully — the engine reported a real send).
+    const updateSent = db.queries.find((q) => q.sql.includes("UPDATE appointment_reminders SET status = 'sent'"));
     expect(updateSent).toBeDefined();
+    expect(updateSent.params).toEqual([9]);
+    const updateFailed = db.queries.find((q) => q.sql.includes("UPDATE appointment_reminders SET status = 'failed'"));
+    expect(updateFailed).toBeUndefined();
+  });
+
+  it("marks an SMS reminder 'failed' (not false 'sent') when the engine does NOT deliver", async () => {
+    const reminders = [
+      { id: 10, channel: "sms", customer_id: 3, appointment_id: 56, customer_phone: "03001234567", customer_name: "X", service_name: "Svc", appt_start: "2026-05-01T10:00:00Z" },
+    ];
+    const db = fakeDb({ reminders });
+    const boss = fakeBoss();
+    // Flag off / no rule / no provider → engine returns nothing dispatched.
+    const notify = vi.fn(async () => ({ dispatched: [], reason: "disabled" }));
+
+    await processPendingReminders(db, boss, "acme", { notify });
+
+    const updateFailed = db.queries.find((q) => q.sql.includes("UPDATE appointment_reminders SET status = 'failed'"));
+    expect(updateFailed).toBeDefined();
+    expect(updateFailed.params).toEqual([10]);
+    // The old false 'sent' update must NOT have fired.
+    const updateSent = db.queries.find((q) => q.sql.includes("UPDATE appointment_reminders SET status = 'sent'"));
+    expect(updateSent).toBeUndefined();
   });
 });

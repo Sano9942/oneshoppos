@@ -940,8 +940,63 @@ function manufacturerPartnerInvite({ storeName, contactName, brandList, setupUrl
   };
 }
 
+// -- F05 Customer Notifications: repair/service ticket status -------------
+// Shared renderer — one builder per status keeps the notification_rules
+// template_key → email TEMPLATES lookup 1:1. Data shape comes from the
+// service-tickets consumer (services/service-tickets.js).
+function ticketStatusEmail(headline, lead) {
+  return (data) => {
+    const { storeName, customerName, ticketNumber, ticketTitle, storePhone } = data || {};
+    return {
+      subject: `${headline}${ticketNumber ? ` — ${ticketNumber}` : ""}`,
+      html: wrapEmailHtml(
+        headline,
+        `<p>Hi ${customerName || "there"},</p>
+         <p>${lead} at <strong>${storeName || "our store"}</strong>.</p>
+         <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+           ${ticketNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Reference</td><td style="padding:10px 16px;font-weight:600">${ticketNumber}</td></tr>` : ""}
+           ${ticketTitle ? `<tr><td style="padding:10px 16px;color:#64748b">Item</td><td style="padding:10px 16px">${ticketTitle}</td></tr>` : ""}
+         </table>
+         ${storePhone ? `<p style="color:#64748b;font-size:14px">Questions? Call us at ${storePhone}.</p>` : ""}
+         ${footer("This is an automated update about your service request.")}`
+      ),
+    };
+  };
+}
+const ticketApproved = ticketStatusEmail("Your repair has been approved", "Good news — your service request has been approved and queued");
+const ticketInProgress = ticketStatusEmail("Your repair is in progress", "Work has started on your service request");
+const ticketCompleted = ticketStatusEmail("Your item is ready for pickup", "Your service request is complete and ready for collection");
+const ticketInvoiced = ticketStatusEmail("Your invoice is ready", "An invoice has been prepared for your completed service request");
+
+// -- F05: appointment reminder (email channel of the reminders engine) ----
+function appointmentReminder(data) {
+  const { storeName, customerName, serviceName, staffName, apptStart } = data || {};
+  let when = apptStart;
+  try { if (apptStart) when = new Date(apptStart).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Reminder: ${serviceName || "your appointment"}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Appointment Reminder",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>This is a reminder for your upcoming appointment at <strong>${storeName || "our store"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#eff6ff;border-radius:8px">
+         ${serviceName ? `<tr><td style="padding:10px 16px;color:#64748b">Service</td><td style="padding:10px 16px;font-weight:600">${serviceName}</td></tr>` : ""}
+         ${staffName ? `<tr><td style="padding:10px 16px;color:#64748b">With</td><td style="padding:10px 16px">${staffName}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+       </table>
+       ${footer("This is an automated appointment reminder.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
+  // F05 customer notifications (status-change engine)
+  ticket_approved: ticketApproved,
+  ticket_in_progress: ticketInProgress,
+  ticket_completed: ticketCompleted,
+  ticket_invoiced: ticketInvoiced,
+  appointment_reminder: appointmentReminder,
   campaign_test: campaignTest,
   customer_invoice: customerInvoice,
   customer_statement: customerStatement,

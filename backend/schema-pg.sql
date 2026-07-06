@@ -2422,7 +2422,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('wholesale_field_sales', false, 'Tier 1.1 wholesale — field rep mobile app: route, GPS+selfie check-in, visit log'),
   ('wholesale_schemes', false, 'Tier 1.3 wholesale — slab-tier volume discounts + brand-scoped schemes on promotions'),
   ('wholesale_secondary_sales', false, 'Tier 1.4 wholesale — manufacturer-partner portal for secondary sales visibility'),
-  ('kit_bom_engine', false, 'F01 kit/BOM engine — recipe costing, production/disassembly runs, assembled products (kit sale decrement itself stays ungated)')
+  ('kit_bom_engine', false, 'F01 kit/BOM engine — recipe costing, production/disassembly runs, assembled products (kit sale decrement itself stays ungated)'),
+  ('customer_notifications', false, 'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -4147,6 +4148,48 @@ CREATE TABLE IF NOT EXISTS service_ticket_activities (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_ticket_activities_ticket ON service_ticket_activities(ticket_id);
+
+-- ── Customer Notifications (F05 status-change engine) ───────────────
+
+CREATE TABLE IF NOT EXISTS notification_rules (
+  id SERIAL PRIMARY KEY,
+  event TEXT NOT NULL,
+  channel TEXT NOT NULL CHECK (channel IN ('email','sms','whatsapp')),
+  template_key TEXT NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(event, channel)
+);
+CREATE INDEX IF NOT EXISTS idx_notification_rules_event ON notification_rules(event);
+
+CREATE TABLE IF NOT EXISTS customer_notifications (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id),
+  event TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  recipient TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'queued'
+    CHECK (status IN ('queued','sent','failed','skipped')),
+  provider_ref TEXT,
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_customer_notifications_customer ON customer_notifications(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_notifications_entity ON customer_notifications(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_customer_notifications_created ON customer_notifications(created_at DESC);
+
+-- Default repair-ticket notification rules (inert until customer_notifications flag on).
+INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+  ('ticket.status_changed:approved',    'email', 'ticket_approved',    true),
+  ('ticket.status_changed:in_progress', 'email', 'ticket_in_progress', true),
+  ('ticket.status_changed:completed',   'sms',   'ticket_completed',   true),
+  ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
+  ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
+  ('appointment.reminder',              'sms',   'appointment_reminder', true)
+ON CONFLICT (event, channel) DO NOTHING;
 
 -- ── M7 Rentals (migration v36) ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS rental_items (
