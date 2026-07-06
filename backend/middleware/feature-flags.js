@@ -77,6 +77,9 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_restaurant_seats: false,
   phase4_restaurant_drive_thru: false,
   phase4_restaurant_menu_engineering: false,
+  // V03 — delivery-aggregator order injection (foodpanda / Careem). Default OFF;
+  // restaurant + cafe presets seed it ON at wizard completion (RESTAURANT_SEED_FLAGS).
+  delivery_aggregators: false,
   // Mode-gated (appointments mode).
   phase4_appointments: false,
   phase4_appointments_waitlists: false,

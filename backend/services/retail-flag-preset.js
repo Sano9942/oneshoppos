@@ -8,7 +8,7 @@
  * RETAIL_SEED_FLAGS: 19 flags enabled when `industry_type === 'general_retail'`.
  *   Split into three buckets: core polish, opt-in extras, and integrations.
  *
- * RESTAURANT_SEED_FLAGS: 11 flags enabled when `industry_type === 'restaurant'`
+ * RESTAURANT_SEED_FLAGS: 12 flags enabled when `industry_type === 'restaurant'`
  *   or `'cafe'`. Subset of retail tuned for F&B — keeps loyalty / gift cards /
  *   manager override / risk controls / SMS / digest / delivery integrations,
  *   drops retail-specific flags (variant picker, holds, inventory intelligence,
@@ -86,6 +86,11 @@ const RESTAURANT_SEED_FLAGS = [
   // send-to-kitchen / pay-at-table flows. Without it the entire restaurant
   // POS path 403s on the first interaction.
   "phase2_draft_orders",
+
+  // Delivery aggregators (1) — V03. foodpanda / Careem order injection surface.
+  // Inert until the tenant connects an integration (adds a store id + webhook
+  // secret in the Integrations Hub), so safe to enable by default for F&B.
+  "delivery_aggregators",
 ];
 
 // Wholesale-only flags that ship ON for any tenant signing up with

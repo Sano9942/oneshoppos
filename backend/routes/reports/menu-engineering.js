@@ -112,7 +112,18 @@ module.exports = function registerMenuEngineeringReport(app, deps /* , helpers *
             CASE
               WHEN SUM(effective_qty) > 0 THEN ((SUM(net_revenue) - SUM(cogs)) / SUM(effective_qty))::numeric
               ELSE 0
-            END AS avg_margin_per_unit
+            END AS avg_margin_per_unit,
+            -- Plate cost per unit (avg captured cost_price_at_sale — for recipe
+            -- items this is the resolved ingredient plate cost) + food-cost %,
+            -- the #1 back-of-house profit lever for kitchens (V03 P1).
+            CASE
+              WHEN SUM(effective_qty) > 0 THEN (SUM(cogs) / SUM(effective_qty))::numeric
+              ELSE 0
+            END AS plate_cost_per_unit,
+            CASE
+              WHEN SUM(net_revenue) > 0 THEN (SUM(cogs) / SUM(net_revenue) * 100)::numeric
+              ELSE 0
+            END AS food_cost_pct
           FROM line_effective
           GROUP BY product_id
           HAVING SUM(effective_qty) > 0
@@ -126,7 +137,9 @@ module.exports = function registerMenuEngineeringReport(app, deps /* , helpers *
           ROUND(revenue, 2)::float AS revenue,
           ROUND(cogs, 2)::float AS cogs,
           ROUND(profit, 2)::float AS profit,
-          ROUND(avg_margin_per_unit, 2)::float AS avg_margin_per_unit
+          ROUND(avg_margin_per_unit, 2)::float AS avg_margin_per_unit,
+          ROUND(plate_cost_per_unit, 2)::float AS plate_cost_per_unit,
+          ROUND(food_cost_pct, 1)::float AS food_cost_pct
         FROM per_product
         ORDER BY popularity DESC
       `;

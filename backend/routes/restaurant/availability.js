@@ -77,6 +77,11 @@ module.exports = function registerRestaurantAvailabilityRoutes(app, deps) {
           );
         } catch { /* audit logging is best-effort */ }
 
+        // V03 — push the 86 out to connected delivery aggregators so foodpanda/
+        // Careem customers can't order what the kitchen just ran out of.
+        // Fire-and-forget: best-effort, never blocks the manager's 86 action.
+        pushAggregatorAvailability(deps.db, id, false);
+
         res.status(201).json(row);
       } catch (err) {
         res.status(err.statusCode || 500).json({ error: err.message });
@@ -114,9 +119,25 @@ module.exports = function registerRestaurantAvailabilityRoutes(app, deps) {
         );
       } catch { /* audit logging is best-effort */ }
 
+      // V03 — restore availability on connected delivery aggregators.
+      pushAggregatorAvailability(deps.db, id, true);
+
       res.json(row);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
+
+  // Fire-and-forget availability push to foodpanda/Careem. Only the
+  // delivery_aggregators flag gates whether anything is attempted; the push
+  // itself no-ops when no aggregator integration is active for the tenant.
+  function pushAggregatorAvailability(db, productId, available) {
+    Promise.resolve()
+      .then(() => require("../../services/aggregator-orders").pushAvailabilityFor86(db, { productId, available }))
+      .catch((err) => {
+        require("../../services/logger")
+          .child({ component: "restaurant-availability" })
+          .warn({ err: err.message, productId }, "aggregator availability push failed");
+      });
+  }
 };
