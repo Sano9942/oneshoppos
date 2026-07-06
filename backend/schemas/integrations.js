@@ -8,6 +8,9 @@ const connectProviderSchema = z.object({
   api_secret: z.string().min(1).optional(),
   oauth_token: z.string().min(1).optional(),
   oauth_refresh_token: z.string().optional(),
+  // HMAC secret the platform signs inbound webhooks with (foodpanda/Careem,
+  // Shopify-style). Stored encrypted; verified in routes/webhooks.js.
+  webhook_secret: z.string().min(1).optional(),
   config_json: z.string().optional(),
 });
 

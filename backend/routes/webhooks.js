@@ -577,6 +577,66 @@ module.exports = function registerWebhookRoutes(app, deps) {
       res.status(500).json({ error: "Internal error" });
     }
   });
+
+  // ── Delivery aggregators (foodpanda / Careem) — V03 food-service depth ──
+  // Order-push webhooks. UNLIKE the Meta/Daraz handlers above, these are
+  // signature-VERIFIED and fail-closed (see services/aggregator-orders.js:
+  // verifyWebhook). Mounted pre-tenant like every other webhook; the tenant is
+  // resolved by aggregator store id → integration_settings (config carries the
+  // per-tenant HMAC secret, which is why routing precedes verification).
+  const aggregator = require("../services/aggregator-orders");
+  for (const source of aggregator.AGGREGATOR_SOURCES) {
+    app.post(`/api/webhooks/${source}`, webhookLimiter, async (req, res) => {
+      try {
+        const payload = req.body || {};
+        // 1. Route by store id (needed before verification — the HMAC secret is
+        //    per-tenant, keyed by store id).
+        const storeId = aggregator.extractStoreId(source, payload);
+        if (!storeId) {
+          logger.warn({ source }, "aggregator webhook: no store id in payload");
+          return res.status(400).json({ error: "Missing store id" });
+        }
+        const resolved = await aggregator.resolveTenantForStore(deps, source, storeId);
+        if (!resolved) {
+          logger.warn({ source, storeId }, "aggregator webhook: no active integration for store");
+          return res.status(404).json({ error: "Store not connected" });
+        }
+        // 2. Verify HMAC signature + replay window — fail-closed.
+        const verify = aggregator.verifyWebhook({
+          source,
+          rawBody: req.rawBody,
+          headers: req.headers,
+          secret: resolved.config.webhook_secret,
+        });
+        if (!verify.ok) {
+          // Fail-closed is security-correct but must not be OPERATIONALLY silent:
+          // a misconfigured secret/header would reject every legit order and the
+          // orders would just vanish. Feed the alerting sliding window so a spike
+          // of rejections on an active integration pages ops instead.
+          logger.warn({ source, storeId, reason: verify.reason }, "aggregator webhook signature rejected");
+          try {
+            require("../services/alerting").recordError({
+              tenant: resolved.tenant.slug,
+              message: `aggregator webhook signature rejected (${source}, store ${storeId}): ${verify.reason}`,
+            });
+          } catch { /* alerting is best-effort */ }
+          return res.status(401).json({ error: "Invalid signature", reason: verify.reason });
+        }
+        // 3. Ingest (idempotent on source+order id) + optional zero-touch
+        //    auto-accept → KDS ticket + booked sale.
+        const result = await aggregator.processInboundOrder(resolved.db, {
+          source,
+          payload,
+          config: resolved.config,
+          tenantSlug: resolved.tenant.slug,
+        });
+        return res.json(result);
+      } catch (err) {
+        logger.error({ err, source }, "aggregator webhook processing error");
+        return res.status(500).json({ error: "Internal error" });
+      }
+    });
+  }
 };
 
 // Export processWebhookEvent for reuse by sandbox simulate endpoint

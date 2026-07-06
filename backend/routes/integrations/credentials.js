@@ -11,16 +11,17 @@ module.exports = function registerCredentialRoutes(router, deps) {
     validate(connectProviderSchema),
     async (req, res) => {
       try {
-        const { provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json } = req.body;
+        const { provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, webhook_secret, config_json } = req.body;
 
         const encKey = api_key ? encryptSecret(api_key) : null;
         const encSecret = api_secret ? encryptSecret(api_secret) : null;
         const encOauth = oauth_token ? encryptSecret(oauth_token) : null;
         const encRefresh = oauth_refresh_token ? encryptSecret(oauth_refresh_token) : null;
+        const encWebhook = webhook_secret ? encryptSecret(webhook_secret) : null;
 
         await db.query(
-          `INSERT INTO integration_settings (provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json, is_active, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
+          `INSERT INTO integration_settings (provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, webhook_secret, config_json, is_active, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, NOW())
            ON CONFLICT (provider) DO UPDATE SET
              category = COALESCE(EXCLUDED.category, integration_settings.category),
              store_url = COALESCE(EXCLUDED.store_url, integration_settings.store_url),
@@ -28,12 +29,27 @@ module.exports = function registerCredentialRoutes(router, deps) {
              api_secret = COALESCE(EXCLUDED.api_secret, integration_settings.api_secret),
              oauth_token = COALESCE(EXCLUDED.oauth_token, integration_settings.oauth_token),
              oauth_refresh_token = COALESCE(EXCLUDED.oauth_refresh_token, integration_settings.oauth_refresh_token),
+             webhook_secret = COALESCE(EXCLUDED.webhook_secret, integration_settings.webhook_secret),
              config_json = COALESCE(EXCLUDED.config_json, integration_settings.config_json),
              is_active = true,
              last_error = NULL,
              updated_at = NOW()`,
-          [provider, category || "marketplace", store_url || null, encKey, encSecret, encOauth, encRefresh, config_json || "{}"]
+          [provider, category || "marketplace", store_url || null, encKey, encSecret, encOauth, encRefresh, encWebhook, config_json || "{}"]
         );
+
+        // V03 — connecting foodpanda/Careem turns the delivery_aggregators surface
+        // ON for this tenant (the flag is a real gate, not decorative; new tenants
+        // get it via the preset seed, existing tenants get it the moment they
+        // connect — so no bulk data migration is needed).
+        if (["foodpanda", "careem"].includes(provider)) {
+          await db.query(
+            `INSERT INTO feature_flags (key, enabled) VALUES ('delivery_aggregators', true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`
+          );
+          try {
+            require("../../middleware/feature-flags").invalidateFeatureFlagCache(req.tenantId);
+          } catch { /* cache invalidation is best-effort */ }
+        }
 
         res.json({ connected: true, provider });
       } catch (err) {

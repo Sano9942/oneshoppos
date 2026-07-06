@@ -2471,6 +2471,12 @@ INSERT INTO feature_flags (key, enabled, description)
 VALUES ('fbr_integration', false, 'FBR Digital Invoicing - real-time invoice posting to FBR API')
 ON CONFLICT (key) DO NOTHING;
 
+-- V03 food-service depth: delivery-aggregator order injection (foodpanda/Careem).
+-- Default off; restaurant + cafe presets flip it on at wizard completion.
+INSERT INTO feature_flags (key, enabled, description)
+VALUES ('delivery_aggregators', false, 'V03 foodpanda/Careem order injection → online-ordering inbox → KDS')
+ON CONFLICT (key) DO NOTHING;
+
 -- Phase 2-G Wave 1: seed all phase2g_* flags (default off; each wave flips
 -- one on — no new migrations needed for flag registration).
 INSERT INTO feature_flags (key, enabled, description) VALUES
