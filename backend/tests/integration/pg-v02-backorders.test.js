@@ -22,6 +22,11 @@
  * isolated-schema clock-in blocker — same pattern as the completion-04 suite.
  */
 
+// Captured for restore; the storefront test deletes MULTI_TENANT after
+// createTestApp so public-tenant-context resolves the single-tenant branch
+// (same pattern as pg-batch-phase1-storefront-contracts.test.js).
+const origMultiTenant = process.env.MULTI_TENANT;
+
 const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
@@ -40,6 +45,10 @@ describe("V02 — backorders / partial fulfillment", () => {
     require("../../routes/sales")(app, deps);
     require("../../routes/backorders")(app, deps);
     require("../../routes/customer-invoices")(app, deps);
+    // Storefront must see the single-tenant branch of public-tenant-context —
+    // delete AFTER createTestApp (dotenv reload) and BEFORE its first require.
+    delete process.env.MULTI_TENANT;
+    require("../../routes/storefront")(app, deps);
 
     await db.query(
       `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_backorders', true)
@@ -71,6 +80,7 @@ describe("V02 — backorders / partial fulfillment", () => {
 
   afterAll(async () => {
     if (cleanup) await cleanup();
+    if (origMultiTenant !== undefined) process.env.MULTI_TENANT = origMultiTenant;
   });
 
   let uuidSeq = 0;
@@ -355,6 +365,105 @@ describe("V02 — backorders / partial fulfillment", () => {
     expect(quote.availabilityErrors).toHaveLength(1);
     expect(Number(quote.availabilityErrors[0].available)).toBe(7);
     expect(Number(quote.availabilityErrors[0].requested)).toBe(12);
+  });
+
+  it("6b. storefront checkout split: clamped cart + backorder_items → web_order + backorder at the QUOTE price", async () => {
+    const { rows: [ch] } = await db.query("SELECT id FROM sales_channels WHERE code = 'storefront'");
+    // Product 4 published (from test 6), stock 7 at outlet 1. Signed-in
+    // buyer's cart clamped to 7 with 5 backordered.
+    const { rows: [cart] } = await db.query(
+      `INSERT INTO storefront_carts (cart_token, customer_id, channel_id)
+       VALUES ('v02-bo-cart', $1, $2) RETURNING id`,
+      [buyer, ch.id]
+    );
+    await db.query(
+      `INSERT INTO storefront_cart_items (cart_id, product_id, quantity) VALUES ($1, 4, 7)`,
+      [cart.id]
+    );
+
+    const res = await request(app)
+      .post("/api/storefront/checkout")
+      .send({
+        cart_token: "v02-bo-cart",
+        delivery_method: "pickup",
+        pickup_outlet_id: 1,
+        customer_name: "Portal Buyer",
+        customer_phone: "0300-1234567",
+        customer_email: "portal@example.test",
+        backorder_items: [{ product_id: 4, quantity: 5, unit_price: 999999 /* ignored — server reprices */ }],
+      });
+    expect(res.status).toBe(201);
+    expect(Array.isArray(res.body.backorders)).toBe(true);
+    expect(res.body.backorders).toHaveLength(1);
+
+    const { rows: [bo] } = await db.query(
+      "SELECT * FROM backorders WHERE id = $1", [res.body.backorders[0].id]
+    );
+    expect(bo.source_type).toBe("web_order");
+    expect(Number(bo.qty_ordered)).toBe(5);
+    expect(Number(bo.customer_id)).toBe(Number(buyer));
+    // Server-authoritative pricing: the quote line's unit price, never the
+    // client-sent number.
+    const { rows: [p4] } = await db.query("SELECT price FROM products WHERE id = 4");
+    expect(Number(bo.unit_price)).toBe(Number(p4.price));
+
+    // Stock consumed only for the fulfilled slice.
+    const { rows: [os] } = await db.query(
+      "SELECT quantity FROM outlet_stock WHERE product_id = 4 AND outlet_id = 1"
+    );
+    expect(Number(os.quantity)).toBe(0);
+  });
+
+  it("6c. anonymous storefront checkout gets no backorder offer", async () => {
+    const { rows: [ch] } = await db.query("SELECT id FROM sales_channels WHERE code = 'storefront'");
+    await db.query(
+      `INSERT INTO storefront_carts (cart_token, customer_id, channel_id)
+       VALUES ('v02-anon-cart', NULL, $1) RETURNING id`,
+      [ch.id]
+    );
+    const { rows: [cart] } = await db.query("SELECT id FROM storefront_carts WHERE cart_token = 'v02-anon-cart'");
+    await db.query(
+      `INSERT INTO storefront_cart_items (cart_id, product_id, quantity) VALUES ($1, 4, 3)`,
+      [cart.id]
+    );
+    // Stock is 0 after 6b — availability error, but no offer for anonymous.
+    const res = await request(app)
+      .post("/api/storefront/checkout")
+      .send({
+        cart_token: "v02-anon-cart",
+        delivery_method: "pickup",
+        pickup_outlet_id: 1,
+        customer_name: "Guest",
+        customer_phone: "0300-0000001",
+        customer_email: "guest@example.test",
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.backorder_available).toBe(false);
+  });
+
+  it("8. ledger audit: Σ invoices − Σ payments == Σ balance_due for the walkthrough buyer", async () => {
+    // The feedback_audit_ledger_before_building bar: a new sale-creating path
+    // (backorder conversion) must not reintroduce a reconciliation gap.
+    const { rows: [inv] } = await db.query(
+      `SELECT COALESCE(SUM(total_amount), 0)::numeric AS total
+         FROM customer_invoices
+        WHERE customer_id = $1 AND status NOT IN ('cancelled','void')`,
+      [buyer]
+    );
+    const { rows: [pay] } = await db.query(
+      `SELECT COALESCE(SUM(CASE WHEN p.payment_type = 'credit_reversal' THEN p.amount ELSE p.amount END), 0)::numeric AS total
+         FROM customer_invoice_payments p
+         JOIN customer_invoices i ON i.id = p.invoice_id
+        WHERE i.customer_id = $1 AND i.status NOT IN ('cancelled','void')`,
+      [buyer]
+    );
+    const { rows: [due] } = await db.query(
+      `SELECT COALESCE(SUM(balance_due), 0)::numeric AS total
+         FROM customer_invoices
+        WHERE customer_id = $1 AND status NOT IN ('cancelled','void')`,
+      [buyer]
+    );
+    expect(Number(inv.total) - Number(pay.total)).toBeCloseTo(Number(due.total), 2);
   });
 
   it("7. backorders list + summary + suggestions endpoints work oldest-first", async () => {
