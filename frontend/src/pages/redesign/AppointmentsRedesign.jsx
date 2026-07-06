@@ -43,7 +43,7 @@ export default function AppointmentsRedesign() {
   const loadAppointments = useCallback(async () => {
     setLoading(true);
     try {
-      let url = `/appointments?from=${from}&to=${to}`;
+      let url = `/api/appointments?from=${from}&to=${to}`;
       if (statusFilter) url += `&status=${statusFilter}`;
       if (employeeFilter) url += `&employee_id=${employeeFilter}`;
       const data = await api.get(url);
@@ -67,8 +67,22 @@ export default function AppointmentsRedesign() {
 
   const updateStatus = async (id, status) => {
     try {
-      await api.put(`/appointments/${id}`, { status });
+      await api.put(`/api/appointments/${id}`, { status });
       toast.success(`Appointment ${status}`);
+      setSelected(null);
+      loadAppointments();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  // F04: no-show goes through the dedicated endpoint so a card-on-file service
+  // can charge its no-show fee. Uses the correct /api/ prefix (the rest of this
+  // page is missing it — tracked separately).
+  const markNoShow = async (id) => {
+    try {
+      const res = await api.post(`/api/appointments/${id}/no-show`, {});
+      if (res?.charge?.ref) toast.success(`No-show — fee charged (${res.charge.amount})`);
+      else if (res?.charge?.error) toast.warning(`Marked no-show; fee charge failed: ${res.charge.error}`);
+      else toast.success("Appointment marked no-show");
       setSelected(null);
       loadAppointments();
     } catch (err) { toast.error(err.message); }
@@ -76,7 +90,7 @@ export default function AppointmentsRedesign() {
 
   const doCancel = async (id) => {
     try {
-      await api.post(`/appointments/${id}/cancel`, { reason: cancelReason || undefined });
+      await api.post(`/api/appointments/${id}/cancel`, { reason: cancelReason || undefined });
       toast.success("Appointment cancelled");
       setCancelReason("");
       setSelected(null);
@@ -87,14 +101,11 @@ export default function AppointmentsRedesign() {
   const doReschedule = async (id) => {
     if (!rescheduleDate) { toast.error("Select new date/time"); return; }
     try {
-      const svc = selected;
+      // Backend recomputes end_at from the service duration — it only needs
+      // start_at (see rescheduleSchema).
       const startAt = new Date(rescheduleDate);
-      // Estimate end from current duration
-      const origDuration = svc.end_at && svc.start_at ? (new Date(svc.end_at) - new Date(svc.start_at)) : 3600000;
-      const endAt = new Date(startAt.getTime() + origDuration);
-      await api.post(`/appointments/${id}/reschedule`, {
-        new_start_at: startAt.toISOString(),
-        new_end_at: endAt.toISOString(),
+      await api.post(`/api/appointments/${id}/reschedule`, {
+        start_at: startAt.toISOString(),
       });
       toast.success("Appointment rescheduled");
       setRescheduleDate("");
@@ -202,7 +213,7 @@ export default function AppointmentsRedesign() {
                   {selected.status === "pending" && <Button size="sm" onClick={() => updateStatus(selected.id, "confirmed")}>Confirm</Button>}
                   {selected.status === "confirmed" && <Button size="sm" onClick={() => updateStatus(selected.id, "in_progress")}>Start</Button>}
                   {selected.status === "in_progress" && <Button size="sm" onClick={() => updateStatus(selected.id, "completed")}>Complete</Button>}
-                  <Button size="sm" variant="ghost" onClick={() => updateStatus(selected.id, "no_show")}>No-Show</Button>
+                  <Button size="sm" variant="ghost" onClick={() => markNoShow(selected.id)}>No-Show</Button>
                 </div>
 
                 {/* Reschedule */}

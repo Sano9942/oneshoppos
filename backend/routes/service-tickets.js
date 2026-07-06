@@ -2,9 +2,10 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
   const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
-  const { createTicketSchema, updateTicketSchema, addNoteSchema } = require("../schemas/service-tickets");
+  const { createTicketSchema, updateTicketSchema, addNoteSchema, depositCheckoutSchema } = require("../schemas/service-tickets");
   const tickets = require("../services/service-tickets");
   const customerNotify = require("../services/customer-notify");
+  const depositEngine = require("../services/deposit-engine");
 
   const gate = [requireMode("workflow_tickets"), requireFeature("phase4_workflow_tickets"), requirePerm("manage_tickets")];
 
@@ -108,6 +109,24 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
         fireTicketNotification(req, t, "invoiced");
       } catch {}
       res.status(201).json(result);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // F04: gateway deposit checkout (charge, not hold — a repair deposit is a
+  // payment). Returns a hosted checkout URL; the webhook marks the deposit
+  // captured and records the paid amount on deposit_amount. When the gateway
+  // is disabled, engine.create throws 400 and staff record a manual deposit via
+  // the ticket's deposit_amount field instead. Guard the UI on payment_enabled.
+  app.post("/api/service-tickets/:id/deposit/checkout", ...gate, validate(depositCheckoutSchema), async (req, res) => {
+    try {
+      const result = await depositEngine.create(deps.db, {
+        entityType: "service_ticket",
+        entityId: Number(req.params.id),
+        amount: req.body?.amount,
+        returnUrl: req.body?.returnUrl,
+        cancelUrl: req.body?.cancelUrl,
+      });
+      res.json(result);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 };

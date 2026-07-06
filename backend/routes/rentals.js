@@ -11,10 +11,12 @@ module.exports = function registerRentalRoutes(app, deps) {
     updateContractSchema,
     checkoutSchema,
     returnSchema,
+    depositPreauthSchema,
     cancelSchema,
     noteSchema,
   } = require("../schemas/rentals");
   const rentals = require("../services/rental-service");
+  const depositEngine = require("../services/deposit-engine");
 
   const gate = [requireMode("rentals"), requireFeature("phase4_rentals"), requirePerm("manage_rentals")];
 
@@ -155,9 +157,40 @@ module.exports = function registerRentalRoutes(app, deps) {
 
   app.post("/api/rental-contracts/:id/return", ...gate, validate(returnSchema), async (req, res) => {
     try {
-      const contract = await rentals.returnContract(deps.db, Number(req.params.id), req.body, req.employee.id);
+      const id = Number(req.params.id);
+      const contract = await rentals.returnContract(deps.db, id, req.body, req.employee.id);
       if (!contract) return res.status(404).json({ error: "Contract not found" });
+      // F04: settle the gateway security-deposit hold (if any). A capture
+      // amount on the return screen captures that much for damage/late fee
+      // (capped at the hold); omitting it releases the hold. Non-fatal — the
+      // return itself already committed.
+      try {
+        const captureAmt = Number(req.body?.deposit_capture_amount || 0);
+        if (captureAmt > 0) {
+          await depositEngine.capture(deps.db, { entityType: "rental_contract", entityId: id, amount: captureAmt });
+        } else {
+          await depositEngine.release(deps.db, { entityType: "rental_contract", entityId: id });
+        }
+      } catch (depErr) {
+        console.warn("[rentals/return] deposit settle failed:", depErr.message);
+      }
       res.json(contract);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // F04: rental gateway deposit pre-auth (security deposit hold). Guard the UI
+  // button on billing payment_enabled — engine.create throws 400 when the
+  // gateway isn't configured.
+  app.post("/api/rental-contracts/:id/deposit/preauth", ...gate, validate(depositPreauthSchema), async (req, res) => {
+    try {
+      const result = await depositEngine.create(deps.db, {
+        entityType: "rental_contract",
+        entityId: Number(req.params.id),
+        amount: req.body?.amount,
+        returnUrl: req.body?.returnUrl,
+        cancelUrl: req.body?.cancelUrl,
+      });
+      res.json(result);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 
@@ -184,8 +217,16 @@ module.exports = function registerRentalRoutes(app, deps) {
 
   app.post("/api/rental-contracts/:id/cancel", ...gate, validate(cancelSchema), async (req, res) => {
     try {
-      const contract = await rentals.cancelContract(deps.db, Number(req.params.id), req.body, req.employee.id);
+      const id = Number(req.params.id);
+      const contract = await rentals.cancelContract(deps.db, id, req.body, req.employee.id);
       if (!contract) return res.status(404).json({ error: "Contract not found" });
+      // F04: a cancelled contract must not keep the customer's deposit frozen —
+      // release any authorized hold. Non-fatal.
+      try {
+        await depositEngine.release(deps.db, { entityType: "rental_contract", entityId: id });
+      } catch (depErr) {
+        console.warn("[rentals/cancel] deposit release failed:", depErr.message);
+      }
       res.json(contract);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });

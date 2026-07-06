@@ -79,7 +79,7 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
 
         const {
           service_id, employee_id, start_at,
-          customer_name, customer_phone, customer_email, notes,
+          customer_name, customer_phone, customer_email, notes, card_token,
         } = req.body;
 
         let companyProfile = null;
@@ -97,7 +97,7 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
         const { createAppointment } = require("../services/booking-services");
         const appt = await createAppointment(
           db,
-          { service_id, employee_id, start_at, customer_name, customer_phone, customer_email, notes },
+          { service_id, employee_id, start_at, customer_name, customer_phone, customer_email, notes, card_token },
           "public",
           {
             tenant: tenantCtx,

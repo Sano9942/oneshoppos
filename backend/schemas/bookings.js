@@ -11,6 +11,9 @@ const createServiceSchema = z.object({
   max_advance_days: z.number().int().positive().default(90),
   // F06 — POS product representing this service at checkout (prefill line).
   product_id: z.number().int().positive().optional().nullable(),
+  // F04 no-show protection
+  no_show_fee: z.number().min(0).optional(),
+  require_card_on_file: z.boolean().optional(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 
@@ -23,6 +26,8 @@ const updateServiceSchema = z.object({
   is_active: z.boolean().optional(),
   requires_confirmation: z.boolean().optional(),
   product_id: z.number().int().positive().optional().nullable(),
+  no_show_fee: z.number().min(0).optional(),
+  require_card_on_file: z.boolean().optional(),
   staff_ids: z.array(z.number().int().positive()).optional(),
 });
 
@@ -43,6 +48,9 @@ const createAppointmentSchema = z.object({
     service_id: z.number().int().positive(),
     employee_id: z.number().int().positive().optional(),
   })).max(9).optional(),
+  // F04: gateway card token for no-show protection (only stored when the
+  // service opts into card-on-file).
+  card_token: z.string().max(255).optional(),
 });
 
 const rescheduleSchema = z.object({
@@ -91,6 +99,8 @@ const publicBookingSchema = z.object({
   customer_phone: z.string().min(1),
   customer_email: z.string().email().optional(),
   notes: z.string().optional(),
+  // F04: gateway card token captured client-side for no-show protection.
+  card_token: z.string().max(255).optional(),
 });
 
 module.exports = {

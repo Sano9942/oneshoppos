@@ -81,6 +81,18 @@ const returnSchema = z.object({
   condition_notes: z.string().max(2000).nullable().optional(),
   late_fee: z.number().min(0).optional(),
   late_fee_override: z.boolean().optional(),
+  // F04: amount of the security-deposit hold to capture on return (damage/late
+  // fee). Omit or 0 → release the hold. Capped at the authorized amount by the
+  // deposit engine.
+  deposit_capture_amount: z.number().min(0).optional(),
+});
+
+// F04: rental gateway deposit pre-auth. Amount optional — falls back to the
+// contract's deposit_collected when omitted.
+const depositPreauthSchema = z.object({
+  amount: z.number().min(0).optional(),
+  returnUrl: z.string().max(500).optional(),
+  cancelUrl: z.string().max(500).optional(),
 });
 
 const cancelSchema = z.object({
@@ -106,6 +118,7 @@ module.exports = {
   updateContractSchema,
   checkoutSchema,
   returnSchema,
+  depositPreauthSchema,
   cancelSchema,
   noteSchema,
   availabilityQuerySchema,

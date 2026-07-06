@@ -5,7 +5,7 @@ module.exports = function registerBookingRoutes(app, deps) {
   const { createServiceSchema, updateServiceSchema, createAppointmentSchema, rescheduleSchema, cancelSchema,
     createResourceSchema, updateResourceSchema, setServiceResourcesSchema } = require("../schemas/bookings");
   const { getAvailableSlots } = require("../services/booking-availability");
-  const { createAppointment, rescheduleAppointment, cancelAppointment, mapOverlapConstraintError } = require("../services/booking-services");
+  const { createAppointment, rescheduleAppointment, cancelAppointment, mapOverlapConstraintError, markNoShow } = require("../services/booking-services");
 
   // notifyCtx for the waitlist offer flow + F05 notifications (fire-and-forget
   // downstream; safe when slug is missing — notify() rejects and is caught).
@@ -29,6 +29,14 @@ module.exports = function registerBookingRoutes(app, deps) {
      JOIN booking_services sbs ON sbs.id = s.service_id
      LEFT JOIN employees se ON se.id = s.employee_id
      WHERE s.appointment_id = a.id) AS segments`;
+
+  // F04: the gateway card token is write-only. Never return it in any response
+  // — expose only a boolean card_on_file so the UI can show a badge.
+  const stripCardToken = (row) => {
+    if (!row) return row;
+    const { card_token, ...safe } = row;
+    return { ...safe, card_on_file: !!card_token };
+  };
 
   // ── Booking Services ─────────────────────────────────────────
 
@@ -54,9 +62,9 @@ module.exports = function registerBookingRoutes(app, deps) {
     try {
       const { staff_ids, ...data } = req.body;
       const { rows: [service] } = await deps.db.query(
-        `INSERT INTO booking_services (name, description, duration_minutes, padding_minutes, price, outlet_id, requires_confirmation, max_advance_days, product_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [data.name, data.description || null, data.duration_minutes, data.padding_minutes, data.price, data.outlet_id || null, data.requires_confirmation, data.max_advance_days, data.product_id || null]
+        `INSERT INTO booking_services (name, description, duration_minutes, padding_minutes, price, outlet_id, requires_confirmation, max_advance_days, product_id, no_show_fee, require_card_on_file)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [data.name, data.description || null, data.duration_minutes, data.padding_minutes, data.price, data.outlet_id || null, data.requires_confirmation, data.max_advance_days, data.product_id || null, data.no_show_fee || 0, data.require_card_on_file || false]
       );
 
       if (staff_ids?.length) {
@@ -139,7 +147,7 @@ module.exports = function registerBookingRoutes(app, deps) {
          ORDER BY a.start_at ASC`,
         params
       );
-      res.json({ appointments: rows });
+      res.json({ appointments: rows.map(stripCardToken) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -229,7 +237,7 @@ module.exports = function registerBookingRoutes(app, deps) {
     try {
       const appt = await createAppointment(deps.db, req.body, "admin");
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_created", JSON.stringify({ id: appt.id })]); } catch {}
-      res.status(201).json(appt);
+      res.status(201).json(stripCardToken(appt));
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
@@ -272,7 +280,7 @@ module.exports = function registerBookingRoutes(app, deps) {
           offerForFreedAppointmentSlot(deps.db, appt, notifyCtxFrom(req)).catch(() => {});
         } catch { /* waitlist module optional */ }
       }
-      res.json(appt);
+      res.json(stripCardToken(appt));
     } catch (err) {
       // employee_id reassignment never ran checkOverlap — the v100 EXCLUDE
       // constraint is what catches a conflicting move here.
@@ -285,7 +293,7 @@ module.exports = function registerBookingRoutes(app, deps) {
     try {
       const appt = await rescheduleAppointment(deps.db, Number(req.params.id), req.body);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_rescheduled", JSON.stringify({ id: appt.id })]); } catch {}
-      res.json(appt);
+      res.json(stripCardToken(appt));
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
@@ -295,7 +303,24 @@ module.exports = function registerBookingRoutes(app, deps) {
     try {
       const appt = await cancelAppointment(deps.db, Number(req.params.id), req.body.reason, { notifyCtx: notifyCtxFrom(req) });
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_cancelled", JSON.stringify({ id: appt.id })]); } catch {}
-      res.json(appt);
+      res.json(stripCardToken(appt));
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // F04: mark no-show and (if the service opts into card-on-file with a fee)
+  // charge the saved instrument. Idempotent — never double-charges.
+  app.post("/api/appointments/:id/no-show", ...gate, async (req, res) => {
+    try {
+      const result = await markNoShow(deps.db, Number(req.params.id));
+      try {
+        await deps.db.query(
+          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          [req.employee.id, "appointment_no_show", JSON.stringify({ id: Number(req.params.id), charge: result.charge })]
+        );
+      } catch {}
+      res.json({ appointment: stripCardToken(result.appointment), charge: result.charge });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

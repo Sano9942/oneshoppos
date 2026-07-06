@@ -65,7 +65,7 @@ export default function AppointmentsCalendarRedesign() {
   const loadEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/appointments/calendar?from=${dateRange.from}&to=${dateRange.to}`);
+      const data = await api.get(`/api/appointments/calendar?from=${dateRange.from}&to=${dateRange.to}`);
       setEvents(data.events || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }

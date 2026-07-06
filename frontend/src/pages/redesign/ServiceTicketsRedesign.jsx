@@ -156,6 +156,9 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
+  const [depositAmt, setDepositAmt] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -166,6 +169,28 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
   }, [ticketId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Gateway deposit button only shows when an online gateway is configured.
+  useEffect(() => {
+    let alive = true;
+    api.get("/api/billing/status")
+      .then((s) => { if (alive) setPaymentEnabled(!!s?.payment_enabled); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const takeGatewayDeposit = async () => {
+    const amt = Number(depositAmt);
+    if (!amt || amt <= 0) { toast.error("Enter a deposit amount"); return; }
+    try {
+      const res = await api.post(`/api/service-tickets/${ticketId}/deposit/checkout`, { amount: amt });
+      if (res?.checkout_url) window.open(res.checkout_url, "_blank", "noopener");
+      toast.success("Deposit checkout opened — updates after payment");
+      setDepositAmt("");
+      load();
+      onRefresh();
+    } catch (err) { toast.error(err.message); }
+  };
 
   const changeStatus = async (newStatus) => {
     setSubmitting(true);
@@ -309,10 +334,22 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Amount</dt><dd className="text-(--ui-text) font-medium">{fmt(ticket.deposit_amount)}</dd></div>
                 <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Method</dt><dd className="text-(--ui-text)">{(ticket.deposit_method || "cash").replace("_", " ")}</dd></div>
+                {ticket.deposit_status && ticket.deposit_status !== "none" && (
+                  <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Gateway</dt><dd className="text-(--ui-text)">{ticket.deposit_status.replace("_", " ")}</dd></div>
+                )}
                 <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Paid At</dt><dd className="text-(--ui-text)">{fmtDateTime(ticket.deposit_paid_at)}</dd></div>
               </dl>
             ) : (
               <p className="text-sm text-(--ui-text-muted)">No deposit recorded</p>
+            )}
+            {/* F04: online gateway deposit (charge). Only when a gateway is configured. */}
+            {paymentEnabled && !["invoiced", "cancelled"].includes(ticket.status) &&
+              !["pending", "captured"].includes(ticket.deposit_status) && (
+              <div className="mt-3 flex gap-2">
+                <Input type="number" min="0" step="0.01" value={depositAmt}
+                  onChange={e => setDepositAmt(e.target.value)} placeholder="Deposit amount" className="flex-1" />
+                <Button size="sm" onClick={takeGatewayDeposit}>Take Online Deposit</Button>
+              </div>
             )}
           </SectionCard>
 

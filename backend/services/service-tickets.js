@@ -186,7 +186,11 @@ async function generateInvoiceFromTicket(db, ticketId, employeeId) {
     }
 
     const invoiceNumber = await generateInvoiceNumber(client);
-    const deposit = Number(ticket.deposit_amount || 0);
+    // F04: a gateway deposit only counts once actually captured. A pending or
+    // failed gateway checkout must not reduce the invoice balance. Manual
+    // deposits carry deposit_status 'none'/NULL and always count.
+    const gwUnpaid = ["pending", "failed"].includes(ticket.deposit_status);
+    const deposit = gwUnpaid ? 0 : Number(ticket.deposit_amount || 0);
 
     // Estimate total as deposit (minimum) — in practice the staff should set a proper total.
     // For now, we create the invoice shell; staff can edit the amount on the invoice page.

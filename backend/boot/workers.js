@@ -331,6 +331,15 @@ function startAll(deps) {
           });
         }
 
+        // F04: releases stale gateway deposit pre-auth holds (rooms/treatments/
+        // rentals) so a lapsed hold isn't captured (and declined) at checkout.
+        if (String(process.env.DEPOSIT_HOLD_EXPIRY_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("deposit-hold-expiry", async () => {
+            const { registerDepositHoldExpiryWorker } = require("../workers/deposit-hold-expiry-worker-boss");
+            await registerDepositHoldExpiryWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.ROOM_OVERDUE_WORKER_ENABLED || "0") === "1") {
           await tryRegister("room-overdue", async () => {
             const { registerRoomOverdueCheckoutWorker } = require("../workers/room-overdue-checkout-worker-boss");

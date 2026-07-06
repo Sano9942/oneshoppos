@@ -600,7 +600,9 @@ async function generateInvoiceFromContract(db, id, employeeId) {
 
     const invoiceNumber = await generateInvoiceNumber(client);
     const totalAmount = Number(contract.final_total || 0);
-    const deposit = Number(contract.deposit_collected || 0);
+    // Manual deposit (cash/card at counter) + any captured gateway hold both
+    // count as money already collected against the rental (F04).
+    const deposit = Number(contract.deposit_collected || 0) + Number(contract.deposit_captured_amount || 0);
     const balanceDue = Math.max(0, totalAmount - deposit);
 
     const { rows: [invoice] } = await client.query(

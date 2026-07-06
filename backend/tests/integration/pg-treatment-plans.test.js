@@ -44,7 +44,9 @@ beforeAll(async () => {
   customerId = rows[0]?.id || 1;
 }, 180000);
 
-jest.setTimeout(30000);
+// Vitest — vi.setConfig, not jest.setTimeout; the stray jest call made the
+// whole suite fail collection.
+vi.setConfig({ testTimeout: 30000 });
 
 afterAll(async () => {
   if (cleanup) await cleanup();
