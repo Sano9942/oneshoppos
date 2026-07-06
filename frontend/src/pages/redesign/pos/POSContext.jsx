@@ -1106,6 +1106,7 @@ export const POSProvider = ({ children }) => {
     triggerSearch: cartHook.triggerSearch,
     handleSearchChange: cartHook.handleSearchChange,
     addToCart: addToCartWithModifiers,
+    addDecodedLine: cartHook.addDecodedLine,
     modifierModalState,
     confirmModifiers,
     cancelModifiers,

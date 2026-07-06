@@ -123,6 +123,9 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
         category_id: c.category_id || null,
         quantity: c.quantity,
         price: Number(c.price || 0),
+        // V01: a scale price-embedded line carries a FINAL price and is excluded
+        // from every promotion by the shared promo engine (services/promo-engine.js).
+        price_locked: c.price_locked === true,
       }));
       const order_total = items.reduce((s, i) => s + i.price * i.quantity, 0);
       api.post("/api/promotions/quote", { items, order_total })
@@ -266,6 +269,48 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     searchRef.current?.focus();
   }, [resolvePriceListPrice, showNotice]);
 
+  // V01 grocery — add a line decoded from a scale price/weight-embedded barcode.
+  // Always a NEW line (each pre-weighed pack is distinct — never merge two
+  // different-weight packs of the same product into one line). Price-embedded
+  // lines are FINAL price + price_locked (excluded from % promos, bypass the
+  // price-list cascade); weight-embedded lines carry the decoded net weight as
+  // quantity at the shelf unit-price. Both lock tare (already netted at the
+  // deli scale) per the V01 harden rules.
+  const addDecodedLine = useCallback((product, embedded) => {
+    const stock = Number(product.local_stock ?? product.stock ?? 0);
+    const line = {
+      ...product,
+      availableStock: stock > 0 ? stock : 99999,
+      seat_number: null,
+      course_name: "main",
+      tare_weight: 0,
+      tare_locked: true,
+      decoded: true,
+      decoded_embed: embedded.embed,
+    };
+    if (embedded.embed === "price") {
+      const p = Number(embedded.price);
+      line.quantity = 1;
+      line.price = p;
+      line.originalPrice = p;
+      line.price_locked = true;
+    } else {
+      const w = Number(embedded.weight);
+      line.quantity = w > 0 ? w : 0.001;
+      line.gross_weight = w > 0 ? w : 0.001;
+      line.price = Number(product.price);
+      line.originalPrice = Number(product.price);
+    }
+    setCart((prev) => [line, ...prev]);
+    setSearch("");
+    setBarcodeSearch("");
+    setSkuSearch("");
+    setPriceSearch("");
+    setResults([]);
+    setShowResults(false);
+    searchRef.current?.focus();
+  }, []);
+
   const updateQty = useCallback((id, delta) => {
     setCart((prev) =>
       prev.map((x) => {
@@ -334,7 +379,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     showDiscountModal, setShowDiscountModal,
     showNoteModal, setShowNoteModal,
     // Cart operations
-    addToCart, updateQty, setQty, removeFromCart,
+    addToCart, addDecodedLine, updateQty, setQty, removeFromCart,
     // Computed
     grossTotal, discountValue, taxTotal, total,
     // Price lists
