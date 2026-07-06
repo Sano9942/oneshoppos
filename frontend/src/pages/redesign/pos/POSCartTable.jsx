@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { ShoppingCart, Minus, Plus, Trash2, Package, Tag, Scale, MoreHorizontal, ShieldAlert } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, Package, Tag, Scale, MoreHorizontal, ShieldAlert, Loader2 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset, isWeightedUnit } from "../../../contexts/PresetContext";
+import { isScaleSupported, weighOnce } from "../../../utils/scale";
 
 export default function POSCartTable() {
   const {
@@ -12,6 +13,7 @@ export default function POSCartTable() {
     money,
     posFlags,
     setPriceOverrideLineId,
+    showNotice,
   } = usePOS();
   const overrideOn = !!posFlags?.phase2g_price_override;
   const [menuOpenFor, setMenuOpenFor] = useState(null);
@@ -109,6 +111,7 @@ export default function POSCartTable() {
                         item={item}
                         setQty={setQty}
                         showTare={showTareField}
+                        showNotice={showNotice}
                       />
                     ) : (
                       <div className="inline-flex items-center gap-0.5 md:gap-1">
@@ -202,16 +205,41 @@ export default function POSCartTable() {
  * Default mode: gross only, tare=0, net=gross.
  * When `showTare` (preset.pos_search_config.show_tare), a second small input appears
  * for tare weight. Net is computed (gross - tare) and committed via setQty().
+ *
+ * V01 grocery lane:
+ *  - "Weigh" button (only when the browser has Web Serial) pulls a live settled
+ *    weight from the lane scale straight into the gross field. Feature-detected;
+ *    when unsupported the cashier types the weight exactly as before (fallback).
+ *  - Lines whose weight came from a scale price/weight-embedded label carry
+ *    `tare_locked` — the deli scale already netted the tare into the printed
+ *    label, so re-entering tare here would undercharge. The tare field is then
+ *    read-only.
  */
-function WeightedQtyCell({ item, setQty, showTare }) {
+function WeightedQtyCell({ item, setQty, showTare, showNotice }) {
   const gross = item.gross_weight != null ? Number(item.gross_weight) : Number(item.quantity);
   const tare = Number(item.tare_weight || 0);
+  const tareLocked = item.tare_locked === true;
+  const [weighing, setWeighing] = useState(false);
+  const canWeigh = isScaleSupported();
 
   const commit = (nextGross, nextTare) => {
     const g = Math.max(0, Number(nextGross) || 0);
     const t = Math.max(0, Number(nextTare) || 0);
     const net = Math.max(0.001, g - t);
     setQty(item.id, net, { gross_weight: g, tare_weight: t });
+  };
+
+  const handleWeigh = async () => {
+    if (weighing) return;
+    setWeighing(true);
+    try {
+      const { weight } = await weighOnce();
+      commit(weight, tare);
+    } catch (err) {
+      showNotice?.(err?.message || "Could not read the scale — type the weight.");
+    } finally {
+      setWeighing(false);
+    }
   };
 
   return (
@@ -227,6 +255,18 @@ function WeightedQtyCell({ item, setQty, showTare }) {
           className="w-20 px-2 py-1 text-center text-sm font-bold text-(--ui-text) border border-(--ui-border-strong) rounded-md focus:outline-none focus:ring-2 focus:ring-(--ui-focus) focus:border-(--ui-focus)"
         />
         <span className="text-[10px] font-semibold text-(--ui-text-muted) uppercase">{item.unit}</span>
+        {canWeigh && (
+          <button
+            type="button"
+            onClick={handleWeigh}
+            disabled={weighing}
+            title="Read weight from the lane scale"
+            className="inline-flex items-center gap-1 px-1.5 py-1 text-[10px] font-semibold text-(--ui-text) border border-(--ui-border-strong) rounded-md hover:bg-(--ui-muted-surface) disabled:opacity-50 transition"
+          >
+            {weighing ? <Loader2 size={11} className="animate-spin" /> : <Scale size={11} />}
+            Weigh
+          </button>
+        )}
       </div>
       {showTare && (
         <div className="inline-flex items-center gap-1 text-[10px] text-(--ui-text-muted)">
@@ -236,10 +276,14 @@ function WeightedQtyCell({ item, setQty, showTare }) {
             step="0.001"
             min="0"
             value={tare}
+            disabled={tareLocked}
+            readOnly={tareLocked}
             onChange={(e) => commit(gross, e.target.value)}
-            className="w-14 px-1 py-0.5 text-center text-[11px] border border-(--ui-border-strong) rounded focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
+            title={tareLocked ? "Tare already netted by the deli scale label" : undefined}
+            className={`w-14 px-1 py-0.5 text-center text-[11px] border border-(--ui-border-strong) rounded focus:outline-none focus:ring-1 focus:ring-(--ui-focus) ${tareLocked ? "opacity-60 cursor-not-allowed bg-(--ui-muted-surface)" : ""}`}
           />
           <span>{item.unit}</span>
+          {tareLocked && <span className="text-[9px]">🔒</span>}
         </div>
       )}
     </div>
