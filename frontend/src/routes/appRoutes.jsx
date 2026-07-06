@@ -292,6 +292,7 @@ export const appRoutes = [
     <Route path="/rentals/items" element={perm("manage_rentals", wrap(RentalsRoute))} />
     <Route path="/rentals/contracts" element={perm("manage_rentals", wrap(RentalsRoute))} />
     <Route path="/rentals/timeline" element={perm("manage_rentals", wrap(RentalsRoute))} />
+    <Route path="/rentals/deliveries" element={perm("manage_rentals", wrap(RentalsRoute))} />
 
     {/* M9 — Room management */}
     <Route path="/rooms" element={perm("manage_rooms", wrap(RoomManagementRoute))} />

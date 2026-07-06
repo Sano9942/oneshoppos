@@ -70,10 +70,18 @@ const updateContractSchema = z.object({
   discount_amount: z.number().min(0).optional(),
 }).strict();
 
+// V09 car-legal: per-line odometer/fuel readings captured at checkout/return.
+const lineReadingSchema = z.object({
+  line_id: z.number().int().positive(),
+  odometer: z.number().min(0).nullable().optional(),
+  fuel_pct: z.number().min(0).max(100).nullable().optional(),
+});
+
 const checkoutSchema = z.object({
   deposit_method: z.string().max(50).optional(),
   deposit_paid_at: z.string().optional(),
   actual_checkin: z.string().optional(),
+  checkout_readings: z.array(lineReadingSchema).optional(),
 });
 
 const returnSchema = z.object({
@@ -81,10 +89,55 @@ const returnSchema = z.object({
   condition_notes: z.string().max(2000).nullable().optional(),
   late_fee: z.number().min(0).optional(),
   late_fee_override: z.boolean().optional(),
+  return_readings: z.array(lineReadingSchema).optional(),
   // F04: amount of the security-deposit hold to capture on return (damage/late
   // fee). Omit or 0 → release the hold. Capped at the authorized amount by the
   // deposit engine.
   deposit_capture_amount: z.number().min(0).optional(),
+});
+
+// V09 car-legal: driver record (PII — staff-only endpoints).
+const driverSchema = z.object({
+  name: z.string().min(1).max(200),
+  cnic: z.string().max(50).nullable().optional(),
+  license_number: z.string().max(100).nullable().optional(),
+  license_expiry: z.string().nullable().optional(),
+  phone: z.string().max(50).nullable().optional(),
+  document_photos: z.array(z.string().max(500)).optional(),
+  is_primary: z.boolean().optional(),
+});
+
+// V09: condition inspection (checkout/return).
+const inspectionSchema = z.object({
+  phase: z.enum(["checkout", "return"]),
+  rental_asset_id: z.number().int().positive().nullable().optional(),
+  checklist: z.record(z.string(), z.any()).optional(),
+  photos: z.array(z.string().max(500)).optional(),
+  damage_notes: z.string().max(2000).nullable().optional(),
+  damage_charge: z.number().min(0).nullable().optional(),
+  customer_ack_signature: z.string().max(500).nullable().optional(),
+});
+
+// V09: staff-assisted / link e-sign of the rental agreement.
+const agreementSignSchema = z.object({
+  signature_data: z.string().min(1),
+});
+
+// V09: delivery & setup scheduling (furniture/party).
+const deliverySchema = z.object({
+  delivery_required: z.boolean().optional(),
+  delivery_at: z.string().nullable().optional(),
+  setup_notes: z.string().max(2000).nullable().optional(),
+  delivery_status: z.enum(["pending", "scheduled", "dispatched", "delivered"]).nullable().optional(),
+  delivery_crew: z.array(z.number().int().positive()).optional(),
+});
+
+// V09: maintenance log entry for an asset.
+const maintenanceLogSchema = z.object({
+  serviced_at: z.string().optional(),
+  odometer: z.number().min(0).nullable().optional(),
+  cost: z.number().min(0).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
 });
 
 // F04: rental gateway deposit pre-auth. Amount optional — falls back to the
@@ -108,6 +161,23 @@ const availabilityQuerySchema = z.object({
   to: z.string().min(1),
 });
 
+// V09 online booking (public, untrusted caller). Creates a 'reserved' contract
+// pending staff confirmation — no deposit/discount/status fields exposed.
+const publicReserveSchema = z.object({
+  customer_name: z.string().min(1).max(200),
+  customer_phone: z.string().max(50).optional(),
+  customer_email: z.string().email().max(200).optional(),
+  rental_start: z.string().min(1),
+  expected_return: z.string().min(1),
+  notes: z.string().max(2000).optional(),
+  lines: z.array(z.object({
+    rental_item_id: z.number().int().positive(),
+    quantity: z.number().int().min(1).default(1),
+    rate_type: z.enum(RATE_TYPES).default("daily"),
+    duration_value: z.number().min(0.01),
+  })).min(1),
+});
+
 module.exports = {
   createRentalItemSchema,
   updateRentalItemSchema,
@@ -122,6 +192,13 @@ module.exports = {
   cancelSchema,
   noteSchema,
   availabilityQuerySchema,
+  publicReserveSchema,
+  lineReadingSchema,
+  driverSchema,
+  inspectionSchema,
+  agreementSignSchema,
+  deliverySchema,
+  maintenanceLogSchema,
   PAYMENT_POLICIES,
   RATE_TYPES,
   ASSET_STATUSES,

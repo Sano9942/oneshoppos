@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
-import { Plus, X, Calendar as CalendarIcon, Package, FileSignature, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, X, Calendar as CalendarIcon, Package, FileSignature, ChevronLeft, ChevronRight, Truck, ClipboardCheck, PenLine, Wrench } from "lucide-react";
 import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 
@@ -63,7 +63,8 @@ export default function RentalsRedesign() {
 
   const tab =
     location.pathname.endsWith("/contracts") ? "contracts" :
-    location.pathname.endsWith("/timeline") ? "timeline" : "items";
+    location.pathname.endsWith("/timeline") ? "timeline" :
+    location.pathname.endsWith("/deliveries") ? "deliveries" : "items";
 
   return (
     <PageShell
@@ -74,6 +75,7 @@ export default function RentalsRedesign() {
       {tab === "items" && <RentalItemsTab />}
       {tab === "contracts" && <ContractsTab />}
       {tab === "timeline" && <TimelineTab />}
+      {tab === "deliveries" && <DeliveriesTab />}
     </PageShell>
   );
 }
@@ -83,6 +85,7 @@ function TabNav({ tab }) {
     { key: "items", label: "Rental Items", path: "/rentals/items", icon: Package },
     { key: "contracts", label: "Contracts", path: "/rentals/contracts", icon: FileSignature },
     { key: "timeline", label: "Timeline", path: "/rentals/timeline", icon: CalendarIcon },
+    { key: "deliveries", label: "Deliveries", path: "/rentals/deliveries", icon: Truck },
   ];
   return (
     <div className="flex gap-2">
@@ -763,6 +766,8 @@ function ContractDetailModal({ id, onClose, onChanged }) {
         </ul>
       </div>
 
+      <V09ContractPanels contract={contract} onChanged={() => { load(); onChanged(); }} />
+
       <ModalFooter>
         {actions.map(a => (
           <Button key={a.action} tone={a.tone} onClick={() => {
@@ -780,6 +785,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
 
       {actionOpen === "checkout" && (
         <CheckoutActionModal
+          lines={contract.lines || []}
           onClose={() => setActionOpen(null)}
           onConfirm={(body) => { setActionOpen(null); runAction("checkout", body); }}
         />
@@ -787,6 +793,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
       {actionOpen === "return" && (
         <ReturnActionModal
           hasGatewayHold={contract.deposit_status === "authorized"}
+          lines={contract.lines || []}
           onClose={() => setActionOpen(null)}
           onConfirm={(body) => { setActionOpen(null); runAction("return", body); }}
         />
@@ -801,35 +808,70 @@ function ContractDetailModal({ id, onClose, onChanged }) {
   );
 }
 
-function CheckoutActionModal({ onClose, onConfirm }) {
+// Build a per-line readings array from a single odometer/fuel entry (the
+// common single-vehicle case). Applies the reading to every line; omitted
+// when both fields are blank.
+function buildReadings(lines, odometer, fuelPct) {
+  if (odometer === "" && fuelPct === "") return undefined;
+  return (lines || []).map((l) => ({
+    line_id: l.id,
+    odometer: odometer === "" ? null : Number(odometer),
+    fuel_pct: fuelPct === "" ? null : Number(fuelPct),
+  }));
+}
+
+function CheckoutActionModal({ onClose, onConfirm, lines }) {
   const [depositMethod, setDepositMethod] = useState("cash");
+  const [odometer, setOdometer] = useState("");
+  const [fuelPct, setFuelPct] = useState("");
   return (
     <Modal title="Check Out" onClose={onClose} size="md" open>
       <Field label="Deposit Method">
         <Input value={depositMethod} onChange={e => setDepositMethod(e.target.value)} />
       </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Odometer out (optional)">
+          <Input type="number" value={odometer} onChange={e => setOdometer(e.target.value)} />
+        </Field>
+        <Field label="Fuel % out (optional)">
+          <Input type="number" min="0" max="100" value={fuelPct} onChange={e => setFuelPct(e.target.value)} />
+        </Field>
+      </div>
       <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
-        <Button tone="primary" onClick={() => onConfirm({ deposit_method: depositMethod })}>Confirm Checkout</Button>
+        <Button tone="primary" onClick={() => onConfirm({
+          deposit_method: depositMethod,
+          checkout_readings: buildReadings(lines, odometer, fuelPct),
+        })}>Confirm Checkout</Button>
       </ModalFooter>
     </Modal>
   );
 }
 
-function ReturnActionModal({ onClose, onConfirm, hasGatewayHold }) {
+function ReturnActionModal({ onClose, onConfirm, hasGatewayHold, lines }) {
   const [conditionNotes, setConditionNotes] = useState("");
   const [overrideLateFee, setOverrideLateFee] = useState("");
   const [captureAmount, setCaptureAmount] = useState("");
+  const [odometer, setOdometer] = useState("");
+  const [fuelPct, setFuelPct] = useState("");
   return (
     <Modal title="Return" onClose={onClose} size="md" open>
       <Field label="Condition Notes">
         <Input value={conditionNotes} onChange={e => setConditionNotes(e.target.value)} />
       </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Odometer in (optional)">
+          <Input type="number" value={odometer} onChange={e => setOdometer(e.target.value)} />
+        </Field>
+        <Field label="Fuel % in (optional)">
+          <Input type="number" min="0" max="100" value={fuelPct} onChange={e => setFuelPct(e.target.value)} />
+        </Field>
+      </div>
       <Field label="Override Late Fee (leave blank for auto-calc)">
         <Input type="number" step="0.01" value={overrideLateFee} onChange={e => setOverrideLateFee(e.target.value)} />
       </Field>
       {hasGatewayHold && (
-        <Field label="Capture from security deposit (damage/late fee — blank/0 releases the hold)">
+        <Field label="Capture from security deposit (damage/late fee — blank/0 leaves the hold for inspection)">
           <Input type="number" step="0.01" value={captureAmount} onChange={e => setCaptureAmount(e.target.value)} />
         </Field>
       )}
@@ -839,6 +881,7 @@ function ReturnActionModal({ onClose, onConfirm, hasGatewayHold }) {
           condition_notes: conditionNotes || undefined,
           late_fee: overrideLateFee === "" ? undefined : Number(overrideLateFee),
           deposit_capture_amount: captureAmount === "" ? undefined : Number(captureAmount),
+          return_readings: buildReadings(lines, odometer, fuelPct),
         })}>Confirm Return</Button>
       </ModalFooter>
     </Modal>
@@ -1050,5 +1093,336 @@ function InfoRow({ label, value }) {
       <div className="text-xs text-(--ui-text-muted)">{label}</div>
       <div className="mt-0.5">{value}</div>
     </div>
+  );
+}
+
+// ── V09: drivers · e-sign agreement · inspections (contract detail) ──
+
+function V09ContractPanels({ contract, onChanged }) {
+  const toast = useToast();
+  const { fmt } = useCurrency();
+  const { flags } = useFeatureFlags();
+  const cid = contract.id;
+  const [drivers, setDrivers] = useState([]);
+  const [inspections, setInspections] = useState([]);
+  const [driverForm, setDriverForm] = useState(null);
+  const [inspForm, setInspForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const loadPanels = useCallback(async () => {
+    try {
+      const d = await api.get(`/api/rental-contracts/${cid}/drivers`);
+      setDrivers(d.drivers || []);
+    } catch { /* ignore */ }
+    if (flags.rental_inspections) {
+      try {
+        const i = await api.get(`/api/rental-contracts/${cid}/inspections`);
+        setInspections(i.inspections || []);
+      } catch { /* ignore */ }
+    }
+  }, [cid, flags.rental_inspections]);
+
+  useEffect(() => { loadPanels(); }, [loadPanels]);
+
+  const saveDriver = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/api/rental-contracts/${cid}/drivers`, {
+        name: driverForm.name,
+        cnic: driverForm.cnic || undefined,
+        license_number: driverForm.license_number || undefined,
+        license_expiry: driverForm.license_expiry || undefined,
+        phone: driverForm.phone || undefined,
+      });
+      toast.success("Driver recorded");
+      setDriverForm(null);
+      await loadPanels();
+    } catch (err) { toast.error(err.message || "Failed to add driver"); }
+    finally { setBusy(false); }
+  };
+
+  const generateAgreement = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/api/rental-contracts/${cid}/agreement`, {});
+      toast.success("Agreement generated");
+      onChanged();
+    } catch (err) { toast.error(err.message || "Failed to generate agreement"); }
+    finally { setBusy(false); }
+  };
+
+  const signAgreement = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/api/rental-contracts/${cid}/agreement/sign`, {
+        signature_data: `staff-assisted:${new Date().toISOString()}`,
+      });
+      toast.success("Agreement signed");
+      onChanged();
+    } catch (err) { toast.error(err.message || "Failed to sign"); }
+    finally { setBusy(false); }
+  };
+
+  const saveInspection = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post(`/api/rental-contracts/${cid}/inspections`, {
+        phase: inspForm.phase,
+        damage_notes: inspForm.damage_notes || undefined,
+        damage_charge: inspForm.damage_charge === "" ? undefined : Number(inspForm.damage_charge),
+        customer_ack_signature: inspForm.ack ? `ack:${new Date().toISOString()}` : undefined,
+      });
+      const cap = res?.deposit?.captured_amount;
+      toast.success(cap ? `Inspection saved — ${fmt(Number(cap))} captured from deposit` : "Inspection saved");
+      setInspForm(null);
+      await loadPanels();
+      onChanged();
+    } catch (err) { toast.error(err.message || "Failed to save inspection"); }
+    finally { setBusy(false); }
+  };
+
+  const hasAgreement = !!contract.contract_document_id;
+
+  return (
+    <>
+      {/* Vehicle & Legal (drivers + e-sign agreement) */}
+      <div className="mt-4 pt-4 border-t border-(--ui-border)">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="font-semibold flex items-center gap-1.5"><FileSignature size={15} /> Vehicle & Legal</h4>
+          <div className="flex gap-2">
+            {!hasAgreement
+              ? <Button size="sm" onClick={generateAgreement} disabled={busy}><PenLine size={13} /> Generate Agreement</Button>
+              : <Button size="sm" onClick={signAgreement} disabled={busy}><PenLine size={13} /> Sign Agreement</Button>}
+            <Button size="sm" tone="plain" onClick={() => setDriverForm({ name: "" })} disabled={busy}><Plus size={13} /> Driver</Button>
+          </div>
+        </div>
+        {drivers.length === 0
+          ? <p className="text-sm text-(--ui-text-muted)">No driver recorded.</p>
+          : (
+            <ul className="text-sm space-y-1">
+              {drivers.map((d) => (
+                <li key={d.id} className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span className="font-medium">{d.name}</span>
+                  {d.cnic && <span className="text-(--ui-text-muted)">CNIC {d.cnic}</span>}
+                  {d.license_number && <span className="text-(--ui-text-muted)">Licence {d.license_number}</span>}
+                  {d.license_expiry && <span className="text-(--ui-text-muted)">exp {d.license_expiry}</span>}
+                  {d.is_primary && <Badge tone="default">primary</Badge>}
+                </li>
+              ))}
+            </ul>
+          )}
+        {hasAgreement && (
+          <p className="mt-1 text-xs text-(--ui-text-muted)">E-sign agreement document #{contract.contract_document_id} linked.</p>
+        )}
+        {driverForm && (
+          <div className="mt-2 p-3 rounded bg-(--ui-muted-surface) grid grid-cols-2 gap-2">
+            <Field label="Name"><Input value={driverForm.name} onChange={e => setDriverForm({ ...driverForm, name: e.target.value })} /></Field>
+            <Field label="CNIC"><Input value={driverForm.cnic || ""} onChange={e => setDriverForm({ ...driverForm, cnic: e.target.value })} /></Field>
+            <Field label="Licence #"><Input value={driverForm.license_number || ""} onChange={e => setDriverForm({ ...driverForm, license_number: e.target.value })} /></Field>
+            <Field label="Licence expiry"><Input type="date" value={driverForm.license_expiry || ""} onChange={e => setDriverForm({ ...driverForm, license_expiry: e.target.value })} /></Field>
+            <div className="col-span-2 flex gap-2 justify-end">
+              <Button size="sm" tone="plain" onClick={() => setDriverForm(null)}>Cancel</Button>
+              <Button size="sm" tone="primary" onClick={saveDriver} disabled={busy || !driverForm.name}>Save Driver</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Inspections (checkout / return condition + damage) */}
+      {flags.rental_inspections && (
+        <div className="mt-4 pt-4 border-t border-(--ui-border)">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-semibold flex items-center gap-1.5"><ClipboardCheck size={15} /> Inspections</h4>
+            <div className="flex gap-2">
+              <Button size="sm" tone="plain" onClick={() => setInspForm({ phase: "checkout", damage_charge: "" })} disabled={busy}><Plus size={13} /> Checkout</Button>
+              <Button size="sm" tone="plain" onClick={() => setInspForm({ phase: "return", damage_charge: "" })} disabled={busy}><Plus size={13} /> Return</Button>
+            </div>
+          </div>
+          {inspections.length === 0
+            ? <p className="text-sm text-(--ui-text-muted)">No inspections recorded.</p>
+            : (
+              <ul className="text-sm space-y-1">
+                {inspections.map((i) => (
+                  <li key={i.id} className="flex flex-wrap gap-x-3">
+                    <Badge tone={i.phase === "return" ? "warning" : "default"}>{i.phase}</Badge>
+                    {i.damage_notes && <span>{i.damage_notes}</span>}
+                    {Number(i.damage_charge || 0) > 0 && <span className="text-(--ui-danger)">damage {fmt(Number(i.damage_charge))}</span>}
+                    <span className="text-(--ui-text-muted)">{fmtUtcDateTime(i.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          {inspForm && (
+            <div className="mt-2 p-3 rounded bg-(--ui-muted-surface) grid grid-cols-2 gap-2">
+              <Field label="Phase">
+                <Select value={inspForm.phase} onChange={e => setInspForm({ ...inspForm, phase: e.target.value })}>
+                  <option value="checkout">Checkout</option>
+                  <option value="return">Return</option>
+                </Select>
+              </Field>
+              <Field label="Damage charge (return only)">
+                <Input type="number" step="0.01" value={inspForm.damage_charge} onChange={e => setInspForm({ ...inspForm, damage_charge: e.target.value })} />
+              </Field>
+              <Field label="Damage notes" full>
+                <Input value={inspForm.damage_notes || ""} onChange={e => setInspForm({ ...inspForm, damage_notes: e.target.value })} />
+              </Field>
+              <label className="col-span-2 flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!!inspForm.ack} onChange={e => setInspForm({ ...inspForm, ack: e.target.checked })} />
+                Customer acknowledged condition
+              </label>
+              <div className="col-span-2 flex gap-2 justify-end">
+                <Button size="sm" tone="plain" onClick={() => setInspForm(null)}>Cancel</Button>
+                <Button size="sm" tone="primary" onClick={saveInspection} disabled={busy}>Save Inspection</Button>
+              </div>
+            </div>
+          )}
+          {inspForm?.phase === "return" && Number(inspForm.damage_charge || 0) > 0 && (
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
+              A return damage charge posts to the invoice and captures that amount from any authorized deposit hold (remainder released).
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Delivery & setup (furniture / party) */}
+      <DeliveryEditor contract={contract} onChanged={onChanged} />
+    </>
+  );
+}
+
+function DeliveryEditor({ contract, onChanged }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toLocalInput = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [form, setForm] = useState({
+    delivery_required: !!contract.delivery_required,
+    delivery_at: toLocalInput(contract.delivery_at),
+    setup_notes: contract.setup_notes || "",
+    delivery_status: contract.delivery_status || "scheduled",
+  });
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.put(`/api/rental-contracts/${contract.id}/delivery`, {
+        delivery_required: form.delivery_required,
+        delivery_at: form.delivery_at ? new Date(form.delivery_at).toISOString() : null,
+        setup_notes: form.setup_notes || null,
+        delivery_status: form.delivery_status || undefined,
+      });
+      toast.success("Delivery updated");
+      setOpen(false);
+      onChanged();
+    } catch (err) { toast.error(err.message || "Failed to update delivery"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-(--ui-border)">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="font-semibold flex items-center gap-1.5"><Truck size={15} /> Delivery & Setup</h4>
+        <Button size="sm" tone="plain" onClick={() => setOpen(o => !o)}>{open ? "Close" : (contract.delivery_required ? "Edit" : "Schedule")}</Button>
+      </div>
+      {!open && (
+        <p className="text-sm text-(--ui-text-muted)">
+          {contract.delivery_required
+            ? `Scheduled${contract.delivery_at ? " · " + fmtUtcDateTime(contract.delivery_at) : ""} (${contract.delivery_status || "pending"})`
+            : "No delivery scheduled."}
+        </p>
+      )}
+      {open && (
+        <div className="p-3 rounded bg-(--ui-muted-surface) grid grid-cols-2 gap-2">
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.delivery_required} onChange={e => setForm({ ...form, delivery_required: e.target.checked })} />
+            Requires delivery & setup
+          </label>
+          <Field label="Delivery date/time"><Input type="datetime-local" value={form.delivery_at} onChange={e => setForm({ ...form, delivery_at: e.target.value })} /></Field>
+          <Field label="Status">
+            <Select value={form.delivery_status} onChange={e => setForm({ ...form, delivery_status: e.target.value })}>
+              <option value="pending">Pending</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="dispatched">Dispatched</option>
+              <option value="delivered">Delivered</option>
+            </Select>
+          </Field>
+          <Field label="Setup notes" full><Input value={form.setup_notes} onChange={e => setForm({ ...form, setup_notes: e.target.value })} /></Field>
+          <div className="col-span-2 flex gap-2 justify-end">
+            <Button size="sm" tone="plain" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" tone="primary" onClick={save} disabled={busy}>Save Delivery</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Deliveries day-view tab (furniture / party logistics) ───────────
+
+function DeliveriesTab() {
+  const toast = useToast();
+  const { fmt } = useCurrency();
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const from = new Date(`${date}T00:00:00`).toISOString();
+      const to = new Date(`${date}T23:59:59`).toISOString();
+      const res = await api.get("/api/rental-deliveries", { from, to });
+      setRows(res.deliveries || []);
+    } catch (err) {
+      toast.error(err.message || "Failed to load deliveries");
+    } finally {
+      setLoading(false);
+    }
+  }, [date, toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <SectionCard className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold flex items-center gap-2"><Truck size={16} /> Deliveries</h3>
+        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-auto" />
+      </div>
+      {loading ? (
+        <p className="text-sm text-(--ui-text-muted)">Loading…</p>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={Truck} title="No deliveries scheduled" subtitle="Rental contracts with a delivery on this date appear here." />
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
+            <tr>
+              <th className="py-2 pr-2">Time</th>
+              <th className="py-2 pr-2">Contract</th>
+              <th className="py-2 pr-2">Customer</th>
+              <th className="py-2 pr-2">Status</th>
+              <th className="py-2 pr-2">Setup notes</th>
+              <th className="py-2 pr-2">Crew</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.id} className="border-b border-(--ui-border)">
+                <td className="py-2 pr-2">{fmtUtcDateTime(d.delivery_at)}</td>
+                <td className="py-2 pr-2">{d.contract_number}</td>
+                <td className="py-2 pr-2">{d.customer_name || "—"}{d.customer_mobile ? ` · ${d.customer_mobile}` : ""}</td>
+                <td className="py-2 pr-2"><Badge tone="default">{d.delivery_status || "pending"}</Badge></td>
+                <td className="py-2 pr-2">{d.setup_notes || "—"}</td>
+                <td className="py-2 pr-2">{Array.isArray(d.delivery_crew) && d.delivery_crew.length ? `${d.delivery_crew.length} assigned` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </SectionCard>
   );
 }

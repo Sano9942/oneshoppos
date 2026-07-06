@@ -2526,7 +2526,9 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase4_appointments_waitlists', false, 'F06 — waitlists for full classes/slots with offer + claim flow'),
   ('custom_forms', false, 'F03 form builder — custom intake/waivers/questionnaires (flipped on by clinical/gym/photography/repair presets)'),
   ('batch_expiry_tracking', false, 'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls'),
-  ('member_checkin', false, 'V07 gym — member check-in kiosk + active-membership validation (flipped on by the gym preset)')
+  ('member_checkin', false, 'V07 gym — member check-in kiosk + active-membership validation (flipped on by the gym preset)'),
+  ('rental_inspections', false, 'V09 rentals — checkout/return condition inspections with photos + damage capture (flipped on by rental presets)'),
+  ('rental_online_booking', false, 'V09 rentals — public/portal online rental reservation (tenant opt-in)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -4560,6 +4562,7 @@ CREATE TABLE IF NOT EXISTS rental_items (
   deposit_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
   payment_policy TEXT NOT NULL DEFAULT 'upfront'
     CHECK (payment_policy IN ('upfront','on_return')),
+  tax_id INTEGER REFERENCES taxes(id),   -- V09 folio-tax: NULL = untaxed
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -4575,6 +4578,12 @@ CREATE TABLE IF NOT EXISTS rental_assets (
   status TEXT NOT NULL DEFAULT 'available'
     CHECK (status IN ('available','rented','maintenance','retired')),
   condition_notes TEXT,
+  attributes JSONB DEFAULT '{}',              -- V09: {plate, vin, odometer, fuel_capacity, color...}
+  service_interval_days INTEGER,             -- V09 maintenance: time-based interval
+  service_due_at TIMESTAMPTZ,
+  last_serviced_at TIMESTAMPTZ,
+  service_odometer_interval INTEGER,         -- usage-based interval (cars)
+  last_serviced_odometer INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -4616,6 +4625,13 @@ CREATE TABLE IF NOT EXISTS rental_contracts (
   invoice_id INTEGER REFERENCES customer_invoices(id),
   overdue_email_sent_at TIMESTAMPTZ,
   cancellation_reason TEXT,
+  contract_document_id INTEGER REFERENCES contracts(id),   -- V09 e-sign agreement link
+  -- V09 delivery & setup scheduling (furniture/party event logistics)
+  delivery_required BOOLEAN DEFAULT FALSE,
+  delivery_at TIMESTAMPTZ,
+  setup_notes TEXT,
+  delivery_status TEXT,                                     -- pending|scheduled|dispatched|delivered
+  delivery_crew JSONB DEFAULT '[]',                        -- employee ids
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -4639,6 +4655,10 @@ CREATE TABLE IF NOT EXISTS rental_contract_lines (
   duration_value NUMERIC(10,2) NOT NULL DEFAULT 1,
   line_total NUMERIC(12,2) NOT NULL DEFAULT 0,
   deposit_snapshot NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax_rate_at_charge NUMERIC(6,3) DEFAULT 0,      -- V09 folio-tax per-line snapshot
+  tax_amount_at_charge NUMERIC(12,2) DEFAULT 0,
+  checkout_reading JSONB DEFAULT '{}',            -- V09 car-legal: {odometer, fuel_pct}
+  return_reading JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_rental_contract_lines_contract ON rental_contract_lines(contract_id);
@@ -4657,6 +4677,53 @@ CREATE TABLE IF NOT EXISTS rental_contract_activities (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_rental_contract_activities_contract ON rental_contract_activities(contract_id);
+
+-- ── V09 Rentals depth (migration v118) ─────────────────────────────
+
+-- Driver records per contract (car-legal). PII — staff-only surfaces;
+-- document_photos live under a non-guessable R2 prefix.
+CREATE TABLE IF NOT EXISTS rental_contract_drivers (
+  id SERIAL PRIMARY KEY,
+  rental_contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  cnic TEXT,
+  license_number TEXT,
+  license_expiry DATE,
+  phone TEXT,
+  document_photos JSONB DEFAULT '[]',   -- R2 keys: license front/back, CNIC
+  is_primary BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rcd_contract ON rental_contract_drivers(rental_contract_id);
+
+-- Condition inspections at checkout + return.
+CREATE TABLE IF NOT EXISTS rental_inspections (
+  id SERIAL PRIMARY KEY,
+  rental_contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+  rental_asset_id INTEGER REFERENCES rental_assets(id),
+  phase TEXT NOT NULL CHECK (phase IN ('checkout','return')),
+  checklist JSONB DEFAULT '{}',
+  photos JSONB DEFAULT '[]',            -- R2 keys
+  damage_notes TEXT,
+  damage_charge NUMERIC(12,2),
+  inspected_by INTEGER REFERENCES employees(id),
+  customer_ack_signature TEXT,          -- R2 key (consent canvas)
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rins_contract ON rental_inspections(rental_contract_id);
+
+-- Per-asset maintenance log (service history).
+CREATE TABLE IF NOT EXISTS asset_maintenance_log (
+  id SERIAL PRIMARY KEY,
+  rental_asset_id INTEGER NOT NULL REFERENCES rental_assets(id) ON DELETE CASCADE,
+  serviced_at TIMESTAMPTZ DEFAULT NOW(),
+  odometer INTEGER,
+  cost NUMERIC(12,2),
+  notes TEXT,
+  performed_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_aml_asset ON asset_maintenance_log(rental_asset_id);
 
 -- ── M8 Customer Portal (migration v37) ─────────────────────────────
 

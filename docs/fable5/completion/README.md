@@ -30,7 +30,7 @@
 | 03 | [03-appointments-commissions.md](plans/03-appointments-commissions.md) | Modes `appointments`+`commissions` — salon, clinic + booking surface of gym/photography/clinical presets | 0 | 5 | `main` | planned |
 | 04 | [04-wholesale.md](plans/04-wholesale.md) | Mode `wholesale` — Tiers 0–2 stack (credit/AR, field PWA, schemes, manufacturer portal, MOQ/visibility) | 0 | 0 | `main` | planned |
 | 05 | [05-workflow-tickets.md](plans/05-workflow-tickets.md) | Mode `workflow_tickets` — repair_shop | 0 (1 owned by 01) | 0 | `main` | ✅ done — folded into V06 pre-flight (baseline test 6/6; portal-tab P0 confirmed fixed by 01) |
-| 06 | [06-rentals.md](plans/06-rentals.md) | Mode `rentals` — car_rental, equipment_hire, furniture_rental, party_supplies | 0 | 0 | `main` | planned |
+| 06 | [06-rentals.md](plans/06-rentals.md) | Mode `rentals` — car_rental, equipment_hire, furniture_rental, party_supplies | 1 | 0 | `main` | ✅ absorbed into V09 (2026-07-07) — pre-flight found the availability-never-enforced P0 (fixed in `createContract` under the FOR UPDATE lock); folio-tax gap resolved via the approved proposal in v118 |
 | 07 | [07-room-management.md](plans/07-room-management.md) | Mode `room_management` — hotel, guesthouse, hostel | 0 | 0 | `main` | planned |
 | 08 | [08-treatment-plans.md](plans/08-treatment-plans.md) | Mode `treatment_plans` — dental_clinic, veterinary, physiotherapy (clinical stack) | 0 | 1 (shared w/ 03) | `main` | planned |
 | 09 | [09-service-projects.md](plans/09-service-projects.md) | Mode `service_projects` — photography_studio (quote→project→contract→invoice) | 0 | 0 | `main` | planned |

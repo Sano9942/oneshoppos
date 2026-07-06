@@ -14,11 +14,17 @@ module.exports = function registerRentalRoutes(app, deps) {
     depositPreauthSchema,
     cancelSchema,
     noteSchema,
+    driverSchema,
+    inspectionSchema,
+    agreementSignSchema,
+    deliverySchema,
+    maintenanceLogSchema,
   } = require("../schemas/rentals");
   const rentals = require("../services/rental-service");
   const depositEngine = require("../services/deposit-engine");
 
   const gate = [requireMode("rentals"), requireFeature("phase4_rentals"), requirePerm("manage_rentals")];
+  const inspectGate = [...gate, requireFeature("rental_inspections")];
 
   // ── Rental items ────────────────────────────────────────────────
 
@@ -160,19 +166,19 @@ module.exports = function registerRentalRoutes(app, deps) {
       const id = Number(req.params.id);
       const contract = await rentals.returnContract(deps.db, id, req.body, req.employee.id);
       if (!contract) return res.status(404).json({ error: "Contract not found" });
-      // F04: settle the gateway security-deposit hold (if any). A capture
-      // amount on the return screen captures that much for damage/late fee
-      // (capped at the hold); omitting it releases the hold. Non-fatal — the
-      // return itself already committed.
+      // F04/V09: if the return screen passes an explicit capture amount
+      // (damage/late fee), capture it from the hold now. Otherwise LEAVE the
+      // hold authorized — a return condition inspection may capture damage
+      // moments later, and completion releases any remainder for a clean
+      // return. Auto-releasing here would race (and lose) the inspection
+      // capture. Non-fatal — the return itself already committed.
       try {
         const captureAmt = Number(req.body?.deposit_capture_amount || 0);
         if (captureAmt > 0) {
           await depositEngine.capture(deps.db, { entityType: "rental_contract", entityId: id, amount: captureAmt });
-        } else {
-          await depositEngine.release(deps.db, { entityType: "rental_contract", entityId: id });
         }
       } catch (depErr) {
-        console.warn("[rentals/return] deposit settle failed:", depErr.message);
+        console.warn("[rentals/return] deposit capture failed:", depErr.message);
       }
       res.json(contract);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
@@ -196,8 +202,17 @@ module.exports = function registerRentalRoutes(app, deps) {
 
   app.post("/api/rental-contracts/:id/complete", ...gate, async (req, res) => {
     try {
-      const contract = await rentals.completeContract(deps.db, Number(req.params.id), req.employee.id);
+      const id = Number(req.params.id);
+      const contract = await rentals.completeContract(deps.db, id, req.employee.id);
       if (!contract) return res.status(404).json({ error: "Contract not found" });
+      // V09: release any deposit hold still authorized at completion — a clean
+      // return with no damage capture. Idempotent (skips a captured/partially-
+      // captured/released hold). Non-fatal.
+      try {
+        await depositEngine.release(deps.db, { entityType: "rental_contract", entityId: id });
+      } catch (depErr) {
+        console.warn("[rentals/complete] deposit release failed:", depErr.message);
+      }
       res.json(contract);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
@@ -236,5 +251,88 @@ module.exports = function registerRentalRoutes(app, deps) {
       await rentals.logActivity(deps.db, Number(req.params.id), req.employee.id, "note", req.body.description);
       res.status(201).json({ ok: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── V09: driver records (car-legal, staff-only PII) ─────────────
+
+  app.get("/api/rental-contracts/:id/drivers", ...gate, async (req, res) => {
+    try {
+      const rows = await rentals.listDrivers(deps.db, Number(req.params.id));
+      res.json({ drivers: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/rental-contracts/:id/drivers", ...gate, validate(driverSchema), async (req, res) => {
+    try {
+      const driver = await rentals.addDriver(deps.db, Number(req.params.id), req.body, req.employee.id);
+      res.status(201).json(driver);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // ── V09: e-sign rental agreement ────────────────────────────────
+
+  app.post("/api/rental-contracts/:id/agreement", ...gate, async (req, res) => {
+    try {
+      const result = await rentals.createRentalAgreement(deps.db, Number(req.params.id), req.employee.id);
+      res.status(201).json(result);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.post("/api/rental-contracts/:id/agreement/sign", ...gate, validate(agreementSignSchema), async (req, res) => {
+    try {
+      const signer = await rentals.signRentalAgreement(deps.db, Number(req.params.id), req.body.signature_data, req.ip);
+      res.json({ ok: true, signer });
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // ── V09: condition inspections (checkout/return) ────────────────
+
+  app.get("/api/rental-contracts/:id/inspections", ...inspectGate, async (req, res) => {
+    try {
+      const rows = await rentals.listInspections(deps.db, Number(req.params.id));
+      res.json({ inspections: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/rental-contracts/:id/inspections", ...inspectGate, validate(inspectionSchema), async (req, res) => {
+    try {
+      const result = await rentals.createInspection(deps.db, Number(req.params.id), req.body, req.employee.id);
+      res.status(201).json(result);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // ── V09: delivery & setup scheduling ────────────────────────────
+
+  app.put("/api/rental-contracts/:id/delivery", ...gate, validate(deliverySchema), async (req, res) => {
+    try {
+      const contract = await rentals.updateDelivery(deps.db, Number(req.params.id), req.body, req.employee.id);
+      if (!contract) return res.status(400).json({ error: "No delivery fields provided" });
+      res.json(contract);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // Day-view of scheduled deliveries. Top-level path (not under
+  // /rental-contracts/:id) to avoid the :id param route shadowing it.
+  app.get("/api/rental-deliveries", ...gate, async (req, res) => {
+    try {
+      const rows = await rentals.getDeliveries(deps.db, req.query);
+      res.json({ deliveries: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── V09: maintenance scheduling ─────────────────────────────────
+
+  app.get("/api/rental-assets/maintenance-due", ...gate, async (req, res) => {
+    try {
+      const rows = await rentals.getDueAssets(deps.db);
+      res.json({ assets: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/rental-items/:id/assets/:assetId/maintenance", ...gate, validate(maintenanceLogSchema), async (req, res) => {
+    try {
+      const log = await rentals.logMaintenance(deps.db, Number(req.params.assetId), req.body, req.employee.id);
+      res.status(201).json(log);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 };
