@@ -36,7 +36,7 @@ module.exports = function registerBackorderRoutes(app, deps) {
 
       const { rows } = await db.query(
         `SELECT b.*, c.name AS customer_name, c.mobile AS customer_mobile,
-                p.name AS product_name, pv.variant_name,
+                p.name AS product_name, pv.sku AS variant_sku,
                 o.name AS outlet_name,
                 (b.qty_ordered - b.qty_fulfilled) AS qty_remaining,
                 ROUND(((b.qty_ordered - b.qty_fulfilled) * b.unit_price)::numeric, 2) AS value_remaining,

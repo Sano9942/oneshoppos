@@ -18,6 +18,16 @@ module.exports = function registerVanRoutes(app, deps) {
     requireAnyPerm(["manage_inventory", "manage_field_sales", "all_access"]),
   ];
 
+  // Employee attribution: JWT-loaded req.employee in production; the
+  // x-outlet/x-employee header bridge everywhere else (loadTenantAndPerms
+  // backfills the header from the JWT, so the header is always populated).
+  function employeeIdOf(req) {
+    const fromJwt = Number(req.employee?.id);
+    if (Number.isInteger(fromJwt) && fromJwt > 0) return fromJwt;
+    const fromHeader = Number(req.headers["x-employee-id"]);
+    return Number.isInteger(fromHeader) && fromHeader > 0 ? fromHeader : null;
+  }
+
   // "Today" in the tenant's timezone — sales.timestamp is UTC, so a raw
   // `timestamp::date = CURRENT_DATE` misattributes early-morning local sales
   // (the repo's documented UTC-date trap). Boundaries computed per request.
@@ -44,7 +54,7 @@ module.exports = function registerVanRoutes(app, deps) {
   // ── Rep view: my van + stock + shift status ──────────────────────────
   app.get("/api/van/mine", ...repGate, async (req, res) => {
     try {
-      const employeeId = req.employee?.id;
+      const employeeId = employeeIdOf(req);
       if (!employeeId) return res.status(401).json({ error: "Not authenticated" });
       const { rows: [van] } = await db.query(
         "SELECT id, name, address FROM outlets WHERE outlet_type = 'van' AND van_rep_employee_id = $1 LIMIT 1",
@@ -92,7 +102,7 @@ module.exports = function registerVanRoutes(app, deps) {
     try {
       const van = await resolveVan(req, res);
       if (!van) return;
-      const employeeId = req.employee?.id || null;
+      const employeeId = employeeIdOf(req);
       const openingFloat = Number(req.body?.opening_float || 0);
 
       const { rows: [existing] } = await db.query(
@@ -225,7 +235,7 @@ module.exports = function registerVanRoutes(app, deps) {
           van.id, JSON.stringify(normalized), cashExpected,
           cash_counted != null ? Number(cash_counted) : null,
           typeof variance_reason === "string" ? variance_reason.slice(0, 300) : null,
-          req.employee?.id || null,
+          employeeIdOf(req),
           todayBounds(req).today,
         ]
       );
@@ -275,7 +285,7 @@ module.exports = function registerVanRoutes(app, deps) {
             `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason, notes)
              VALUES ($1, $2, $3, $4, 'van_reconcile', $5) RETURNING id`,
             [
-              line.product_id, recon.outlet_id, req.employee?.id || null, variance,
+              line.product_id, recon.outlet_id, employeeIdOf(req), variance,
               `Van day-end reconcile #${recon.id}: expected ${line.expected}, counted ${line.counted}` +
                 (recon.variance_reason ? ` — ${recon.variance_reason}` : ""),
             ]
@@ -305,7 +315,7 @@ module.exports = function registerVanRoutes(app, deps) {
           `UPDATE van_reconciliations
               SET status = 'confirmed', confirmed_by = $1, confirmed_at = NOW(), adjustment_id = $2
             WHERE id = $3 RETURNING *`,
-          [req.employee?.id || null, adjustmentId, recon.id]
+          [employeeIdOf(req), adjustmentId, recon.id]
         );
         return { reconciliation: updated, closed_shift_id: shift?.id || null };
       });

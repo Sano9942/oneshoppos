@@ -56,14 +56,18 @@ module.exports = function registerOutletRoutes(app, deps) {
         return res.status(400).json({ error: "outlet_type must be 'store' or 'van'" });
       }
       if (isVan) {
+        // Direct feature_flags read (same pattern as services/backorder.js) —
+        // the middleware's cached map isn't wired in every context this
+        // route runs in (tests, ST mode).
+        let vanFlagOn = false;
         try {
-          const { getFeatureFlagsMap } = require("../middleware/feature-flags");
-          const flags = await getFeatureFlagsMap(req.tenantId);
-          if (!flags.wholesale_van_sales) {
-            return res.status(403).json({ error: "Feature disabled: wholesale_van_sales", flag: "wholesale_van_sales" });
-          }
-        } catch (e) {
-          return res.status(500).json({ error: e.message });
+          const { rows } = await db.query(
+            "SELECT enabled FROM feature_flags WHERE key = 'wholesale_van_sales'"
+          );
+          vanFlagOn = rows.length ? rows[0].enabled === true : false;
+        } catch { /* flag table missing → off */ }
+        if (!vanFlagOn) {
+          return res.status(403).json({ error: "Feature disabled: wholesale_van_sales", flag: "wholesale_van_sales" });
         }
       }
 
@@ -84,7 +88,9 @@ module.exports = function registerOutletRoutes(app, deps) {
         const alreadySeeded = profile?.multi_outlet_flags_seeded === true;
 
         let multiOutletSeeded = false;
-        if (outletCount > 1 && !alreadySeeded) {
+        // Vans never trigger (or backfill) multi-outlet seeding — only the
+        // creation of a second STORE flips the tenant into multi-outlet mode.
+        if (!isVan && outletCount > 1 && !alreadySeeded) {
           await seedMultiOutletFlags(client);
           await client.query(
             "UPDATE company_profile SET multi_outlet_flags_seeded = true WHERE id = 1"

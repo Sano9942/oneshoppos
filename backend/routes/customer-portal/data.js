@@ -228,7 +228,7 @@ module.exports = function registerCustomerPortalData(app, deps) {
     try {
       const { rows } = await req.db.query(
         `SELECT b.id, b.created_at, b.expected_at, b.status,
-                p.name AS product_name, pv.variant_name,
+                p.name AS product_name, pv.sku AS variant_sku,
                 b.qty_ordered, b.qty_fulfilled,
                 (b.qty_ordered - b.qty_fulfilled) AS qty_remaining,
                 b.unit_price

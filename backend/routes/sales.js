@@ -1640,7 +1640,7 @@ module.exports = function registerSalesRoutes(app, deps) {
         if (normalizedBackorderItems.length) {
           createdBackorders = await backorderSvc.createBackorders(client, {
             customerId: Number(customer_id),
-            sourceType: isFieldRepSale ? "field_order" : "sale",
+            sourceType: (field_visit_id || field_visit_uuid) ? "field_order" : "sale",
             sourceId: newSaleId,
             outletId: Number(outlet_id),
             items: normalizedBackorderItems,

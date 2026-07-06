@@ -370,7 +370,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
     let open_backorders_value = 0;
     try {
       const { rows: boRows } = await db.query(
-        `SELECT b.id, b.created_at, p.name AS product_name, pv.variant_name,
+        `SELECT b.id, b.created_at, p.name AS product_name, pv.sku AS variant_sku,
                 (b.qty_ordered - b.qty_fulfilled) AS qty_remaining,
                 b.unit_price, b.expected_at, b.status
            FROM backorders b
@@ -383,7 +383,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
       open_backorders = boRows.map((r) => ({
         id: r.id,
         date_label: dateFmt(r.created_at),
-        product_name: r.product_name + (r.variant_name ? ` — ${r.variant_name}` : ""),
+        product_name: r.product_name + (r.variant_sku ? ` — ${r.variant_sku}` : ""),
         qty_remaining: Number(r.qty_remaining),
         unit_price: Number(r.unit_price),
         value: Math.round(Number(r.qty_remaining) * Number(r.unit_price) * 100) / 100,
