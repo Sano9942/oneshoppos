@@ -1,4 +1,4 @@
-import { AlertTriangle, X, Scale, PackageX, Check } from "lucide-react";
+import { AlertTriangle, X, Scale, PackageX, Check, PackagePlus } from "lucide-react";
 import { logErrorState } from "../../../utils/errorLog";
 
 /**
@@ -12,10 +12,14 @@ import { logErrorState } from "../../../utils/errorLog";
  *
  * Props:
  *  - open:        boolean
- *  - prompt:      { product_id, variant_id, product_name, available, requested }
+ *  - prompt:      { product_id, variant_id, product_name, available, requested,
+ *                   backorder_available?, price? }
  *  - canOverride: boolean  (hide Oversell button if false)
  *  - onAdjust:    (product_id, variant_id, available) => void
  *  - onOversell:  () => void
+ *  - onBackorder: (prompt) => void  (V02 wholesale — fulfill available now,
+ *                 backorder the remainder at the order-time price; only shown
+ *                 when prompt.backorder_available)
  *  - onClose:     () => void
  */
 export default function POSInsufficientStockModal({
@@ -24,9 +28,24 @@ export default function POSInsufficientStockModal({
   canOverride = false,
   onAdjust,
   onOversell,
+  onBackorder,
   onClose,
 }) {
   if (!open || !prompt) return null;
+
+  const remainder = Math.max(0, Number(prompt.requested || 0) - Number(prompt.available || 0));
+  const canBackorder =
+    prompt.backorder_available === true && remainder > 0 && Number(prompt.available || 0) > 0 && !!onBackorder;
+
+  const handleBackorder = () => {
+    logErrorState(
+      "pos_insufficient_stock_backorder",
+      `Backorder offer accepted for product ${prompt.product_id}: fulfill ${prompt.available}, backorder ${remainder}`,
+      prompt,
+    );
+    onBackorder?.(prompt);
+    onClose?.();
+  };
 
   const handleAdjust = () => {
     logErrorState("pos_insufficient_stock_adjust", `Clamped cart for product ${prompt.product_id} to ${prompt.available}`, prompt);
@@ -67,6 +86,16 @@ export default function POSInsufficientStockModal({
         </p>
 
         <div className="space-y-2 mt-4">
+          {canBackorder && (
+            <button
+              type="button"
+              onClick={handleBackorder}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-(--ui-primary) text-white hover:bg-(--ui-primary-strong) px-3 py-3 text-sm font-semibold transition"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Sell {Number(prompt.available)} now, backorder {remainder}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleAdjust}

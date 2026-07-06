@@ -135,6 +135,7 @@ export const SHOPIFY_NAV_GROUPS = [
     label: "Fulfillment",
     items: [
       { name: "Fulfillment", path: "/fulfillment", icon: PackageCheck, requiredPerm: "manage_orders" },
+      { name: "Backorders", path: "/backorders", icon: PackageCheck, requiredPerm: "manage_orders", requiredFlag: "wholesale_backorders" },
       { name: "Courier Settings", path: "/courier-settings", icon: Truck, requiredPerm: "all_access" },
       { name: "COD Settlements", path: "/cod-settlements", icon: Wallet, requiredPerm: "manage_orders", requiredFlag: "phase5_cod_reconciliation" },
     ],
@@ -145,6 +146,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Routes", path: "/field/routes", icon: ClipboardList, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
       { name: "Visits", path: "/field/visits", icon: History, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
       { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
+      { name: "My Van", path: "/field/van", icon: Truck, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_van_sales" },
     ],
   },
   {

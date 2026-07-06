@@ -251,7 +251,13 @@ module.exports = function registerVanRoutes(app, deps) {
   });
 
   // ── Manager confirm: variance → stock adjustment, close the shift ────
-  app.post("/api/van-reconciliations/:id/confirm", ...mgrGate, async (req, res) => {
+  // Deliberately NOT manage_field_sales — the rep submits the count but a
+  // manager signs off on the variance.
+  const confirmGate = [
+    requireFeature("wholesale_van_sales"),
+    requireAnyPerm(["manage_inventory", "all_access"]),
+  ];
+  app.post("/api/van-reconciliations/:id/confirm", ...confirmGate, async (req, res) => {
     try {
       const result = await db.transaction(async (client) => {
         const { rows: [recon] } = await client.query(

@@ -316,6 +316,7 @@ function POSErrorStateModals() {
     retryWithManagerPin, cancelCreditOverride,
     submitting,
     addToCart, setQty,
+    stageBackorderItems, showNotice,
   } = usePOS();
   const [creditPinError, setCreditPinError] = useState("");
 
@@ -382,6 +383,24 @@ function POSErrorStateModals() {
         prompt={insufficientStockPrompt}
         canOverride={false}
         onAdjust={(productId, _variantId, available) => setQty?.(productId, available)}
+        onBackorder={(p) => {
+          // V02 wholesale — clamp the line to what's fulfillable and stage
+          // the remainder at the ORDER-time price; it rides the next
+          // checkout submit as backorder_items.
+          const remainder = Math.max(0, Number(p.requested || 0) - Number(p.available || 0));
+          setQty?.(p.product_id, Number(p.available || 0));
+          stageBackorderItems?.([
+            {
+              product_id: p.product_id,
+              variant_id: p.variant_id || null,
+              quantity: remainder,
+              unit_price: p.price != null ? Number(p.price) : 0,
+            },
+          ]);
+          showNotice?.(
+            `Cart adjusted to ${Number(p.available)} — ${remainder} will be backordered when you complete the sale.`,
+          );
+        }}
         onClose={() => setInsufficientStockPrompt(null)}
       />
 

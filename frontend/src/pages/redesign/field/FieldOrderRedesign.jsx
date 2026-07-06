@@ -267,6 +267,11 @@ export default function FieldOrderRedesign() {
     return null;
   }, [paymentMethod, credit, cartTotal]);
 
+  // V02 wholesale backorders — the accepted shortfall remainder, staged after
+  // an insufficient_stock reject. Rides the next submit as backorder_items
+  // (offline replays carry it too — it's part of the queued payload).
+  const [stagedBackorder, setStagedBackorder] = useState(null);
+
   const submit = async () => {
     if (submittedRef.current) return;
     if (cartItems.length === 0) {
@@ -303,6 +308,13 @@ export default function FieldOrderRedesign() {
       discount_type: "fixed",
       field_visit_uuid: visitUuid,
       applied_promotions: appliedPromotions,
+      backorder_items: stagedBackorder
+        ? [{
+            product_id: stagedBackorder.product_id,
+            quantity: stagedBackorder.quantity,
+            unit_price: stagedBackorder.unit_price,
+          }]
+        : undefined,
     };
 
     // Optimistic flow: enqueue locally first, then try to sync.
@@ -317,9 +329,15 @@ export default function FieldOrderRedesign() {
 
     try {
       await markSyncing(idempotency_key);
-      await api.post("/api/sales", payload);
+      const data = await api.post("/api/sales", payload);
       await markSynced(idempotency_key);
-      toastOk("Order recorded");
+      setStagedBackorder(null);
+      if (Array.isArray(data?.backorders) && data.backorders.length) {
+        toastOk(`Order recorded — ${data.backorders.length} item(s) backordered at today's price`);
+      } else {
+        toastOk("Order recorded");
+      }
+      navigate("/field/today");
     } catch (e) {
       // Hard credit-limit reject from backend → keep order out of queue and
       // let the rep retry with a smaller cart. Soft credit warning above
@@ -336,6 +354,38 @@ export default function FieldOrderRedesign() {
       // stale catalog (rep app cached pre-rule, owner just set MOQ) can
       // still produce a server 400. Don't queue for retry; let the rep
       // adjust the cart and resubmit.
+      // V02 wholesale backorders — shortfall with the offer hint. Clamp the
+      // cart line to what's fulfillable, stage the remainder at today's
+      // price, and let the rep review + resubmit (totals recompute).
+      if (code === "insufficient_stock") {
+        await markSynced(idempotency_key); // never auto-retry the failing payload
+        const b = e?.body || {};
+        const line = cartItems.find((it) => Number(it.id) === Number(b.product_id));
+        const available = Number(b.available || 0);
+        const remainder = Math.max(0, Number(b.requested ?? line?.quantity ?? 0) - available);
+        if (b.backorder_available && line && available > 0 && remainder > 0) {
+          const accept = window.confirm(
+            `Only ${available} in stock for ${line.name}. Sell ${available} now and backorder ${remainder} at today's price?`
+          );
+          if (accept) {
+            setCart((c) => ({ ...c, [line.id]: { ...c[line.id], quantity: available } }));
+            setStagedBackorder({
+              product_id: Number(line.id),
+              quantity: remainder,
+              unit_price: Number(line.price),
+              name: line.name,
+            });
+            toastOk(`Cart adjusted to ${available} — tap Submit again to book the order + backorder.`);
+          } else {
+            toastErr(e.message || "Not enough stock");
+          }
+        } else {
+          toastErr(e.message || "Not enough stock");
+        }
+        setSubmitting(false);
+        submittedRef.current = false;
+        return;
+      }
       if (code === "MOQ_VIOLATION") {
         await markSynced(idempotency_key);
         const violations = e?.body?.violations || [];
@@ -349,9 +399,12 @@ export default function FieldOrderRedesign() {
       }
       await markFailed(idempotency_key, e.message);
       toastOk("Saved offline — will sync when connection returns");
-    } finally {
-      setSubmitting(false);
       navigate("/field/today");
+    } finally {
+      // Adjust-and-resubmit rejects (credit limit, MOQ, insufficient stock)
+      // return above WITHOUT navigating — the rep stays on the cart to fix
+      // it. Only success and the offline fallback leave this screen.
+      setSubmitting(false);
     }
   };
 

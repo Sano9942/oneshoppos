@@ -1337,6 +1337,13 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
   const [loading, setLoading] = useState(true);
   const [handoverName, setHandoverName] = useState("");
   const [showHandover, setShowHandover] = useState(false);
+  // V02 wholesale POD — per-stop delivered/failed capture
+  const [podStop, setPodStop] = useState(null); // order row being stamped
+  const [podStatus, setPodStatus] = useState("delivered");
+  const [podReceiver, setPodReceiver] = useState("");
+  const [podReason, setPodReason] = useState("");
+  const [podPhoto, setPodPhoto] = useState(null); // base64 data URL
+  const [podBusy, setPodBusy] = useState(false);
   const { success, error } = useToast();
 
   const load = useCallback(async () => {
@@ -1396,6 +1403,63 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
 
   const printLoadsheet = () => {
     openPrintableLoadsheet(ls, ls.orders || [], fmt);
+  };
+
+  // V02 wholesale POD ------------------------------------------------------
+  const openPod = (order) => {
+    setPodStop(order);
+    setPodStatus("delivered");
+    setPodReceiver("");
+    setPodReason("");
+    setPodPhoto(null);
+  };
+
+  const submitPod = async () => {
+    if (!podStop) return;
+    if (podStatus === "delivered" && !podReceiver.trim()) {
+      return error("Receiver name is required for a delivered stop");
+    }
+    setPodBusy(true);
+    try {
+      await api.post(
+        `/api/fulfillment/loadsheets/${loadsheetId}/orders/${podStop.web_order_id}/pod`,
+        {
+          status: podStatus,
+          receiver_name: podReceiver.trim() || undefined,
+          failed_reason: podStatus === "failed" ? (podReason.trim() || "Delivery failed") : undefined,
+          photo_base64: podPhoto || undefined,
+        }
+      );
+      success(podStatus === "delivered" ? "Stop marked delivered" : "Stop marked failed");
+      setPodStop(null);
+      load();
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setPodBusy(false);
+    }
+  };
+
+  const returnToStock = async (order) => {
+    if (!window.confirm(`Return order ${order.external_order_number || order.web_order_id}'s goods to stock?`)) return;
+    try {
+      const res = await api.post(
+        `/api/fulfillment/loadsheets/${loadsheetId}/orders/${order.web_order_id}/return-to-stock`,
+        {}
+      );
+      success(`${res.restocked_items} item(s) returned to stock`);
+      load();
+    } catch (err) {
+      error(err.message);
+    }
+  };
+
+  const onPodPhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return setPodPhoto(null);
+    const reader = new FileReader();
+    reader.onload = () => setPodPhoto(String(reader.result));
+    reader.readAsDataURL(file);
   };
 
   if (loading || !ls) {
@@ -1497,6 +1561,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
                 <th className="px-3 py-2">Total</th>
                 <th className="px-3 py-2">COD</th>
                 <th className="px-3 py-2">Tracking #</th>
+                <th className="px-3 py-2">Delivery</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -1515,12 +1580,70 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>
+                  <td className="px-3 py-2">
+                    {o.pod_status === "delivered" ? (
+                      <Badge tone="success">Delivered{o.pod_receiver_name ? ` — ${o.pod_receiver_name}` : ""}</Badge>
+                    ) : o.pod_status === "failed" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Badge tone="danger">Failed</Badge>
+                        {!String(o.pod_failed_reason || "").includes("[restocked]") && (
+                          <Button size="sm" variant="ghost" onClick={() => returnToStock(o)}>Return to stock</Button>
+                        )}
+                      </span>
+                    ) : ls.status === "handed_over" ? (
+                      <Button size="sm" onClick={() => openPod(o)}>Record POD</Button>
+                    ) : (
+                      <span className="text-(--ui-text-muted)">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </SectionCard>
+
+      {/* V02 wholesale — per-stop proof-of-delivery capture */}
+      {podStop && (
+        <SectionCard className="mt-4">
+          <h3 className="mb-2 text-sm font-semibold">
+            Proof of delivery — {podStop.external_order_number || `#${podStop.web_order_id}`}
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={podStatus}
+              onChange={(e) => setPodStatus(e.target.value)}
+              className="rounded-md border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-2 text-sm"
+            >
+              <option value="delivered">Delivered</option>
+              <option value="failed">Failed</option>
+            </select>
+            {podStatus === "delivered" ? (
+              <Input
+                placeholder="Receiver name (required)"
+                value={podReceiver}
+                onChange={(e) => setPodReceiver(e.target.value)}
+                className="w-56"
+              />
+            ) : (
+              <Input
+                placeholder="Failure reason"
+                value={podReason}
+                onChange={(e) => setPodReason(e.target.value)}
+                className="w-56"
+              />
+            )}
+            <label className="text-sm text-(--ui-text-muted)">
+              Photo:{" "}
+              <input type="file" accept="image/*" capture="environment" onChange={onPodPhotoChange} className="text-xs" />
+            </label>
+            <Button onClick={submitPod} disabled={podBusy}>
+              {podBusy ? "Saving…" : "Save POD"}
+            </Button>
+            <Button variant="ghost" onClick={() => setPodStop(null)} disabled={podBusy}>Cancel</Button>
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }

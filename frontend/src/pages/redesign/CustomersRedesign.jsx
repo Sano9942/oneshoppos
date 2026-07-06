@@ -2090,6 +2090,23 @@ export default function CustomersRedesign() {
                     Note: closing balance reflects activity through {statementPreview.to}. Current outstanding is {money(statementPreview.current_balance_due)}.
                   </p>
                 )}
+                {/* V02 wholesale — open backorders MEMO: goods still owed at
+                    order-time prices. Never part of the balance math. */}
+                {Array.isArray(statementPreview.open_backorders) && statementPreview.open_backorders.length > 0 && (
+                  <div className="mt-3 border-t border-(--ui-border) pt-2">
+                    <p className="text-xs font-semibold text-(--ui-text)">
+                      Open backorders (memo — not included in balance): {money(statementPreview.open_backorders_value)}
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {statementPreview.open_backorders.map((b) => (
+                        <li key={b.id} className="flex justify-between text-xs text-(--ui-text-muted)">
+                          <span>{b.date_label} — {b.product_name} × {b.qty_remaining} @ {money(b.unit_price)}</span>
+                          <span>{money(b.value)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

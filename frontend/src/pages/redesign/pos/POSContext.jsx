@@ -635,6 +635,11 @@ export const POSProvider = ({ children }) => {
         product_name: line?.name || `Product ${info.product_id}`,
         available: info.available,
         requested: info.requested,
+        // V02 wholesale backorders — offer "fulfill available + backorder
+        // remainder" when the backend says the split is possible. The line's
+        // current price becomes the ORDER-time snapshot.
+        backorder_available: info.backorder_available === true,
+        price: line ? Number(line.price) : null,
       });
       logErrorState("pos_insufficient_stock", `Insufficient stock for product ${info.product_id}`, info);
     },
@@ -992,6 +997,8 @@ export const POSProvider = ({ children }) => {
     setBarcodeMissPrompt,
     insufficientStockPrompt,
     setInsufficientStockPrompt,
+    // V02 wholesale backorders — stage the accepted shortfall remainder
+    stageBackorderItems: checkout.stageBackorderItems,
     // Tier 0.1 wholesale — credit-limit override flow
     creditLimitPrompt,
     setCreditLimitPrompt,

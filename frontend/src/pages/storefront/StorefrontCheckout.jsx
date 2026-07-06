@@ -8,7 +8,7 @@ import { useStorefrontCart } from "./useStorefrontCart";
 export default function StorefrontCheckout() {
   const { tenantSlug, config, setCartItemCount } = useStorefront();
   const navigate = useNavigate();
-  const { items, loading: cartLoading, fetchCart, getQuote, cartToken, clearCart } =
+  const { items, loading: cartLoading, fetchCart, getQuote, cartToken, clearCart, updateItem } =
     useStorefrontCart(tenantSlug);
   const currencySymbol = config?.currency_symbol || "Rs";
 
@@ -86,7 +86,7 @@ export default function StorefrontCheckout() {
     setContact((prev) => ({ ...prev, [field]: value }));
   }
 
-  async function handlePlaceOrder() {
+  async function handlePlaceOrder(backorderItems = null) {
     setError(null);
 
     if (!contact.name.trim() || !contact.phone.trim() || !contact.email.trim()) {
@@ -127,6 +127,10 @@ export default function StorefrontCheckout() {
         };
       }
 
+      if (Array.isArray(backorderItems) && backorderItems.length) {
+        body.backorder_items = backorderItems;
+      }
+
       const res = await fetch(
         `${API_BASE}/api/storefront/checkout?tenant=${tenantSlug}`,
         {
@@ -138,6 +142,50 @@ export default function StorefrontCheckout() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+
+        // V02 wholesale backorders — the backend offers a split: fulfill
+        // what's in stock now, backorder the remainder at today's price
+        // (signed-in B2B buyers only). Clamp the cart lines and resubmit
+        // once with the remainder as backorder_items.
+        const availErrors = Array.isArray(errData.availabilityErrors) ? errData.availabilityErrors : [];
+        const allPartial = availErrors.length > 0 && availErrors.every((a) => Number(a.available) > 0);
+        if (errData.backorder_available && allPartial && !backorderItems) {
+          const lines = availErrors
+            .map((a) => {
+              const cartLine = items.find(
+                (it) =>
+                  Number(it.product_id) === Number(a.productId) &&
+                  (Number(it.variant_id) || null) === (Number(a.variantId) || null)
+              );
+              return cartLine ? { avail: a, cartLine } : null;
+            })
+            .filter(Boolean);
+          if (lines.length === availErrors.length) {
+            const summary = lines
+              .map(({ avail, cartLine }) =>
+                `${cartLine.product_name || cartLine.title || "Item"}: ${avail.available} now, ${Number(avail.requested) - Number(avail.available)} backordered`)
+              .join("\n");
+            const accept = window.confirm(
+              `Some items are short on stock. Take what's available now and backorder the rest at today's price?\n\n${summary}`
+            );
+            if (accept) {
+              for (const { avail, cartLine } of lines) {
+                await updateItem(cartLine.id, Number(avail.available));
+              }
+              const remainder = lines.map(({ avail }) => ({
+                product_id: Number(avail.productId),
+                variant_id: avail.variantId ? Number(avail.variantId) : null,
+                quantity: Number(avail.requested) - Number(avail.available),
+                // server-authoritative: checkout snapshots the quote line's
+                // unit price; this value is ignored but must be present.
+                unit_price: 0,
+              }));
+              setSubmitting(false);
+              return handlePlaceOrder(remainder);
+            }
+          }
+        }
+
         throw new Error(errData.error || "Checkout failed. Please try again.");
       }
 
@@ -494,7 +542,7 @@ export default function StorefrontCheckout() {
 
             {/* Place Order */}
             <button
-              onClick={handlePlaceOrder}
+              onClick={() => handlePlaceOrder()}
               disabled={submitting || quoteLoading || items.length === 0}
               className="mt-6 w-full px-6 py-3 bg-(--ui-primary) text-(--ui-on-primary) font-medium rounded-lg hover:bg-(--ui-primary-strong) transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >

@@ -11,12 +11,19 @@ export default function PortalOrders() {
   const [loading, setLoading] = useState(true);
   const [reorderingKey, setReorderingKey] = useState(null);
   const [notice, setNotice] = useState(null);
+  // V02 wholesale — open backorders (memo: goods still owed at order-time
+  // prices; nothing is payable until the store fulfills them).
+  const [backorders, setBackorders] = useState([]);
 
   useEffect(() => {
     portalApi
       .get(tenantSlug, "/api/portal/me/order-history")
       .then((data) => setOrders(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false));
+    portalApi
+      .get(tenantSlug, "/api/portal/me/backorders")
+      .then((data) => setBackorders(Array.isArray(data) ? data : []))
+      .catch(() => setBackorders([]));
   }, [tenantSlug]);
 
   async function handleReorder(order) {
@@ -47,6 +54,33 @@ export default function PortalOrders() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Order history</h1>
+
+      {backorders.length > 0 && (
+        <div className="bg-(--ui-surface) rounded-xl border border-(--ui-border) overflow-hidden">
+          <div className="px-4 py-3 border-b border-(--ui-border)">
+            <p className="font-medium">On backorder</p>
+            <p className="text-xs text-(--ui-text-muted)">
+              These items are reserved for you at the price you ordered at. We'll invoice them when stock arrives — nothing to pay yet.
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {backorders.map((b) => (
+                <tr key={b.id} className="border-b border-(--ui-border) last:border-0">
+                  <td className="px-4 py-2.5">
+                    {b.product_name}
+                    {b.variant_sku ? <span className="text-(--ui-text-muted)"> — {b.variant_sku}</span> : null}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">{Number(b.qty_remaining)} × {Number(b.unit_price).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-right text-(--ui-text-muted)">
+                    {b.expected_at ? `Expected ${new Date(b.expected_at).toLocaleDateString()}` : b.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {notice && (
         <div className="bg-(--ui-warning-bg) border border-(--ui-warning-bg) text-(--ui-warning-fg) rounded-lg px-4 py-3 text-sm">

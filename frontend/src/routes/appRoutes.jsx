@@ -65,6 +65,7 @@ const FieldVisitsRedesign = lazy(() => import("../pages/redesign/field/FieldVisi
 const FieldRoutesAdminRedesign = lazy(() => import("../pages/redesign/field/FieldRoutesAdminRedesign"));
 // Tier 1.2 wholesale: order capture from the field rep app
 const FieldOrderRedesign = lazy(() => import("../pages/redesign/field/FieldOrderRedesign"));
+const FieldVanRedesign = lazy(() => import("../pages/redesign/field/FieldVanRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
@@ -92,6 +93,7 @@ const CustomerGroupPriceBookRedesign = lazy(() => import("../pages/redesign/Cust
 const GiftCardsAdminRedesign = lazy(() => import("../pages/redesign/GiftCardsAdminRedesign"));
 const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
 const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
+const BackordersRedesign = lazy(() => import("../pages/redesign/BackordersRedesign"));
 const CODSettlementsRoute = lazy(() => import("../pages/CODSettlementsRoute"));
 const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
 const SmartCollectionsRoute = lazy(() => import("../pages/SmartCollectionsRoute"));
@@ -242,6 +244,8 @@ export const appRoutes = [
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}
     <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />
+    {/* V02 wholesale — backorder fulfillment loop */}
+    <Route path="/backorders" element={perm("manage_orders", <BackordersRedesign />)} />
     <Route path="/cod-settlements" element={perm("manage_orders", <CODSettlementsRoute />)} />
     {/* Phase 2B — Report Builder, POS Layouts */}
     <Route path="/report-builder" element={perm("view_reports", <ReportBuilderRoute />)} />
@@ -310,6 +314,8 @@ export const appRoutes = [
     <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />
     <Route path="/field/check-in/:customer_id" element={perm("manage_field_sales", wrap(FieldCheckInRedesign))} />
     <Route path="/field/order/:customer_id" element={perm("manage_field_sales", wrap(FieldOrderRedesign))} />
+    {/* V02 wholesale — van sales (rep van view + day-end count) */}
+    <Route path="/field/van" element={perm("manage_field_sales", wrap(FieldVanRedesign))} />
     <Route path="/field/visits" element={perm("manage_field_sales", wrap(FieldVisitsRedesign))} />
     <Route path="/field/routes" element={perm("manage_field_sales", wrap(FieldRoutesAdminRedesign))} />
   </Route>,

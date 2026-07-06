@@ -96,6 +96,15 @@ export function useCheckout({
   const managerPinRef = useRef(null);
   const [creditWarning, setCreditWarning] = useState(null);
 
+  // V02 wholesale backorders — staged remainder from an accepted shortfall
+  // offer (POSInsufficientStockModal). Rides the next completeSale payload as
+  // backorder_items; requires a customer. Cleared after the sale (or cart
+  // clear) so a later unrelated sale never inherits stale rows.
+  const backorderItemsRef = useRef([]);
+  const stageBackorderItems = useCallback((items) => {
+    backorderItemsRef.current = Array.isArray(items) ? items.filter(Boolean) : [];
+  }, []);
+
   // Phase 2.1 C1 — tip + server capture for restaurant sales. Stored here so
   // any preset can use them; backend ignores tips when tip_amount = 0 and
   // staff_id is nullable on sale_items.
@@ -328,6 +337,13 @@ export function useCheckout({
       manager_pin: managerPinRef.current || undefined,
       // F06 — appointment checkout link; backend completes the appointment.
       appointment_id: activeAppointmentId || null,
+      // V02 wholesale backorders — accepted shortfall remainder (see
+      // stageBackorderItems). Only sent with an identified customer; the
+      // backend rejects backorders without one.
+      backorder_items:
+        backorderItemsRef.current.length && checkoutCustomerId
+          ? backorderItemsRef.current
+          : undefined,
     };
     // Clear the pin immediately after stamping the payload; if the retry
     // itself fails the user is prompted to enter again rather than silently
@@ -395,6 +411,8 @@ export function useCheckout({
           variant_id: data.variant_id,
           available: data.available,
           requested: data.requested,
+          // V02 — backend hint: flag on + customer attached + partial stock.
+          backorder_available: data.backorder_available === true,
           message: data.error,
         });
         setSubmitting(false);
@@ -449,10 +467,19 @@ export function useCheckout({
         }).catch(() => {});
       }
 
+      // V02 — staged backorders are consumed by this sale (success) either
+      // way; confirm to the cashier when the backend actually created rows.
+      backorderItemsRef.current = [];
       clearAfterSale();
-      showNotice?.(
-        `Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`,
-      );
+      if (Array.isArray(data?.backorders) && data.backorders.length) {
+        showNotice?.(
+          `Sale #${data.saleId} completed — ${data.backorders.length} item(s) backordered at today's price. Customer will be notified when stock arrives.`,
+        );
+      } else {
+        showNotice?.(
+          `Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`,
+        );
+      }
       await loadParked?.(selectedOutletId);
     } catch (e) {
       if (e instanceof TypeError || !navigator.onLine) {
@@ -588,6 +615,9 @@ export function useCheckout({
     retryWithManagerPin,
     cancelCreditOverride,
     creditWarning, setCreditWarning,
+    // V02 wholesale backorders — stage the accepted shortfall remainder for
+    // the next completeSale.
+    stageBackorderItems,
     // Phase 2.1 C1 wiring
     tipAmount, setTipAmount,
     tipMethod, setTipMethod,
