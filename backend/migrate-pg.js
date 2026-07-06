@@ -7382,6 +7382,125 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 101,
+    description:
+      "V06 repair depth (device intake) — ticket_types (per-repair-type checklist templates), ticket_devices (device entity, encrypted passcode), service_tickets.ticket_type_id, widened activity_type CHECK, seed 3 default repair types",
+    up: async (client) => {
+      // Tenant-schema only. Each block SAVEPOINT-guarded so a public-schema run
+      // (no service_tickets table) is a harmless skip, matching the v99/v100 pattern.
+
+      // 1. ticket_types — per-repair-type checklist templates. F03 form-builder
+      //    is NOT merged to main, so this is the plan's ticket_types fallback.
+      try {
+        await client.query("SAVEPOINT v101_ticket_types");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ticket_types (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            checklist_template JSONB NOT NULL DEFAULT '[]',
+            default_warranty_days INTEGER,
+            sort_order INTEGER DEFAULT 0,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query("RELEASE SAVEPOINT v101_ticket_types");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_ticket_types");
+        console.warn(`[migrate-pg v101] ticket_types skipped: ${err.message}`);
+      }
+
+      // 2. ticket_devices — the device entity (the intake form IS the product
+      //    in this vertical). passcode holds AES-256-GCM ciphertext (enc:v1:...)
+      //    via services/crypto.js; reveal-on-click decrypts. NEVER in a portal payload.
+      try {
+        await client.query("SAVEPOINT v101_ticket_devices");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ticket_devices (
+            id SERIAL PRIMARY KEY,
+            service_ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+            device_type TEXT, brand TEXT, model TEXT,
+            serial_number TEXT, imei TEXT,
+            passcode TEXT,
+            condition_notes TEXT,
+            accessories JSONB NOT NULL DEFAULT '[]',
+            checklist JSONB NOT NULL DEFAULT '{}',
+            photos JSONB NOT NULL DEFAULT '[]',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_devices_ticket ON ticket_devices(service_ticket_id)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_devices_imei ON ticket_devices(imei) WHERE imei IS NOT NULL`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_devices_serial ON ticket_devices(serial_number) WHERE serial_number IS NOT NULL`);
+        await client.query("RELEASE SAVEPOINT v101_ticket_devices");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_ticket_devices");
+        console.warn(`[migrate-pg v101] ticket_devices skipped: ${err.message}`);
+      }
+
+      // 3. service_tickets.ticket_type_id — one repair type per job (95% case);
+      //    its checklist_template seeds each attached device's checklist at intake.
+      try {
+        await client.query("SAVEPOINT v101_ticket_type_fk");
+        await client.query(
+          `ALTER TABLE service_tickets ADD COLUMN IF NOT EXISTS ticket_type_id INTEGER REFERENCES ticket_types(id)`
+        );
+        await client.query("RELEASE SAVEPOINT v101_ticket_type_fk");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_ticket_type_fk");
+        console.warn(`[migrate-pg v101] service_tickets.ticket_type_id skipped: ${err.message}`);
+      }
+
+      // 4. widen the activity_type CHECK for device-intake mutations (harden:
+      //    every new mutation writes an audit row like the existing ones do).
+      try {
+        await client.query("SAVEPOINT v101_activity_check");
+        await client.query(
+          `ALTER TABLE service_ticket_activities DROP CONSTRAINT IF EXISTS service_ticket_activities_activity_type_check`
+        );
+        await client.query(`
+          ALTER TABLE service_ticket_activities
+            ADD CONSTRAINT service_ticket_activities_activity_type_check
+            CHECK (activity_type IN (
+              'note','status_change','assignment','deposit_recorded','invoice_generated',
+              'device_added','device_updated','device_removed','passcode_revealed'
+            ))
+        `);
+        await client.query("RELEASE SAVEPOINT v101_activity_check");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_activity_check");
+        console.warn(`[migrate-pg v101] activity_type CHECK skipped: ${err.message}`);
+      }
+
+      // 5. Seed 3 default repair types so a fresh repair_shop tenant demos
+      //    immediately. Empty-guarded → idempotent, never overrides tenant edits.
+      //    (Same shared-defaults pattern as loyalty_tiers / chart_of_accounts.)
+      try {
+        await client.query("SAVEPOINT v101_seed_types");
+        const { rows: t } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'ticket_types'
+        `);
+        if (t.length) {
+          const { rows: cnt } = await client.query("SELECT count(*)::int c FROM ticket_types");
+          if (cnt[0].c === 0) {
+            await client.query(`
+              INSERT INTO ticket_types (name, checklist_template, default_warranty_days, sort_order) VALUES
+                ('Screen Replacement', '["Powers on","Screen cracked","Touch works","LCD intact","Frame bent"]'::jsonb, 30, 1),
+                ('Battery Replacement', '["Powers on","Holds charge","Swollen battery","Charges normally"]'::jsonb, 90, 2),
+                ('Water Damage', '["Powers on","Liquid indicator triggered","Corrosion visible","Screen functional","Speaker/mic working"]'::jsonb, 0, 3)
+            `);
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v101_seed_types");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_seed_types");
+        console.warn(`[migrate-pg v101] default repair types skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**
