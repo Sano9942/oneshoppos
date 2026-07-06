@@ -207,6 +207,9 @@ const INDUSTRY_PRESETS = Object.freeze({
       customers: "Members",
       sale: "Enrollment",
       order: "Booking",
+      // F06 — class timetable vocabulary
+      class_singular: "Class",
+      timetable: "Class Timetable",
     },
     public_booking_labels: {
       booking_cta: "Book a session",
@@ -738,6 +741,7 @@ const DEFAULT_PORTAL_LABELS = Object.freeze({
   contracts_tab: "Rentals",
   stays_tab: "My Stays",
   treatments_tab: "Treatment Plans",
+  packages_tab: "My Packages",
   tickets_tab: "Service Tickets",
   loyalty_tab: "Loyalty",
   wallet_tab: "Wallet",
@@ -753,11 +757,11 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
   general_retail: ["invoices", "orders", "loyalty", "profile"],
   restaurant: ["orders", "loyalty", "profile"],
   cafe: ["orders", "loyalty", "profile"],
-  salon: ["appointments", "invoices", "loyalty", "profile"],
+  salon: ["appointments", "packages", "invoices", "loyalty", "profile"],
   clinic: ["appointments", "invoices", "loyalty", "profile"],
   grocery: ["invoices", "orders", "loyalty", "profile"],
   repair_shop: ["tickets", "invoices", "profile"],
-  gym: ["subscriptions", "invoices", "appointments", "profile"],
+  gym: ["subscriptions", "packages", "invoices", "appointments", "profile"],
   wholesale: ["invoices", "orders", "profile"],
   photography_studio: ["invoices", "orders", "appointments", "profile"],
   butcher: ["invoices", "orders", "profile"],
@@ -772,7 +776,7 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
   hostel: ["stays", "invoices", "profile"],
   dental_clinic: ["treatments", "appointments", "invoices", "loyalty", "profile"],
   veterinary: ["treatments", "appointments", "invoices", "profile"],
-  physiotherapy: ["treatments", "appointments", "invoices", "profile"],
+  physiotherapy: ["treatments", "appointments", "packages", "invoices", "profile"],
 });
 
 // Preset-specific portal label overrides. Missing keys fall back to defaults.
@@ -782,7 +786,7 @@ const PORTAL_LABEL_OVERRIDES = Object.freeze({
   restaurant: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
   cafe: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
   wholesale: { invoices_tab: "Account Invoices", orders_tab: "Purchase Orders" },
-  gym: { subscriptions_tab: "My Memberships", appointments_tab: "Class Bookings" },
+  gym: { subscriptions_tab: "My Memberships", appointments_tab: "Class Bookings", packages_tab: "Class Passes" },
   repair_shop: { tickets_tab: "Repair Tickets" },
   car_rental: { contracts_tab: "Rental Agreements" },
   equipment_hire: { contracts_tab: "Equipment Rentals" },
@@ -794,7 +798,7 @@ const PORTAL_LABEL_OVERRIDES = Object.freeze({
   hostel: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a bed" },
   dental_clinic: { treatments_tab: "My Treatment Plans", appointments_tab: "My Appointments", book_cta: "Book a consultation" },
   veterinary: { treatments_tab: "Pet Treatment Plans", appointments_tab: "Appointments", book_cta: "Book your pet" },
-  physiotherapy: { treatments_tab: "My Treatment", appointments_tab: "Sessions", book_cta: "Book a session" },
+  physiotherapy: { treatments_tab: "My Treatment", appointments_tab: "Sessions", packages_tab: "Session Passes", book_cta: "Book a session" },
 });
 
 function getPreset(industryType) {

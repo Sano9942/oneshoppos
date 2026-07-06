@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Pause, Play, Package } from "lucide-react";
+import { Calendar, CalendarClock, Pause, Play, Package, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 function readBulkScanMode() {
@@ -32,8 +32,12 @@ export default function POSSubHeader() {
     setHoldCreateOpen,
     setHoldPickupOpen,
     taxMode,
+    setShowAppointments,
+    activeAppointment,
+    clearActiveAppointment,
   } = usePOS();
   const holdsOn = !!posFlags?.phase2g_holds;
+  const appointmentsOn = !!posFlags?.phase4_appointments;
   // P8 (3.14): hide the inclusive/exclusive toggle for unregistered tenants
   // — they cannot legally charge GST so the choice is meaningless.
   const showTaxToggle = taxMode && taxMode !== "none";
@@ -106,6 +110,25 @@ export default function POSSubHeader() {
         </div>
       </div>
       <div className="flex gap-2">
+        {appointmentsOn && (
+          activeAppointment ? (
+            <button
+              onClick={clearActiveAppointment}
+              title="Checkout will complete this appointment — click to detach"
+              className="flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-emerald-50 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-100 transition shadow-sm"
+            >
+              <CalendarClock size={13} /> Appt #{activeAppointment.id}
+              <X size={11} />
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAppointments(true)}
+              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm"
+            >
+              <CalendarClock size={13} /> Appointments
+            </button>
+          )
+        )}
         <button
           onClick={parkSale}
           disabled={!cart.length || !selectedOutletId}

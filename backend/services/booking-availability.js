@@ -29,6 +29,30 @@ async function getAvailableSlots(db, { serviceId, employeeId, date, outletId }) 
   }
   if (!staffIds.length) return [];
 
+  // F06 resources: when the flag is on and the service maps to resources, a
+  // slot additionally needs at least one free resource instance (salon chair,
+  // physio bed, studio bay). Occupancy is loaded once for the day.
+  const candidateResources = await getCandidateResources(db, serviceId);
+  let resourceBusy = [];
+  if (candidateResources.length) {
+    const { rows } = await db.query(
+      `SELECT resource_id, start_at, end_at FROM appointments
+       WHERE resource_id = ANY($1::int[]) AND start_at::date = $2
+       AND status NOT IN ('cancelled','no_show')`,
+      [candidateResources, date]
+    );
+    resourceBusy = rows;
+  }
+  const hasFreeResource = (slotStart, slotEnd) => {
+    if (!candidateResources.length) return true;
+    const busySet = new Set(
+      resourceBusy
+        .filter((b) => new Date(slotStart) < new Date(b.end_at) && new Date(slotEnd) > new Date(b.start_at))
+        .map((b) => b.resource_id)
+    );
+    return candidateResources.some((id) => !busySet.has(id));
+  };
+
   // 3. For each staff member, compute available slots
   const allSlots = [];
 
@@ -50,10 +74,14 @@ async function getAvailableSlots(db, { serviceId, employeeId, date, outletId }) 
       [sid, dateStart, dateEnd]
     );
 
-    // Get existing appointments for this date
+    // Get existing appointments for this date (F06: segments occupy staff too)
     const { rows: existing } = await db.query(
       `SELECT start_at, end_at FROM appointments
-       WHERE employee_id = $1 AND start_at::date = $2 AND status NOT IN ('cancelled','no_show')`,
+       WHERE employee_id = $1 AND start_at::date = $2 AND status NOT IN ('cancelled','no_show')
+       UNION ALL
+       SELECT s.start_at, s.end_at FROM appointment_segments s
+       JOIN appointments pa ON pa.id = s.appointment_id
+       WHERE s.employee_id = $1 AND s.start_at::date = $2 AND pa.status NOT IN ('cancelled','no_show')`,
       [sid, date]
     );
 
@@ -75,7 +103,7 @@ async function getAvailableSlots(db, { serviceId, employeeId, date, outletId }) 
           new Date(slotStart) < new Date(a.end_at) && new Date(slotEndPadded) > new Date(a.start_at)
         );
 
-        if (!blocked && !occupied) {
+        if (!blocked && !occupied && hasFreeResource(slotStart, slotEndPadded)) {
           allSlots.push({
             employee_id: sid,
             start_at: slotStart,
@@ -97,13 +125,68 @@ async function checkOverlap(db, employeeId, startAt, endAt, excludeAppointmentId
     params.push(excludeAppointmentId);
     exclude = ` AND id != $${params.length}`;
   }
+  // F06: appointment_segments block staff too — a color+cut's second stylist
+  // must be invisible to direct bookings for that stylist. Segment rows count
+  // only while their parent appointment is live.
+  const segExclude = excludeAppointmentId ? ` AND s.appointment_id != $${params.length}` : "";
   const { rows } = await db.query(
     `SELECT id FROM appointments
      WHERE employee_id = $1 AND start_at < $3 AND end_at > $2
-     AND status NOT IN ('cancelled','no_show')${exclude}`,
+     AND status NOT IN ('cancelled','no_show')${exclude}
+     UNION ALL
+     SELECT s.appointment_id FROM appointment_segments s
+     JOIN appointments pa ON pa.id = s.appointment_id
+     WHERE s.employee_id = $1 AND s.start_at < $3 AND s.end_at > $2
+     AND pa.status NOT IN ('cancelled','no_show')${segExclude}`,
     params
   );
   return rows.length > 0;
+}
+
+/**
+ * F06 resources — is the feature on, and which resources can serve a service?
+ * Returns [] when the flag is off or the service needs no resource (staff-only
+ * availability, pre-F06 behavior).
+ */
+async function getCandidateResources(db, serviceId) {
+  try {
+    const { rows: [flag] } = await db.query(
+      "SELECT enabled FROM feature_flags WHERE key = 'phase4_appointments_resources'"
+    );
+    if (!flag || flag.enabled !== true) return [];
+    const { rows } = await db.query(
+      `SELECT r.id FROM booking_resource_assignments a
+       JOIN booking_resources r ON r.id = a.resource_id AND r.is_active = true
+       WHERE a.service_id = $1 ORDER BY r.id`,
+      [serviceId]
+    );
+    return rows.map((r) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Pick a free resource among candidates for [startAt, endAt). Returns the id
+ * or null when all are occupied. Run inside the booking transaction (after
+ * the resource advisory locks) so concurrent picks serialize.
+ */
+async function findFreeResource(db, candidateIds, startAt, endAt, excludeAppointmentId = null) {
+  if (!candidateIds.length) return null;
+  const params = [candidateIds, startAt, endAt];
+  let exclude = "";
+  if (excludeAppointmentId) {
+    params.push(excludeAppointmentId);
+    exclude = ` AND id != $${params.length}`;
+  }
+  const { rows: busy } = await db.query(
+    `SELECT DISTINCT resource_id FROM appointments
+     WHERE resource_id = ANY($1::int[]) AND start_at < $3 AND end_at > $2
+     AND status NOT IN ('cancelled','no_show')${exclude}`,
+    params
+  );
+  const busySet = new Set(busy.map((b) => b.resource_id));
+  return candidateIds.find((id) => !busySet.has(id)) ?? null;
 }
 
 // helpers
@@ -118,4 +201,4 @@ function minutesToIso(date, minutes) {
   return `${date}T${h}:${m}:00`;
 }
 
-module.exports = { getAvailableSlots, checkOverlap };
+module.exports = { getAvailableSlots, checkOverlap, getCandidateResources, findFreeResource };

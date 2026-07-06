@@ -41,6 +41,9 @@ const DEFAULT_FEATURE_FLAGS = {
   marketing_campaigns: true,
   customer_messaging: true,
   customer_invoicing: true,
+  // F05 — status-change customer notifications (SMS/email/WhatsApp). Default OFF;
+  // consumers (repair tickets, booking reminders) only dispatch when flipped on.
+  customer_notifications: false,
   payment_links: false,
   // AI insights chat (routes/insights-ai.js). Default OFF — surfaces the flag
   // in the admin flags editor so it can be toggled on per tenant. Also requires
@@ -78,7 +81,9 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_appointments: false,
   phase4_appointments_waitlists: false,
   phase4_appointments_classes: false,
-  phase4_google_calendar_sync: false,
+  phase4_appointments_resources: false,
+  // F02 — packages / session passes (default OFF; salon/gym/physio presets flip it).
+  packages_passes: false,
   // Mode-gated (service_projects mode).
   phase4_service_projects: false,
   phase4_service_contracts: false,

@@ -7271,6 +7271,531 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 100,
+    description:
+      "F05 customer notifications — notification_rules + customer_notifications tables, customer_notifications flag, default repair-ticket rules",
+    up: async (client) => {
+      // 1. notification_rules — event→channel→template map, per-rule enable toggle.
+      //    UNIQUE(event, channel) so the engine resolves a deterministic set of
+      //    channels per event and seeds/edits are idempotent.
+      try {
+        await client.query("SAVEPOINT v100_notif_rules");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS notification_rules (
+            id SERIAL PRIMARY KEY,
+            event TEXT NOT NULL,
+            channel TEXT NOT NULL CHECK (channel IN ('email','sms','whatsapp')),
+            template_key TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(event, channel)
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_notification_rules_event ON notification_rules(event)`
+        );
+        await client.query("RELEASE SAVEPOINT v100_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_notif_rules");
+        console.warn(`[migrate-pg v100] notification_rules skipped: ${err.message}`);
+      }
+
+      // 2. customer_notifications — one row per dispatch attempt (audit + truth log).
+      //    status reflects real provider outcome; 'skipped' = rule off or no recipient
+      //    (never 'failed' for a missing mobile — see engine recipient resolution).
+      try {
+        await client.query("SAVEPOINT v100_customer_notif");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS customer_notifications (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER REFERENCES customers(id),
+            event TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            recipient TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'queued'
+              CHECK (status IN ('queued','sent','failed','skipped')),
+            provider_ref TEXT,
+            error TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_customer ON customer_notifications(customer_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_entity ON customer_notifications(entity_type, entity_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_notifications_created ON customer_notifications(created_at DESC)`
+        );
+        await client.query("RELEASE SAVEPOINT v100_customer_notif");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_customer_notif");
+        console.warn(`[migrate-pg v100] customer_notifications skipped: ${err.message}`);
+      }
+
+      // 3. customer_notifications feature flag — default OFF. Consumers (repair
+      //    tickets, reminders) only dispatch when this is flipped on per tenant.
+      try {
+        await client.query("SAVEPOINT v100_notif_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('customer_notifications', false,
+               'F05 — status-change customer notifications (SMS/email/WhatsApp) via notification_rules')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v100_notif_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_notif_flag");
+        console.warn(`[migrate-pg v100] customer_notifications flag skipped: ${err.message}`);
+      }
+
+      // 4. Default repair-ticket rules. INERT until the flag is on AND the ticket
+      //    flow calls the engine — safe to seed for every tenant (ON CONFLICT
+      //    keeps it idempotent and never overrides a tenant's own toggles).
+      try {
+        await client.query("SAVEPOINT v100_default_rules");
+        await client.query(`
+          INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+            ('ticket.status_changed:approved',    'email', 'ticket_approved',    true),
+            ('ticket.status_changed:in_progress', 'email', 'ticket_in_progress', true),
+            ('ticket.status_changed:completed',   'sms',   'ticket_completed',   true),
+            ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
+            ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
+            ('appointment.reminder',              'sms',   'appointment_reminder', true)
+          ON CONFLICT (event, channel) DO NOTHING
+        `);
+        await client.query("RELEASE SAVEPOINT v100_default_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v100_default_rules");
+        console.warn(`[migrate-pg v100] default notification rules skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 101,
+    description:
+      "F06 scheduling engine activation — appointment↔sale link, class sessions/bookings deltas, waitlist offer flow, appointment overlap exclusion constraint, ICS feed token, phase4_appointments_resources flag",
+    up: async (client) => {
+      // 1. btree_gist — needed for the appointments overlap EXCLUDE constraint
+      //    (integer equality inside a gist index). DB-global; first schema to
+      //    run this installs it, later schemas no-op. Installed into public so
+      //    the opclass resolves under every tenant's "<schema>, public" path.
+      try {
+        await client.query("SAVEPOINT v101_btree_gist");
+        await client.query("CREATE EXTENSION IF NOT EXISTS btree_gist SCHEMA public");
+        await client.query("RELEASE SAVEPOINT v101_btree_gist");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_btree_gist");
+        console.warn(`[migrate-pg v101] btree_gist extension skipped: ${err.message}`);
+      }
+
+      // 2. appointment↔sale checkout link (salon P0 — revenue attribution for
+      //    every appointment vertical). Both directions: sales.appointment_id is
+      //    stamped inside the sale transaction; appointments.sale_id +
+      //    status='completed' are set right after commit.
+      try {
+        await client.query("SAVEPOINT v101_appt_sale_link");
+        await client.query(
+          "ALTER TABLE sales ADD COLUMN IF NOT EXISTS appointment_id INTEGER REFERENCES appointments(id)"
+        );
+        await client.query(
+          "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS sale_id INTEGER REFERENCES sales(id)"
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_sales_appointment ON sales(appointment_id)
+           WHERE appointment_id IS NOT NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v101_appt_sale_link");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_appt_sale_link");
+        console.warn(`[migrate-pg v101] appointment↔sale link skipped: ${err.message}`);
+      }
+
+      // 3. booking_services.product_id — maps a bookable service to the POS
+      //    product that represents it at checkout (services ring up as products;
+      //    the POS appointment prefill uses this to build the cart line).
+      try {
+        await client.query("SAVEPOINT v101_service_product");
+        await client.query(
+          "ALTER TABLE booking_services ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id)"
+        );
+        await client.query("RELEASE SAVEPOINT v101_service_product");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_service_product");
+        console.warn(`[migrate-pg v101] booking_services.product_id skipped: ${err.message}`);
+      }
+
+      // 4. appointments.source CHECK gains 'kiosk' (V07 member check-in kiosk
+      //    books through the same engine — extend now while the table is open).
+      try {
+        await client.query("SAVEPOINT v101_appt_source");
+        await client.query(
+          "ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_source_check"
+        );
+        await client.query(
+          `ALTER TABLE appointments ADD CONSTRAINT appointments_source_check
+           CHECK (source IN ('admin','public','import','portal','kiosk'))`
+        );
+        await client.query("RELEASE SAVEPOINT v101_appt_source");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_appt_source");
+        console.warn(`[migrate-pg v101] appointments source CHECK skipped: ${err.message}`);
+      }
+
+      // 5. Overlap exclusion constraint — the DB-level backstop for the
+      //    booking double-book race (completion-03 verdict). The service layer
+      //    also takes a transaction-scoped advisory lock (friendly 409), but
+      //    this guarantees correctness for ANY write path (e.g. admin PUT
+      //    reassigning employee_id, which never ran checkOverlap). Half-open
+      //    tstzrange means back-to-back appointments never conflict. Skipped
+      //    with a warning if existing rows already overlap — the advisory lock
+      //    still protects new writes on such tenants.
+      try {
+        await client.query("SAVEPOINT v101_appt_excl");
+        const { rows: hasConstraint } = await client.query(
+          `SELECT 1 FROM pg_constraint c
+           JOIN pg_class t ON t.oid = c.conrelid
+           JOIN pg_namespace n ON n.oid = t.relnamespace
+           WHERE c.conname = 'excl_appointments_employee_overlap'
+             AND t.relname = 'appointments' AND n.nspname = current_schema()`
+        );
+        if (!hasConstraint.length) {
+          await client.query(
+            `ALTER TABLE appointments ADD CONSTRAINT excl_appointments_employee_overlap
+             EXCLUDE USING gist (employee_id WITH =, tstzrange(start_at, end_at) WITH &&)
+             WHERE (employee_id IS NOT NULL AND status NOT IN ('cancelled','no_show'))`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v101_appt_excl");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_appt_excl");
+        console.warn(`[migrate-pg v101] appointments overlap exclusion skipped: ${err.message}`);
+      }
+
+      // 6. class_sessions deltas — recurrence (simple 'weekly:0,2,4' day-list
+      //    encoding materialized ahead at save time, not RRULE), per-session
+      //    price, notes, and the parent pointer occurrences link back to.
+      try {
+        await client.query("SAVEPOINT v101_class_sessions");
+        await client.query(`
+          ALTER TABLE class_sessions
+            ADD COLUMN IF NOT EXISTS recurrence_rule TEXT,
+            ADD COLUMN IF NOT EXISTS recurrence_parent_id INTEGER REFERENCES class_sessions(id) ON DELETE SET NULL,
+            ADD COLUMN IF NOT EXISTS price NUMERIC(12,2),
+            ADD COLUMN IF NOT EXISTS notes TEXT,
+            ADD COLUMN IF NOT EXISTS cancellation_reason TEXT
+        `);
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_sessions_start ON class_sessions(start_at)"
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_sessions_parent ON class_sessions(recurrence_parent_id) WHERE recurrence_parent_id IS NOT NULL"
+        );
+        await client.query("RELEASE SAVEPOINT v101_class_sessions");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_class_sessions");
+        console.warn(`[migrate-pg v101] class_sessions deltas skipped: ${err.message}`);
+      }
+
+      // 7. class_session_bookings deltas — booking source, walk-in contact
+      //    fields (public bookings without a customer record resolve to a
+      //    customer row in the service, but the columns keep the raw input),
+      //    F02 package redemption stub (plain INTEGER — customer_packages
+      //    doesn't exist yet; F02 adds the FK), and the anti-double-book
+      //    uniqueness. Partial unique (status <> 'cancelled') so a member who
+      //    cancels can rebook the same session.
+      try {
+        await client.query("SAVEPOINT v101_class_bookings");
+        await client.query(`
+          ALTER TABLE class_session_bookings
+            ADD COLUMN IF NOT EXISTS booked_via TEXT NOT NULL DEFAULT 'admin',
+            ADD COLUMN IF NOT EXISTS customer_package_id INTEGER,
+            ADD COLUMN IF NOT EXISTS customer_name TEXT,
+            ADD COLUMN IF NOT EXISTS customer_phone TEXT,
+            ADD COLUMN IF NOT EXISTS customer_email TEXT,
+            ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
+        `);
+        await client.query(
+          "ALTER TABLE class_session_bookings DROP CONSTRAINT IF EXISTS class_session_bookings_booked_via_check"
+        );
+        await client.query(
+          `ALTER TABLE class_session_bookings ADD CONSTRAINT class_session_bookings_booked_via_check
+           CHECK (booked_via IN ('admin','portal','public','kiosk'))`
+        );
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_class_booking_active
+           ON class_session_bookings(class_session_id, customer_id)
+           WHERE status <> 'cancelled' AND customer_id IS NOT NULL`
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_class_bookings_session ON class_session_bookings(class_session_id, status)"
+        );
+        await client.query("RELEASE SAVEPOINT v101_class_bookings");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_class_bookings");
+        console.warn(`[migrate-pg v101] class_session_bookings deltas skipped: ${err.message}`);
+      }
+
+      // 8. Waitlist offer flow — class linkage, offer window, the public claim
+      //    token the F05 notification link carries, and email for the email
+      //    channel. status CHECK gains 'cancelled' (admin removal ≠ 'expired').
+      try {
+        await client.query("SAVEPOINT v101_waitlist");
+        await client.query(`
+          ALTER TABLE appointment_waitlist_entries
+            ADD COLUMN IF NOT EXISTS class_session_id INTEGER REFERENCES class_sessions(id) ON DELETE CASCADE,
+            ADD COLUMN IF NOT EXISTS offered_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS offer_expires_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS claim_token TEXT,
+            ADD COLUMN IF NOT EXISTS customer_email TEXT,
+            ADD COLUMN IF NOT EXISTS offered_start_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS offered_employee_id INTEGER REFERENCES employees(id)
+        `);
+        await client.query(
+          "ALTER TABLE appointment_waitlist_entries DROP CONSTRAINT IF EXISTS appointment_waitlist_entries_status_check"
+        );
+        await client.query(
+          `ALTER TABLE appointment_waitlist_entries ADD CONSTRAINT appointment_waitlist_entries_status_check
+           CHECK (status IN ('waiting','offered','booked','expired','cancelled'))`
+        );
+        await client.query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS uq_waitlist_claim_token ON appointment_waitlist_entries(claim_token) WHERE claim_token IS NOT NULL"
+        );
+        await client.query(
+          "CREATE INDEX IF NOT EXISTS idx_waitlist_class_status ON appointment_waitlist_entries(class_session_id, status)"
+        );
+        await client.query("RELEASE SAVEPOINT v101_waitlist");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_waitlist");
+        console.warn(`[migrate-pg v101] waitlist deltas skipped: ${err.message}`);
+      }
+
+      // 9. ICS feed token — calendar_sync_accounts finally gets a feature:
+      //    per-employee one-way ICS feed (signed random token in the URL).
+      //    Full Google OAuth sync stays unbuilt; the dead flag is deleted below.
+      try {
+        await client.query("SAVEPOINT v101_ics_feed");
+        await client.query(
+          "ALTER TABLE calendar_sync_accounts ADD COLUMN IF NOT EXISTS feed_token TEXT"
+        );
+        await client.query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS uq_calendar_feed_token ON calendar_sync_accounts(feed_token) WHERE feed_token IS NOT NULL"
+        );
+        await client.query("RELEASE SAVEPOINT v101_ics_feed");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_ics_feed");
+        console.warn(`[migrate-pg v101] calendar feed token skipped: ${err.message}`);
+      }
+
+      // 10. Flags — seed phase4_appointments_resources (default OFF; vertical
+      //     presets flip it), delete the never-implemented
+      //     phase4_google_calendar_sync (replaced by the ICS feed above).
+      try {
+        await client.query("SAVEPOINT v101_flags");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('phase4_appointments_resources', false,
+               'F06 — bookable resources (chairs/beds/bays) required alongside staff availability')
+             ON CONFLICT (key) DO NOTHING`
+          );
+          await client.query(
+            "DELETE FROM feature_flags WHERE key = 'phase4_google_calendar_sync'"
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v101_flags");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_flags");
+        console.warn(`[migrate-pg v101] flags skipped: ${err.message}`);
+      }
+
+      // 11. Default F06 notification rules (inert until customer_notifications
+      //     flag is on — same F05 pattern as the repair-ticket seeds).
+      try {
+        await client.query("SAVEPOINT v101_notif_rules");
+        await client.query(`
+          INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+            ('class_session.cancelled', 'sms',   'class_cancelled', true),
+            ('class_session.cancelled', 'email', 'class_cancelled', true),
+            ('waitlist.offer',          'sms',   'waitlist_offer',  true),
+            ('waitlist.offer',          'email', 'waitlist_offer',  true)
+          ON CONFLICT (event, channel) DO NOTHING
+        `);
+        await client.query("RELEASE SAVEPOINT v101_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v101_notif_rules");
+        console.warn(`[migrate-pg v101] F06 notification rules skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 102,
+    description:
+      "F02 packages/passes — package_templates + customer_packages credit-ledger + redemptions (appointment/class/sale linked), package↔product POS tile link, subscription_runs dunning columns, packages_passes flag, dunning notification rules",
+    up: async (client) => {
+      // 1. Package entity + credit ledger. A package is a prepaid entitlement of
+      //    N credits, sold once and redeemed over time; credits_used is a running
+      //    total kept in lockstep (FOR UPDATE) with the redemptions ledger. The
+      //    invariant credits_used = Σ redemptions.credits WHERE reversed_at IS NULL
+      //    is enforced in application code + a reconciliation test, not a trigger.
+      try {
+        await client.query("SAVEPOINT v102_packages");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_templates (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            price NUMERIC(12,2) NOT NULL,
+            credits INTEGER NOT NULL CHECK (credits > 0),
+            validity_days INTEGER,
+            service_scope TEXT NOT NULL DEFAULT 'any'
+              CHECK (service_scope IN ('any','listed')),
+            product_id INTEGER REFERENCES products(id),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        // A package template optionally backs a POS product so it rings up as a
+        // sellable tile (mirrors is_gift_card_sku detection). One product ↔ one
+        // template, so the sale-commit lookup by product_id is unambiguous.
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_package_template_product
+             ON package_templates(product_id) WHERE product_id IS NOT NULL`
+        );
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_template_services (
+            package_template_id INTEGER NOT NULL REFERENCES package_templates(id) ON DELETE CASCADE,
+            booking_service_id INTEGER NOT NULL REFERENCES booking_services(id),
+            PRIMARY KEY (package_template_id, booking_service_id)
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS customer_packages (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            package_template_id INTEGER NOT NULL REFERENCES package_templates(id),
+            sale_id INTEGER REFERENCES sales(id),
+            credits_total INTEGER NOT NULL,
+            credits_used INTEGER NOT NULL DEFAULT 0 CHECK (credits_used <= credits_total),
+            expires_at TIMESTAMPTZ,
+            status TEXT NOT NULL DEFAULT 'active'
+              CHECK (status IN ('active','exhausted','expired','refunded')),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS package_redemptions (
+            id SERIAL PRIMARY KEY,
+            customer_package_id INTEGER NOT NULL REFERENCES customer_packages(id),
+            credits INTEGER NOT NULL DEFAULT 1,
+            appointment_id INTEGER REFERENCES appointments(id),
+            class_session_booking_id INTEGER REFERENCES class_session_bookings(id),
+            sale_id INTEGER REFERENCES sales(id),
+            redeemed_at TIMESTAMPTZ DEFAULT NOW(),
+            reversed_at TIMESTAMPTZ
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_customer_packages_customer
+             ON customer_packages(customer_id, status)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_package_redemptions_pkg
+             ON package_redemptions(customer_package_id) WHERE reversed_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v102_packages");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_packages");
+        console.warn(`[migrate-pg v102] packages tables skipped: ${err.message}`);
+      }
+
+      // 2. Dunning state on subscription_runs. When an auto-charge against a
+      //    saved instrument fails, the run is marked charge_status='failed' and
+      //    scheduled for retries at +1/+3/+7 days from first_failed_at; the
+      //    dunning worker advances dunning_attempts and pauses the subscription
+      //    after the 3rd failure. dunning_done_at closes a run out (paid or paused).
+      try {
+        await client.query("SAVEPOINT v102_dunning");
+        await client.query(
+          `ALTER TABLE subscription_runs
+             ADD COLUMN IF NOT EXISTS dunning_attempts INTEGER NOT NULL DEFAULT 0,
+             ADD COLUMN IF NOT EXISTS first_failed_at TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS next_dunning_at TIMESTAMPTZ,
+             ADD COLUMN IF NOT EXISTS dunning_done_at TIMESTAMPTZ`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_subscription_runs_dunning
+             ON subscription_runs(next_dunning_at)
+             WHERE charge_status = 'failed' AND dunning_done_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v102_dunning");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_dunning");
+        console.warn(`[migrate-pg v102] dunning columns skipped: ${err.message}`);
+      }
+
+      // 3. Flag — packages_passes (default OFF; salon/gym/physio presets flip it
+      //    per V04/V05/V07). Gates the POS sell/redeem blocks and the portal tab.
+      try {
+        await client.query("SAVEPOINT v102_flag");
+        const { rows: ffT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ffT.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('packages_passes', false,
+               'F02 — session packs / passes: N-credit prepaid entitlements sold once and redeemed over time')
+             ON CONFLICT (key) DO NOTHING`
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v102_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_flag");
+        console.warn(`[migrate-pg v102] packages_passes flag skipped: ${err.message}`);
+      }
+
+      // 4. Dunning notification rules (inert until customer_notifications on —
+      //    same F05 pattern as the v100 class/waitlist seeds). The dunning worker
+      //    dispatches these through services/customer-notify.notify().
+      try {
+        await client.query("SAVEPOINT v102_notif_rules");
+        const { rows: nrT } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (nrT.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('subscription.payment_failed', 'email', 'subscription_payment_failed', true),
+              ('subscription.payment_failed', 'sms',   'subscription_payment_failed', true),
+              ('subscription.paused',         'email', 'subscription_paused', true),
+              ('subscription.paused',         'sms',   'subscription_paused', true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v102_notif_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v102_notif_rules");
+        console.warn(`[migrate-pg v102] dunning notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

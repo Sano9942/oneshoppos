@@ -940,8 +940,155 @@ function manufacturerPartnerInvite({ storeName, contactName, brandList, setupUrl
   };
 }
 
+// -- F05 Customer Notifications: repair/service ticket status -------------
+// Shared renderer — one builder per status keeps the notification_rules
+// template_key → email TEMPLATES lookup 1:1. Data shape comes from the
+// service-tickets consumer (services/service-tickets.js).
+function ticketStatusEmail(headline, lead) {
+  return (data) => {
+    const { storeName, customerName, ticketNumber, ticketTitle, storePhone } = data || {};
+    return {
+      subject: `${headline}${ticketNumber ? ` — ${ticketNumber}` : ""}`,
+      html: wrapEmailHtml(
+        headline,
+        `<p>Hi ${customerName || "there"},</p>
+         <p>${lead} at <strong>${storeName || "our store"}</strong>.</p>
+         <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+           ${ticketNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Reference</td><td style="padding:10px 16px;font-weight:600">${ticketNumber}</td></tr>` : ""}
+           ${ticketTitle ? `<tr><td style="padding:10px 16px;color:#64748b">Item</td><td style="padding:10px 16px">${ticketTitle}</td></tr>` : ""}
+         </table>
+         ${storePhone ? `<p style="color:#64748b;font-size:14px">Questions? Call us at ${storePhone}.</p>` : ""}
+         ${footer("This is an automated update about your service request.")}`
+      ),
+    };
+  };
+}
+const ticketApproved = ticketStatusEmail("Your repair has been approved", "Good news — your service request has been approved and queued");
+const ticketInProgress = ticketStatusEmail("Your repair is in progress", "Work has started on your service request");
+const ticketCompleted = ticketStatusEmail("Your item is ready for pickup", "Your service request is complete and ready for collection");
+const ticketInvoiced = ticketStatusEmail("Your invoice is ready", "An invoice has been prepared for your completed service request");
+
+// -- F05: appointment reminder (email channel of the reminders engine) ----
+function appointmentReminder(data) {
+  const { storeName, customerName, serviceName, staffName, apptStart } = data || {};
+  let when = apptStart;
+  try { if (apptStart) when = new Date(apptStart).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Reminder: ${serviceName || "your appointment"}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Appointment Reminder",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>This is a reminder for your upcoming appointment at <strong>${storeName || "our store"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#eff6ff;border-radius:8px">
+         ${serviceName ? `<tr><td style="padding:10px 16px;color:#64748b">Service</td><td style="padding:10px 16px;font-weight:600">${serviceName}</td></tr>` : ""}
+         ${staffName ? `<tr><td style="padding:10px 16px;color:#64748b">With</td><td style="padding:10px 16px">${staffName}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+       </table>
+       ${footer("This is an automated appointment reminder.")}`
+    ),
+  };
+}
+
+// -- F06: class session cancelled (classes engine) -------------------------
+function classCancelled(data) {
+  const { storeName, customerName, className, classStart, reason } = data || {};
+  let when = classStart;
+  try { if (classStart) when = new Date(classStart).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Cancelled: ${className || "your class"}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Class Cancelled",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We're sorry — the following class at <strong>${storeName || "our store"}</strong> has been cancelled.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         ${className ? `<tr><td style="padding:10px 16px;color:#64748b">Class</td><td style="padding:10px 16px;font-weight:600">${className}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+         ${reason ? `<tr><td style="padding:10px 16px;color:#64748b">Reason</td><td style="padding:10px 16px">${reason}</td></tr>` : ""}
+       </table>
+       <p>Please get in touch to rebook or pick another session.</p>
+       ${footer("This is an automated class-schedule notification.")}`
+    ),
+  };
+}
+
+// -- F06: waitlist offer (spot opened up) -----------------------------------
+function waitlistOffer(data) {
+  const { storeName, customerName, className, classStart, offerExpiresAt, claimUrl } = data || {};
+  let when = classStart;
+  try { if (classStart) when = new Date(classStart).toLocaleString(); } catch { /* leave as-is */ }
+  let expires = offerExpiresAt;
+  try { if (offerExpiresAt) expires = new Date(offerExpiresAt).toLocaleString(); } catch { /* leave as-is */ }
+  return {
+    subject: `A spot opened up${className ? ` — ${className}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Your Waitlist Spot Is Ready",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Good news — a spot opened up for a session you're waitlisted for at <strong>${storeName || "our store"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+         ${className ? `<tr><td style="padding:10px 16px;color:#64748b">Class</td><td style="padding:10px 16px;font-weight:600">${className}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+         ${expires ? `<tr><td style="padding:10px 16px;color:#64748b">Claim by</td><td style="padding:10px 16px;font-weight:600;color:#dc2626">${expires}</td></tr>` : ""}
+       </table>
+       ${claimUrl ? `<p style="text-align:center;margin:24px 0"><a href="${claimUrl}" style="background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Claim My Spot</a></p>` : ""}
+       <p>If you don't claim it before the deadline, the spot is offered to the next person in line.</p>
+       ${footer("This is an automated waitlist notification.")}`
+    ),
+  };
+}
+
+// -- F02: membership payment failed (dunning retry notice) -----------------
+function subscriptionPaymentFailed(data) {
+  const { storeName, customerName, planName, amount, currency, attempt, maxAttempts, nextAttemptAt, payUrl } = data || {};
+  let nextWhen = nextAttemptAt;
+  try { if (nextAttemptAt) nextWhen = new Date(nextAttemptAt).toLocaleDateString(); } catch { /* leave as-is */ }
+  return {
+    subject: `Payment failed${planName ? ` — ${planName}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Payment Didn't Go Through",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We tried to charge your saved card for your <strong>${planName || "membership"}</strong> at <strong>${storeName || "our store"}</strong>, but the payment didn't go through.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Amount</td><td style="padding:10px 16px;font-weight:600">${currency || "PKR"} ${amount != null ? Number(amount).toLocaleString() : ""}</td></tr>
+         ${attempt ? `<tr><td style="padding:10px 16px;color:#64748b">Attempt</td><td style="padding:10px 16px">${attempt}${maxAttempts ? ` of ${maxAttempts}` : ""}</td></tr>` : ""}
+         ${nextWhen ? `<tr><td style="padding:10px 16px;color:#64748b">Next retry</td><td style="padding:10px 16px;font-weight:600">${nextWhen}</td></tr>` : ""}
+       </table>
+       <p>We'll automatically retry. To avoid any interruption, please make sure your card details are up to date.</p>
+       ${payUrl ? `<p style="text-align:center;margin:24px 0"><a href="${payUrl}" style="background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Update Payment</a></p>` : ""}
+       ${footer("This is an automated billing notification.")}`
+    ),
+  };
+}
+
+// -- F02: membership paused after failed dunning ---------------------------
+function subscriptionPaused(data) {
+  const { storeName, customerName, planName, payUrl } = data || {};
+  return {
+    subject: `Membership paused${planName ? ` — ${planName}` : ""}${storeName ? ` at ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Your Membership Is Paused",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We weren't able to collect payment for your <strong>${planName || "membership"}</strong> at <strong>${storeName || "our store"}</strong> after several attempts, so it's now paused.</p>
+       <p>To reactivate, please update your payment details or get in touch with us.</p>
+       ${payUrl ? `<p style="text-align:center;margin:24px 0"><a href="${payUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Reactivate Membership</a></p>` : ""}
+       ${footer("This is an automated billing notification.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
+  // F05 customer notifications (status-change engine)
+  ticket_approved: ticketApproved,
+  ticket_in_progress: ticketInProgress,
+  ticket_completed: ticketCompleted,
+  ticket_invoiced: ticketInvoiced,
+  appointment_reminder: appointmentReminder,
+  // F06 scheduling (classes + waitlist)
+  class_cancelled: classCancelled,
+  waitlist_offer: waitlistOffer,
+  // F02 membership dunning
+  subscription_payment_failed: subscriptionPaymentFailed,
+  subscription_paused: subscriptionPaused,
   campaign_test: campaignTest,
   customer_invoice: customerInvoice,
   customer_statement: customerStatement,

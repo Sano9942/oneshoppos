@@ -449,6 +449,18 @@ module.exports = function registerSalesRoutes(app, deps) {
           [id]
         ).catch(err => console.error("[commission] void reversal error:", err.message));
 
+        // F06 — unlink + reopen the appointment this sale paid for, so the
+        // cashier can re-ring it after a mistaken sale (same reversal duty as
+        // the completion-04 on-account invoice lesson). 'in_progress', not
+        // 'completed' — the service happened; only the payment was undone.
+        if (sale.appointment_id) {
+          db.query(
+            `UPDATE appointments SET sale_id = NULL, status = 'in_progress', updated_at = NOW()
+             WHERE id = $1 AND sale_id = $2`,
+            [sale.appointment_id, id]
+          ).catch(err => console.error("[f06] appointment unlink on void error:", err.message));
+        }
+
         res.json({
           message: "Sale voided successfully. Stock has been restored.",
         });
@@ -552,6 +564,10 @@ module.exports = function registerSalesRoutes(app, deps) {
       // here (works even when the rep app never saw the visit's numeric id).
       field_visit_id: field_visit_id_in = null,
       field_visit_uuid = null,
+      // F06 — when the POS checkout started from "today's appointments", the
+      // sale links back to the appointment; post-commit the appointment is
+      // marked completed with the sale backlink (revenue attribution).
+      appointment_id = null,
       // Tier 1.3 wholesale schemes — POS / rep-app sends the applied promotions
       // from /api/promotions/quote. Persisted to sale_promotion_applications
       // as an audit trail (snapshot — doesn't affect totals; the discount is
@@ -602,6 +618,29 @@ module.exports = function registerSalesRoutes(app, deps) {
         // here. Logging only — never block the sale on the guard's own bug.
         if (!String(moqErr.message || "").includes("min_order_qty")) {
           console.warn("[sales] MOQ guard skipped:", moqErr.message);
+        }
+      }
+    }
+
+    // F06 — validate the appointment link before opening the transaction: it
+    // must exist, be in a checkout-able state, and not already be paid for.
+    if (appointment_id) {
+      try {
+        const { rows: [appt] } = await db.query(
+          "SELECT id, status, sale_id FROM appointments WHERE id = $1",
+          [Number(appointment_id)]
+        );
+        if (!appt) return res.status(400).json({ error: "Linked appointment not found" });
+        if (appt.sale_id) {
+          return res.status(409).json({ error: "Appointment is already linked to a sale", code: "APPOINTMENT_ALREADY_PAID" });
+        }
+        if (!["confirmed", "in_progress", "pending"].includes(appt.status)) {
+          return res.status(400).json({ error: `Appointment is ${appt.status} and cannot be checked out` });
+        }
+      } catch (apptErr) {
+        // Pre-v100 tenant without the sale_id column — treat as no linkage.
+        if (!/sale_id/.test(String(apptErr.message || ""))) {
+          console.warn("[sales] appointment link check skipped:", apptErr.message);
         }
       }
     }
@@ -924,6 +963,10 @@ module.exports = function registerSalesRoutes(app, deps) {
     // doesn't send a phantom code.
     let issuedCards = [];
     let giftCardsFlagOn = false;
+    // F02 packages/passes — populated inside the transaction when a package
+    // product line is sold (soldPackages) so a post-commit hook can react.
+    let soldPackages = [];
+    let packagesFlagOn = false;
     try {
       const { getFeatureFlagsMap } = require("../middleware/feature-flags");
       const flags = await getFeatureFlagsMap(req.tenantId);
@@ -931,6 +974,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       const loyaltyOn = !!flags.phase2g_loyalty;
       loyaltyFlagOn = loyaltyOn;
       giftCardsFlagOn = !!flags.phase2g_gift_cards;
+      packagesFlagOn = !!flags.packages_passes;
       if ((pbOn || loyaltyOn) && customer_id) {
         const pricing = require("../services/pricing");
         const { group, tier } = await pricing.resolveCustomerPricing({
@@ -1238,6 +1282,29 @@ module.exports = function registerSalesRoutes(app, deps) {
         // every row is locked+checked before any write.
         const kitDecrementsByIndex = {};
 
+        // Non-inventory product types (services + F02 packages) have no stock
+        // to gate — a package/service line rings up regardless of outlet_stock.
+        // Only the availability guard is skipped; the (no-op) deduction below
+        // is unaffected, so a service that DOES carry stock still behaves as
+        // before.
+        const nonInventoryProductIds = new Set();
+        {
+          const cartProductIds = Array.from(new Set(
+            cartItems
+              .filter((i) => !i.is_bundle && !i.variant_id)
+              .map((i) => Number(i.original_product_id || i.id))
+              .filter((n) => Number.isInteger(n) && n > 0),
+          ));
+          if (cartProductIds.length) {
+            const { rows: niRows } = await client.query(
+              `SELECT id FROM products
+                WHERE id = ANY($1::int[]) AND product_type IN ('service','package')`,
+              [cartProductIds],
+            );
+            for (const r of niRows) nonInventoryProductIds.add(Number(r.id));
+          }
+        }
+
         for (let ci = 0; ci < cartItems.length; ci++) {
           const item = cartItems[ci];
           if (isKit(item)) {
@@ -1298,6 +1365,9 @@ module.exports = function registerSalesRoutes(app, deps) {
               }
             } else {
               const productId = item.original_product_id || item.id;
+              if (nonInventoryProductIds.has(Number(productId))) {
+                continue; // service / package line — nothing to gate
+              }
               const { rows: [row] } = await client.query(
                 `SELECT COALESCE(quantity, 0) AS available
                  FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
@@ -1321,7 +1391,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id, appointment_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -1341,6 +1411,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             taxTotalSnapshot,
             taxInclusiveResolved,
             field_visit_id || null,
+            appointment_id ? Number(appointment_id) : null,
           ]
         );
         const newSaleId = saleRow.id;
@@ -1453,6 +1524,32 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [newSaleId, months, sr.id],
               );
             }
+          }
+
+          // F02 — redeem-at-checkout. A cart line flagged with
+          // redeem_customer_package_id is "paid with package": the line rings
+          // up at price 0 (client-sent) and a package_redemptions row is
+          // written inside the sale transaction, so a rolled-back sale un-does
+          // the redemption. Scope is validated against the line's service.
+          if (packagesFlagOn && item.redeem_customer_package_id) {
+            if (!customer_id) {
+              throw Object.assign(
+                new Error("Redeeming a package requires a customer on the sale"),
+                { statusCode: 400 },
+              );
+            }
+            const pkgService = require("../services/packages");
+            const redeemProductId = Number(item.original_product_id || item.id);
+            const bookingServiceId =
+              await pkgService.resolveBookingServiceForProduct(client, redeemProductId);
+            await pkgService.redeemPackage(client, {
+              customerPackageId: Number(item.redeem_customer_package_id),
+              customerId: customer_id,
+              credits: 1,
+              saleId: newSaleId,
+              appointmentId: appointment_id ? Number(appointment_id) : null,
+              bookingServiceId,
+            });
           }
 
           // v45: stock columns are NUMERIC(10,3) — deduct the exact sold quantity,
@@ -1795,6 +1892,52 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // F02 — sell-at-POS. For each cart line whose product backs a package
+        // template, issue one customer_packages row per unit at sale commit
+        // (mirrors the gift-card issue hook). Requires a customer — a package
+        // has no owner without one, so an anonymous package line rolls the sale
+        // back rather than silently dropping the entitlement.
+        if (packagesFlagOn && cartItems.length > 0) {
+          const pkgProductIds = Array.from(
+            new Set(
+              cartItems
+                .map((i) => Number(i.original_product_id || i.id))
+                .filter((n) => Number.isInteger(n) && n > 0),
+            ),
+          );
+          if (pkgProductIds.length > 0) {
+            const { rows: tpls } = await client.query(
+              `SELECT id, product_id FROM package_templates
+                WHERE product_id = ANY($1::int[]) AND is_active = true`,
+              [pkgProductIds],
+            );
+            if (tpls.length > 0) {
+              const byProduct = new Map(tpls.map((t) => [t.product_id, t.id]));
+              const pkgService = require("../services/packages");
+              for (const item of cartItems) {
+                const pid = Number(item.original_product_id || item.id);
+                const templateId = byProduct.get(pid);
+                if (!templateId) continue;
+                if (!customer_id) {
+                  throw Object.assign(
+                    new Error("Selling a package requires a customer on the sale"),
+                    { statusCode: 400 },
+                  );
+                }
+                const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+                for (let i = 0; i < qty; i += 1) {
+                  const pkg = await pkgService.sellPackage(client, {
+                    customerId: customer_id,
+                    templateId,
+                    saleId: newSaleId,
+                  });
+                  soldPackages.push(pkg);
+                }
+              }
+            }
+          }
+        }
+
         // Debit wallet for any Wallet payments
         const walletPayments = finalPayments.filter(
           (p) => p.method === "Wallet",
@@ -1928,6 +2071,18 @@ module.exports = function registerSalesRoutes(app, deps) {
           ).catch((err) => logger.error({ err, table_session_id }, "[settle] table_session dirty flip failed (non-blocking)"));
         }
 
+        // F06 — checkout completes the linked appointment (backlink + status).
+        // sale_id IS NULL guard: if two sales raced past the pre-check, only
+        // the first one wins the link; the second keeps its own forward link
+        // for audit but doesn't flip the appointment twice.
+        if (appointment_id) {
+          db.query(
+            `UPDATE appointments SET sale_id = $1, status = 'completed', updated_at = NOW()
+             WHERE id = $2 AND sale_id IS NULL`,
+            [saleId, Number(appointment_id)]
+          ).catch((err) => logger.error({ err, appointment_id, saleId }, "[f06] appointment completion failed (non-blocking)"));
+        }
+
         // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-
         // and-forget; failure shouldn't block the sale response. Only runs
         // when the caller actually passed a tip — non-restaurant sales skip.
@@ -1955,27 +2110,16 @@ module.exports = function registerSalesRoutes(app, deps) {
             });
         }
 
-        // Auto-calculate commissions (fire-and-forget, don't block sale response)
+        // Auto-calculate commissions (fire-and-forget, don't block sale
+        // response). F06 fix: the shared per-line engine attributes each
+        // sale line to its staff_id (stylist/provider) and falls back to
+        // the cashier — the old inline INSERT credited the cashier with
+        // the whole sale, so salon color+cut commissions went to whoever
+        // rang up the sale instead of the stylists on the lines.
         if (authenticatedEmployeeId) {
-          db.query(
-            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
-             SELECT $1, $2, cpr.plan_id, cpr.id, $3,
-               CASE cp.type
-                 WHEN 'percentage' THEN LEAST($3 * cpr.rate / 100, COALESCE(cpr.max_cap, $3 * cpr.rate / 100))
-                 WHEN 'fixed_per_sale' THEN LEAST(cpr.rate, COALESCE(cpr.max_cap, cpr.rate))
-                 ELSE 0
-               END
-             FROM employees e
-             JOIN commission_plans cp ON cp.id = e.commission_plan_id
-             JOIN commission_plan_rules cpr ON cpr.plan_id = cp.id
-             WHERE e.id = $1 AND e.commission_plan_id IS NOT NULL AND cp.is_active = TRUE
-               AND (cp.starts_at IS NULL OR cp.starts_at <= NOW())
-               AND (cp.ends_at IS NULL OR cp.ends_at >= NOW())
-               AND $3 >= cpr.min_threshold
-             ORDER BY cpr.priority DESC
-             LIMIT 1`,
-            [authenticatedEmployeeId, saleId, totalAmount]
-          ).catch(err => console.error("[commission] auto-calc error:", err.message));
+          const { calculateCommissionsForSale } = require("../services/commission-calc");
+          calculateCommissionsForSale(db, saleId)
+            .catch(err => console.error("[commission] auto-calc error:", err.message));
         }
 
         res.json({
@@ -1995,6 +2139,14 @@ module.exports = function registerSalesRoutes(app, deps) {
           // POS can print them on the receipt + show them in the
           // confirmation modal.
           issuedGiftCards: issuedCards,
+          // F02 — packages issued on this sale (id + remaining) so the POS can
+          // confirm the new pass balance in the receipt/confirmation modal.
+          soldPackages: soldPackages.map((p) => ({
+            id: p.id,
+            credits_total: p.credits_total,
+            credits_remaining: p.credits_total - p.credits_used,
+            expires_at: p.expires_at,
+          })),
           // Tier 0.1 wholesale — non-blocking notice when a Credit-tender sale
           // proceeded past credit_limit under credit_block_mode='warn'.
           creditWarning,

@@ -131,6 +131,31 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
     }
   });
 
+  // F02 — failed-payments (dunning) list for the subscriptions admin page. Open
+  // dunning runs = charge failed, not yet resolved. Shows attempt count and the
+  // next scheduled retry so an owner can see who is mid-dunning at a glance.
+  app.get("/api/customer-subscriptions/failed-payments", ...gate, async (req, res) => {
+    try {
+      const { rows } = await deps.db.query(
+        `SELECT sr.id AS run_id, sr.subscription_id, sr.invoice_id,
+                sr.charge_amount, sr.dunning_attempts, sr.first_failed_at,
+                sr.next_dunning_at, sr.error, sr.period_end,
+                cs.status AS subscription_status, cs.customer_id,
+                sp.name AS plan_name, c.name AS customer_name
+           FROM subscription_runs sr
+           JOIN customer_subscriptions cs ON cs.id = sr.subscription_id
+           JOIN subscription_plans sp ON sp.id = cs.plan_id
+           LEFT JOIN customers c ON c.id = cs.customer_id
+          WHERE sr.charge_status = 'failed' AND sr.dunning_done_at IS NULL
+          ORDER BY sr.next_dunning_at ASC NULLS LAST
+          LIMIT 200`
+      );
+      res.json({ failed_payments: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/customer-subscriptions", ...gate, validate(createSubscriptionSchema), async (req, res) => {
     try {
       const { plan_id, customer_id, auto_charge } = req.body;

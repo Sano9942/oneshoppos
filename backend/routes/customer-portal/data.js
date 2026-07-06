@@ -35,6 +35,7 @@ const TAB_FEATURE_FLAGS = {
   stays: "phase4_room_management",
   treatments: "phase4_treatment_plans",
   tickets: "phase4_workflow_tickets",
+  packages: "packages_passes",
   orders: null,
   loyalty: null,
   profile: null,

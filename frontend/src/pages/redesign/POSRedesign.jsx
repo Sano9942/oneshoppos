@@ -10,6 +10,7 @@ import POSLockScreen from "./pos/POSLockScreen";
 import POSDiscountModal from "./pos/POSDiscountModal";
 import POSNoteModal from "./pos/POSNoteModal";
 import POSParkedModal from "./pos/POSParkedModal";
+import POSAppointmentsModal from "./pos/POSAppointmentsModal";
 import POSCheckoutModal from "./pos/POSCheckoutModal";
 import POSModifierModal from "./pos/POSModifierModal";
 import POSReceiptModal from "./pos/POSReceiptModal";
@@ -276,6 +277,7 @@ function POSContent() {
       <POSDiscountModal />
       <POSNoteModal />
       <POSParkedModal />
+      <POSAppointmentsModal />
       <POSOpeningGateModal />
       <POSCloseShiftModal />
       <POSCheckoutModal />

@@ -96,4 +96,44 @@ function buildIcsEvent(opts) {
   return lines.map(foldLine).join(CRLF) + CRLF;
 }
 
-module.exports = { buildIcsEvent, escapeIcsText, toIcsUtcStamp };
+/**
+ * Build an ICS calendar containing MANY VEVENTs (subscription feed).
+ *
+ * @param {object} opts
+ * @param {Array}  opts.events   — [{ uid, start, end, summary, description?, location? }]
+ * @param {string} [opts.calName] — X-WR-CALNAME shown by calendar clients
+ * @param {string} [opts.prodId]
+ * @returns {string} ICS text (CRLF line endings)
+ */
+function buildIcsFeed(opts) {
+  const events = (opts && opts.events) || [];
+  const prodId = (opts && opts.prodId) || "-//SanoPOS//Bookings//EN";
+  const dtstamp = toIcsUtcStamp(new Date());
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    `PRODID:${escapeIcsText(prodId)}`,
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+  ];
+  if (opts && opts.calName) lines.push(`X-WR-CALNAME:${escapeIcsText(opts.calName)}`);
+  for (const ev of events) {
+    if (!ev || !ev.uid || !ev.start || !ev.end || !ev.summary) continue;
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${escapeIcsText(ev.uid)}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART:${toIcsUtcStamp(ev.start)}`,
+      `DTEND:${toIcsUtcStamp(ev.end)}`,
+      `SUMMARY:${escapeIcsText(ev.summary)}`
+    );
+    if (ev.description) lines.push(`DESCRIPTION:${escapeIcsText(ev.description)}`);
+    if (ev.location) lines.push(`LOCATION:${escapeIcsText(ev.location)}`);
+    lines.push("END:VEVENT");
+  }
+  lines.push("END:VCALENDAR");
+  return lines.map(foldLine).join(CRLF) + CRLF;
+}
+
+module.exports = { buildIcsEvent, buildIcsFeed, escapeIcsText, toIcsUtcStamp };

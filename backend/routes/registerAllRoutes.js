@@ -189,6 +189,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/appointments")(app, deps);
   require("./customer-portal/stays")(app, deps);
   require("./customer-portal/treatments")(app, deps);
+  require("./customer-portal/packages")(app, deps);
 
   // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
   // BEFORE tenant middleware; each route resolves tenant via
@@ -550,6 +551,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: GIFT CARDS (Phase 2-G Wave 2 — 2-G.2) ---
   require("./gift-cards")(app, deps);
 
+  // --- ROUTES: PACKAGES / SESSION PASSES (F02) ---
+  require("./packages")(app, deps);
+
   // --- ROUTES: DRAFT ORDERS (Phase 2) ---
   require("./draft-orders")(app, deps);
 
@@ -670,6 +674,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./restaurant-inbox")(app, deps);
   require("./restaurant-kiosk")(app, deps);
   require("./bookings")(app, deps);
+  require("./classes")(app, deps); // F06 — class sessions timetable + waitlist
   require("./projects")(app, deps);
   require("./contracts")(app, deps);
   require("./service-tickets")(app, deps);
@@ -677,6 +682,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./rooms")(app, deps);
   require("./treatment-plans")(app, deps);
   require("./treatment-plan-templates")(app, deps);
+
+  // --- F05 customer notifications: per-event channel rules + delivery log ---
+  require("./notification-settings")(app, deps);
 
   // --- Tier 1.1 wholesale: field rep mobile app ---
   require("./field")(app, deps);

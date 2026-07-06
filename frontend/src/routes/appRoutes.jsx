@@ -69,6 +69,7 @@ const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
 const CourierSettingsRedesign = lazy(() => import("../pages/redesign/CourierSettingsRedesign"));
+const NotificationSettingsRoute = lazy(() => import("../pages/NotificationSettingsRoute"));
 const MarketingCampaignsRoute = lazy(() => import("../pages/MarketingCampaignsRoute"));
 const MessagingInboxRoute = lazy(() => import("../pages/MessagingInboxRoute"));
 const CustomerInvoicesRoute = lazy(() => import("../pages/CustomerInvoicesRoute"));
@@ -113,6 +114,7 @@ const KDSRoute = lazy(() => import("../pages/KDSRoute"));
 const AppointmentServicesRoute = lazy(() => import("../pages/AppointmentServicesRoute"));
 const AppointmentsCalendarRoute = lazy(() => import("../pages/AppointmentsCalendarRoute"));
 const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
+const ClassTimetableRoute = lazy(() => import("../pages/ClassTimetableRoute"));
 const ProjectsRoute = lazy(() => import("../pages/ProjectsRoute"));
 const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
@@ -197,6 +199,7 @@ export const appRoutes = [
     <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
     <Route path="/printer-settings" element={perm("all_access", <PrinterSettingsRedesign />)} />
     <Route path="/courier-settings" element={perm("all_access", <CourierSettingsRedesign />)} />
+    <Route path="/settings/notifications" element={perm("manage_inventory", wrap(NotificationSettingsRoute))} />
     <Route path="/billing" element={perm("all_access", <BillingRoute />)} />
     <Route path="/settings/fbr" element={perm("all_access", <FBRSettingsRoute />)} />
     <Route path="/fbr" element={perm("all_access", <FBRDashboardRoute />)} />
@@ -271,6 +274,7 @@ export const appRoutes = [
     <Route path="/appointments/services" element={perm("manage_bookings", wrap(AppointmentServicesRoute))} />
     <Route path="/appointments/calendar" element={perm("manage_bookings", wrap(AppointmentsCalendarRoute))} />
     <Route path="/appointments/bookings" element={perm("manage_bookings", wrap(AppointmentsRoute))} />
+    <Route path="/classes/timetable" element={perm("manage_bookings", wrap(ClassTimetableRoute))} />
     {/* Phase 4 — Service Workspace */}
     <Route path="/projects" element={perm("manage_projects", wrap(ProjectsRoute))} />
     <Route path="/contracts" element={perm("manage_contracts", wrap(ContractsRoute))} />

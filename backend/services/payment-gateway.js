@@ -254,7 +254,11 @@ class SandboxAdapter extends BasePaymentAdapter {
     if (!token) throw new Error("token required");
     const gatewayRef = `sbx_chg_${Date.now()}_${reference || "ref"}`;
     logger.info({ token, amount, currency, reference, gatewayRef }, "Sandbox charge-saved");
-    // Sandbox always succeeds unless we want to simulate a failure later.
+    // Simulated decline: a token containing "FAIL" (case-insensitive) always
+    // declines — lets the dunning worker + its tests drive the failure path.
+    if (/fail/i.test(String(token))) {
+      return { gateway_ref: gatewayRef, status: "failed", error: "simulated_decline" };
+    }
     return { gateway_ref: gatewayRef, status: "completed", amount: Number(amount) };
   }
 }

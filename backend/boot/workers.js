@@ -310,6 +310,13 @@ function startAll(deps) {
           });
         }
 
+        if (String(process.env.SUBSCRIPTION_DUNNING_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("subscription-dunning", async () => {
+            const { registerSubscriptionDunningWorker } = require("../workers/subscription-dunning-worker-boss");
+            await registerSubscriptionDunningWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.RENTAL_OVERDUE_WORKER_ENABLED || "0") === "1") {
           await tryRegister("rental-overdue", async () => {
             const { registerRentalOverdueWorker } = require("../workers/rental-overdue-worker-boss");
@@ -402,13 +409,11 @@ function startAll(deps) {
         }
 
         // Booking reminders — tenant-aware setInterval poll. Uses
-        // forEachActiveTenant to iterate active tenants (since it's a
-        // scheduled poll, not a per-event job — there's no tenantSlug
-        // to pull from a payload). Each iteration calls
-        // processPendingReminders(tenantDb, boss), which SELECTs
-        // pending appointment_reminders rows and enqueues them via the
-        // shared "email" job. The email worker is tenant-agnostic —
-        // it just calls Resend — so no further routing is needed.
+        // forEachActiveTenant to iterate active tenants; the tenant slug is
+        // passed to processPendingReminders(tenantDb, boss, slug). Email-channel
+        // reminders enqueue via the shared tenant-agnostic "email" job; SMS-channel
+        // reminders route through the F05 notification engine (customer-notify),
+        // which needs the slug for its pg-boss email payloads and truth logging.
         if (String(process.env.BOOKING_REMINDER_WORKER_ENABLED || "0") === "1") {
           const { processPendingReminders } = require("../services/booking-reminders");
           global.__bookingReminderWorkerStatus = {
@@ -420,8 +425,8 @@ function startAll(deps) {
           const pollBookingReminders = async () => {
             global.__bookingReminderWorkerStatus.lastPollAt = Date.now();
             let processedThisPoll = 0;
-            await forEachActiveTenant("BookingReminders", async (tenantDb) => {
-              const count = await processPendingReminders(tenantDb, boss);
+            await forEachActiveTenant("BookingReminders", async (tenantDb, tenant) => {
+              const count = await processPendingReminders(tenantDb, boss, tenant && tenant.slug);
               processedThisPoll += count || 0;
             }, deps);
             if (processedThisPoll > 0) {
