@@ -185,6 +185,13 @@ CREATE TABLE IF NOT EXISTS products (
 -- override is intentional). 0/1 defaults preserve pre-v95 behavior.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS min_order_qty INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS order_increment INTEGER NOT NULL DEFAULT 1;
+
+-- v100 (F07 batch/expiry/lot): per-product opt-in for batch decomposition of
+-- outlet_stock. track_batches=false leaves the product on the plain outlet_stock
+-- path with zero behavior change. shelf_life_days pre-fills the expiry suggestion
+-- at GRN receive.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS track_batches BOOLEAN DEFAULT FALSE;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER;
 DO $$ BEGIN
   ALTER TABLE products ADD CONSTRAINT products_min_order_qty_nonneg CHECK (min_order_qty >= 0);
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -788,6 +795,52 @@ CREATE TABLE IF NOT EXISTS grn_items (
   qty_received INTEGER NOT NULL DEFAULT 0,
   cost_price NUMERIC(12,2) NOT NULL DEFAULT 0
 );
+
+-- ── F07 batch/expiry/lot engine (migrate-pg v100) ──────────────────────
+-- stock_batches decomposes outlet_stock for products.track_batches SKUs.
+-- outlet_stock.quantity remains authoritative; invariant for tracked products:
+--   Σ stock_batches.remaining_qty (status='active') = outlet_stock.quantity
+-- maintained inside the same tx that locks outlet_stock FOR UPDATE.
+-- lot_type='batch' → expiry lot; lot_type='roll' → divisible length (textile).
+CREATE TABLE IF NOT EXISTS stock_batches (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  lot_type TEXT NOT NULL DEFAULT 'batch' CHECK (lot_type IN ('batch','roll')),
+  batch_number TEXT NOT NULL,
+  expiry_date DATE,
+  received_qty NUMERIC(12,4) NOT NULL,
+  remaining_qty NUMERIC(12,4) NOT NULL CHECK (remaining_qty >= 0),
+  unit_cost NUMERIC(12,4),
+  grn_id INTEGER REFERENCES goods_received_notes(id),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','depleted','expired','written_off')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_batches_fefo
+  ON stock_batches(product_id, outlet_id, expiry_date NULLS LAST, id)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_batches_expiry
+  ON stock_batches(expiry_date)
+  WHERE status = 'active' AND expiry_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_batches_product_outlet
+  ON stock_batches(product_id, outlet_id, status);
+
+-- Signed audit trail for batch stock movements (recall search + drift forensics).
+CREATE TABLE IF NOT EXISTS batch_movements (
+  id SERIAL PRIMARY KEY,
+  batch_id INTEGER NOT NULL REFERENCES stock_batches(id),
+  movement_type TEXT NOT NULL CHECK (movement_type IN
+    ('receive','sale','return','transfer_out','transfer_in','adjust','write_off','convert')),
+  quantity NUMERIC(12,4) NOT NULL,
+  ref_type TEXT,
+  ref_id INTEGER,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_batch_movements_batch ON batch_movements(batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_movements_ref ON batch_movements(ref_type, ref_id);
 
 CREATE TABLE IF NOT EXISTS supplier_invoices (
   id SERIAL PRIMARY KEY,
@@ -2427,7 +2480,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase4_appointments_resources', false, 'F06 — bookable resources (chairs/beds/bays) required alongside staff availability'),
   ('phase4_appointments_classes', false, 'F06 — group class sessions: timetable, capacity, member booking'),
   ('phase4_appointments_waitlists', false, 'F06 — waitlists for full classes/slots with offer + claim flow'),
-  ('custom_forms', false, 'F03 form builder — custom intake/waivers/questionnaires (flipped on by clinical/gym/photography/repair presets)')
+  ('custom_forms', false, 'F03 form builder — custom intake/waivers/questionnaires (flipped on by clinical/gym/photography/repair presets)'),
+  ('batch_expiry_tracking', false, 'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)

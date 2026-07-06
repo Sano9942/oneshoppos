@@ -368,6 +368,13 @@ function startAll(deps) {
           });
         }
 
+        if (String(process.env.EXPIRY_ALERT_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("expiry-alert", async () => {
+            const { registerExpiryAlertWorker } = require("../workers/expiry-alert-worker-boss");
+            await registerExpiryAlertWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.RETAIL_DIGEST_WORKER_ENABLED || "0") === "1") {
           await tryRegister("retail-digest", async () => {
             const { registerRetailDigestWorker } = require("../workers/retail-digest-worker-boss");

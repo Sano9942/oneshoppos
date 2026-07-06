@@ -7927,6 +7927,134 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS deposit_authorized_at TIMESTAMPTZ`);
     },
   },
+  {
+    version: 105,
+    description:
+      "F07 Batch/expiry/lot engine — products.track_batches + shelf_life_days, stock_batches (FEFO ledger, batch|roll), batch_movements audit; batch_expiry_tracking flag",
+    up: async (client) => {
+      // Tenant-schema only. SAVEPOINT-guarded so running against the public
+      // schema (no products/outlets tables) is a harmless skip, matching v95–v99.
+      //
+      // Design: batches are a *decomposition* of outlet_stock for opted-in
+      // products (products.track_batches), NOT a replacement. outlet_stock.quantity
+      // stays authoritative for every existing consumer. Invariant for tracked
+      // products: Σ stock_batches.remaining_qty (active) = outlet_stock.quantity,
+      // written inside the same tx that already locks outlet_stock FOR UPDATE.
+
+      // ── products: per-product opt-in + shelf-life default ───────────────
+      try {
+        await client.query("SAVEPOINT v105_prod_cols");
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS track_batches BOOLEAN DEFAULT FALSE`
+        );
+        await client.query(
+          `ALTER TABLE products
+             ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER`
+        );
+        await client.query("RELEASE SAVEPOINT v105_prod_cols");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v105_prod_cols");
+        console.warn(`[migrate-pg v105] products batch cols skipped: ${err.message}`);
+      }
+
+      // ── stock_batches: the FEFO ledger ─────────────────────────────────
+      // lot_type='batch'  — expiry-tracked lot (grocery/butcher/sweet_shop).
+      // lot_type='roll'   — divisible lot measured in length (textile thaan);
+      //                     remaining_qty = metres left on the roll.
+      // remaining_qty >= 0 CHECK is the hard oversell guard at the DB level.
+      try {
+        await client.query("SAVEPOINT v105_batches");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS stock_batches (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            variant_id INTEGER REFERENCES product_variants(id),
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            lot_type TEXT NOT NULL DEFAULT 'batch' CHECK (lot_type IN ('batch','roll')),
+            batch_number TEXT NOT NULL,
+            expiry_date DATE,
+            received_qty NUMERIC(12,4) NOT NULL,
+            remaining_qty NUMERIC(12,4) NOT NULL CHECK (remaining_qty >= 0),
+            unit_cost NUMERIC(12,4),
+            grn_id INTEGER REFERENCES goods_received_notes(id),
+            status TEXT NOT NULL DEFAULT 'active'
+              CHECK (status IN ('active','depleted','expired','written_off')),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        // FEFO allocation index: first-expiry-first-out, NULL expiry (no date)
+        // sorts last so dated stock is consumed before undated, then FIFO by id.
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_batches_fefo
+             ON stock_batches(product_id, outlet_id, expiry_date NULLS LAST, id)
+             WHERE status = 'active'`
+        );
+        // Near-expiry worker scan + drift-check reconciliation.
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_batches_expiry
+             ON stock_batches(expiry_date)
+             WHERE status = 'active' AND expiry_date IS NOT NULL`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_batches_product_outlet
+             ON stock_batches(product_id, outlet_id, status)`
+        );
+        await client.query("RELEASE SAVEPOINT v105_batches");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v105_batches");
+        console.warn(`[migrate-pg v105] stock_batches skipped: ${err.message}`);
+      }
+
+      // ── batch_movements: signed audit trail (recall + drift forensics) ──
+      try {
+        await client.query("SAVEPOINT v105_movements");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS batch_movements (
+            id SERIAL PRIMARY KEY,
+            batch_id INTEGER NOT NULL REFERENCES stock_batches(id),
+            movement_type TEXT NOT NULL CHECK (movement_type IN
+              ('receive','sale','return','transfer_out','transfer_in','adjust','write_off','convert')),
+            quantity NUMERIC(12,4) NOT NULL,
+            ref_type TEXT,
+            ref_id INTEGER,
+            note TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_batch_movements_batch
+             ON batch_movements(batch_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_batch_movements_ref
+             ON batch_movements(ref_type, ref_id)`
+        );
+        await client.query("RELEASE SAVEPOINT v105_movements");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v105_movements");
+        console.warn(`[migrate-pg v105] batch_movements skipped: ${err.message}`);
+      }
+
+      // ── batch_expiry_tracking feature flag (default OFF) ────────────────
+      // Real functional gate is per-product products.track_batches; this flag
+      // controls surface visibility (GRN batch fields, expiring-soon page,
+      // batch reports). Idempotent seed — only inserts when the table exists.
+      try {
+        await client.query("SAVEPOINT v105_flag");
+        await client.query(
+          `INSERT INTO feature_flags (key, enabled, description)
+             VALUES ('batch_expiry_tracking', false,
+                     'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls')
+           ON CONFLICT (key) DO NOTHING`
+        );
+        await client.query("RELEASE SAVEPOINT v105_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v105_flag");
+        console.warn(`[migrate-pg v105] batch_expiry_tracking flag skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

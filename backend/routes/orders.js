@@ -1,5 +1,6 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const kitEngine = require("../services/kit-engine");
+const batchStock = require("../services/batch-stock");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 
 module.exports = function registerOrderRoutes(app, deps) {
@@ -1297,6 +1298,16 @@ module.exports = function registerOrderRoutes(app, deps) {
             "UPDATE outlet_stock SET quantity = quantity - $1 WHERE id = $2",
             [item.qty, stock.id]
           );
+
+          // F07: FEFO-consume batches for a tracked SKU on web-order allocation.
+          await batchStock.consumeBatches(client, {
+            productId: item.productId,
+            variantId: item.variantId || null,
+            outletId: fulfillmentOutletId,
+            qty: item.qty,
+            refType: "web_order",
+            refId: order.id,
+          });
 
           // Create converted reservation record
           await client.query(

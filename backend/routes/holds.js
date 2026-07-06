@@ -16,6 +16,7 @@
 const { validate } = require("../middleware/validate");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
 const kitEngine = require("../services/kit-engine");
+const batchStock = require("../services/batch-stock");
 const {
   CreateHoldSchema,
   AddPaymentSchema,
@@ -411,11 +412,22 @@ module.exports = function registerHoldRoutes(app, deps) {
           // stock of its own). The engine locks components in stable order and
           // throws insufficient_stock if a component sold out during the layaway.
           if ((await kitEngine.getBomType(client, hi.product_id)) === "kit") {
-            await kitEngine.reserveAndDecrement(client, {
+            const decs = await kitEngine.reserveAndDecrement(client, {
               productId: hi.product_id,
               outletId: hold.outlet_id,
               saleQty: Number(hi.quantity),
             });
+            // F07: consume batches per tracked component of the settled kit.
+            for (const d of decs || []) {
+              await batchStock.consumeBatches(client, {
+                productId: d.component_product_id,
+                variantId: d.component_variant_id || null,
+                outletId: hold.outlet_id,
+                qty: d.needed,
+                refType: "sale",
+                refId: sale.id,
+              });
+            }
             continue;
           }
           if (hi.variant_id) {
@@ -431,6 +443,15 @@ module.exports = function registerHoldRoutes(app, deps) {
              WHERE outlet_id = $2 AND product_id = $3`,
             [Number(hi.quantity), hold.outlet_id, hi.product_id],
           );
+          // F07: FEFO-consume batches for a tracked held SKU at settle.
+          await batchStock.consumeBatches(client, {
+            productId: hi.product_id,
+            variantId: hi.variant_id || null,
+            outletId: hold.outlet_id,
+            qty: Number(hi.quantity),
+            refType: "sale",
+            refId: sale.id,
+          });
         }
 
         // 6. Flip hold status + link completed_sale_id.

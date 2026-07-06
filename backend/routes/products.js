@@ -733,6 +733,8 @@ module.exports = function registerProductRoutes(app, deps) {
       order_increment,         // Tier 2.2 wholesale MOQ
       visibility,              // Tier 2.11 wholesale visibility
       customer_group_ids,      // Tier 2.11 — groups that can see this restricted product
+      track_batches,           // F07 batch/expiry opt-in
+      shelf_life_days,         // F07 default expiry suggestion at GRN
     } = req.body;
     // Fall back through: explicit body field → header → session context → first outlet.
     // Without this, the Add Product form's Opening Stock value silently dropped
@@ -768,8 +770,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment, visibility)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment, visibility, track_batches, shelf_life_days)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
            RETURNING id`,
           [
             barcode || null,
@@ -809,6 +811,11 @@ module.exports = function registerProductRoutes(app, deps) {
               : 1,
             // Tier 2.11 — visibility column. Unknown/missing → 'all' default.
             visibility === "restricted" ? "restricted" : "all",
+            // F07 — batch tracking opt-in + default shelf life.
+            track_batches === true || track_batches === "true",
+            shelf_life_days != null && shelf_life_days !== ""
+              ? Math.max(0, Math.floor(Number(shelf_life_days)))
+              : null,
           ]
         );
         const newProductId = inserted.id;
@@ -1077,6 +1084,8 @@ module.exports = function registerProductRoutes(app, deps) {
       order_increment,         // Tier 2.2 wholesale MOQ
       visibility,              // Tier 2.11 wholesale visibility
       customer_group_ids,      // Tier 2.11 — groups whitelist for restricted products
+      track_batches,           // F07 batch/expiry opt-in
+      shelf_life_days,         // F07 default expiry suggestion at GRN
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -1189,6 +1198,21 @@ module.exports = function registerProductRoutes(app, deps) {
             order_increment === "" || order_increment == null
               ? 1
               : Math.max(1, Math.floor(Number(order_increment)))
+          );
+          nextParam++;
+        }
+        // F07 — batch tracking opt-in + default shelf life.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "track_batches")) {
+          updateFields.push(`track_batches = $${nextParam}`);
+          updateParams.push(track_batches === true || track_batches === "true");
+          nextParam++;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "shelf_life_days")) {
+          updateFields.push(`shelf_life_days = $${nextParam}`);
+          updateParams.push(
+            shelf_life_days === "" || shelf_life_days == null
+              ? null
+              : Math.max(0, Math.floor(Number(shelf_life_days)))
           );
           nextParam++;
         }

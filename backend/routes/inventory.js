@@ -1,6 +1,7 @@
 const { validate } = require("../middleware/validate");
 const { CreateTransferSchema, CreateAdjustmentSchema } = require("../schemas/inventory");
 const kitEngine = require("../services/kit-engine");
+const batchStock = require("../services/batch-stock");
 
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -133,9 +134,9 @@ module.exports = function registerInventoryRoutes(app, deps) {
 
       await db.transaction(async (client) => {
         // 1. Record the transfer (with optional variant_id)
-        await client.query(
+        const { rows: [transferRow] } = await client.query(
           `INSERT INTO inventory_transfers (product_id, variant_id, from_outlet_id, to_outlet_id, quantity, employee_id, note)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
           [product_id, variant_id || null, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
         );
 
@@ -173,6 +174,20 @@ module.exports = function registerInventoryRoutes(app, deps) {
           // product_variants.stock is the cross-outlet rollup — a transfer
           // doesn't change it, so no update here.
         }
+
+        // 4. F07: move batch IDENTITY, not just quantity. FEFO-consume at source
+        // and recreate the consumed slices at the destination preserving
+        // batch_number/expiry/unit_cost — so mithai keeps its 2-day expiry when
+        // it moves between branches. No-op for untracked products.
+        await batchStock.transferBatches(client, {
+          productId: product_id,
+          variantId: variant_id || null,
+          fromOutletId: from_outlet_id,
+          toOutletId: to_outlet_id,
+          qty: quantity,
+          refType: "transfer",
+          refId: transferRow.id,
+        });
       });
 
       enqueueInventorySyncEvents(
@@ -345,6 +360,23 @@ module.exports = function registerInventoryRoutes(app, deps) {
             [quantity_change, variant_id],
           );
         }
+
+        // F07: mirror the adjustment into the batch ledger. Negative deltas
+        // FEFO-consume; positive add to the newest batch. Expiry/damage/spoilage
+        // reasons flip fully-consumed batches to 'written_off' (vs 'depleted')
+        // so the write-off report can distinguish them. No-op for untracked.
+        const isWriteOff =
+          Number(quantity_change) < 0 &&
+          /expir|write.?off|damage|spoil|scrap/i.test(String(reason || ""));
+        await batchStock.adjustBatches(client, {
+          productId: product_id,
+          variantId: variant_id || null,
+          outletId: outlet_id,
+          delta: Number(quantity_change),
+          movementType: isWriteOff ? "write_off" : "adjust",
+          refType: "adjustment",
+          refId: adjustmentId,
+        });
       });
 
       enqueueInventorySyncEvents(

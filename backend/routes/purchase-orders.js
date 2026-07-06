@@ -1,5 +1,6 @@
 const { validate } = require("../middleware/validate");
 const { CreatePOSchema } = require("../schemas/purchase-orders");
+const batchStock = require("../services/batch-stock");
 
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -364,7 +365,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
             .json({ error: "Only Approved POs can be received" });
 
         const { rows: poItems } = await db.query(
-          `SELECT poi.*, p.name as product_name
+          `SELECT poi.*, p.name as product_name,
+                  COALESCE(p.track_batches, false) AS track_batches,
+                  p.shelf_life_days
            FROM purchase_order_items poi
            JOIN products p ON poi.product_id = p.id
            WHERE poi.po_id = $1`,
@@ -372,11 +375,20 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
         );
 
         // Build a map of qty_received: use provided items or default to full quantity
+        // F07: receivedItems entries may also carry batch_number + expiry_date for
+        // batch-tracked products (captured per line on the GRN editor).
         const receivedMap = {};
+        const batchInfoMap = {};
         const hasPartialReceive = receivedItems && Array.isArray(receivedItems) && receivedItems.length > 0;
         if (hasPartialReceive) {
           receivedItems.forEach((ri) => {
             receivedMap[ri.product_id] = parseFloat(ri.qty_received) || 0;
+            if (ri.batch_number || ri.expiry_date) {
+              batchInfoMap[ri.product_id] = {
+                batch_number: ri.batch_number ? String(ri.batch_number).trim() : null,
+                expiry_date: ri.expiry_date || null,
+              };
+            }
           });
         }
 
@@ -419,6 +431,30 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
                ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
               [item.product_id, outlet_id, qtyReceived, qtyReceived]
             );
+
+            // F07: for batch-tracked products, decompose the received qty into a
+            // stock_batches lot inside the SAME tx that bumped outlet_stock — so
+            // the invariant (Σ batch.remaining = outlet_stock) holds from receipt.
+            // Skip zero-qty partial-receive lines (nothing to batch).
+            if (item.track_batches === true && Number(qtyReceived) > 0) {
+              const info = batchInfoMap[item.product_id] || {};
+              let expiry = info.expiry_date || null;
+              // Auto-suggest expiry from shelf_life_days when not supplied.
+              if (!expiry && item.shelf_life_days != null && Number(item.shelf_life_days) > 0) {
+                const d = new Date();
+                d.setDate(d.getDate() + Number(item.shelf_life_days));
+                expiry = d.toISOString().slice(0, 10);
+              }
+              await batchStock.receiveBatch(client, {
+                productId: item.product_id,
+                outletId: outlet_id,
+                batchNumber: info.batch_number, // receiveBatch defaults GRN-derived if null
+                expiryDate: expiry,
+                qty: qtyReceived,
+                unitCost: item.cost_price,
+                grnId: newGrnId,
+              });
+            }
           }
 
           return newGrnId;
