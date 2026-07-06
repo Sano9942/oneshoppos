@@ -188,6 +188,27 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
 
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_created", JSON.stringify({ subscription_id: sub.id, plan_id })]); } catch {}
 
+      // V07 gym — on enrollment, assign a scannable member_code (only when the
+      // tenant runs member check-in) and auto-attach any membership-enroll
+      // waiver (F03). Both best-effort: a hiccup here must never fail the
+      // enrollment, which is already committed above.
+      try {
+        const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+        const flags = await getFeatureFlagsMap(req.tenantId);
+        if (flags.member_checkin && customer_id) {
+          const { ensureMemberCode } = require("../services/members");
+          await ensureMemberCode(deps.db, customer_id);
+        }
+        const { autoAttachForms } = require("../services/forms");
+        await autoAttachForms(deps.db, "membership_enroll", {
+          customerId: customer_id,
+          entityType: "subscription",
+          entityId: sub.id,
+        });
+      } catch (enrollErr) {
+        // non-fatal — the subscription is already persisted
+      }
+
       res.status(201).json(sub);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
