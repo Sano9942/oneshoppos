@@ -113,6 +113,11 @@ const WHOLESALE_SEED_FLAGS = [
   "wholesale_field_sales",
   "wholesale_schemes",
   "wholesale_secondary_sales",
+  // V02 wholesale depth — backorders/partial fulfillment + van sales. Like
+  // the flags above, both are latent surfaces: no POS impact until a
+  // shortfall offer is accepted / a van outlet is created.
+  "wholesale_backorders",
+  "wholesale_van_sales",
 ];
 
 const MULTI_OUTLET_SEED_FLAGS = [

@@ -17,7 +17,22 @@ const CartItemSchema = z.object({
   price: z.coerce.number(),
   quantity: z.coerce.number().positive(),
   price_override: PriceOverrideSchema.optional().nullable(),
+  // V02 wholesale backorders — conversion flow: this cart line fulfills an
+  // existing backorder through the standard sale path. Price must equal the
+  // backorder's snapshot unit_price (enforced in sales.js, not here).
+  backorder_id: z.coerce.number().int().positive().optional().nullable(),
 }).passthrough(); // preserve name, cost_price, tax, gst, barcode, variant_id, gross_weight, tare_weight, unit, etc.
+
+// V02 wholesale backorders — the shortfall remainder of an accepted
+// "fulfill available + backorder the rest" offer. unit_price is the
+// ORDER-time snapshot honored at fulfillment.
+const BackorderItemSchema = z.object({
+  product_id: z.coerce.number().int().positive(),
+  variant_id: z.coerce.number().int().positive().optional().nullable(),
+  quantity: z.coerce.number().positive(),
+  unit_price: z.coerce.number().nonnegative(),
+  notes: z.string().max(500).optional().nullable(),
+}).passthrough();
 
 // Payment line — split-tender support. Method is free-form (Cash, Card, Wallet,
 // JazzCash, EasyPaisa, BankTransfer, etc. — tenant-configurable). Passthrough
@@ -59,6 +74,9 @@ const CreateSaleSchema = z.object({
       }).passthrough(),
     )
     .optional(),
+  // V02 wholesale backorders — requires customer_id; validated + created
+  // inside the sale transaction in sales.js.
+  backorder_items: z.array(BackorderItemSchema).optional().nullable(),
 }).passthrough(); // preserve employee_id, customer_id, shift_id, discount_amount, staff_id, room_id, plan_id, etc.
 
 // PUT /api/sales/:id/void
@@ -66,4 +84,4 @@ const VoidSaleSchema = z.object({
   void_reason: z.string().min(1, "void_reason is required"),
 }).passthrough();
 
-module.exports = { CartItemSchema, PriceOverrideSchema, PaymentLineSchema, CreateSaleSchema, VoidSaleSchema };
+module.exports = { CartItemSchema, PriceOverrideSchema, PaymentLineSchema, BackorderItemSchema, CreateSaleSchema, VoidSaleSchema };

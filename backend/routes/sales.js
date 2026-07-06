@@ -602,6 +602,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       // as an audit trail (snapshot — doesn't affect totals; the discount is
       // already folded into discount_amount client-side).
       applied_promotions = [],
+      // V02 wholesale backorders — the accepted shortfall offer: cart
+      // quantities arrive already clamped to what's fulfillable and the
+      // remainder rides here at the ORDER-time unit price. Rows are created
+      // inside the sale transaction. Requires customer_id.
+      backorder_items = null,
     } = req.body;
 
     // Resolve field_visit_uuid → field_visits.id when only the uuid is given.
@@ -628,10 +633,24 @@ module.exports = function registerSalesRoutes(app, deps) {
     if ((field_visit_id || field_visit_uuid) && Array.isArray(cartItems) && cartItems.length) {
       try {
         const { validateMoq } = require("../services/moq");
-        const moqItems = cartItems.map((it) => ({
-          product_id: Number(it.id),
-          quantity: Number(it.quantity || 0),
-        }));
+        // V02 backorders: MOQ validates the ORDERED quantity, not the
+        // fulfilled slice — a partial fulfillment below MOQ is legitimate
+        // when the order met it. Merge the backordered remainder back into
+        // the per-product totals before validating.
+        const orderedByProduct = new Map();
+        for (const it of cartItems) {
+          const pid = Number(it.id);
+          orderedByProduct.set(pid, (orderedByProduct.get(pid) || 0) + Number(it.quantity || 0));
+        }
+        if (Array.isArray(backorder_items)) {
+          for (const bi of backorder_items) {
+            const pid = Number(bi.product_id ?? bi.id);
+            if (Number.isInteger(pid) && pid > 0) {
+              orderedByProduct.set(pid, (orderedByProduct.get(pid) || 0) + Number(bi.quantity ?? bi.qty ?? 0));
+            }
+          }
+        }
+        const moqItems = Array.from(orderedByProduct, ([product_id, quantity]) => ({ product_id, quantity }));
         const moqResult = await validateMoq(db, moqItems);
         if (!moqResult.ok) {
           return res.status(400).json({
@@ -648,6 +667,96 @@ module.exports = function registerSalesRoutes(app, deps) {
         if (!String(moqErr.message || "").includes("min_order_qty")) {
           console.warn("[sales] MOQ guard skipped:", moqErr.message);
         }
+      }
+    }
+
+    // V02 wholesale backorders — flag + payload validation before the
+    // transaction. backorderFlagOn also drives the `backorder_available`
+    // hint on the insufficient_stock 400 so all four order-taking surfaces
+    // offer the split from the same error shape.
+    const backorderSvc = require("../services/backorder");
+    let backorderFlagOn = false;
+    try {
+      backorderFlagOn = await backorderSvc.backordersEnabled(db);
+    } catch { /* flag table missing → no offer */ }
+
+    let normalizedBackorderItems = [];
+    if (Array.isArray(backorder_items) && backorder_items.length) {
+      if (!backorderFlagOn) {
+        return res.status(400).json({
+          error: "Backorders are not enabled for this store",
+          code: "BACKORDERS_DISABLED",
+        });
+      }
+      if (!customer_id) {
+        return res.status(400).json({
+          error: "Backordering the remainder requires a customer on the sale",
+          code: "BACKORDER_REQUIRES_CUSTOMER",
+        });
+      }
+      try {
+        normalizedBackorderItems = backorderSvc.normalizeBackorderItems(backorder_items);
+      } catch (e) {
+        return res.status(e.statusCode || 400).json({ error: e.message });
+      }
+    }
+
+    // V02 — backorder CONVERSION: cart lines carrying backorder_id fulfill an
+    // existing backorder through this standard sale path (stock lock, tax
+    // snapshot, AR — zero parallel fulfillment code). Cheap validation here;
+    // the authoritative remaining-qty check re-runs under FOR UPDATE inside
+    // the transaction. Conversion must honor the ORDER-time price snapshot —
+    // re-pricing is rejected, not silently corrected, so the caller's totals
+    // (already computed from cart prices) can never drift from the snapshot.
+    // NOTE: conversion deliberately does NOT re-validate MOQ — the original
+    // order met it; a partial fulfillment below MOQ is legitimate.
+    const isBackorderConversion =
+      Array.isArray(cartItems) && cartItems.some((it) => it && it.backorder_id);
+    if (isBackorderConversion) {
+      if (!customer_id) {
+        return res.status(400).json({
+          error: "Backorder conversion requires the backorder's customer on the sale",
+          code: "BACKORDER_REQUIRES_CUSTOMER",
+        });
+      }
+      try {
+        for (const it of cartItems) {
+          if (!it || !it.backorder_id) continue;
+          const { rows: [bo] } = await db.query(
+            `SELECT id, customer_id, product_id, qty_ordered, qty_fulfilled, unit_price, status
+             FROM backorders WHERE id = $1`,
+            [Number(it.backorder_id)]
+          );
+          if (!bo) {
+            return res.status(400).json({ error: `Backorder ${it.backorder_id} not found`, code: "BACKORDER_NOT_FOUND" });
+          }
+          if (bo.status === "cancelled" || bo.status === "fulfilled") {
+            return res.status(400).json({ error: `Backorder ${bo.id} is ${bo.status}`, code: "BACKORDER_NOT_OPEN" });
+          }
+          if (Number(bo.customer_id) !== Number(customer_id)) {
+            return res.status(400).json({ error: `Backorder ${bo.id} belongs to a different customer`, code: "BACKORDER_CUSTOMER_MISMATCH" });
+          }
+          if (Number(it.original_product_id || it.id) !== Number(bo.product_id)) {
+            return res.status(400).json({ error: `Backorder ${bo.id} is for a different product`, code: "BACKORDER_PRODUCT_MISMATCH" });
+          }
+          if (Math.abs(Number(it.price) - Number(bo.unit_price)) > 0.005) {
+            return res.status(400).json({
+              error: `Backorder ${bo.id} must be fulfilled at its snapshot price ${Number(bo.unit_price).toFixed(2)}`,
+              code: "BACKORDER_PRICE_DRIFT",
+              snapshot_price: Number(bo.unit_price),
+            });
+          }
+          const remaining = Number(bo.qty_ordered) - Number(bo.qty_fulfilled);
+          if (Number(it.quantity) > remaining + 1e-9) {
+            return res.status(400).json({
+              error: `Backorder ${bo.id} has only ${remaining} remaining`,
+              code: "BACKORDER_OVERFULFILL",
+              remaining,
+            });
+          }
+        }
+      } catch (boErr) {
+        return res.status(500).json({ error: boErr.message });
       }
     }
 
@@ -950,7 +1059,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       // the signal that this sale came from the rep app, not the counter.
       const isFieldRepSale = !!(field_visit_id || field_visit_uuid);
 
-      if (!isFieldRepSale && (!idempotency_key || activeShift.status === "open")) {
+      // V02 — backorder conversions come from the back-office Backorders
+      // screen; the converting manager isn't clocked in at a register. Same
+      // exemption as field-rep sales (shift is still required — the sale
+      // lands in the outlet's open cash session like any other).
+      if (!isFieldRepSale && !isBackorderConversion && (!idempotency_key || activeShift.status === "open")) {
         // Only check attendance for real-time sales (not offline replays)
         const attendanceStatus = await getEmployeeCheckoutStatus(
           authenticatedEmployeeId,
@@ -996,6 +1109,10 @@ module.exports = function registerSalesRoutes(app, deps) {
     // product line is sold (soldPackages) so a post-commit hook can react.
     let soldPackages = [];
     let packagesFlagOn = false;
+    // V02 wholesale backorders — populated inside the transaction so the
+    // post-commit F05 notifications + response can reference them.
+    let createdBackorders = [];
+    const convertedBackorders = [];
     try {
       const { getFeatureFlagsMap } = require("../middleware/feature-flags");
       const flags = await getFeatureFlagsMap(req.tenantId);
@@ -1488,6 +1605,22 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // V02 wholesale backorders — persist the accepted shortfall remainder
+        // inside the same transaction (a rolled-back sale leaves no orphan
+        // rows). The sale itself invoices ONLY the fulfilled quantities; these
+        // rows are not AR and don't count toward the customer's credit
+        // exposure until converted.
+        if (normalizedBackorderItems.length) {
+          createdBackorders = await backorderSvc.createBackorders(client, {
+            customerId: Number(customer_id),
+            sourceType: isFieldRepSale ? "field_order" : "sale",
+            sourceId: newSaleId,
+            outletId: Number(outlet_id),
+            items: normalizedBackorderItems,
+            createdBy: authenticatedEmployeeId || null,
+          });
+        }
+
         // 3. Loop through cart to insert Line Items AND deduct stock
         for (let cartIdx = 0; cartIdx < cartItems.length; cartIdx++) {
           const item = cartItems[cartIdx];
@@ -1533,6 +1666,27 @@ module.exports = function registerSalesRoutes(app, deps) {
             ]
           );
           const saleItemId = insertedLine.id;
+
+          // V02 — this line fulfills an existing backorder. Lock the row
+          // (FOR UPDATE — two concurrent conversions can't over-fulfill),
+          // re-verify, and record the fulfillment. Price/product/customer
+          // were validated pre-transaction; qty is re-checked under the lock.
+          if (item.backorder_id) {
+            const bo = await backorderSvc.lockForFulfillment(client, Number(item.backorder_id));
+            if (Number(bo.customer_id) !== Number(customer_id)) {
+              throw Object.assign(
+                new Error(`Backorder ${bo.id} belongs to a different customer`),
+                { statusCode: 400, code: "BACKORDER_CUSTOMER_MISMATCH" }
+              );
+            }
+            const applied = await backorderSvc.applyFulfillment(client, {
+              backorder: bo,
+              saleId: newSaleId,
+              saleItemId,
+              qty: item.quantity,
+            });
+            convertedBackorders.push({ id: bo.id, qty: Number(item.quantity), status: applied.status });
+          }
 
           // 2-G.6: stamp each scanned serial — insert bridge row, flip status
           // to 'sold', populate warranty_start_date (today) + compute
@@ -2227,7 +2381,44 @@ module.exports = function registerSalesRoutes(app, deps) {
           // (null on cash/card sales). POS receipt renders these so the buyer
           // sees their AR reference number and when the payment is due.
           arInvoice: creditArInvoice,
+          // V02 wholesale backorders — rows created for the shortfall
+          // remainder (surface confirms "X items backordered") and any
+          // backorders this sale fulfilled (conversion flow).
+          backorders: createdBackorders,
+          convertedBackorders,
         });
+
+        // V02 — F05 customer notifications, post-commit + best-effort (inert
+        // unless the tenant's customer_notifications flag is on).
+        if (customer_id && (createdBackorders.length || convertedBackorders.length)) {
+          const tenantInfo = { slug: req.tenantSlug, name: req.company?.name };
+          const notifData = {
+            storeName: req.company?.name,
+            storePhone: req.company?.phone,
+            invoiceNumber: invoiceNumber || null,
+            itemCount: createdBackorders.length || convertedBackorders.length,
+          };
+          if (createdBackorders.length) {
+            backorderSvc.notifyBackorderEvent(db, {
+              event: "backorder.created",
+              customerId: Number(customer_id),
+              tenantSlug: req.tenantSlug,
+              tenant: tenantInfo,
+              data: { ...notifData, itemCount: createdBackorders.length },
+              entityId: createdBackorders[0]?.id,
+            }).catch(() => {});
+          }
+          if (convertedBackorders.length) {
+            backorderSvc.notifyBackorderEvent(db, {
+              event: "backorder.fulfilled",
+              customerId: Number(customer_id),
+              tenantSlug: req.tenantSlug,
+              tenant: tenantInfo,
+              data: { ...notifData, itemCount: convertedBackorders.length },
+              entityId: convertedBackorders[0]?.id,
+            }).catch(() => {});
+          }
+        }
       } catch (invErr) {
         res.status(500).json({
           error: "Sale committed but invoice finalization failed",
@@ -2247,6 +2438,13 @@ module.exports = function registerSalesRoutes(app, deps) {
           if (err.product_id != null) body.product_id = err.product_id;
           if (err.variant_id != null) body.variant_id = err.variant_id;
           if (err.requested != null) body.requested = err.requested;
+          // V02 — the shortfall-offer hint: the surface may re-submit with
+          // clamped quantities + backorder_items. Requires the flag, an
+          // identified customer, and at least some fulfillable quantity
+          // (a partial split needs a sale to hang the source on).
+          body.backorder_available =
+            backorderFlagOn && !!customer_id && !isBackorderConversion &&
+            Number(err.available || 0) > 0;
         }
         return res.status(err.statusCode).json(body);
       }

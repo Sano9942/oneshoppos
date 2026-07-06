@@ -648,6 +648,11 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         customer_phone,
         customer_email,
         shipping_address,
+        // V02 wholesale backorders — the accepted shortfall offer: the cart
+        // was clamped to available quantities via the cart API and the
+        // remainder rides here. Requires an identified customer on the cart
+        // (portal reorder) — anonymous guests get no offer.
+        backorder_items,
       } = req.body || {};
 
       if (!cart_token) return res.status(400).json({ error: "cart_token is required" });
@@ -703,15 +708,66 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         { taxMode: checkoutTaxMode, tenantId: resolved.tenant?.id, customerId: cart.customer_id || null }
       );
 
+      // V02 wholesale backorders — one decision point shared with POS/field
+      // (services/backorder.js). Offer requires the flag AND an identified
+      // customer on the cart (portal reorder); anonymous guests get the
+      // plain availability error.
+      const backorderSvc = require("../services/backorder");
+      let backorderFlagOn = false;
+      try {
+        backorderFlagOn = await backorderSvc.backordersEnabled(db);
+      } catch { /* no offer */ }
+      const backorderOfferOk = backorderFlagOn && !!cart.customer_id;
+
       // 3. Check for availability errors
       if (quote.availabilityErrors && quote.availabilityErrors.length > 0) {
         return res.status(400).json({
           error: "Some items are unavailable",
           availabilityErrors: quote.availabilityErrors,
+          // Offer needs at least one fulfillable unit somewhere in the cart —
+          // the split still creates a web_order for the fulfilled slice.
+          backorder_available:
+            backorderOfferOk &&
+            quote.availabilityErrors.some((e) => Number(e.available || 0) > 0),
         });
       }
 
+      // V02 — validate the accepted shortfall remainder. Server-authoritative
+      // pricing: each backorder line must match a (clamped) quote line for
+      // the same product+variant, and snapshots THAT unit price — the client
+      // never dictates storefront prices.
+      let normalizedBackorderItems = [];
+      if (Array.isArray(backorder_items) && backorder_items.length) {
+        if (!backorderFlagOn) {
+          return res.status(400).json({ error: "Backorders are not enabled for this store", code: "BACKORDERS_DISABLED" });
+        }
+        if (!cart.customer_id) {
+          return res.status(400).json({
+            error: "Backordering the remainder requires a signed-in customer",
+            code: "BACKORDER_REQUIRES_CUSTOMER",
+          });
+        }
+        try {
+          normalizedBackorderItems = backorderSvc.normalizeBackorderItems(backorder_items).map((bi) => {
+            const qLine = quote.items.find(
+              (qi) => Number(qi.productId) === bi.product_id &&
+                      (Number(qi.variantId) || null) === (bi.variant_id || null)
+            );
+            if (!qLine) {
+              throw Object.assign(
+                new Error(`Backorder line for product ${bi.product_id} has no matching cart line`),
+                { statusCode: 400 }
+              );
+            }
+            return { ...bi, unit_price: Number(qLine.unitPrice) };
+          });
+        } catch (e) {
+          return res.status(e.statusCode || 400).json({ error: e.message });
+        }
+      }
+
       // 4-13. Atomic transaction
+      let createdBackorders = [];
       const result = await db.transaction(async (client) => {
         // 5-6. Generate tokens
         const externalOrderId = "sf_" + crypto.randomUUID().replace(/-/g, "").slice(0, 20);
@@ -799,7 +855,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
             if (!stockRows.length) {
               throw Object.assign(
                 new Error(`Insufficient stock for ${qi.productName}`),
-                { statusCode: 400 }
+                { statusCode: 400, code: "insufficient_stock", product_id: qi.productId, requested: Number(qi.qty) }
               );
             }
             stockOutletId = stockRows[0].outlet_id;
@@ -826,7 +882,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           if (!lockRows.length || lockRows[0].quantity < qi.qty) {
             throw Object.assign(
               new Error(`Insufficient stock for ${qi.productName}`),
-              { statusCode: 400 }
+              {
+                statusCode: 400,
+                code: "insufficient_stock",
+                product_id: qi.productId,
+                available: Number(lockRows[0]?.quantity ?? 0),
+                requested: Number(qi.qty),
+              }
             );
           }
 
@@ -904,6 +966,20 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           );
         }
 
+        // V02 — persist the backordered remainder inside the same transaction
+        // (a rolled-back order leaves no orphan rows). Not AR; not counted
+        // toward the customer's credit exposure until converted.
+        if (normalizedBackorderItems.length) {
+          createdBackorders = await backorderSvc.createBackorders(client, {
+            customerId: Number(cart.customer_id),
+            sourceType: "web_order",
+            sourceId: order.id,
+            outletId: delivery_method === "pickup" ? Number(pickup_outlet_id) : (fulfillmentOutletId || null),
+            items: normalizedBackorderItems,
+            createdBy: null, // customer-originated — no employee attribution
+          });
+        }
+
         // 12. Delete the cart (cascade deletes cart items)
         await client.query("DELETE FROM storefront_carts WHERE id = $1", [cart.id]);
 
@@ -918,11 +994,34 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         };
       });
 
-      res.status(201).json(result);
+      // V02 — F05 notification, post-commit + best-effort (inert unless the
+      // tenant's customer_notifications flag is on).
+      if (createdBackorders.length) {
+        backorderSvc.notifyBackorderEvent(db, {
+          event: "backorder.created",
+          customerId: Number(cart.customer_id),
+          tenantSlug: resolved.tenant?.slug || req.query.tenant,
+          tenant: { slug: resolved.tenant?.slug, name: resolved.tenant?.name },
+          data: { itemCount: createdBackorders.length, orderNumber: result.order_number },
+          entityId: createdBackorders[0]?.id,
+        }).catch(() => {});
+      }
+
+      res.status(201).json({ ...result, backorders: createdBackorders });
     } catch (err) {
       console.error("Storefront checkout error:", err);
       const status = err.statusCode || 500;
-      res.status(status).json({ error: err.message || "Checkout failed" });
+      const body = { error: err.message || "Checkout failed" };
+      if (err.code) body.code = err.code;
+      // V02 — race-window shortfall (stock moved between quote and lock):
+      // surface the same structured fields the pre-check 400 carries so the
+      // client can re-offer the split.
+      if (err.code === "insufficient_stock") {
+        if (err.product_id != null) body.product_id = err.product_id;
+        if (err.available != null) body.available = err.available;
+        if (err.requested != null) body.requested = err.requested;
+      }
+      res.status(status).json(body);
     }
   });
 

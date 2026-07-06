@@ -8286,6 +8286,252 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 110,
+    description:
+      "V02 wholesale depth (backorders) — backorders + backorder_fulfillments tables, wholesale_backorders flag (seeded ON for wholesale tenants)",
+    up: async (client) => {
+      // Tenant-schema only (references customers/products). SAVEPOINT-guarded
+      // skip on public where those tables don't exist.
+      try {
+        await client.query("SAVEPOINT v110_backorders");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS backorders (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            source_type TEXT NOT NULL CHECK (source_type IN ('sale','web_order','field_order')),
+            source_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            variant_id INTEGER REFERENCES product_variants(id),
+            outlet_id INTEGER REFERENCES outlets(id),
+            qty_ordered NUMERIC(12,4) NOT NULL,
+            qty_fulfilled NUMERIC(12,4) NOT NULL DEFAULT 0,
+            unit_price NUMERIC(12,2) NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','fulfilled','cancelled')),
+            expected_at DATE,
+            notes TEXT,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_backorders_status ON backorders(status)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_backorders_customer ON backorders(customer_id)`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_backorders_product ON backorders(product_id, status)`
+        );
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS backorder_fulfillments (
+            id SERIAL PRIMARY KEY,
+            backorder_id INTEGER NOT NULL REFERENCES backorders(id),
+            sale_id INTEGER NOT NULL REFERENCES sales(id),
+            sale_item_id INTEGER REFERENCES sale_items(id),
+            qty NUMERIC(12,4) NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_backorder_fulfillments_bo ON backorder_fulfillments(backorder_id)`
+        );
+        await client.query("RELEASE SAVEPOINT v110_backorders");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v110_backorders");
+        console.warn(`[migrate-pg v110] backorders tables skipped: ${err.message}`);
+      }
+
+      // Flag: default OFF everywhere; backfilled ON for wholesale tenants
+      // (v87 pattern — industry_type OR an enabled wholesale mode row).
+      try {
+        await client.query("SAVEPOINT v110_flag");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_backorders', false)
+             ON CONFLICT (key) DO NOTHING`
+          );
+          const { rows: profile } = await client.query(
+            `SELECT industry_type FROM company_profile WHERE id = 1`
+          );
+          let isWholesale = profile[0]?.industry_type === "wholesale";
+          if (!isWholesale) {
+            const { rows: tm } = await client.query(`
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = current_schema() AND table_name = 'tenant_modes'
+            `);
+            if (tm.length) {
+              const { rows: mode } = await client.query(
+                `SELECT 1 FROM tenant_modes WHERE mode = 'wholesale' AND enabled = true`
+              );
+              isWholesale = mode.length > 0;
+            }
+          }
+          if (isWholesale) {
+            await client.query(
+              `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_backorders', true)
+               ON CONFLICT (key) DO UPDATE SET enabled = true`
+            );
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v110_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v110_flag");
+        console.warn(`[migrate-pg v110] wholesale_backorders flag skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 111,
+    description:
+      "V02 wholesale depth (van sales) — outlets.outlet_type ('store'|'van') + van_rep_employee_id, van_reconciliations table, wholesale_van_sales flag (seeded ON for wholesale tenants)",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v111_van");
+        await client.query(
+          `ALTER TABLE outlets ADD COLUMN IF NOT EXISTS outlet_type TEXT NOT NULL DEFAULT 'store'`
+        );
+        await client.query(
+          `ALTER TABLE outlets ADD COLUMN IF NOT EXISTS van_rep_employee_id INTEGER REFERENCES employees(id)`
+        );
+        // CHECK added NOT VALID (defaults guarantee compliance on existing rows),
+        // idempotent via catalog probe.
+        await client.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'chk_outlets_outlet_type'
+                AND conrelid = (current_schema() || '.outlets')::regclass
+            ) THEN
+              ALTER TABLE outlets ADD CONSTRAINT chk_outlets_outlet_type
+                CHECK (outlet_type IN ('store','van')) NOT VALID;
+            END IF;
+          END $$;
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS van_reconciliations (
+            id SERIAL PRIMARY KEY,
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            reconcile_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','confirmed')),
+            lines JSONB NOT NULL DEFAULT '[]',
+            cash_expected NUMERIC(12,2) DEFAULT 0,
+            cash_counted NUMERIC(12,2),
+            variance_reason TEXT,
+            adjustment_id INTEGER,
+            created_by INTEGER REFERENCES employees(id),
+            confirmed_by INTEGER REFERENCES employees(id),
+            confirmed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(outlet_id, reconcile_date)
+          )
+        `);
+        await client.query("RELEASE SAVEPOINT v111_van");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v111_van");
+        console.warn(`[migrate-pg v111] van sales schema skipped: ${err.message}`);
+      }
+
+      try {
+        await client.query("SAVEPOINT v111_flag");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_van_sales', false)
+             ON CONFLICT (key) DO NOTHING`
+          );
+          const { rows: profile } = await client.query(
+            `SELECT industry_type FROM company_profile WHERE id = 1`
+          );
+          let isWholesale = profile[0]?.industry_type === "wholesale";
+          if (!isWholesale) {
+            const { rows: tm } = await client.query(`
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = current_schema() AND table_name = 'tenant_modes'
+            `);
+            if (tm.length) {
+              const { rows: mode } = await client.query(
+                `SELECT 1 FROM tenant_modes WHERE mode = 'wholesale' AND enabled = true`
+              );
+              isWholesale = mode.length > 0;
+            }
+          }
+          if (isWholesale) {
+            await client.query(
+              `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_van_sales', true)
+               ON CONFLICT (key) DO UPDATE SET enabled = true`
+            );
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v111_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v111_flag");
+        console.warn(`[migrate-pg v111] wholesale_van_sales flag skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 112,
+    description:
+      "V02 wholesale depth (POD) — proof-of-delivery columns on loadsheet_orders (per-stop signature/photo/receiver, delivered/failed status)",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v112_pod");
+        await client.query(`
+          ALTER TABLE loadsheet_orders
+            ADD COLUMN IF NOT EXISTS pod_status TEXT,
+            ADD COLUMN IF NOT EXISTS pod_receiver_name TEXT,
+            ADD COLUMN IF NOT EXISTS pod_signature_url TEXT,
+            ADD COLUMN IF NOT EXISTS pod_photo_url TEXT,
+            ADD COLUMN IF NOT EXISTS pod_failed_reason TEXT,
+            ADD COLUMN IF NOT EXISTS pod_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS pod_by INTEGER REFERENCES employees(id)
+        `);
+        await client.query("RELEASE SAVEPOINT v112_pod");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v112_pod");
+        console.warn(`[migrate-pg v112] loadsheet_orders POD columns skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 113,
+    description:
+      "V02 wholesale depth — seed backorder.created/backorder.fulfilled/order.delivered notification rules (F05 engine; inert until customer_notifications flag is on)",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v113_notify_rules");
+        const { rows } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (rows.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('backorder.created',   'sms',   'backorder_created',   true),
+              ('backorder.created',   'email', 'backorder_created',   true),
+              ('backorder.fulfilled', 'sms',   'backorder_fulfilled', true),
+              ('backorder.fulfilled', 'email', 'backorder_fulfilled', true),
+              ('order.delivered',     'sms',   'order_delivered',     true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v113_notify_rules");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v113_notify_rules");
+        console.warn(`[migrate-pg v113] V02 notification rules skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

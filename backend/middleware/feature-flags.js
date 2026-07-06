@@ -148,6 +148,15 @@ const DEFAULT_FEATURE_FLAGS = {
   // distributor invites brand owners (Tapal, Coca-Cola, etc.) to see real-time
   // aggregate onward sales of their brand SKUs. Separate JWT scope. Default false.
   wholesale_secondary_sales: false,
+  // V02 (wholesale depth): backorders / partial fulfillment — on shortfall the
+  // order-taking surfaces offer "fulfill available + backorder remainder"
+  // instead of a hard insufficient_stock 400. Default false; seeded ON for
+  // wholesale tenants (v110 backfill + WHOLESALE_SEED_FLAGS).
+  wholesale_backorders: false,
+  // V02 (wholesale depth): van sales — outlets.outlet_type='van' stock
+  // locations, field-PWA sell-from-van, day-end reconciliation. Default false;
+  // seeded ON for wholesale tenants (v111 backfill + WHOLESALE_SEED_FLAGS).
+  wholesale_van_sales: false,
   // F01 kit/BOM engine. Default false — gates the NEW surfaces (Production
   // screen, recipe costing report, assembled-product type, theoretical-vs-
   // actual usage). The core kit sale decrement stays UNGATED (it already

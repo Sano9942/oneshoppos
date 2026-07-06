@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS outlets (
 -- 2-R.6 — per-outlet timezone for day-parting (falls back to company_profile.timezone when NULL)
 ALTER TABLE outlets ADD COLUMN IF NOT EXISTS timezone TEXT;
 
+-- v111 (V02 wholesale van sales): a van IS an outlet — all stock machinery
+-- (outlet_stock, transfers, FOR UPDATE decrements, reports) works unmodified.
+-- outlet_type='van' rows are exempt from the outlets plan cap (plan-limits.js)
+-- and gated behind the wholesale_van_sales flag at creation.
+ALTER TABLE outlets ADD COLUMN IF NOT EXISTS outlet_type TEXT NOT NULL DEFAULT 'store'
+  CHECK (outlet_type IN ('store','van'));
+ALTER TABLE outlets ADD COLUMN IF NOT EXISTS van_rep_employee_id INTEGER;
+
 CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -2253,6 +2261,15 @@ CREATE TABLE IF NOT EXISTS loadsheet_orders (
   tracking_number TEXT,
   is_cod BOOLEAN DEFAULT false,
   cod_amount NUMERIC(12,2) DEFAULT 0,
+  -- v112 (V02 wholesale POD): per-stop proof of delivery. pod_status is
+  -- NULL until the stop is resolved, then 'delivered' | 'failed'.
+  pod_status TEXT,
+  pod_receiver_name TEXT,
+  pod_signature_url TEXT,
+  pod_photo_url TEXT,
+  pod_failed_reason TEXT,
+  pod_at TIMESTAMPTZ,
+  pod_by INTEGER REFERENCES employees(id),
   UNIQUE(loadsheet_id, web_order_id)
 );
 
@@ -5360,6 +5377,69 @@ CREATE TABLE IF NOT EXISTS risk_controls_config (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 INSERT INTO risk_controls_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- ── V02 wholesale depth (v110–v111): backorders + van reconciliation ──
+
+-- Backorders: the shortfall remainder of a partially-fulfilled order.
+-- NOT AR — no customer_invoices row exists until conversion, so the
+-- credit-limit exposure check naturally counts fulfilled amounts only.
+-- unit_price is the ORDER-time snapshot, honored at fulfillment even if
+-- price lists changed in between.
+CREATE TABLE IF NOT EXISTS backorders (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  source_type TEXT NOT NULL CHECK (source_type IN ('sale','web_order','field_order')),
+  source_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  qty_ordered NUMERIC(12,4) NOT NULL,
+  qty_fulfilled NUMERIC(12,4) NOT NULL DEFAULT 0,
+  unit_price NUMERIC(12,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','fulfilled','cancelled')),
+  expected_at DATE,
+  notes TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_backorders_status ON backorders(status);
+CREATE INDEX IF NOT EXISTS idx_backorders_customer ON backorders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_backorders_product ON backorders(product_id, status);
+
+-- Audit of (possibly partial) backorder fulfillments. The conversion sale
+-- itself goes through the standard POST /api/sales path (stock lock, tax
+-- snapshot, AR) — this table only records which sale line fulfilled which
+-- backorder and by how much.
+CREATE TABLE IF NOT EXISTS backorder_fulfillments (
+  id SERIAL PRIMARY KEY,
+  backorder_id INTEGER NOT NULL REFERENCES backorders(id),
+  sale_id INTEGER NOT NULL REFERENCES sales(id),
+  sale_item_id INTEGER REFERENCES sale_items(id),
+  qty NUMERIC(12,4) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_backorder_fulfillments_bo ON backorder_fulfillments(backorder_id);
+
+-- Van day-end reconciliation: expected (load-out − sales) vs counted per
+-- product, plus cash expected vs collected. Confirm writes the variance as
+-- a stock adjustment (adjustment_id) and closes the van's cash shift.
+CREATE TABLE IF NOT EXISTS van_reconciliations (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  reconcile_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','confirmed')),
+  lines JSONB NOT NULL DEFAULT '[]',
+  cash_expected NUMERIC(12,2) DEFAULT 0,
+  cash_counted NUMERIC(12,2),
+  variance_reason TEXT,
+  adjustment_id INTEGER,
+  created_by INTEGER REFERENCES employees(id),
+  confirmed_by INTEGER REFERENCES employees(id),
+  confirmed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(outlet_id, reconcile_date)
+);
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

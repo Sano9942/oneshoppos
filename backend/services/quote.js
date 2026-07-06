@@ -196,9 +196,14 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
     const inStock = availableQty >= qty;
 
     if (!inStock) {
+      // V02 backorders: numeric available/requested let the checkout surface
+      // build the "fulfill available + backorder remainder" offer without a
+      // second roundtrip.
       availabilityErrors.push({
         productId,
         variantId,
+        available: availableQty,
+        requested: qty,
         reason: availableQty <= 0
           ? 'Out of stock'
           : `Only ${availableQty} available (requested ${qty})`
