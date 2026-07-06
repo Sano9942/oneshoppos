@@ -5380,6 +5380,20 @@ INSERT INTO risk_controls_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- ── V02 wholesale depth (v110–v111): backorders + van reconciliation ──
 
+-- v111 follow-up: the outlets.van_rep_employee_id FK can't be declared inline
+-- (outlets is created before employees in this file); add it here so fresh
+-- bootstraps match migrated tenants.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_outlets_van_rep_employee'
+      AND conrelid = 'outlets'::regclass
+  ) THEN
+    ALTER TABLE outlets ADD CONSTRAINT fk_outlets_van_rep_employee
+      FOREIGN KEY (van_rep_employee_id) REFERENCES employees(id);
+  END IF;
+END $$;
+
 -- Backorders: the shortfall remainder of a partially-fulfilled order.
 -- NOT AR — no customer_invoices row exists until conversion, so the
 -- credit-limit exposure check naturally counts fulfilled amounts only.
