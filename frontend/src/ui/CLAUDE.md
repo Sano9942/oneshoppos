@@ -1,6 +1,10 @@
 # UI — Claude Guide
 
-Shared design system components, layout helpers, and theme tokens. Most use CSS custom property classes (`text-(--ui-text)`, `bg-(--ui-surface)`) for dark mode support via `[data-theme="dark"]`. **Exceptions with hardcoded Tailwind colors:** `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, `FBRPromptBanner.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors. POS elsewhere in the app follows the same hardcoded-color exception.
+Shared design system components, layout helpers, and theme tokens. This is the **Square redesign** system (merged to `main` 2026-07-06, tag `v-square-redesign-merged`): **light-only** (dark mode was dropped — there is no more `[data-theme="dark"]` styling), near-monochrome — primary actions are **black**, color is reserved for text links, focus rings, and pale status badges. Components style via `--ui-*` custom-property classes (`text-(--ui-text)`, `bg-(--ui-surface)`, `border-(--ui-border)`), Tailwind v4 syntax. **`primitives.jsx` is fully token-based** (including `Badge` and `BulkActionBar`, which now use pale `--ui-*` status/surface tokens — no longer hardcoded).
+
+**Remaining hardcoded-color exceptions (not yet tokenized):** `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, `FBRPromptBanner.jsx`, and parts of `SupportWidget.jsx`. The `Modal`/`Drawer` backdrop scrim is an intentional `bg-black/45`. POS elsewhere in the app uses hardcoded colors by exception (except `POSShortcutsOverlay` + `EndlessAisleModal`).
+
+**Building new UI:** compose from these primitives + `--ui-*` tokens — never hardcode Tailwind color classes (`bg-slate-800`, `text-indigo-600`) or arbitrary hex. Spec: `docs/fable5/redesign-spec.md`.
 
 ---
 
@@ -12,43 +16,47 @@ Core design system. All named exports.
 
 | Export | Props | Notes |
 |--------|-------|-------|
-| `PageShell` | `{ title, subtitle?, right?, children }` | Page wrapper with gradient bg (`.ui-shell-bg`). `right` renders top-right (buttons/actions). **No `actions` prop.** |
-| `SectionCard` | `{ children, className? }` | Card container with border + surface bg + shadow. **No `title` prop.** |
+| `PageShell` | `{ title, subtitle?, right?, children }` | Page header wrapper (`min-h-full w-full`): 25px bold title + optional muted subtitle, `right` renders top-right (buttons/actions). No background/gradient of its own. **No `actions` prop.** |
+| `SectionCard` | `{ children, className? }` | Card container: `rounded-(--ui-radius-md)` + hairline `--ui-border` + `--ui-surface` bg. **Flat — no shadow** (flatness is the Square look). **No `title` prop.** |
 
 ### Form Inputs
 
 | Export | Props | Notes |
 |--------|-------|-------|
-| `Button` | `{ tone?, size?, iconOnly?, className?, ...props }` | Spreads all HTML button props |
-| `Input` | `{ className?, ...props }` | Spreads all HTML input props. Full width, white bg (not theme-aware bg) |
-| `Select` | `{ className?, children, ...props }` | Spreads all HTML select props. Same white bg caveat as `Input` |
+| `Button` | `{ tone?, size?, iconOnly?, className?, ...props }` | Spreads all HTML button props. Always a `rounded-full` pill, `font-semibold` |
+| `Input` | `{ className?, ...props }` | Spreads all HTML input props. Full width, `bg-white`, `--ui-border-strong` border, `rounded-(--ui-radius-sm)` |
+| `Select` | `{ className?, children, ...props }` | Spreads all HTML select props. Same styling as `Input` |
 
-**`Button` tones:** `default` (surface + border, default), `primary` (`--ui-primary` green, white text), `danger` (`--ui-danger` red, white text), `plain` (transparent, muted text), `link` (transparent, primary-colored text, no padding, underline on hover).
+**`Button` tones:** `default` (`--ui-muted-surface` bg + `--ui-text`), `primary` (**`--ui-primary` = black `#101010`**, white `--ui-on-primary` text), `danger` (`--ui-danger` red, white text), `plain` (transparent, muted text, hover surface), `link` (transparent, `--ui-link` blue text, no padding, underline on hover).
 
 **`Button` does not accept a `variant` prop** — only `tone`. Passing `variant="secondary"` (as `ErrorBoundary.jsx` does) is silently ignored.
 
-**`Button` sizes:** `md` (default, `px-4 py-2 text-sm`), `sm` (`px-3 py-1.5 text-xs`). `iconOnly` switches to square padding (`p-2` md / `p-1.5` sm) for table-row icon buttons; `tone="link"` always gets `p-0` regardless of `iconOnly`/`size`.
+**`Button` sizes:** `md` (default, `h-10 px-4 text-sm`), `sm` (`h-8 px-3 text-[13px]`). `iconOnly` switches to a fixed square (`h-10 w-10` md / `h-8 w-8` sm) for table-row/toolbar icons; `tone="link"` always gets `p-0`.
 
 ### Display
 
 | Export | Props | Notes |
 |--------|-------|-------|
-| `Badge` | `{ tone?, children }` | Inline label chip. Tones: `success` (emerald), `warning` (amber), `danger` (rose), `default` (slate) — all hardcoded Tailwind colors, not theme tokens |
-| `EmptyState` | `{ title, body? }` | Centered empty-state message |
-| `Skeleton` | `{ className? }` | `animate-pulse` placeholder block |
+| `Badge` | `{ tone?, children }` | Inline pill chip. Tones map to **pale `--ui-*` status tokens**: `success` (`--ui-success-bg/fg`), `warning` (`--ui-warning-bg/fg`), `danger` (`--ui-danger-bg/fg`), `default` (`--ui-muted-surface` / `--ui-text-muted`) |
+| `EmptyState` | `{ title, body?, icon?, action?, secondaryAction?, learnMoreHref?, variant? }` | 3-tier empty state. `variant`: `minimal` (default — icon + title + one line + action), `standard` (adds secondaryAction + optional bordered "Learn more" row), `hero` (full-bleed **black `--ui-primary`** section for flagship first-run pages) |
+| `Skeleton` | `{ className? }` | `animate-pulse` placeholder block (`--ui-muted-surface`) |
+| `Toggle` | `{ checked?, onChange, disabled?, ...props }` | `role="switch"` pill toggle. Grey track, monochrome knob — no colored "on" track. Checked knob = `--ui-primary` |
+| `Tooltip` | `{ label, children }` | Pure-CSS black pill tooltip on hover (no positioning lib) |
 
 ### Tables
 
 | Export | Props | Notes |
 |--------|-------|-------|
 | `TableToolbar` | `{ left, right }` | Filter/action bar above tables — two flex groups, wraps on small screens |
-| `BulkActionBar` | `{ children }` | Emerald-tinted (hardcoded) bar for multi-select bulk actions |
+| `FilterPill` | `{ label, value?, active?, onClick, onClear?, className? }` | Clearable filter chip for `TableToolbar`. Active (non-default) pills show an inline ✕ (`onClear`) so they clear without opening the picker |
+| `BulkActionBar` | `{ children }` | Multi-select bulk-action bar — `--ui-muted-surface` bg + `--ui-border-strong` (tokenized, no longer hardcoded) |
 
 ### Modals
 
 | Export | Props | Notes |
 |--------|-------|-------|
-| `Modal` | `{ open, onClose, title?, size?, hideClose?, closeOnBackdrop?, children }` | Backdrop `bg-black/45` (hardcoded), Escape key, focus trap entry + focus restore on close |
+| `Modal` | `{ open, onClose, title?, size?, hideClose?, closeOnBackdrop?, children }` | Backdrop `bg-black/45` scrim, Escape key, focus trap entry + focus restore on close. Card `bg-white` + `shadow-(--ui-shadow-lg)` |
+| `Drawer` | `{ open, onClose, title?, actions?, size?, children }` | Right-anchored full-height slide-over with scrim (Square account-menu / notifications / record-detail pattern). Header: X (left), title, optional `actions` (right); body scrolls. Same focus/Escape handling as `Modal`. Sizes `sm`/`md`/`lg` = `max-w-[360/420/560px]` |
 | `ModalBody` | `{ children, className? }` | `space-y-3` wrapper |
 | `ModalFooter` | `{ children, className? }` | Right-aligned flex row, `mt-4` |
 | `ConfirmDialog` | `{ open, title?, body?, confirmLabel?, cancelLabel?, destructive?, busy?, onConfirm, onCancel }` | Wraps `Modal` at `size="sm"`; `busy=true` disables both buttons, shows "Working..." on confirm, and disables backdrop/Escape close |
@@ -69,26 +77,32 @@ Core design system. All named exports.
 
 ## `tokens.css`
 
-CSS custom properties for both themes, applied via `[data-theme="dark"]` on `<html>` (see `utils/theme.js`).
+The Square design tokens. **Light-only, near-monochrome** — no dark theme, no `[data-theme]` (dark mode was dropped in the redesign). This file is the source of truth; the values below are the real ones.
 
-| Token | Light | Dark | Role |
-|-------|-------|------|------|
-| `--ui-bg` | `#f6f6f7` | `#0f172a` | Page background |
-| `--ui-surface` | `#ffffff` | `#1e293b` | Card / sidebar surface |
-| `--ui-muted-surface` | `#f1f2f3` | `#334155` | Hover / disabled bg |
-| `--ui-border` | `#d9dce1` | `#475569` | All borders |
-| `--ui-text` | `#1f2937` | `#f1f5f9` | Body text |
-| `--ui-text-muted` | `#6b7280` | `#94a3b8` | Secondary text |
-| `--ui-primary` | `#008060` | `#10b981` | Shopify-green accent |
-| `--ui-primary-strong` | `#006e52` | `#059669` | Hover state |
-| `--ui-danger` | `#d82c0d` | `#ef4444` | Destructive actions |
-| `--ui-warning` | `#b98900` | `#f59e0b` | Warning accents (not consumed by `primitives.jsx` today — used ad hoc elsewhere) |
-| `--ui-radius-sm/md/lg` | `8px / 12px / 16px` | same | Border radius |
-| `--ui-shadow` / `--ui-shadow-lg` | subtle / larger | darker | Box shadows |
+| Token | Value | Role |
+|-------|-------|------|
+| `--ui-text` | `#101010` | Body text (near-black, not pure `#000`) |
+| `--ui-text-muted` | `#6b7280` | Secondary text |
+| `--ui-bg` | `#ffffff` | Main content canvas |
+| `--ui-surface` | `#ffffff` | Cards |
+| `--ui-sidebar` | `#fafafa` | Sidebar bg (subtly separates nav from content) |
+| `--ui-muted-surface` | `#f5f5f5` | Hover / disabled / secondary-button bg |
+| `--ui-border` | `#f0f0f0` | Near-invisible hairline — THE flat-card cue |
+| `--ui-border-strong` | `#e3e3e3` | Input borders, dividers that must read |
+| `--ui-primary` | `#101010` | **Primary action = black** |
+| `--ui-primary-strong` | `#000000` | Primary hover |
+| `--ui-on-primary` | `#ffffff` | Text/icon on primary |
+| `--ui-link` / `--ui-focus` | `#006aff` | Text links + focus ring **only** (never fills) |
+| `--ui-success-bg/fg` | `#e7f6ec` / `#0a7d33` | Pale success badge |
+| `--ui-warning-bg/fg` | `#fdf1e3` / `#a5620a` | Pale warning badge |
+| `--ui-danger-bg/fg` · `--ui-danger` | `#fdecea` / `#c0341d` · `#c0341d` | Pale danger badge · solid danger |
+| `--ui-radius-sm/md/lg/pill` | `8px / 12px / 16px / 9999px` | Radii (inputs / cards / containers / pills) |
+| `--ui-shadow` · `--ui-shadow-lg` | `none` · `0 8px 30px rgba(0,0,0,.08)` | Elevation is **off** — flatness comes from hairline borders; `-lg` is drawers/modals only |
+| `--ui-font` | `"Inter Variable", "Inter", system-ui…` | Type |
 
-**Utility classes:** `.ui-shell-bg` (gradient background consumed by `PageShell`), `.ui-focus-ring` (2px solid `--ui-primary` outline on `:focus-visible`, used across `primitives.jsx` inputs/buttons).
+**Legacy aliases** (defined so old/ad-hoc sites heal instead of rendering transparent): `--ui-muted`, `--ui-accent`, `--ui-bg-hover/-muted/-elevated`, `--ui-surface-muted`, plus an un-prefixed namespace (`--text-primary`, `--accent`, `--border`, `--bg-card`, …) — all mapped onto the Square palette. Prefer the canonical `--ui-*` names above in new code.
 
-`Input`/`Select` use a literal `bg-white` rather than `bg-(--ui-surface)` — they do not visually invert in dark mode the way `SectionCard`/`Button` do. Known, not yet fixed.
+**Utility classes:** `.ui-shell-bg` (solid `--ui-bg` background), `.ui-focus-ring` (2px solid `--ui-focus` outline on `:focus-visible`, used across `primitives.jsx`), `.ui-anim-drawer` / `.ui-anim-fade` (drawer slide-in / fade-in). `Input`/`Select` use literal `bg-white` (fine — light-only, no dark inversion to worry about).
 
 ---
 

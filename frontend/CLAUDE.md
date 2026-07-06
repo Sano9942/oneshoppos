@@ -49,9 +49,9 @@ Provider nesting: `CurrencyProvider → ToastProvider → AuthProvider → Prese
 - `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded }`.
 
 ### `src/ui/` — see `src/ui/CLAUDE.md`
-Design system primitives, banners, and shared components. Most components use CSS custom property classes for dark mode (exception: POS uses hardcoded colors). Several `ui/` files still use fixed Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, and parts of `SupportWidget.jsx`. In `primitives.jsx`, `Badge`, `BulkActionBar`, and the modal backdrop also use fixed colors.
+Design system primitives, banners, and shared components — the **Square design system** (light-only; dark mode removed in the 2026-07-06 reskin). Components style via `--ui-*` tokens (`ui/tokens.css`): black primary, hairline borders, flat/no shadow, pill buttons, Inter. `primitives.jsx` is fully token-based (incl. `Badge`/`BulkActionBar`). Still-hardcoded exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, and the `Modal`/`Drawer` `bg-black/45` scrim. POS uses hardcoded colors by exception.
 
-Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `SectionCard({ children, className? })`, `Button`, `Input`, `Select`, `Badge`, `Modal`, `ConfirmDialog`, `TabBar`. `PageShell` has no `actions` prop; `SectionCard` has no `title` prop.
+Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `SectionCard({ children, className? })`, `Button`, `Input`, `Select`, `Badge`, `Modal`, `Drawer`, `ConfirmDialog`, `TabBar`, `Toggle`, `Tooltip`, `FilterPill`, `EmptyState`. `PageShell` has no `actions` prop; `SectionCard` has no `title` prop and is flat (no shadow). `Button` primary tone is black; use `tone` not `variant`.
 
 `ErrorBoundary` is a **named export**: `import { ErrorBoundary } from "../ui/ErrorBoundary"`.
 
@@ -60,7 +60,7 @@ Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `S
 - `csvExport.js` — `downloadCsv(headers, rows, filename)`. Use this for all new pages; do not write inline Blob code.
 - `receipt.js` — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. `slip.timestamp` must be a pre-formatted string — call `fmtDateTime()` before passing.
 - `offlineQueue.js` — IndexedDB-backed POS offline queue (sale/return/check_in/field_order types).
-- `theme.js` — dark mode: `getTheme()`, `setTheme()`, `toggleTheme()`, `initTheme()`. Stored in `localStorage["sanopos_theme"]`, applied via `document.documentElement.dataset.theme`.
+- `theme.js` — **removed** in the Square reskin (app is light-only; no dark mode). `App.jsx` no longer calls `initTheme()`. Any `initTheme`/`toggleTheme`/`sanopos_theme` mentions still lingering in nested `src/*/CLAUDE.md` sub-guides are stale.
 
 ### `src/routes/` — see `src/routes/CLAUDE.md`
 - `publicRoutes.jsx` — unauthenticated routes: `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug`, `/portal/:tenantSlug`, `/manufacturer-portal/:tenantSlug`, public booking/menu pages. Also hosts `/pos`, `/kiosk`, `/context-select` (full-screen, self-wrapped in `<RequireAuth>`).
@@ -98,8 +98,8 @@ CSS-first config — no `tailwind.config.js`. Rules:
 ### Currency
 `const { fmt } = useCurrency()` in components — never hardcode currency symbols.
 
-### Dark Mode
-Automatic via CSS variables on `[data-theme="dark"]`. No special handling needed in page components. POS is the exception — uses hardcoded colors.
+### Design System (Square) — light-only
+The app runs the **Square design system** (merged to `main` 2026-07-06, tag `v-square-redesign-merged`). **Light-only — dark mode was removed** (no `[data-theme]`, `theme.js` deleted). Build every new/edited surface from `ui/primitives.jsx` (`PageShell`, `SectionCard`, `Button`, `Input`, `Modal`, `Drawer`, `TabBar`, `Badge`, …) and `--ui-*` tokens from `ui/tokens.css` — black primary (`#101010`), hairline borders, flat (no shadow), pill buttons, Inter. **Never** hardcode Tailwind color classes (`bg-slate-800`, `text-indigo-600`) or arbitrary hex. When unsure, match an existing `*Redesign.jsx` page. Spec: `docs/fable5/redesign-spec.md`. POS is the one hardcoded-color exception.
 
 ### Toast Notifications
 `const { success, error, warning } = useToast()` from `contexts/ToastContext.jsx`. Page-level error pattern: `catch(err) { toast.error(err.message || "Something went wrong") }`.
