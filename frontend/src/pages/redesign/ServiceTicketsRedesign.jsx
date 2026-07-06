@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
-import { Plus, ArrowLeft, X, FileText, Clock, User, Wrench } from "lucide-react";
+import { Plus, ArrowLeft, X, FileText, User, Smartphone, Eye, EyeOff, Trash2, History, Camera } from "lucide-react";
 import { api } from "../../api";
 
 const STATUS_TONES = {
@@ -47,19 +47,128 @@ function fmtDateTime(iso) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/* ── Create Ticket Modal ─────────────────────────────────────────── */
+const EMPTY_DEVICE = {
+  device_type: "", brand: "", model: "", serial_number: "", imei: "",
+  passcode: "", condition_notes: "", accessories: "",
+};
+
+function accessoriesToArray(str) {
+  return (str || "").split(",").map(s => s.trim()).filter(Boolean);
+}
+
+/* ── Prior-device history banner ─────────────────────────────────── */
+
+function DeviceHistoryBanner({ matches }) {
+  if (!matches || matches.length === 0) return null;
+  const warrantyMatch = matches.find(m => m.in_warranty);
+  return (
+    <div className="rounded-lg border border-(--ui-warning) bg-(--ui-warning-bg) px-3 py-2 text-xs text-(--ui-warning-fg)">
+      <div className="flex items-center gap-1.5 font-medium mb-1">
+        <History className="w-3.5 h-3.5" />
+        {warrantyMatch
+          ? `Warranty return — under warranty until ${fmtDate(warrantyMatch.warranty_until)}`
+          : `Seen before — ${matches.length} prior ticket${matches.length > 1 ? "s" : ""}`}
+      </div>
+      <ul className="space-y-0.5 text-(--ui-warning-fg)">
+        {matches.slice(0, 3).map(m => (
+          <li key={m.ticket_id}>
+            {m.ticket_number} · {m.title} · {fmtDate(m.created_at)}
+            {m.in_warranty && <span className="font-semibold"> · under warranty</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ── Device intake fields (shared by create modal + add-device) ──── */
+
+function DeviceIntakeFields({ device, set, historyMatches, onLookup }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Device Type</label>
+          <Input value={device.device_type} onChange={e => set("device_type", e.target.value)} placeholder="Phone" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Brand</label>
+          <Input value={device.brand} onChange={e => set("brand", e.target.value)} placeholder="Apple" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Model</label>
+          <Input value={device.model} onChange={e => set("model", e.target.value)} placeholder="iPhone 12" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">IMEI</label>
+          <Input
+            value={device.imei}
+            onChange={e => set("imei", e.target.value)}
+            onBlur={() => onLookup && device.imei && onLookup({ imei: device.imei })}
+            placeholder="15-digit IMEI"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Serial Number</label>
+          <Input
+            value={device.serial_number}
+            onChange={e => set("serial_number", e.target.value)}
+            onBlur={() => onLookup && device.serial_number && onLookup({ serial: device.serial_number })}
+            placeholder="Serial"
+          />
+        </div>
+      </div>
+      <DeviceHistoryBanner matches={historyMatches} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Passcode</label>
+          <Input value={device.passcode} onChange={e => set("passcode", e.target.value)} placeholder="Stored encrypted" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Accessories</label>
+          <Input value={device.accessories} onChange={e => set("accessories", e.target.value)} placeholder="charger, case" />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Condition Notes</label>
+        <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)" rows={2} value={device.condition_notes} onChange={e => set("condition_notes", e.target.value)} placeholder="Front glass shattered, LCD intact..." />
+      </div>
+    </div>
+  );
+}
+
+/* ── Create Ticket Modal (one-page intake) ───────────────────────── */
 
 function CreateTicketModal({ customers, employees, onClose, onCreated }) {
   const toast = useToast();
-  const { fmt } = useCurrency();
+  const [types, setTypes] = useState([]);
   const [form, setForm] = useState({
     title: "", description: "", customer_id: "", outlet_id: "",
-    assigned_to: "", expected_completion: "", deposit_amount: "",
+    assigned_to: "", ticket_type_id: "", expected_completion: "", deposit_amount: "",
     deposit_method: "cash", notes: "",
   });
+  const [device, setDevice] = useState({ ...EMPTY_DEVICE });
+  const [historyMatches, setHistoryMatches] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    api.get("/api/service-tickets/types").then(d => setTypes(d.types || [])).catch(() => {});
+  }, []);
+
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const setDev = (k, v) => setDevice(prev => ({ ...prev, [k]: v }));
+
+  const lookup = useCallback(async ({ imei, serial }) => {
+    try {
+      const q = imei ? { imei } : { serial };
+      const d = await api.get("/api/service-tickets/device-history", q);
+      setHistoryMatches(d.history || []);
+    } catch { /* non-fatal */ }
+  }, []);
+
+  const deviceHasData = Object.values(device).some(v => String(v).trim());
 
   const submit = async () => {
     if (!form.title.trim()) { toast.error("Title is required"); return; }
@@ -71,11 +180,24 @@ function CreateTicketModal({ customers, employees, onClose, onCreated }) {
         customer_id: form.customer_id ? Number(form.customer_id) : undefined,
         outlet_id: form.outlet_id ? Number(form.outlet_id) : undefined,
         assigned_to: form.assigned_to ? Number(form.assigned_to) : undefined,
+        ticket_type_id: form.ticket_type_id ? Number(form.ticket_type_id) : undefined,
         expected_completion: form.expected_completion || undefined,
         deposit_amount: form.deposit_amount ? Number(form.deposit_amount) : undefined,
         deposit_method: form.deposit_amount ? form.deposit_method : undefined,
         notes: form.notes || undefined,
       };
+      if (deviceHasData) {
+        body.devices = [{
+          device_type: device.device_type || undefined,
+          brand: device.brand || undefined,
+          model: device.model || undefined,
+          serial_number: device.serial_number || undefined,
+          imei: device.imei || undefined,
+          passcode: device.passcode || undefined,
+          condition_notes: device.condition_notes || undefined,
+          accessories: accessoriesToArray(device.accessories),
+        }];
+      }
       await api.post("/api/service-tickets", body);
       toast.success("Ticket created");
       onCreated();
@@ -86,19 +208,24 @@ function CreateTicketModal({ customers, employees, onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-(--ui-text)">New Service Ticket</h2>
           <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X className="w-5 h-5" /></button>
         </div>
         <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Title *</label>
-            <Input value={form.title} onChange={e => set("title", e.target.value)} placeholder="e.g. iPhone screen repair" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Description</label>
-            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)" rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Details about the job..." />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Title *</label>
+              <Input value={form.title} onChange={e => set("title", e.target.value)} placeholder="e.g. iPhone screen repair" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Repair Type</label>
+              <Select value={form.ticket_type_id} onChange={e => set("ticket_type_id", e.target.value)}>
+                <option value="">-- Select --</option>
+                {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -116,13 +243,27 @@ function CreateTicketModal({ customers, employees, onClose, onCreated }) {
               </Select>
             </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Expected Completion</label>
-            <Input type="date" value={form.expected_completion} onChange={e => set("expected_completion", e.target.value)} />
+
+          {/* Device intake */}
+          <div className="rounded-lg border border-(--ui-border) p-3">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-(--ui-text) mb-3">
+              <Smartphone className="w-4 h-4" /> Device
+              <span className="text-xs font-normal text-(--ui-text-muted)">(optional — leave blank for a plain service job)</span>
+            </div>
+            <DeviceIntakeFields device={device} set={setDev} historyMatches={historyMatches} onLookup={lookup} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div>
+            <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Problem Description</label>
+            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)" rows={2} value={form.description} onChange={e => set("description", e.target.value)} placeholder="What's wrong / what the customer reported..." />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Deposit Amount</label>
+              <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Expected Completion</label>
+              <Input type="date" value={form.expected_completion} onChange={e => set("expected_completion", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Deposit</label>
               <Input type="number" min="0" step="0.01" value={form.deposit_amount} onChange={e => set("deposit_amount", e.target.value)} placeholder="0.00" />
             </div>
             <div>
@@ -132,10 +273,6 @@ function CreateTicketModal({ customers, employees, onClose, onCreated }) {
               </Select>
             </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Notes</label>
-            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)" rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Internal notes..." />
-          </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button tone="default" onClick={onClose}>Cancel</Button>
             <Button tone="primary" disabled={saving} onClick={submit}>{saving ? "Creating..." : "Create Ticket"}</Button>
@@ -143,6 +280,388 @@ function CreateTicketModal({ customers, employees, onClose, onCreated }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Checklist tri-state control ─────────────────────────────────── */
+
+function ChecklistRow({ label, value, onChange }) {
+  const opts = [
+    { v: true, txt: "Pass", tone: "success" },
+    { v: false, txt: "Fail", tone: "danger" },
+    { v: null, txt: "—", tone: "default" },
+  ];
+  return (
+    <div className="flex items-center justify-between gap-2 py-1">
+      <span className="text-sm text-(--ui-text)">{label}</span>
+      <div className="flex gap-1">
+        {opts.map(o => (
+          <button
+            key={String(o.v)}
+            onClick={() => onChange(o.v)}
+            className={`px-2 py-0.5 rounded text-xs border transition-colors ${
+              value === o.v
+                ? o.tone === "success" ? "bg-(--ui-success-bg) text-(--ui-success-fg) border-transparent"
+                : o.tone === "danger" ? "bg-(--ui-danger-bg) text-(--ui-danger-fg) border-transparent"
+                : "bg-(--ui-muted-surface) text-(--ui-text) border-(--ui-border)"
+                : "border-(--ui-border) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
+            }`}
+          >
+            {o.txt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Device card (detail view) ───────────────────────────────────── */
+
+function DeviceCard({ ticketId, device, onChanged }) {
+  const toast = useToast();
+  const [revealed, setRevealed] = useState(null);
+  const [checklist, setChecklist] = useState(device.checklist || {});
+  const [savingCk, setSavingCk] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const reveal = async () => {
+    if (revealed !== null) { setRevealed(null); return; }
+    try {
+      const r = await api.post(`/api/service-tickets/${ticketId}/devices/${device.id}/reveal-passcode`);
+      setRevealed(r.passcode || "(none)");
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const setCheck = async (label, val) => {
+    const next = { ...checklist, [label]: val };
+    setChecklist(next);
+    setSavingCk(true);
+    try {
+      await api.put(`/api/service-tickets/${ticketId}/devices/${device.id}`, { checklist: next });
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingCk(false); }
+  };
+
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { url } = await api.upload(`/api/service-tickets/${ticketId}/devices/${device.id}/photos`, fd);
+      const photos = [...(device.photos || []), url];
+      await api.put(`/api/service-tickets/${ticketId}/devices/${device.id}`, { photos });
+      toast.success("Photo added");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const remove = async () => {
+    if (!confirm("Remove this device from the ticket?")) return;
+    try {
+      await api.del(`/api/service-tickets/${ticketId}/devices/${device.id}`);
+      toast.success("Device removed");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const title = [device.brand, device.model].filter(Boolean).join(" ") || device.device_type || "Device";
+  const checklistKeys = Object.keys(checklist);
+
+  return (
+    <div className="rounded-lg border border-(--ui-border) p-3 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-(--ui-text)">
+            <Smartphone className="w-4 h-4" /> {title}
+          </div>
+          <div className="text-xs text-(--ui-text-muted) mt-0.5 space-x-2">
+            {device.imei && <span>IMEI: {device.imei}</span>}
+            {device.serial_number && <span>SN: {device.serial_number}</span>}
+          </div>
+        </div>
+        <button onClick={remove} className="text-(--ui-text-muted) hover:text-(--ui-danger)" title="Remove device">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {device.condition_notes && <p className="text-sm text-(--ui-text-muted)">{device.condition_notes}</p>}
+
+      {device.accessories?.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {device.accessories.map((a, i) => <Badge key={i} tone="default">{a}</Badge>)}
+        </div>
+      )}
+
+      {/* Passcode reveal */}
+      {device.has_passcode && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-(--ui-text-muted)">Passcode:</span>
+          {revealed !== null
+            ? <span className="font-mono text-(--ui-text)">{revealed}</span>
+            : <span className="font-mono text-(--ui-text-muted)">••••</span>}
+          <button onClick={reveal} className="text-(--ui-primary) hover:opacity-80" title={revealed !== null ? "Hide" : "Reveal"}>
+            {revealed !== null ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      )}
+
+      {/* Checklist */}
+      {checklistKeys.length > 0 && (
+        <div className="border-t border-(--ui-border) pt-2">
+          <div className="text-xs font-medium text-(--ui-text-muted) mb-1">Pre-repair checklist {savingCk && "· saving…"}</div>
+          {checklistKeys.map(k => (
+            <ChecklistRow key={k} label={k} value={checklist[k]} onChange={v => setCheck(k, v)} />
+          ))}
+        </div>
+      )}
+
+      {/* Photos */}
+      <div className="border-t border-(--ui-border) pt-2">
+        <div className="flex items-center gap-2 mb-2">
+          {(device.photos || []).map((p, i) => (
+            <a key={i} href={p} target="_blank" rel="noreferrer">
+              <img src={p} alt="condition" className="w-12 h-12 object-cover rounded border border-(--ui-border)" />
+            </a>
+          ))}
+          <label className="w-12 h-12 rounded border border-dashed border-(--ui-border) flex items-center justify-center cursor-pointer text-(--ui-text-muted) hover:bg-(--ui-muted-surface)">
+            <Camera className="w-4 h-4" />
+            <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={e => uploadPhoto(e.target.files?.[0])} />
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Add-device form (detail view) ───────────────────────────────── */
+
+function AddDeviceForm({ ticketId, onAdded, onCancel }) {
+  const toast = useToast();
+  const [device, setDevice] = useState({ ...EMPTY_DEVICE });
+  const [historyMatches, setHistoryMatches] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const setDev = (k, v) => setDevice(prev => ({ ...prev, [k]: v }));
+
+  const lookup = useCallback(async ({ imei, serial }) => {
+    try {
+      const q = imei ? { imei } : { serial };
+      const d = await api.get("/api/service-tickets/device-history", { ...q, exclude: ticketId });
+      setHistoryMatches(d.history || []);
+    } catch { /* non-fatal */ }
+  }, [ticketId]);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await api.post(`/api/service-tickets/${ticketId}/devices`, {
+        device_type: device.device_type || undefined,
+        brand: device.brand || undefined,
+        model: device.model || undefined,
+        serial_number: device.serial_number || undefined,
+        imei: device.imei || undefined,
+        passcode: device.passcode || undefined,
+        condition_notes: device.condition_notes || undefined,
+        accessories: accessoriesToArray(device.accessories),
+      });
+      toast.success("Device added");
+      onAdded();
+    } catch (err) { toast.error(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="rounded-lg border border-(--ui-border) p-3 space-y-3">
+      <DeviceIntakeFields device={device} set={setDev} historyMatches={historyMatches} onLookup={lookup} />
+      <div className="flex justify-end gap-2">
+        <Button tone="default" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button tone="primary" size="sm" disabled={saving} onClick={submit}>{saving ? "Adding…" : "Add Device"}</Button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Parts & labor section (detail view) ─────────────────────────── */
+
+const ITEM_TYPE_TONES = { part: "success", labor: "warning", fee: "default" };
+
+function PartsSection({ ticketId, items, ticketStatus, fmt, onChanged }) {
+  const toast = useToast();
+  const editable = !["invoiced", "cancelled"].includes(ticketStatus);
+  const [mode, setMode] = useState("part");
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [serials, setSerials] = useState([]);
+  const [serialId, setSerialId] = useState("");
+  const [qty, setQty] = useState("1");
+  const [price, setPrice] = useState("");
+  const [desc, setDesc] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const search = async (text) => {
+    setQ(text); setPicked(null); setSerials([]); setSerialId("");
+    if (!text.trim()) { setResults([]); return; }
+    try {
+      const d = await api.get("/api/products/search", { query: text });
+      setResults((d.products || []).slice(0, 6));
+    } catch { setResults([]); }
+  };
+
+  const pick = async (p) => {
+    setPicked(p); setResults([]); setQ(p.name);
+    setPrice(String(p.price ?? ""));
+    if (p.serial_required) {
+      try {
+        const d = await api.get(`/api/products/${p.id}/serials`, { status: "available" });
+        setSerials(d.serials || []);
+      } catch { setSerials([]); }
+    }
+  };
+
+  const addPart = async () => {
+    if (!picked) { toast.error("Pick a product"); return; }
+    if (picked.serial_required && !serialId) { toast.error("Select a serial"); return; }
+    setBusy(true);
+    try {
+      await api.post(`/api/service-tickets/${ticketId}/items`, {
+        item_type: "part",
+        product_id: picked.id,
+        quantity: Number(qty) || 1,
+        unit_price: price !== "" ? Number(price) : undefined,
+        product_serial_id: serialId ? Number(serialId) : undefined,
+      });
+      toast.success("Part added");
+      setQ(""); setPicked(null); setSerials([]); setSerialId(""); setQty("1"); setPrice("");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const addLine = async (type) => {
+    if (!desc.trim() || amount === "") { toast.error("Description and amount required"); return; }
+    setBusy(true);
+    try {
+      await api.post(`/api/service-tickets/${ticketId}/items`, {
+        item_type: type, description: desc, unit_price: Number(amount), quantity: 1,
+      });
+      toast.success(`${type} added`);
+      setDesc(""); setAmount("");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (itemId) => {
+    try {
+      await api.del(`/api/service-tickets/${ticketId}/items/${itemId}`);
+      toast.success("Removed");
+      onChanged();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const subtotal = (items || []).reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+
+  return (
+    <SectionCard>
+      <h4 className="text-sm font-semibold text-(--ui-text) mb-3">Parts &amp; Labor</h4>
+      {(items || []).length === 0 ? (
+        <p className="text-sm text-(--ui-text-muted) mb-3">No parts or labor added yet.</p>
+      ) : (
+        <table className="w-full text-sm mb-3">
+          <tbody>
+            {items.map(it => (
+              <tr key={it.id} className="border-b border-(--ui-border)">
+                <td className="py-1.5"><Badge tone={ITEM_TYPE_TONES[it.item_type]}>{it.item_type}</Badge></td>
+                <td className="py-1.5 text-(--ui-text)">
+                  {it.description}
+                  {it.serial_number && <span className="text-xs text-(--ui-text-muted)"> · SN {it.serial_number}</span>}
+                </td>
+                <td className="py-1.5 text-right text-(--ui-text-muted) whitespace-nowrap">{Number(it.quantity)} × {fmt(it.unit_price)}</td>
+                <td className="py-1.5 text-right text-(--ui-text) font-medium whitespace-nowrap">{fmt(Number(it.quantity) * Number(it.unit_price))}</td>
+                <td className="py-1.5 text-right pl-2">
+                  {editable && <button onClick={() => remove(it.id)} className="text-(--ui-text-muted) hover:text-(--ui-danger)"><X className="w-3.5 h-3.5" /></button>}
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={3} className="py-2 text-right text-(--ui-text-muted) font-medium">Subtotal</td>
+              <td className="py-2 text-right text-(--ui-text) font-bold whitespace-nowrap">{fmt(subtotal)}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      {editable && (
+        <div className="border-t border-(--ui-border) pt-3">
+          <div className="flex gap-1 mb-3">
+            {["part", "labor", "fee"].map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className={`px-3 py-1 rounded text-xs capitalize ${mode === m ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          {mode === "part" ? (
+            <div className="space-y-2">
+              <div className="relative">
+                <Input value={q} onChange={e => search(e.target.value)} placeholder="Search a part by name / SKU / barcode..." />
+                {results.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-(--ui-surface) border border-(--ui-border) rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {results.map(p => (
+                      <button key={p.id} onClick={() => pick(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) flex justify-between gap-2">
+                        <span className="text-(--ui-text)">{p.name}</span>
+                        <span className="text-(--ui-text-muted) whitespace-nowrap">{fmt(p.price)} · {Number(p.local_stock)} in stock</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {picked && (
+                <div className="grid grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="text-xs text-(--ui-text-muted) mb-1 block">Qty</label>
+                    <Input type="number" min="0.0001" step="any" value={qty} onChange={e => setQty(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-(--ui-text-muted) mb-1 block">Unit Price</label>
+                    <Input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} />
+                  </div>
+                  {picked.serial_required ? (
+                    <div>
+                      <label className="text-xs text-(--ui-text-muted) mb-1 block">Serial</label>
+                      <Select value={serialId} onChange={e => setSerialId(e.target.value)}>
+                        <option value="">-- Select --</option>
+                        {serials.map(s => <option key={s.id} value={s.id}>{s.serial_number}</option>)}
+                      </Select>
+                    </div>
+                  ) : <div />}
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button tone="primary" size="sm" disabled={busy || !picked} onClick={addPart}>Add Part</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+              <div>
+                <label className="text-xs text-(--ui-text-muted) mb-1 block">Description</label>
+                <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder={mode === "labor" ? "Repair labor" : "Service fee"} />
+              </div>
+              <div>
+                <label className="text-xs text-(--ui-text-muted) mb-1 block">Amount</label>
+                <Input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="w-28" />
+              </div>
+              <Button tone="primary" size="sm" disabled={busy} onClick={() => addLine(mode)}>Add</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -155,6 +674,7 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
   const [loading, setLoading] = useState(true);
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [addingDevice, setAddingDevice] = useState(false);
 
   const [paymentEnabled, setPaymentEnabled] = useState(false);
   const [depositAmt, setDepositAmt] = useState("");
@@ -214,6 +734,16 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
     finally { setSubmitting(false); }
   };
 
+  const sendEstimate = async () => {
+    setSubmitting(true);
+    try {
+      const r = await api.post(`/api/service-tickets/${ticketId}/send-estimate`);
+      toast.success(`Estimate sent to customer (${fmt(r.total)})`);
+      load();
+    } catch (err) { toast.error(err.message); }
+    finally { setSubmitting(false); }
+  };
+
   const addNote = async () => {
     if (!noteText.trim()) return;
     try {
@@ -244,11 +774,17 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-xl font-bold text-(--ui-text)">{ticket.ticket_number}</h2>
               <Badge tone={STATUS_TONES[ticket.status]}>{STATUS_LABELS[ticket.status]}</Badge>
+              {ticket.ticket_type_name && <Badge tone="default">{ticket.ticket_type_name}</Badge>}
             </div>
             <h3 className="text-lg text-(--ui-text)">{ticket.title}</h3>
             {ticket.customer_name && <p className="text-sm text-(--ui-text-muted) mt-1"><User className="w-3.5 h-3.5 inline mr-1" />{ticket.customer_name}</p>}
           </div>
           <div className="flex gap-2 flex-wrap">
+            {ticket.status === "intake" && (
+              <Button tone="default" size="sm" disabled={submitting} onClick={sendEstimate}>
+                <FileText className="w-3.5 h-3.5 mr-1" /> Send Estimate
+              </Button>
+            )}
             {actions.map(a => (
               <Button key={a.status} tone={a.tone} size="sm" disabled={submitting} onClick={() => changeStatus(a.status)}>
                 {a.label}
@@ -271,9 +807,41 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Details */}
         <div className="md:col-span-2 space-y-4">
+          {/* Devices */}
+          <SectionCard>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-(--ui-text)">Devices</h4>
+              {!addingDevice && (
+                <Button tone="default" size="sm" onClick={() => setAddingDevice(true)}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Device
+                </Button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {(ticket.devices || []).map(d => (
+                <DeviceCard key={d.id} ticketId={ticketId} device={d} onChanged={load} />
+              ))}
+              {addingDevice && (
+                <AddDeviceForm ticketId={ticketId} onAdded={() => { setAddingDevice(false); load(); }} onCancel={() => setAddingDevice(false)} />
+              )}
+              {(!ticket.devices || ticket.devices.length === 0) && !addingDevice && (
+                <p className="text-sm text-(--ui-text-muted)">No devices attached — add one for repair jobs, or leave empty for a plain service.</p>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* Parts & Labor */}
+          <PartsSection
+            ticketId={ticketId}
+            items={ticket.items}
+            ticketStatus={ticket.status}
+            fmt={fmt}
+            onChanged={load}
+          />
+
           {ticket.description && (
             <SectionCard>
-              <h4 className="text-sm font-semibold text-(--ui-text) mb-2">Description</h4>
+              <h4 className="text-sm font-semibold text-(--ui-text) mb-2">Problem Description</h4>
               <p className="text-sm text-(--ui-text-muted) whitespace-pre-wrap">{ticket.description}</p>
             </SectionCard>
           )}
@@ -324,6 +892,7 @@ function TicketDetail({ ticketId, onBack, onRefresh }) {
               <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Assigned To</dt><dd className="text-(--ui-text)">{ticket.assigned_to_name || "Unassigned"}</dd></div>
               <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Expected</dt><dd className="text-(--ui-text)">{fmtDate(ticket.expected_completion)}</dd></div>
               {ticket.actual_completion && <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Completed</dt><dd className="text-(--ui-text)">{fmtDateTime(ticket.actual_completion)}</dd></div>}
+              {ticket.warranty_until && <div className="flex justify-between"><dt className="text-(--ui-text-muted)">Warranty until</dt><dd className="text-(--ui-text)">{fmtDate(ticket.warranty_until)}</dd></div>}
             </dl>
           </SectionCard>
 
@@ -438,8 +1007,8 @@ export default function ServiceTicketsRedesign() {
         <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by ticket # or title..."
-          className="w-64"
+          placeholder="Search by ticket #, IMEI, serial, or phone..."
+          className="w-72"
         />
       </div>
 
@@ -456,6 +1025,7 @@ export default function ServiceTicketsRedesign() {
                 <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                   <th className="py-2 px-3 font-medium">Ticket #</th>
                   <th className="py-2 px-3 font-medium">Title</th>
+                  <th className="py-2 px-3 font-medium">Type</th>
                   <th className="py-2 px-3 font-medium">Customer</th>
                   <th className="py-2 px-3 font-medium">Status</th>
                   <th className="py-2 px-3 font-medium">Assigned To</th>
@@ -473,6 +1043,7 @@ export default function ServiceTicketsRedesign() {
                   >
                     <td className="py-2.5 px-3 font-mono text-xs text-(--ui-primary)">{t.ticket_number}</td>
                     <td className="py-2.5 px-3 text-(--ui-text) font-medium max-w-[200px] truncate">{t.title}</td>
+                    <td className="py-2.5 px-3 text-(--ui-text-muted)">{t.ticket_type_name || "-"}</td>
                     <td className="py-2.5 px-3 text-(--ui-text-muted)">{t.customer_name || "-"}</td>
                     <td className="py-2.5 px-3"><Badge tone={STATUS_TONES[t.status]}>{STATUS_LABELS[t.status]}</Badge></td>
                     <td className="py-2.5 px-3 text-(--ui-text-muted)">{t.assigned_to_name || "-"}</td>

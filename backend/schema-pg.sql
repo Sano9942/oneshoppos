@@ -4312,6 +4312,18 @@ CREATE INDEX IF NOT EXISTS idx_sms_messages_provider_ref ON sms_provider_message
 
 -- ── Service Tickets (M2 Workflow Engine) ────────────────────────────
 
+-- V06 repair depth: per-repair-type checklist templates (F03 fallback).
+-- Defined before service_tickets so its ticket_type_id FK resolves.
+CREATE TABLE IF NOT EXISTS ticket_types (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  checklist_template JSONB NOT NULL DEFAULT '[]',
+  default_warranty_days INTEGER,
+  sort_order INTEGER DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS service_tickets (
   id SERIAL PRIMARY KEY,
   ticket_number TEXT NOT NULL UNIQUE,
@@ -4319,6 +4331,7 @@ CREATE TABLE IF NOT EXISTS service_tickets (
   outlet_id INTEGER REFERENCES outlets(id),
   created_by INTEGER NOT NULL REFERENCES employees(id),
   assigned_to INTEGER REFERENCES employees(id),
+  ticket_type_id INTEGER REFERENCES ticket_types(id),
   status TEXT NOT NULL DEFAULT 'intake'
     CHECK (status IN ('intake','approved','in_progress','on_hold','completed','invoiced','cancelled')),
   title TEXT NOT NULL,
@@ -4333,8 +4346,11 @@ CREATE TABLE IF NOT EXISTS service_tickets (
   deposit_payment_intent_id TEXT,
   deposit_authorized_at TIMESTAMPTZ,
   final_invoice_id INTEGER REFERENCES customer_invoices(id),
+  quotation_id INTEGER REFERENCES quotations(id),
   expected_completion DATE,
   actual_completion TIMESTAMPTZ,
+  warranty_days INTEGER,
+  warranty_until DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -4347,12 +4363,62 @@ CREATE TABLE IF NOT EXISTS service_ticket_activities (
   ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
   actor_id INTEGER REFERENCES employees(id),
   activity_type TEXT NOT NULL
-    CHECK (activity_type IN ('note','status_change','assignment','deposit_recorded','invoice_generated')),
+    CHECK (activity_type IN ('note','status_change','assignment','deposit_recorded','invoice_generated',
+      'device_added','device_updated','device_removed','passcode_revealed',
+      'part_added','part_removed')),
   description TEXT,
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_ticket_activities_ticket ON service_ticket_activities(ticket_id);
+
+-- V06 repair depth: the device entity (make/model/serial/IMEI/passcode/condition).
+-- passcode holds AES-256-GCM ciphertext (enc:v1:...) via services/crypto.js;
+-- reveal-on-click decrypts. NEVER included in any portal payload.
+CREATE TABLE IF NOT EXISTS ticket_devices (
+  id SERIAL PRIMARY KEY,
+  service_ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+  device_type TEXT, brand TEXT, model TEXT,
+  serial_number TEXT, imei TEXT,
+  passcode TEXT,
+  condition_notes TEXT,
+  accessories JSONB NOT NULL DEFAULT '[]',
+  checklist JSONB NOT NULL DEFAULT '{}',
+  photos JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_devices_ticket ON ticket_devices(service_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_devices_imei ON ticket_devices(imei) WHERE imei IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ticket_devices_serial ON ticket_devices(serial_number) WHERE serial_number IS NOT NULL;
+
+-- Seed 3 default repair types (demo-readiness); empty-guarded, idempotent.
+INSERT INTO ticket_types (name, checklist_template, default_warranty_days, sort_order)
+SELECT * FROM (VALUES
+  ('Screen Replacement', '["Powers on","Screen cracked","Touch works","LCD intact","Frame bent"]'::jsonb, 30, 1),
+  ('Battery Replacement', '["Powers on","Holds charge","Swollen battery","Charges normally"]'::jsonb, 90, 2),
+  ('Water Damage', '["Powers on","Liquid indicator triggered","Corrosion visible","Screen functional","Speaker/mic working"]'::jsonb, 0, 3)
+) AS v(name, checklist_template, default_warranty_days, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM ticket_types);
+
+-- V06 repair depth: parts/labor/fee lines on a ticket. Parts decrement stock
+-- at add (stock_decremented guards double-decrement at invoice); product_serial_id
+-- links a serialized part to its chosen serial.
+CREATE TABLE IF NOT EXISTS service_ticket_items (
+  id SERIAL PRIMARY KEY,
+  service_ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+  item_type TEXT NOT NULL CHECK (item_type IN ('part','labor','fee')),
+  product_id INTEGER REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  product_serial_id INTEGER REFERENCES product_serial_numbers(id),
+  description TEXT NOT NULL,
+  quantity NUMERIC(12,4) NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12,2) NOT NULL,
+  unit_cost NUMERIC(12,4),
+  stock_decremented BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_service_ticket_items_ticket ON service_ticket_items(service_ticket_id);
 
 -- ── Customer Notifications (F05 status-change engine) ───────────────
 
@@ -4393,6 +4459,8 @@ INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
   ('ticket.status_changed:completed',   'sms',   'ticket_completed',   true),
   ('ticket.status_changed:completed',   'email', 'ticket_completed',   true),
   ('ticket.status_changed:invoiced',    'email', 'ticket_invoiced',    true),
+  ('ticket.estimate_ready',             'sms',   'ticket_estimate',    true),
+  ('ticket.estimate_ready',             'email', 'ticket_estimate',    true),
   ('appointment.reminder',              'sms',   'appointment_reminder', true)
 ON CONFLICT (event, channel) DO NOTHING;
 
