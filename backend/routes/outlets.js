@@ -43,16 +43,41 @@ module.exports = function registerOutletRoutes(app, deps) {
   // Note: kiosk_context_locked is NOT in the seed list — merchant opt-in.
   app.post("/api/outlets", requirePerm("all_access"), requirePlanLimit("outlets"), async (req, res) => {
     try {
-      const { name, address, phone } = req.body;
+      const { name, address, phone, outlet_type, van_rep_employee_id } = req.body;
+
+      // V02 wholesale van sales — a van IS an outlet, so all stock machinery
+      // works unmodified. Creating one requires the wholesale_van_sales flag;
+      // vans are exempt from the plan cap (plan-limits counts stores only)
+      // and do NOT trigger multi-outlet flag seeding (a van isn't a second
+      // selling location — enforcing context headers would break nothing but
+      // add friction for single-store + van distributors).
+      const isVan = outlet_type === "van";
+      if (outlet_type && !["store", "van"].includes(outlet_type)) {
+        return res.status(400).json({ error: "outlet_type must be 'store' or 'van'" });
+      }
+      if (isVan) {
+        try {
+          const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+          const flags = await getFeatureFlagsMap(req.tenantId);
+          if (!flags.wholesale_van_sales) {
+            return res.status(403).json({ error: "Feature disabled: wholesale_van_sales", flag: "wholesale_van_sales" });
+          }
+        } catch (e) {
+          return res.status(500).json({ error: e.message });
+        }
+      }
+
       const result = await db.transaction(async (client) => {
         const { rows: [{ id: outletId }] } = await client.query(
-          "INSERT INTO outlets (name, address, phone) VALUES ($1, $2, $3) RETURNING id",
-          [name, address, phone]
+          `INSERT INTO outlets (name, address, phone, outlet_type, van_rep_employee_id)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [name, address, phone, isVan ? "van" : "store", isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null]
         );
 
-        // Read the resulting outlet count + the seed-once flag in one round-trip.
+        // Read the resulting STORE count + the seed-once flag in one
+        // round-trip (vans never trigger multi-outlet seeding).
         const [{ rows: [{ cnt }] }, { rows: [profile] }] = await Promise.all([
-          client.query("SELECT COUNT(*) AS cnt FROM outlets"),
+          client.query("SELECT COUNT(*) AS cnt FROM outlets WHERE COALESCE(outlet_type, 'store') <> 'van'"),
           client.query("SELECT multi_outlet_flags_seeded FROM company_profile WHERE id = 1"),
         ]);
         const outletCount = Number(cnt);
@@ -75,6 +100,8 @@ module.exports = function registerOutletRoutes(app, deps) {
         name,
         address,
         phone,
+        outlet_type: isVan ? "van" : "store",
+        van_rep_employee_id: isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null,
         multi_outlet_flags_seeded: result.multiOutletSeeded,
       });
     } catch (err) {
@@ -86,10 +113,16 @@ module.exports = function registerOutletRoutes(app, deps) {
   app.put("/api/outlets/:id", requirePerm("all_access"), async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, address, phone } = req.body;
+      const { name, address, phone, van_rep_employee_id } = req.body;
+      // van_rep_employee_id: pass null explicitly to unassign; undefined
+      // leaves it unchanged (COALESCE can't express "clear", so gate on
+      // whether the key was present in the body).
+      const hasRepKey = Object.prototype.hasOwnProperty.call(req.body || {}, "van_rep_employee_id");
       const { rowCount } = await db.query(
-        "UPDATE outlets SET name = COALESCE($1, name), address = COALESCE($2, address), phone = COALESCE($3, phone) WHERE id = $4",
-        [name, address, phone, id]
+        `UPDATE outlets SET name = COALESCE($1, name), address = COALESCE($2, address), phone = COALESCE($3, phone),
+                van_rep_employee_id = CASE WHEN $5 THEN $4::int ELSE van_rep_employee_id END
+         WHERE id = $6`,
+        [name, address, phone, van_rep_employee_id != null ? Number(van_rep_employee_id) : null, hasRepKey, id]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Outlet not found" });
       res.json({ message: "Outlet updated successfully" });

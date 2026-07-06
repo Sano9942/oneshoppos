@@ -362,6 +362,37 @@ module.exports = function registerCustomerRoutes(app, deps) {
     );
     const current_balance_due = Number(curBal.amt);
 
+    // V02 wholesale backorders — MEMO section only. A backorder is not AR
+    // (no invoice exists until conversion), so these rows never touch the
+    // opening/closing balance math above; the statement just tells the buyer
+    // what's still owed to them in goods, at the price they ordered at.
+    let open_backorders = [];
+    let open_backorders_value = 0;
+    try {
+      const { rows: boRows } = await db.query(
+        `SELECT b.id, b.created_at, p.name AS product_name, pv.variant_name,
+                (b.qty_ordered - b.qty_fulfilled) AS qty_remaining,
+                b.unit_price, b.expected_at, b.status
+           FROM backorders b
+           JOIN products p ON p.id = b.product_id
+           LEFT JOIN product_variants pv ON pv.id = b.variant_id
+          WHERE b.customer_id = $1 AND b.status IN ('open','partial')
+          ORDER BY b.created_at ASC`,
+        [customerId]
+      );
+      open_backorders = boRows.map((r) => ({
+        id: r.id,
+        date_label: dateFmt(r.created_at),
+        product_name: r.product_name + (r.variant_name ? ` — ${r.variant_name}` : ""),
+        qty_remaining: Number(r.qty_remaining),
+        unit_price: Number(r.unit_price),
+        value: Math.round(Number(r.qty_remaining) * Number(r.unit_price) * 100) / 100,
+        expected_at: r.expected_at,
+        status: r.status,
+      }));
+      open_backorders_value = Math.round(open_backorders.reduce((s, r) => s + r.value, 0) * 100) / 100;
+    } catch { /* pre-v110 tenant — no memo section */ }
+
     return {
       customer: {
         id: customer.id,
@@ -383,6 +414,9 @@ module.exports = function registerCustomerRoutes(app, deps) {
       period_credits: Math.round(period_credits * 100) / 100,
       closing_balance,
       current_balance_due,
+      // memo only — never part of the balance math
+      open_backorders,
+      open_backorders_value,
     };
   }
 

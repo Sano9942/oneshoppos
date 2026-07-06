@@ -1382,4 +1382,192 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       }
     }
   );
+
+  // ── V02 wholesale: per-stop proof of delivery ─────────────────────
+  // POST /api/fulfillment/loadsheets/:id/orders/:webOrderId/pod
+  // Marks one loadsheet stop delivered/failed with signature + photo
+  // (base64 → R2, same pipeline as the field-rep selfie) and receiver name.
+  // Delivered → shipment status/tracking event (when a shipment exists) +
+  // F05 order.delivered notification. Failed stops stay on the run; the
+  // explicit return-to-stock endpoint below restocks the goods.
+  app.post("/api/fulfillment/loadsheets/:id/orders/:webOrderId/pod", perm, async (req, res) => {
+    try {
+      const { status, receiver_name, signature_base64, photo_base64, failed_reason } = req.body || {};
+      if (!["delivered", "failed"].includes(status)) {
+        return res.status(400).json({ error: "status must be 'delivered' or 'failed'" });
+      }
+      if (status === "delivered" && !receiver_name?.trim()) {
+        return res.status(400).json({ error: "receiver_name is required for a delivered stop" });
+      }
+
+      const { rows: [stop] } = await db.query(
+        `SELECT lo.id, lo.pod_status, wo.id AS web_order_id, wo.external_order_id,
+                wo.customer_phone_snapshot, wo.customer_name_snapshot
+           FROM loadsheet_orders lo
+           JOIN web_orders wo ON wo.id = lo.web_order_id
+          WHERE lo.loadsheet_id = $1 AND lo.web_order_id = $2`,
+        [req.params.id, req.params.webOrderId]
+      );
+      if (!stop) return res.status(404).json({ error: "Stop not found on this loadsheet" });
+      if (stop.pod_status === "delivered") {
+        return res.status(400).json({ error: "Stop is already marked delivered" });
+      }
+
+      // Base64 → R2 (best-effort: an upload failure must not block the
+      // driver in the field — same stance as the check-in selfie).
+      const { uploadToR2 } = require("../utils/r2");
+      async function uploadPodImage(b64, suffix) {
+        if (!b64) return null;
+        try {
+          const matches = String(b64).match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+          const mime = matches ? matches[1] : "image/jpeg";
+          const raw = matches ? matches[2] : b64;
+          const buffer = Buffer.from(raw, "base64");
+          const ext = (mime.split("/")[1] || "jpg").replace("+xml", "");
+          const key = `pod/${req.tenantSlug || "default"}/${req.params.id}/${req.params.webOrderId}-${suffix}.${ext}`;
+          return await uploadToR2(buffer, key, mime);
+        } catch (e) {
+          req.log?.warn?.({ err: e.message }, "POD image upload failed; continuing without");
+          return null;
+        }
+      }
+      const [signatureUrl, photoUrl] = await Promise.all([
+        uploadPodImage(signature_base64, "sig"),
+        uploadPodImage(photo_base64, "photo"),
+      ]);
+
+      const { rows: [updated] } = await db.query(
+        `UPDATE loadsheet_orders
+            SET pod_status = $1, pod_receiver_name = $2, pod_signature_url = $3,
+                pod_photo_url = $4, pod_failed_reason = $5, pod_at = NOW(), pod_by = $6
+          WHERE id = $7 RETURNING *`,
+        [
+          status,
+          receiver_name ? String(receiver_name).slice(0, 200) : null,
+          signatureUrl, photoUrl,
+          status === "failed" ? String(failed_reason || "").slice(0, 300) || "Delivery failed" : null,
+          req.employee?.id || null,
+          stop.id,
+        ]
+      );
+
+      // Reflect onto the shipment record + tracking timeline when one exists.
+      try {
+        const { rows: [shipment] } = await db.query(
+          `SELECT id FROM order_shipments WHERE web_order_id = $1 ORDER BY id DESC LIMIT 1`,
+          [stop.web_order_id]
+        );
+        if (shipment) {
+          await db.query(
+            `UPDATE order_shipments
+                SET status = $1, delivered_at = CASE WHEN $1 = 'delivered' THEN NOW() ELSE delivered_at END
+              WHERE id = $2`,
+            [status === "delivered" ? "delivered" : "failed", shipment.id]
+          );
+          await db.query(
+            `INSERT INTO shipment_tracking_events (shipment_id, event_status, event_description, event_timestamp)
+             VALUES ($1, $2, $3, NOW())`,
+            [
+              shipment.id,
+              status === "delivered" ? "delivered" : "delivery_failed",
+              status === "delivered"
+                ? `Delivered — received by ${receiver_name}`.slice(0, 300)
+                : `Delivery failed: ${failed_reason || "no reason given"}`.slice(0, 300),
+            ]
+          );
+        }
+      } catch (e) {
+        req.log?.warn?.({ err: e.message }, "POD shipment update skipped");
+      }
+
+      // F05 — customer notification. web_orders carries a phone snapshot, so
+      // pass it as data.mobile (recipient fallback for customer-less orders).
+      if (status === "delivered" && req.tenantSlug) {
+        try {
+          const { notify } = require("../services/customer-notify");
+          notify(db, {
+            event: "order.delivered",
+            data: {
+              storeName: req.company?.name,
+              orderNumber: stop.external_order_id,
+              receiverName: receiver_name,
+              mobile: stop.customer_phone_snapshot,
+            },
+            tenantSlug: req.tenantSlug,
+            tenant: { slug: req.tenantSlug, name: req.company?.name },
+            entityType: "web_order",
+            entityId: stop.web_order_id,
+          }).catch(() => {});
+        } catch { /* notification is best-effort */ }
+      }
+
+      res.json({ stop: updated });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── V02 wholesale: failed stop → return to stock ──────────────────
+  // Explicit manager action (goods physically came back with the driver).
+  // Restores each order line to the order's fulfillment outlet under
+  // FOR UPDATE, marks the order unfulfilled again, and stamps the stop.
+  app.post("/api/fulfillment/loadsheets/:id/orders/:webOrderId/return-to-stock", perm, async (req, res) => {
+    try {
+      const result = await db.transaction(async (client) => {
+        const { rows: [stop] } = await client.query(
+          `SELECT lo.id, lo.pod_status, lo.pod_failed_reason, wo.id AS web_order_id,
+                  wo.fulfillment_outlet_id, wo.pickup_outlet_id
+             FROM loadsheet_orders lo
+             JOIN web_orders wo ON wo.id = lo.web_order_id
+            WHERE lo.loadsheet_id = $1 AND lo.web_order_id = $2
+            FOR UPDATE OF lo`,
+          [req.params.id, req.params.webOrderId]
+        );
+        if (!stop) throw Object.assign(new Error("Stop not found on this loadsheet"), { statusCode: 404 });
+        if (stop.pod_status !== "failed") {
+          throw Object.assign(new Error("Only a failed stop can be returned to stock"), { statusCode: 400 });
+        }
+        if (String(stop.pod_failed_reason || "").includes("[restocked]")) {
+          throw Object.assign(new Error("Stop already returned to stock"), { statusCode: 400 });
+        }
+
+        const outletId = stop.fulfillment_outlet_id || stop.pickup_outlet_id;
+        if (!outletId) throw Object.assign(new Error("Order has no fulfillment outlet to restock"), { statusCode: 400 });
+
+        const { rows: items } = await client.query(
+          `SELECT product_id, variant_id, qty FROM web_order_items WHERE web_order_id = $1`,
+          [stop.web_order_id]
+        );
+        for (const it of items) {
+          if (!it.product_id) continue;
+          await client.query(
+            `SELECT id FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
+            [it.product_id, outletId]
+          );
+          await client.query(
+            `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
+             ON CONFLICT (product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
+            [it.product_id, outletId, Number(it.qty)]
+          );
+        }
+
+        await client.query(
+          `UPDATE web_orders SET fulfillment_status = 'unfulfilled', updated_at = NOW() WHERE id = $1`,
+          [stop.web_order_id]
+        );
+        // idempotency stamp — the [restocked] marker above guards re-runs
+        await client.query(
+          `UPDATE loadsheet_orders
+              SET pod_failed_reason = COALESCE(pod_failed_reason, 'Delivery failed') || ' [restocked]'
+            WHERE id = $1`,
+          [stop.id]
+        );
+        return { web_order_id: stop.web_order_id, restocked_items: items.length, outlet_id: outletId };
+      });
+
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
 };

@@ -220,6 +220,34 @@ module.exports = function registerCustomerPortalData(app, deps) {
     }
   });
 
+  // ── GET /me/backorders (V02 wholesale) ────────────────────────────
+  // Open backorders as a memo view — the buyer sees what's still owed to
+  // them in goods and at what (order-time) price. Not AR: nothing here is
+  // payable until fulfillment converts it into an invoice.
+  router.get("/me/backorders", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT b.id, b.created_at, b.expected_at, b.status,
+                p.name AS product_name, pv.variant_name,
+                b.qty_ordered, b.qty_fulfilled,
+                (b.qty_ordered - b.qty_fulfilled) AS qty_remaining,
+                b.unit_price
+           FROM backorders b
+           JOIN products p ON p.id = b.product_id
+           LEFT JOIN product_variants pv ON pv.id = b.variant_id
+          WHERE b.customer_id = $1 AND b.status IN ('open','partial')
+          ORDER BY b.created_at ASC
+          LIMIT 200`,
+        [req.customerId]
+      );
+      res.json(rows);
+    } catch (err) {
+      // pre-v110 tenant — table missing → empty list, not a 500
+      if (String(err.message || "").includes("does not exist")) return res.json([]);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /me/invoices/:id ──────────────────────────────────────────
   router.get("/me/invoices/:id", authMw, customerPortalDataLimiter, async (req, res) => {
     try {

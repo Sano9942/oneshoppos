@@ -26,7 +26,12 @@ const RESOURCE_CONFIG = {
   },
   outlets: {
     limitColumn: "max_outlets",
-    countSql: "SELECT COUNT(*) AS cnt FROM outlets",
+    // V02 wholesale van sales — vans (outlet_type='van') are exempt from the
+    // plan cap by decision: they're rep stock buckets gated behind the
+    // wholesale_van_sales flag, not sellable locations. COALESCE keeps NULL
+    // rows counting as stores; pre-v111 tenants without the column hit the
+    // middleware's best-effort catch (never blocks on its own failure).
+    countSql: "SELECT COUNT(*) AS cnt FROM outlets WHERE COALESCE(outlet_type, 'store') <> 'van'",
     label: "outlets",
   },
   products: {

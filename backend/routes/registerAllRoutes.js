@@ -532,6 +532,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- V02 WHOLESALE: BACKORDER FULFILLMENT LOOP ---
   require("./backorders")(app, deps);
 
+  // --- V02 WHOLESALE: VAN SALES (rep van view, day open/close, reconcile) ---
+  require("./van")(app, deps);
+
   // --- ROUTES: SCHEDULES (Phase 2) ---
   require("./schedules")(app, deps);
 
