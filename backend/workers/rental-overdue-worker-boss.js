@@ -68,6 +68,17 @@ async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueue
     if (rows[0]?.store_name) storeName = rows[0].store_name;
   } catch { /* ignore — company_profile may not exist in edge cases */ }
 
+  // V09: park any service-due assets into 'maintenance' so they can't be
+  // booked until serviced. Guarded — pre-v118 tenants lack service_due_at.
+  try {
+    const flagged = await rentals.flagDueAssetsForMaintenance(db);
+    if (flagged > 0) logger.info({ tenantSlug, flagged }, "Rental assets flagged for maintenance");
+  } catch (err) {
+    if (!/does not exist/i.test(err.message)) {
+      logger.error({ err, tenantSlug }, "Rental maintenance-due flagging failed");
+    }
+  }
+
   const overdue = await rentals.getOverdueContracts(db);
 
   for (const contract of overdue) {

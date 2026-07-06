@@ -8688,6 +8688,174 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 118,
+    description:
+      "V09 rentals depth — folio-tax (approved proposal, rentals slice: rental_items.tax_id + rental_contract_lines per-line snapshot) + car-legal agreement (rental_assets.attributes, rental_contract_drivers, contract-line checkout/return readings, rental_contracts.contract_document_id e-sign link) + rental_inspections + maintenance scheduling (rental_assets service cols + asset_maintenance_log) + delivery scheduling (rental_contracts delivery cols) + rental_inspections/rental_online_booking flags with rental-preset backfill. All tenant-only; warns on the public schema.",
+    up: async (client) => {
+      // 1. Folio-tax (rentals slice). NULL tax_id = untaxed (preserves today's
+      //    hardcoded-0 behavior); per-line snapshot mirrors sale_items naming.
+      try {
+        await client.query("SAVEPOINT v118_folio_tax");
+        await client.query(`ALTER TABLE rental_items ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id)`);
+        await client.query(`ALTER TABLE rental_contract_lines
+          ADD COLUMN IF NOT EXISTS tax_rate_at_charge   NUMERIC(6,3)  DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tax_amount_at_charge NUMERIC(12,2) DEFAULT 0`);
+        await client.query("RELEASE SAVEPOINT v118_folio_tax");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_folio_tax");
+        console.warn(`[migrate-pg v118] folio-tax columns skipped: ${err.message}`);
+      }
+
+      // 2. Car-legal agreement: vehicle attributes, driver records (PII —
+      //    staff-only surfaces), odometer/fuel readings per line, e-sign link.
+      try {
+        await client.query("SAVEPOINT v118_car_legal");
+        await client.query(`ALTER TABLE rental_assets ADD COLUMN IF NOT EXISTS attributes JSONB DEFAULT '{}'`);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS rental_contract_drivers (
+            id SERIAL PRIMARY KEY,
+            rental_contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            cnic TEXT,
+            license_number TEXT,
+            license_expiry DATE,
+            phone TEXT,
+            document_photos JSONB DEFAULT '[]',   -- R2 keys (license front/back, CNIC) — non-guessable prefix, staff-only
+            is_primary BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_rcd_contract ON rental_contract_drivers(rental_contract_id)`);
+        await client.query(`ALTER TABLE rental_contract_lines
+          ADD COLUMN IF NOT EXISTS checkout_reading JSONB DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS return_reading   JSONB DEFAULT '{}'`);
+        await client.query(`ALTER TABLE rental_contracts ADD COLUMN IF NOT EXISTS contract_document_id INTEGER REFERENCES contracts(id)`);
+        await client.query("RELEASE SAVEPOINT v118_car_legal");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_car_legal");
+        console.warn(`[migrate-pg v118] car-legal schema skipped: ${err.message}`);
+      }
+
+      // 3. Inspections: checkout/return condition record with photos, checklist,
+      //    damage charge, and a customer acknowledgment signature.
+      try {
+        await client.query("SAVEPOINT v118_inspections");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS rental_inspections (
+            id SERIAL PRIMARY KEY,
+            rental_contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+            rental_asset_id INTEGER REFERENCES rental_assets(id),
+            phase TEXT NOT NULL CHECK (phase IN ('checkout','return')),
+            checklist JSONB DEFAULT '{}',
+            photos JSONB DEFAULT '[]',            -- R2 keys
+            damage_notes TEXT,
+            damage_charge NUMERIC(12,2),
+            inspected_by INTEGER REFERENCES employees(id),
+            customer_ack_signature TEXT,          -- R2 key (consent canvas)
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_rins_contract ON rental_inspections(rental_contract_id)`);
+        await client.query("RELEASE SAVEPOINT v118_inspections");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_inspections");
+        console.warn(`[migrate-pg v118] rental_inspections skipped: ${err.message}`);
+      }
+
+      // 4. Maintenance scheduling: time- and usage-(odometer)-based service
+      //    intervals on assets + a maintenance log.
+      try {
+        await client.query("SAVEPOINT v118_maintenance");
+        await client.query(`ALTER TABLE rental_assets
+          ADD COLUMN IF NOT EXISTS service_interval_days     INTEGER,
+          ADD COLUMN IF NOT EXISTS service_due_at            TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS last_serviced_at          TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS service_odometer_interval INTEGER,
+          ADD COLUMN IF NOT EXISTS last_serviced_odometer    INTEGER`);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS asset_maintenance_log (
+            id SERIAL PRIMARY KEY,
+            rental_asset_id INTEGER NOT NULL REFERENCES rental_assets(id) ON DELETE CASCADE,
+            serviced_at TIMESTAMPTZ DEFAULT NOW(),
+            odometer INTEGER,
+            cost NUMERIC(12,2),
+            notes TEXT,
+            performed_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_aml_asset ON asset_maintenance_log(rental_asset_id)`);
+        await client.query("RELEASE SAVEPOINT v118_maintenance");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_maintenance");
+        console.warn(`[migrate-pg v118] maintenance schema skipped: ${err.message}`);
+      }
+
+      // 5. Delivery & setup scheduling (furniture/party event logistics).
+      try {
+        await client.query("SAVEPOINT v118_delivery");
+        await client.query(`ALTER TABLE rental_contracts
+          ADD COLUMN IF NOT EXISTS delivery_required BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS delivery_at       TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS setup_notes       TEXT,
+          ADD COLUMN IF NOT EXISTS delivery_status   TEXT,
+          ADD COLUMN IF NOT EXISTS delivery_crew     JSONB DEFAULT '[]'`);
+        await client.query("RELEASE SAVEPOINT v118_delivery");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_delivery");
+        console.warn(`[migrate-pg v118] delivery columns skipped: ${err.message}`);
+      }
+
+      // 6. Feature flags (default OFF; preset backfill below flips inspections on).
+      try {
+        await client.query("SAVEPOINT v118_flags");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(`
+            INSERT INTO feature_flags (key, enabled, description) VALUES
+              ('rental_inspections',    false, 'V09 — checkout/return condition inspections with photos + damage capture'),
+              ('rental_online_booking', false, 'V09 — public/portal online rental reservation')
+            ON CONFLICT (key) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v118_flags");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_flags");
+        console.warn(`[migrate-pg v118] rental flags skipped: ${err.message}`);
+      }
+
+      // 7. Backfill: rental-preset tenants get rental_inspections ON (all four
+      //    presets, per approval). Kept in sync with PRESET_EXTRA_FLAGS in
+      //    config/industry-config.js. Mirrors the v117 gym backfill.
+      try {
+        await client.query("SAVEPOINT v118_preset_backfill");
+        const { rows: profile } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        const rentalPresets = ["car_rental", "equipment_hire", "furniture_rental", "party_supplies"];
+        if (rentalPresets.includes(profile[0]?.industry_type)) {
+          const { rows: ff } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+          `);
+          if (ff.length) {
+            await client.query(`
+              INSERT INTO feature_flags (key, enabled) VALUES ('rental_inspections', true)
+              ON CONFLICT (key) DO UPDATE SET enabled = true
+            `);
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v118_preset_backfill");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v118_preset_backfill");
+        console.warn(`[migrate-pg v118] rental preset backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

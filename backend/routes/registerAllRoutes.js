@@ -180,6 +180,10 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public booking page — no auth required, manually resolves tenant DB
   require("./public-bookings")(app, deps);
 
+  // V09 — Public online rental booking. No auth; resolves tenant DB manually;
+  // gated on the rental_online_booking flag inside the handlers.
+  require("./public-rentals")(app, deps);
+
   // F03 — Public tokenized form fill (intake/waivers). No auth; single-use
   // token; resolves tenant via resolvePublicTenantDb; rate-limited.
   require("./public-forms")(app, deps);

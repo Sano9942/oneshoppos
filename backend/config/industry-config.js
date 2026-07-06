@@ -857,6 +857,13 @@ const PRESET_EXTRA_FLAGS = Object.freeze({
     "custom_forms",                  // F03 — liability waivers
     "member_checkin",                // V07 — door check-in
   ],
+  // V09 — every rental preset gets condition inspections ON by default
+  // (kept in sync with the v118 rental-preset backfill). Online booking stays
+  // OFF (tenant opt-in), so it is deliberately not listed here.
+  car_rental: ["rental_inspections"],
+  equipment_hire: ["rental_inspections"],
+  furniture_rental: ["rental_inspections"],
+  party_supplies: ["rental_inspections"],
 });
 
 // Every flag any preset can flip on as an extra — used to reset the full set

@@ -183,4 +183,39 @@ async function resolveTaxSnapshot(db, { items, taxMode, taxInclusive, outletId, 
   return { lines, taxTotal, gross, subtotal, taxInclusive: inclusiveResolved };
 }
 
-module.exports = { resolveTaxSnapshot };
+/**
+ * Folio-tax resolver (V09/approved folio-tax-proposal). Non-product charges
+ * (rental duration, room nights, session fees) resolve tax from an EXPLICIT
+ * tax_id on the entity — the product/category cascade doesn't apply — but the
+ * mode/inclusive/rounding math is the same single implementation as sales.
+ *
+ * @param {object} db    tenant db/client — needs .query
+ * @param {object} opts
+ * @param {number|null} opts.taxId    entity's tax FK; NULL/undefined → untaxed (rate 0)
+ * @param {number} opts.price         per-unit charge (pre-tax in exclusive, tax-inclusive in inclusive mode)
+ * @param {number} [opts.quantity=1]
+ * @param {string} opts.taxMode       'none' | 'inclusive' | 'exclusive'
+ * @param {boolean} [opts.taxInclusive]  override; defaults to taxMode === 'inclusive'
+ * @returns {Promise<{rate:number, amount:number}>} per-line rate (%) + tax amount (2dp)
+ */
+async function resolveTaxForExplicitRate(db, { taxId, price, quantity = 1, taxMode, taxInclusive }) {
+  const mode = taxMode || "none";
+  if (mode === "none" || taxId == null) return { rate: 0, amount: 0 };
+
+  const inclusive = typeof taxInclusive === "boolean" ? taxInclusive : mode === "inclusive";
+
+  let rate = 0;
+  try {
+    const { rows: [t] } = await db.query("SELECT rate FROM taxes WHERE id = $1", [Number(taxId)]);
+    if (t && t.rate != null) rate = Number(t.rate);
+  } catch { /* taxes row missing → untaxed */ }
+  if (!isFinite(rate) || rate <= 0) return { rate: 0, amount: 0 };
+
+  const gross = Number(price) * Number(quantity);
+  const amount = inclusive
+    ? Math.round((gross * rate / (100 + rate)) * 100) / 100
+    : Math.round((gross * rate / 100) * 100) / 100;
+  return { rate, amount };
+}
+
+module.exports = { resolveTaxSnapshot, resolveTaxForExplicitRate };
