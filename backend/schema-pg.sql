@@ -220,6 +220,17 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- v115 (V01 retail depth): grocery PLU rapid-entry code. 4-5 digit produce
+-- codes typed on a PLU pad; the scan endpoint matches barcode OR sku OR plu_code.
+-- Partial unique on live rows only, mirroring the v82 products.sku pattern.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS plu_code VARCHAR(8);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_plu_code
+  ON products (plu_code) WHERE plu_code IS NOT NULL AND deleted_at IS NULL;
+
+-- v116 (V01 retail depth): age-restricted flag → POS cashier-attest confirm
+-- modal on add-to-cart. DEFAULT false = no change for existing products.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS age_restricted BOOLEAN NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS product_variants (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -1260,7 +1271,14 @@ CREATE TABLE IF NOT EXISTS company_profile (
   field_geofence_meters INTEGER NOT NULL DEFAULT 500,
   multi_outlet_flags_seeded BOOLEAN DEFAULT false,
   test_receipt_printed_at TIMESTAMPTZ,
-  fbr_banner_dismissed BOOLEAN DEFAULT false
+  fbr_banner_dismissed BOOLEAN DEFAULT false,
+  -- v114 (V01 retail depth): price/weight-embedded EAN-13 decode scheme for
+  -- deli/scale labels. NULL = feature off. Shape validated by
+  -- services/embedded-barcode.js:normalizeScheme (never trusted raw):
+  --   { enabled, prefixes:[20..29], embed:'price'|'weight', item_code_length,
+  --     value_length, value_decimals, item_code_field:'sku'|'plu'|'barcode',
+  --     verify_check_digit }
+  barcode_scheme JSONB
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (

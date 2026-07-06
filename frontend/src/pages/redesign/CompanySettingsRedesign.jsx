@@ -11,6 +11,7 @@ import {
   Input,
   PageShell,
   SectionCard,
+  Select,
 } from "../../ui/primitives";
 
 const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
@@ -94,6 +95,72 @@ export default function CompanySettingsRedesign() {
   };
   const removeDenom = (d) => {
     upd("cash_denominations", JSON.stringify(denoms.filter(x => x !== d)));
+  };
+
+  // V01 grocery — price/weight-embedded scale-label decode scheme. Self-loads
+  // via the dedicated all_access endpoint (independent of the multi_company-
+  // gated profile load), so a grocery counter can configure it.
+  const DEFAULT_SCHEME = {
+    enabled: false,
+    prefixes: "20,21,22,23,24,25,26,27,28,29",
+    embed: "price",
+    item_code_length: 5,
+    value_length: 5,
+    value_decimals: 2,
+    item_code_field: "sku",
+    verify_check_digit: true,
+  };
+  const [scheme, setScheme] = useState(DEFAULT_SCHEME);
+  const [schemeSaving, setSchemeSaving] = useState(false);
+  const updScheme = (k, v) => setScheme((s) => ({ ...s, [k]: v }));
+
+  const loadScheme = useCallback(async () => {
+    try {
+      const data = await api.get("/api/company-profile/barcode-scheme");
+      const bs = data?.barcode_scheme;
+      if (bs && typeof bs === "object") {
+        setScheme({
+          enabled: bs.enabled === true,
+          prefixes: Array.isArray(bs.prefixes) ? bs.prefixes.join(",") : DEFAULT_SCHEME.prefixes,
+          embed: bs.embed === "weight" ? "weight" : "price",
+          item_code_length: bs.item_code_length ?? 5,
+          value_length: bs.value_length ?? 5,
+          value_decimals: bs.value_decimals ?? (bs.embed === "weight" ? 3 : 2),
+          item_code_field: bs.item_code_field || "sku",
+          verify_check_digit: bs.verify_check_digit !== false,
+        });
+      }
+    } catch { /* endpoint gated / not grocery — leave defaults */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { loadScheme(); }, [loadScheme]);
+
+  const saveScheme = async () => {
+    setSchemeSaving(true);
+    try {
+      const payload = {
+        barcode_scheme: {
+          enabled: !!scheme.enabled,
+          prefixes: String(scheme.prefixes)
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean),
+          embed: scheme.embed === "weight" ? "weight" : "price",
+          item_code_length: Number(scheme.item_code_length) || 5,
+          value_length: Number(scheme.value_length) || 5,
+          value_decimals: Number(scheme.value_decimals),
+          item_code_field: scheme.item_code_field,
+          verify_check_digit: !!scheme.verify_check_digit,
+        },
+      };
+      await api.put("/api/company-profile/barcode-scheme", payload);
+      showMsg("success", "Scale-label barcode scheme saved.");
+      loadScheme();
+    } catch (err) {
+      showMsg("error", err.message || "Failed to save barcode scheme.");
+    } finally {
+      setSchemeSaving(false);
+    }
   };
 
   const load = useCallback(async () => {
@@ -597,6 +664,85 @@ export default function CompanySettingsRedesign() {
             </div>
           </div>
         </SectionCard>
+
+        {/* V01 grocery — Scale-label (price/weight-embedded) barcode scheme */}
+        {["general_retail", "grocery", "butcher", "sweet_shop"].includes(form.industry_type) && (
+          <SectionCard className="p-5">
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-(--ui-text)">Scale-label barcodes</h3>
+                <p className="text-xs text-(--ui-text-muted) mt-1">
+                  Decode the price/weight-embedded EAN-13 labels a deli or produce
+                  scale prints. When on, scanning a matching label rings the item
+                  with its pre-weighed price (or weight) automatically.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-(--ui-text)">
+                <input
+                  type="checkbox"
+                  checked={!!scheme.enabled}
+                  onChange={(e) => updScheme("enabled", e.target.checked)}
+                />
+                Enable scale-label decoding
+              </label>
+              {scheme.enabled && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Prefixes (comma-separated)</label>
+                    <Input
+                      value={scheme.prefixes}
+                      onChange={(e) => updScheme("prefixes", e.target.value)}
+                      placeholder="20,21,22,…"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Embedded value</label>
+                    <Select value={scheme.embed} onChange={(e) => updScheme("embed", e.target.value)}>
+                      <option value="price">Final price</option>
+                      <option value="weight">Weight</option>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Resolve product by</label>
+                    <Select value={scheme.item_code_field} onChange={(e) => updScheme("item_code_field", e.target.value)}>
+                      <option value="sku">SKU</option>
+                      <option value="plu">PLU code</option>
+                      <option value="barcode">Barcode</option>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Item-code digits</label>
+                    <Input type="number" min="1" max="7" value={scheme.item_code_length}
+                      onChange={(e) => updScheme("item_code_length", e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Value digits</label>
+                    <Input type="number" min="1" max="7" value={scheme.value_length}
+                      onChange={(e) => updScheme("value_length", e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Value decimals (price=2, weight=3)</label>
+                    <Input type="number" min="0" max="4" value={scheme.value_decimals}
+                      onChange={(e) => updScheme("value_decimals", e.target.value)} />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-(--ui-text) md:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={!!scheme.verify_check_digit}
+                      onChange={(e) => updScheme("verify_check_digit", e.target.checked)}
+                    />
+                    Verify EAN-13 check digit (reject corrupted labels)
+                  </label>
+                </div>
+              )}
+              <div>
+                <Button type="button" tone="primary" onClick={saveScheme} disabled={schemeSaving}>
+                  {schemeSaving ? "Saving…" : "Save scale scheme"}
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
+        )}
 
         {/* Customer Display */}
         <SectionCard className="p-5">

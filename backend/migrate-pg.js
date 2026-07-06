@@ -8532,6 +8532,61 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 114,
+    description:
+      "V01 retail depth — company_profile.barcode_scheme JSONB (price/weight-embedded EAN-13 decode config; NULL = feature off). Tenant-only table; warns on the public schema.",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v114_barcode");
+        await client.query(
+          `ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS barcode_scheme JSONB`
+        );
+        await client.query("RELEASE SAVEPOINT v114_barcode");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v114_barcode");
+        console.warn(`[migrate-pg v114] company_profile.barcode_scheme skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 115,
+    description:
+      "V01 retail depth — products.plu_code (grocery PLU rapid entry) + partial unique index on live rows (mirrors the v82 products.sku partial-unique pattern)",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v115_plu");
+        await client.query(
+          `ALTER TABLE products ADD COLUMN IF NOT EXISTS plu_code VARCHAR(8)`
+        );
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_products_plu_code
+             ON products (plu_code) WHERE plu_code IS NOT NULL AND deleted_at IS NULL`
+        );
+        await client.query("RELEASE SAVEPOINT v115_plu");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v115_plu");
+        console.warn(`[migrate-pg v115] products.plu_code skipped: ${err.message}`);
+      }
+    },
+  },
+  {
+    version: 116,
+    description:
+      "V01 retail depth — products.age_restricted (POS cashier-attest age-verification prompt; DEFAULT false, no behavior change for existing products)",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v116_age");
+        await client.query(
+          `ALTER TABLE products ADD COLUMN IF NOT EXISTS age_restricted BOOLEAN NOT NULL DEFAULT false`
+        );
+        await client.query("RELEASE SAVEPOINT v116_age");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v116_age");
+        console.warn(`[migrate-pg v116] products.age_restricted skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

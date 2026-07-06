@@ -4,6 +4,7 @@ const {
   getDescendantLeafIds,
 } = require("../category-tree");
 const kitEngine = require("../services/kit-engine");
+const { decodeEmbeddedBarcode } = require("../services/embedded-barcode");
 
 module.exports = function registerProductRoutes(app, deps) {
   const { db, multer, requirePerm, requireAnyPerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
@@ -379,8 +380,42 @@ module.exports = function registerProductRoutes(app, deps) {
       const { barcode } = req.params;
       const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
 
+      // V01 grocery lane — AUTHORITATIVE price/weight-embedded EAN-13 decode.
+      // A deli/scale label carries a 2x-prefix code whose middle digits are an
+      // item code and whose tail is the pre-weighed price (or weight). Decode
+      // against the tenant's scheme (company_profile.barcode_scheme, already on
+      // req.company), then resolve the product by the item code via the scheme's
+      // configured field. `not_embedded`/`disabled` fall through to the normal
+      // barcode/sku/plu lookup; a decoded-but-unresolvable item code is a hard
+      // "unmapped scale item" error, never a silent zero-price line.
+      const decoded = decodeEmbeddedBarcode(barcode, req.company?.barcode_scheme);
+      let lookupValue = barcode;
+      let lookupField = null; // null → match barcode OR sku OR plu_code
+      if (decoded.ok) {
+        lookupValue = decoded.itemCode;
+        lookupField = decoded.itemCodeField; // 'sku' | 'plu' | 'barcode'
+      }
+
       let outletJoinCondition = "";
-      const params = [barcode, barcode];
+      let whereClause;
+      let params;
+      if (lookupField === "sku") {
+        whereClause = "p.sku = $1";
+        params = [lookupValue];
+      } else if (lookupField === "plu") {
+        whereClause = "p.plu_code = $1";
+        params = [lookupValue];
+      } else if (lookupField === "barcode") {
+        whereClause = "p.barcode = $1";
+        params = [lookupValue];
+      } else {
+        // Normal scan / PLU pad: match any identifier. plu_code lookup lights up
+        // grocery PLU codes typed on the pad (omniInputRouter routes 4-5 digit
+        // numerics here) without a separate endpoint.
+        whereClause = "(p.barcode = $1 OR p.sku = $2 OR p.plu_code = $3)";
+        params = [lookupValue, lookupValue, lookupValue];
+      }
+
       if (outlet_id) {
         params.push(Number(outlet_id));
         outletJoinCondition = `AND os.outlet_id = $${params.length}`;
@@ -392,12 +427,25 @@ module.exports = function registerProductRoutes(app, deps) {
           FROM products p
           LEFT JOIN taxes t ON p.tax_id = t.id
           LEFT JOIN outlet_stock os ON p.id = os.product_id ${outletJoinCondition}
-          WHERE p.deleted_at IS NULL AND (p.barcode = $1 OR p.sku = $2)
+          WHERE p.deleted_at IS NULL AND ${whereClause}
           GROUP BY p.id, t.rate, t.name
       `;
 
       const { rows: [row] } = await db.query(sql, params);
-      if (!row) return res.status(404).json({ error: "Product not found" });
+      if (!row) {
+        // A decoded scale label that resolves to no product is a mis-mapped
+        // scale PLU — surface it clearly so the cashier fixes the mapping,
+        // never a silent zero-price sale.
+        if (decoded.ok) {
+          return res.status(404).json({
+            error: `Unmapped scale item — no product for ${decoded.itemCodeField} ${decoded.itemCode}`,
+            code: "unmapped_scale_item",
+            item_code: decoded.itemCode,
+            item_code_field: decoded.itemCodeField,
+          });
+        }
+        return res.status(404).json({ error: "Product not found" });
+      }
 
       const effectiveTaxRate =
         row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
@@ -409,6 +457,20 @@ module.exports = function registerProductRoutes(app, deps) {
         effectiveTaxRate,
         effectiveTaxName,
       };
+
+      // Attach the decoded scale reading so the POS builds the correct cart line:
+      //   price → FINAL price, quantity 1, price_locked + tare_locked (excluded
+      //           from % promos; tare already netted at the deli scale).
+      //   weight → decoded net weight as quantity at the shelf unit-price,
+      //           tare_locked (no double tare).
+      if (decoded.ok) {
+        productWithTax.embedded = {
+          embed: decoded.embed,
+          ...(decoded.embed === "price"
+            ? { price: decoded.price, price_locked: true, tare_locked: true }
+            : { weight: decoded.weight, tare_locked: true }),
+        };
+      }
 
       await enrichKitAvailability([productWithTax], outlet_id);
       res.json({ product: productWithTax });
@@ -735,6 +797,8 @@ module.exports = function registerProductRoutes(app, deps) {
       customer_group_ids,      // Tier 2.11 — groups that can see this restricted product
       track_batches,           // F07 batch/expiry opt-in
       shelf_life_days,         // F07 default expiry suggestion at GRN
+      plu_code,                // V01 grocery — 4-5 digit PLU rapid-entry code
+      age_restricted,          // V01 — POS cashier-attest age gate
     } = req.body;
     // Fall back through: explicit body field → header → session context → first outlet.
     // Without this, the Add Product form's Opening Stock value silently dropped
@@ -770,8 +834,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment, visibility, track_batches, shelf_life_days)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days, min_order_qty, order_increment, visibility, track_batches, shelf_life_days, plu_code, age_restricted)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
            RETURNING id`,
           [
             barcode || null,
@@ -816,6 +880,12 @@ module.exports = function registerProductRoutes(app, deps) {
             shelf_life_days != null && shelf_life_days !== ""
               ? Math.max(0, Math.floor(Number(shelf_life_days)))
               : null,
+            // V01 — PLU code (trimmed, empty→null so the partial-unique index
+            // frees). age_restricted defaults false.
+            plu_code != null && String(plu_code).trim() !== ""
+              ? String(plu_code).trim()
+              : null,
+            age_restricted === true || age_restricted === "true",
           ]
         );
         const newProductId = inserted.id;
@@ -1086,6 +1156,8 @@ module.exports = function registerProductRoutes(app, deps) {
       customer_group_ids,      // Tier 2.11 — groups whitelist for restricted products
       track_batches,           // F07 batch/expiry opt-in
       shelf_life_days,         // F07 default expiry suggestion at GRN
+      plu_code,                // V01 grocery — PLU rapid-entry code
+      age_restricted,          // V01 — POS cashier-attest age gate
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -1221,6 +1293,22 @@ module.exports = function registerProductRoutes(app, deps) {
         if (Object.prototype.hasOwnProperty.call(req.body || {}, "visibility")) {
           updateFields.push(`visibility = $${nextParam}`);
           updateParams.push(visibility === "restricted" ? "restricted" : "all");
+          nextParam++;
+        }
+        // V01 — PLU code patch. Empty/null → NULL (frees the partial-unique index).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "plu_code")) {
+          updateFields.push(`plu_code = $${nextParam}`);
+          updateParams.push(
+            plu_code == null || String(plu_code).trim() === ""
+              ? null
+              : String(plu_code).trim()
+          );
+          nextParam++;
+        }
+        // V01 — age_restricted patch (NOT NULL, coerce to boolean).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "age_restricted")) {
+          updateFields.push(`age_restricted = $${nextParam}`);
+          updateParams.push(age_restricted === true || age_restricted === "true");
           nextParam++;
         }
         // F01: bom_type + is_bundle sync. Patch only when the caller sends

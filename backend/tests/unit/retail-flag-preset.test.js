@@ -3,9 +3,12 @@ import {
   RETAIL_SEED_FLAGS,
   RESTAURANT_SEED_FLAGS,
   MULTI_OUTLET_SEED_FLAGS,
+  RETAIL_SUBTYPE_FLAGS,
+  RETAIL_BUNDLE_INDUSTRIES,
   seedRetailFlags,
   seedRestaurantFlags,
   seedMultiOutletFlags,
+  seedRetailSubtypeFlags,
 } from "../../services/retail-flag-preset.js";
 
 describe("retail-flag-preset", () => {
@@ -13,8 +16,9 @@ describe("retail-flag-preset", () => {
     expect(RETAIL_SEED_FLAGS).toHaveLength(19);
   });
 
-  it("exports exactly 11 restaurant seed flags", () => {
-    expect(RESTAURANT_SEED_FLAGS).toHaveLength(11);
+  it("exports exactly 12 restaurant seed flags", () => {
+    // 11 F&B flags + delivery_aggregators (V03 foodpanda/Careem injection).
+    expect(RESTAURANT_SEED_FLAGS).toHaveLength(12);
   });
 
   it("exports exactly 5 multi-outlet seed flags", () => {
@@ -98,5 +102,57 @@ describe("retail-flag-preset", () => {
     const client = { query: vi.fn().mockResolvedValue({ rowCount: 1 }) };
     await seedMultiOutletFlags(client);
     expect(client.query).toHaveBeenCalledTimes(MULTI_OUTLET_SEED_FLAGS.length);
+  });
+
+  // V01 retail depth — the buy/sell retail family shares the retail bundle, and
+  // each perishable/lot/kit sub-type layers its vertical engines on top. These
+  // assertions guard against drift in the signup flag-seeding contract.
+  describe("V01 retail sub-type seeding", () => {
+    it("RETAIL_BUNDLE_INDUSTRIES covers all six buy/sell retail presets", () => {
+      expect(RETAIL_BUNDLE_INDUSTRIES).toEqual([
+        "general_retail",
+        "grocery",
+        "wholesale",
+        "butcher",
+        "sweet_shop",
+        "textile",
+      ]);
+    });
+
+    it("maps the exact per-preset vertical-engine flags", () => {
+      expect(RETAIL_SUBTYPE_FLAGS).toEqual({
+        grocery: ["batch_expiry_tracking"],
+        butcher: ["batch_expiry_tracking", "kit_bom_engine"],
+        sweet_shop: ["batch_expiry_tracking", "kit_bom_engine"],
+        textile: ["batch_expiry_tracking"],
+      });
+    });
+
+    it("grocery/textile get batch tracking but NOT the kit engine", () => {
+      expect(RETAIL_SUBTYPE_FLAGS.grocery).not.toContain("kit_bom_engine");
+      expect(RETAIL_SUBTYPE_FLAGS.textile).not.toContain("kit_bom_engine");
+    });
+
+    it("butcher + sweet_shop get both batch + kit engines (disassembly / assorted box)", () => {
+      for (const preset of ["butcher", "sweet_shop"]) {
+        expect(RETAIL_SUBTYPE_FLAGS[preset]).toContain("batch_expiry_tracking");
+        expect(RETAIL_SUBTYPE_FLAGS[preset]).toContain("kit_bom_engine");
+      }
+    });
+
+    it("seedRetailSubtypeFlags upserts the preset's engines, no-ops for general_retail/wholesale", async () => {
+      const client = { query: vi.fn().mockResolvedValue({ rowCount: 1 }) };
+      await seedRetailSubtypeFlags(client, "butcher");
+      expect(client.query).toHaveBeenCalledTimes(2); // batch + kit
+      const [sql, params] = client.query.mock.calls[0];
+      expect(sql).toMatch(/ON CONFLICT \(key\) DO UPDATE SET enabled = true/);
+      expect(params).toEqual(["batch_expiry_tracking"]);
+
+      client.query.mockClear();
+      await seedRetailSubtypeFlags(client, "general_retail");
+      expect(client.query).not.toHaveBeenCalled();
+      await seedRetailSubtypeFlags(client, "wholesale");
+      expect(client.query).not.toHaveBeenCalled();
+    });
   });
 });

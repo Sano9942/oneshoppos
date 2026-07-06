@@ -20,6 +20,8 @@ const {
   seedRetailFlags,
   seedRestaurantFlags,
   seedWholesaleFlags,
+  seedRetailSubtypeFlags,
+  RETAIL_BUNDLE_INDUSTRIES,
 } = require("../services/retail-flag-preset");
 const { signAccessToken, signRefreshToken } = require("../jwt-auth");
 // Single source of truth for role -> permissions mapping. Previously hardcoded
@@ -270,11 +272,16 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         // 1f. Per-industry flag bundles. See services/retail-flag-preset.js
         // for the per-industry flag lists. Other industries (salon, clinic,
         // rentals, etc.) skip this entirely until their own bundles ship.
-        // Grocery + wholesale share the retail bundle — same buy_sell /
-        // b2b_distribution flow, same feature surface (barcode, price lists,
-        // loyalty, gift cards, holds, COD, SMS) is appropriate.
-        if (industry_type === "general_retail" || industry_type === "grocery" || industry_type === "wholesale") {
+        // The buy/sell retail family shares the retail bundle — same feature
+        // surface (barcode, price lists, loyalty, gift cards, holds, COD, SMS).
+        // V01: butcher/sweet_shop/textile joined general_retail/grocery/wholesale
+        // (RETAIL_BUNDLE_INDUSTRIES) instead of skipping the seeder, and each
+        // retail sub-type additionally gets the vertical engines it consumes
+        // (batch/expiry, kit/BOM) via seedRetailSubtypeFlags — latent until the
+        // owner opts a product in.
+        if (RETAIL_BUNDLE_INDUSTRIES.includes(industry_type)) {
           await seedRetailFlags(client);
+          await seedRetailSubtypeFlags(client, industry_type);
         } else if (industry_type === "restaurant" || industry_type === "cafe") {
           await seedRestaurantFlags(client);
         }

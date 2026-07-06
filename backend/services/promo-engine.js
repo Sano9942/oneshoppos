@@ -8,9 +8,18 @@
  * Tier 1.3 (v93) additions: slab_percent tier evaluation, brand-scoped
  * matching, and ORDER BY priority DESC.
  *
- * Item shape: { product_id, category_id?, brand_id?, quantity, price }.
+ * Item shape: { product_id, category_id?, brand_id?, quantity, price, price_locked? }.
  * brand_id is hydrated from the products table when any active promo needs
  * it and the caller didn't supply it.
+ *
+ * price_locked (V01 grocery): a line whose price is FINAL and not promotable —
+ * a scale/deli price-embedded barcode already carries the exact price for that
+ * pre-weighed pack, and a manager price override is an explicit fixed price.
+ * Such lines are excluded from EVERY promotion (percentage, threshold, bxgy,
+ * slab) so a "10% off storewide" scheme can't re-discount a chicken pack that
+ * was already priced at the counter — a margin leak on every weighed item
+ * otherwise. Locked lines still count toward the caller-supplied orderTotal
+ * (they are real spend for threshold gating); they just never RECEIVE discount.
  *
  * Read-only — safe to call outside a transaction.
  */
@@ -73,7 +82,9 @@ async function evaluatePromotions(db, items, orderTotal) {
       return false;
     };
 
-    const matchedItems = hydratedItems.filter(itemMatches);
+    const matchedItems = hydratedItems.filter(
+      (item) => itemMatches(item) && item.price_locked !== true,
+    );
     const matchedTotal = matchedItems.reduce(
       (s, i) => s + i.price * i.quantity,
       0,

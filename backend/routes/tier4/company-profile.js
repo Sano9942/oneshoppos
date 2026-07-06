@@ -4,6 +4,7 @@ const { getPreset, VALID_INDUSTRY_TYPES } = require("../../config/industry-confi
 const { getFeatureFlagsForModes, VALID_MODES } = require("../../config/mode-registry");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
+const { normalizeScheme } = require("../../services/embedded-barcode");
 
 module.exports = function createCompanyProfileRouter({
   db,
@@ -224,6 +225,39 @@ module.exports = function createCompanyProfileRouter({
     try {
       await db.query("UPDATE company_profile SET fbr_banner_dismissed = true WHERE id = 1");
       res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // V01 grocery — price/weight-embedded barcode scheme config. Self-contained
+  // (all_access, no multi_company flag) so a grocery counter can configure its
+  // deli-scale label scheme without the multi-company feature. GET returns the
+  // stored scheme (or null = off); PUT normalizes + persists, then busts the
+  // company-profile cache so the scan route's decode sees it immediately.
+  router.get("/api/company-profile/barcode-scheme", requirePerm("all_access"), async (req, res) => {
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT barcode_scheme FROM company_profile WHERE id = 1"
+      );
+      res.json({ barcode_scheme: row?.barcode_scheme || null });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put("/api/company-profile/barcode-scheme", requirePerm("all_access"), async (req, res) => {
+    try {
+      const raw = req.body?.barcode_scheme;
+      // null / falsy / {enabled:false-only} → store NULL to fully disable.
+      const scheme = raw && typeof raw === "object" ? normalizeScheme(raw) : null;
+      const stored = scheme && scheme.enabled ? scheme : (scheme ? scheme : null);
+      await db.query(
+        "UPDATE company_profile SET barcode_scheme = $1, updated_at = NOW() WHERE id = 1",
+        [stored ? JSON.stringify(stored) : null]
+      );
+      invalidateCompanyProfileCache(req.tenantId);
+      res.json({ ok: true, barcode_scheme: stored });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

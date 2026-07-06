@@ -109,7 +109,8 @@ const INDUSTRY_PRESETS = Object.freeze({
     onboarding_steps: ["store", "product", "employees", "shift", "sale"],
     pos_layout_mode: "grid",
     visible_report_groups: null,
-    pos_search_config: { show_barcode: true, show_sku: true, show_price: true },
+    // V01 — show_plu surfaces the POS PLU rapid-entry pad for loose produce.
+    pos_search_config: { show_barcode: true, show_sku: true, show_price: true, show_plu: true },
   },
   cafe: {
     industry_type: "cafe",
@@ -314,7 +315,7 @@ const INDUSTRY_PRESETS = Object.freeze({
     onboarding_steps: ["store", "product", "employees", "shift", "sale"],
     pos_layout_mode: "list",
     visible_report_groups: null,
-    pos_search_config: { show_barcode: true, show_sku: false, show_price: true, show_tare: true },
+    pos_search_config: { show_barcode: true, show_sku: false, show_price: true, show_tare: true, show_plu: true },
     unit_vocabulary: ["kg", "g", "lb", "pcs"],
   },
   sweet_shop: {
@@ -342,7 +343,7 @@ const INDUSTRY_PRESETS = Object.freeze({
     onboarding_steps: ["store", "product", "employees", "shift", "sale"],
     pos_layout_mode: "grid",
     visible_report_groups: null,
-    pos_search_config: { show_barcode: true, show_sku: true, show_price: true, show_tare: true },
+    pos_search_config: { show_barcode: true, show_sku: true, show_price: true, show_tare: true, show_plu: true },
     unit_vocabulary: ["kg", "g", "dozen", "pcs", "pack"],
   },
   textile: {

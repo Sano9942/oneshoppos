@@ -133,6 +133,41 @@ const MULTI_OUTLET_SEED_FLAGS = [
   "phase2g_price_books",
 ];
 
+// V01 retail depth — per-preset vertical-engine flags layered ON TOP of the
+// retail bundle for the buy/sell retail sub-types. All are LATENT surfaces
+// (same argument as the wholesale flags): they only surface a UI, never touch
+// an out-of-the-box tenant's checkout path, so they're safe to ship ON at
+// signup.
+//   - batch_expiry_tracking: surfaces GRN batch capture + expiring-soon page +
+//     batch reports + the textile roll (thaan) picker. The real functional gate
+//     is per-product products.track_batches (default false), so no SKU is
+//     FEFO-tracked until the owner opts one in. Every perishable/lot sub-type
+//     gets it (grocery/butcher/sweet_shop/textile). The DEFAULT_FEATURE_FLAGS
+//     comment already documents this exact intent.
+//   - kit_bom_engine: surfaces the Production/recipe tab — butcher (carcass →
+//     cuts disassembly) and sweet_shop (assorted mithai box). Latent until a
+//     product is made a kit. Grocery/textile don't disassemble, so they skip it.
+const RETAIL_SUBTYPE_FLAGS = {
+  grocery: ["batch_expiry_tracking"],
+  butcher: ["batch_expiry_tracking", "kit_bom_engine"],
+  sweet_shop: ["batch_expiry_tracking", "kit_bom_engine"],
+  textile: ["batch_expiry_tracking"],
+};
+
+// Retail presets (buy/sell) that share the general-retail flag bundle. Grocery
+// + wholesale were already wired in setup.js; V01 adds the three sub-types that
+// were skipping the seeder (butcher/sweet_shop/textile) so they get barcode
+// scan, price lists, loyalty, gift cards, holds, COD, SMS like every other
+// retail counter. general_retail/grocery/wholesale keep their existing paths.
+const RETAIL_BUNDLE_INDUSTRIES = [
+  "general_retail",
+  "grocery",
+  "wholesale",
+  "butcher",
+  "sweet_shop",
+  "textile",
+];
+
 async function seedRetailFlags(client) {
   for (const key of RETAIL_SEED_FLAGS) {
     await client.query(
@@ -177,13 +212,32 @@ async function seedMultiOutletFlags(client) {
   }
 }
 
+// V01: enable the vertical engines (batch/expiry, kit/BOM) a retail sub-type
+// consumes. No-op for presets not in RETAIL_SUBTYPE_FLAGS (general_retail,
+// wholesale). Idempotent upsert, joins the caller's transaction.
+async function seedRetailSubtypeFlags(client, industryType) {
+  const keys = RETAIL_SUBTYPE_FLAGS[industryType];
+  if (!keys) return;
+  for (const key of keys) {
+    await client.query(
+      `INSERT INTO feature_flags (key, enabled)
+       VALUES ($1, true)
+       ON CONFLICT (key) DO UPDATE SET enabled = true`,
+      [key]
+    );
+  }
+}
+
 module.exports = {
   RETAIL_SEED_FLAGS,
   RESTAURANT_SEED_FLAGS,
   WHOLESALE_SEED_FLAGS,
   MULTI_OUTLET_SEED_FLAGS,
+  RETAIL_SUBTYPE_FLAGS,
+  RETAIL_BUNDLE_INDUSTRIES,
   seedRetailFlags,
   seedRestaurantFlags,
   seedWholesaleFlags,
   seedMultiOutletFlags,
+  seedRetailSubtypeFlags,
 };

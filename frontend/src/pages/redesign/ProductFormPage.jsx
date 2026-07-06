@@ -70,6 +70,10 @@ const BLANK_FORM = {
   // shelf_life_days pre-fills the expiry suggestion at GRN receive.
   track_batches: false,
   shelf_life_days: "",
+  // V01 grocery — 4-5 digit PLU rapid-entry code (produce sold by code on the
+  // POS PLU pad / omni input). age_restricted → POS cashier-attest gate.
+  plu_code: "",
+  age_restricted: false,
   // Tier 2.11 wholesale visibility — 'all' (everyone, default) or 'restricted'
   // (only customers in listed groups can see this SKU). customer_group_ids
   // is the whitelist; only used when visibility === 'restricted'.
@@ -219,6 +223,9 @@ export default function ProductFormPage() {
         track_batches: !!form.track_batches,
         shelf_life_days:
           form.shelf_life_days !== "" ? Number(form.shelf_life_days) : null,
+        // V01 grocery — PLU rapid-entry code (empty → null) + age gate.
+        plu_code: form.plu_code?.trim() ? form.plu_code.trim() : null,
+        age_restricted: !!form.age_restricted,
         // Tier 2.11 — only include the whitelist when visibility is restricted.
         // Sending an empty array still replaces the existing mapping (correct
         // for the case where user just removed every group).
@@ -379,6 +386,8 @@ export default function ProductFormPage() {
                 : "",
             track_batches: !!p.track_batches,
             shelf_life_days: p.shelf_life_days != null ? p.shelf_life_days : "",
+            plu_code: p.plu_code != null ? p.plu_code : "",
+            age_restricted: !!p.age_restricted,
             visibility: p.visibility === "restricted" ? "restricted" : "all",
             customer_group_ids: Array.isArray(p.customer_group_ids)
               ? p.customer_group_ids.map(Number)
@@ -1155,6 +1164,40 @@ export default function ProductFormPage() {
               </div>
             </SectionCard>
           )}
+
+          {/* V01 grocery — PLU rapid-entry code + age-restriction. PLU lets the
+              cashier ring produce by a 4-5 digit code on the POS pad / omni
+              input; age_restricted prompts a cashier-attest confirm at add. */}
+          <SectionCard>
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                Counter &amp; lane
+              </p>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-(--ui-text-muted)">
+                  PLU code (produce / lane rapid-entry)
+                </label>
+                <Input
+                  value={form.plu_code}
+                  onChange={(e) => upd("plu_code", e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
+                  placeholder="e.g. 4011 — typed on the POS PLU pad"
+                  inputMode="numeric"
+                />
+                <p className="text-[11px] text-(--ui-text-muted)">
+                  Unique per live product. The POS matches a 4–5 digit entry to
+                  this code, so cashiers can ring loose produce without a barcode.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-(--ui-text)">
+                <input
+                  type="checkbox"
+                  checked={!!form.age_restricted}
+                  onChange={(e) => upd("age_restricted", e.target.checked)}
+                />
+                Age-restricted (cashier must confirm the customer's age at POS)
+              </label>
+            </div>
+          </SectionCard>
 
           {/* Tier 2.11 — Catalog visibility. Controls who can see this SKU on
               the storefront, customer portal, and field-rep app. Admin

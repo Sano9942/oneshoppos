@@ -2,7 +2,20 @@ import { useEffect, useRef, useCallback } from "react";
 import { Zap } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { classifyOmniInput } from "./omniInputRouter";
+import { decodeEmbeddedBarcode } from "../../../utils/embeddedBarcode";
+import { useAuth } from "../../../auth/AuthProvider";
 import { api } from "../../../api";
+
+// V01 P2 — age-restricted attest prompt. Cashier confirms the customer meets
+// the minimum age before an age_restricted product is rung up. Lightweight
+// (native confirm); returns true when the cashier attests / when confirm is
+// unavailable (never blocks a sale in a non-interactive environment).
+function confirmAgeRestricted(product) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") return true;
+  return window.confirm(
+    `"${product.name || "This item"}" is age-restricted.\nConfirm the customer meets the minimum age requirement?`,
+  );
+}
 
 export default function POSOmniInput() {
   const {
@@ -10,6 +23,7 @@ export default function POSOmniInput() {
     setResults,
     setShowResults,
     addToCart,
+    addDecodedLine,
     setSelectedCustomerId,
     setCustomerSearch,
     setShowCustomerDD,
@@ -18,6 +32,8 @@ export default function POSOmniInput() {
     setPendingSerialContext,
     showNotice,
   } = usePOS();
+  const { company } = useAuth();
+  const barcodeScheme = company?.barcode_scheme || null;
 
   const inputRef = useRef(null);
 
@@ -52,17 +68,49 @@ export default function POSOmniInput() {
 
     try {
       if (parsed.kind === "barcode" || parsed.kind === "plu") {
+        // V01 grocery — instant on-screen feedback the moment a scale label is
+        // scanned (the backend scan endpoint remains the authoritative decoder).
+        const preview = decodeEmbeddedBarcode(parsed.value, barcodeScheme);
+        if (preview.ok) {
+          showNotice?.(
+            preview.embed === "price"
+              ? `Scale item — Rs ${Number(preview.price).toFixed(2)}`
+              : `Scale item — ${preview.weight} kg`,
+          );
+        }
         const res = await api.raw(
           `/api/products/scan/${encodeURIComponent(parsed.value)}`,
         );
         if (!res.ok) {
-          showNotice?.(`No product for ${parsed.value}`);
+          // Surface the backend's message (e.g. "Unmapped scale item — no
+          // product for sku 12345") instead of a generic miss, so a mis-mapped
+          // scale PLU is fixable rather than a silent zero-price line.
+          let msg = `No product for ${parsed.value}`;
+          try {
+            const body = await res.json();
+            if (body?.error) msg = body.error;
+          } catch {
+            /* non-JSON body */
+          }
+          showNotice?.(msg);
           return;
         }
         const data = await res.json();
         const product = data?.product;
         if (!product) {
           showNotice?.(`No product for ${parsed.value}`);
+          return;
+        }
+        // V01 P2 — age-restricted attest gate (tobacco/alcohol). Cashier must
+        // confirm before the item is added.
+        if (product.age_restricted && !confirmAgeRestricted(product)) {
+          return;
+        }
+        // V01 — a decoded scale line (price/weight-embedded) goes to the
+        // dedicated builder: FINAL price + price_locked, or decoded weight at
+        // shelf unit-price; both lock tare.
+        if (product.embedded) {
+          addDecodedLine(product, product.embedded);
           return;
         }
         let variants = [];
@@ -117,6 +165,8 @@ export default function POSOmniInput() {
     }
   }, [
     addToCart,
+    addDecodedLine,
+    barcodeScheme,
     setSearch,
     setShowResults,
     setSelectedCustomerId,
@@ -124,6 +174,7 @@ export default function POSOmniInput() {
     setShowCustomerDD,
     setPendingVariantProductId,
     setPendingSerialProductId,
+    setPendingSerialContext,
     showNotice,
   ]);
 

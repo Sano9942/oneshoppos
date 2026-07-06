@@ -3,6 +3,7 @@ import { Search, LayoutGrid, List } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
 import POSOmniInput from "./POSOmniInput";
+import POSPluPad from "./POSPluPad";
 
 export default function POSSearchArea() {
   const { pos_layout_mode, pos_search_config, labels = {} } = usePreset();
@@ -35,6 +36,9 @@ export default function POSSearchArea() {
       {/* 2-G.0 scan-first omni-input — flag-gated; existing inputs below
           remain as fallback so flag-off behavior matches main exactly. */}
       {posFlags?.phase2g_omni_input && <POSOmniInput />}
+
+      {/* V01 grocery — PLU rapid-entry pad for loose produce (preset-gated). */}
+      {pos_search_config?.show_plu && <POSPluPad />}
 
       {/* Specific field search row — conditionally shown per preset */}
       {(() => {
