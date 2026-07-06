@@ -397,20 +397,23 @@ module.exports = function registerProductRoutes(app, deps) {
       }
 
       let outletJoinCondition = "";
-      // Base params: $1 barcode, $2 sku, $3 plu_code for the generic OR-match.
-      const params = [lookupValue, lookupValue, lookupValue];
       let whereClause;
+      let params;
       if (lookupField === "sku") {
         whereClause = "p.sku = $1";
+        params = [lookupValue];
       } else if (lookupField === "plu") {
         whereClause = "p.plu_code = $1";
+        params = [lookupValue];
       } else if (lookupField === "barcode") {
         whereClause = "p.barcode = $1";
+        params = [lookupValue];
       } else {
         // Normal scan / PLU pad: match any identifier. plu_code lookup lights up
         // grocery PLU codes typed on the pad (omniInputRouter routes 4-5 digit
         // numerics here) without a separate endpoint.
         whereClause = "(p.barcode = $1 OR p.sku = $2 OR p.plu_code = $3)";
+        params = [lookupValue, lookupValue, lookupValue];
       }
 
       if (outlet_id) {
