@@ -38,6 +38,7 @@ const StorefrontCart = lazy(() => import("../pages/storefront/StorefrontCart"));
 const StorefrontCheckout = lazy(() => import("../pages/storefront/StorefrontCheckout"));
 const StorefrontOrderStatus = lazy(() => import("../pages/storefront/StorefrontOrderStatus"));
 const PublicBookingPage = lazy(() => import("../pages/public/PublicBookingPage"));
+const PublicRoomBookingPage = lazy(() => import("../pages/public/PublicRoomBookingPage"));
 const PublicRestaurantMenuPage = lazy(() => import("../pages/public/PublicRestaurantMenuPage"));
 const RestaurantPayPage = lazy(() => import("../pages/public/RestaurantPayPage"));
 const ReservationBookingPage = lazy(() => import("../pages/public/ReservationBookingPage"));
@@ -192,6 +193,11 @@ export const publicRoutes = [
     key="public-book"
     path="/book/:tenantSlug"
     element={<Suspense fallback={<RouteLoading />}><PublicBookingPage /></Suspense>}
+  />,
+  <Route
+    key="public-book-room"
+    path="/book-room/:tenantSlug"
+    element={<Suspense fallback={<RouteLoading />}><PublicRoomBookingPage /></Suspense>}
   />,
   <Route
     key="public-menu"

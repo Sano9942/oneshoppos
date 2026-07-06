@@ -38,6 +38,17 @@ function toIcsUtcStamp(input) {
   );
 }
 
+/** YYYYMMDD for VALUE=DATE fields. Accepts 'YYYY-MM-DD' or Date. */
+function toIcsDateStamp(input) {
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}/.test(input)) {
+    return input.slice(0, 10).replace(/-/g, "");
+  }
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) throw new Error("ics: invalid date input");
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getUTCFullYear().toString() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate());
+}
+
 /**
  * Fold long lines to 75 octets per RFC 5545 §3.1.
  * We approximate using character count, which is fine for ASCII output.
@@ -123,11 +134,19 @@ function buildIcsFeed(opts) {
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeIcsText(ev.uid)}`,
-      `DTSTAMP:${dtstamp}`,
-      `DTSTART:${toIcsUtcStamp(ev.start)}`,
-      `DTEND:${toIcsUtcStamp(ev.end)}`,
-      `SUMMARY:${escapeIcsText(ev.summary)}`
+      `DTSTAMP:${dtstamp}`
     );
+    if (ev.allDay) {
+      // VALUE=DATE events (hotel stays) — DTEND is exclusive per RFC 5545,
+      // matching checkout-day-exclusive overlap math.
+      lines.push(
+        `DTSTART;VALUE=DATE:${toIcsDateStamp(ev.start)}`,
+        `DTEND;VALUE=DATE:${toIcsDateStamp(ev.end)}`
+      );
+    } else {
+      lines.push(`DTSTART:${toIcsUtcStamp(ev.start)}`, `DTEND:${toIcsUtcStamp(ev.end)}`);
+    }
+    lines.push(`SUMMARY:${escapeIcsText(ev.summary)}`);
     if (ev.description) lines.push(`DESCRIPTION:${escapeIcsText(ev.description)}`);
     if (ev.location) lines.push(`LOCATION:${escapeIcsText(ev.location)}`);
     lines.push("END:VEVENT");
@@ -136,4 +155,4 @@ function buildIcsFeed(opts) {
   return lines.map(foldLine).join(CRLF) + CRLF;
 }
 
-module.exports = { buildIcsEvent, buildIcsFeed, escapeIcsText, toIcsUtcStamp };
+module.exports = { buildIcsEvent, buildIcsFeed, escapeIcsText, toIcsUtcStamp, toIcsDateStamp };

@@ -48,8 +48,10 @@ const updateRateOverrideSchema = z.object({
 });
 
 // ── Rooms ─────────────────────────────────────────────────────────
-const createRoomSchema = z.object({
-  room_type_id: z.number().int().positive(),
+const roomBaseSchema = z.object({
+  // Optional when parent_room_id is set — a bed inherits the dorm's type (V10).
+  room_type_id: z.number().int().positive().optional(),
+  parent_room_id: z.number().int().positive().nullable().optional(),
   outlet_id: z.number().int().positive().optional(),
   room_number: z.string().min(1).max(50),
   floor: z.string().max(50).nullable().optional(),
@@ -58,7 +60,12 @@ const createRoomSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   is_active: z.boolean().optional(),
 });
-const updateRoomSchema = createRoomSchema.partial();
+const createRoomSchema = roomBaseSchema.superRefine((d, ctx) => {
+  if (!d.room_type_id && !d.parent_room_id) {
+    ctx.addIssue({ code: "custom", path: ["room_type_id"], message: "room_type_id required (unless the room is a bed with parent_room_id)" });
+  }
+});
+const updateRoomSchema = roomBaseSchema.partial();
 
 const housekeepingSchema = z.object({
   housekeeping_status: z.enum(HOUSEKEEPING_STATUSES),
@@ -94,9 +101,21 @@ const cancelBookingSchema = z.object({
   cancellation_reason: z.string().max(500).optional(),
 });
 
+// V10 guest registration — guests captured at the desk during check-in.
+const bookingGuestSchema = z.object({
+  name: z.string().min(1).max(200),
+  cnic_passport: z.string().max(100).nullable().optional(),
+  nationality: z.string().max(100).nullable().optional(),
+  phone: z.string().max(50).nullable().optional(),
+  document_photos: z.array(z.string().max(500)).max(10).optional(),
+  is_primary: z.boolean().optional(),
+});
+
 const checkInSchema = z.object({
   actual_checkin: z.string().optional(),
   room_id: z.number().int().positive().optional(),
+  guests: z.array(bookingGuestSchema).max(20).optional(),
+  skip_registration: z.boolean().optional(),
 });
 
 const checkOutSchema = z.object({
@@ -109,6 +128,7 @@ const addFolioLineSchema = z.object({
   description: z.string().min(1).max(500),
   quantity: z.number().min(0.001).default(1),
   unit_price: z.number(),
+  tax_id: z.number().int().positive().nullable().optional(), // V10 folio-tax
 });
 
 const attachSaleSchema = z.object({
@@ -126,6 +146,78 @@ const depositPreAuthSchema = z.object({
   return_url: z.string().url().optional(),
   cancel_url: z.string().url().optional(),
 });
+
+// ── V10: group bookings ───────────────────────────────────────────
+const createBookingGroupSchema = z.object({
+  name: z.string().min(1).max(200),
+  customer_id: z.number().int().positive().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  bookings: z
+    .array(
+      z.object({
+        room_type_id: z.number().int().positive(),
+        room_id: z.number().int().positive().nullable().optional(),
+        customer_id: z.number().int().positive().nullable().optional(),
+        check_in_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        check_out_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        notes: z.string().max(2000).nullable().optional(),
+      }).refine((d) => d.check_out_date > d.check_in_date, {
+        message: "check_out_date must be after check_in_date",
+      })
+    )
+    .min(1)
+    .max(50),
+});
+
+// ── V10: iCal channel feeds ───────────────────────────────────────
+const createChannelFeedSchema = z
+  .object({
+    direction: z.enum(["export", "import"]),
+    name: z.string().min(1).max(200),
+    channel_name: z.string().max(100).nullable().optional(), // "Booking.com", "Airbnb"…
+    room_id: z.number().int().positive().nullable().optional(),
+    room_type_id: z.number().int().positive().nullable().optional(),
+    url: z.string().url().max(1000).optional(), // import source URL
+    is_active: z.boolean().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.direction === "import" && !d.url) {
+      ctx.addIssue({ code: "custom", path: ["url"], message: "import feeds need the OTA calendar URL" });
+    }
+    if (d.direction === "import" && !d.room_id) {
+      ctx.addIssue({ code: "custom", path: ["room_id"], message: "import feeds map to one room" });
+    }
+  });
+
+const updateChannelFeedSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  channel_name: z.string().max(100).nullable().optional(),
+  url: z.string().url().max(1000).optional(),
+  is_active: z.boolean().optional(),
+});
+
+// ── V10: night audit ──────────────────────────────────────────────
+const nightAuditRunSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // default: yesterday
+});
+
+// ── V10: public booking engine (untrusted caller — tight) ─────────
+const publicRoomBookSchema = z
+  .object({
+    room_type_id: z.number().int().positive(),
+    check_in_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    check_out_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    guest_name: z.string().min(1).max(200),
+    guest_phone: z.string().max(50).nullable().optional(),
+    guest_email: z.string().email().max(200).nullable().optional(),
+    notes: z.string().max(1000).nullable().optional(),
+  })
+  .refine((d) => d.check_out_date > d.check_in_date, {
+    message: "check_out_date must be after check_in_date",
+  })
+  .refine((d) => d.guest_phone || d.guest_email, {
+    message: "phone or email required so we can confirm your booking",
+  });
 
 module.exports = {
   OCCUPANCY_STATUSES,
@@ -149,4 +241,11 @@ module.exports = {
   attachSaleSchema,
   settleFolioSchema,
   depositPreAuthSchema,
+  // V10
+  bookingGuestSchema,
+  createBookingGroupSchema,
+  createChannelFeedSchema,
+  updateChannelFeedSchema,
+  nightAuditRunSchema,
+  publicRoomBookSchema,
 };

@@ -5,9 +5,11 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
-import { Plus, X, Calendar as CalendarIcon, BedDouble, FileSignature, ChevronLeft, ChevronRight, Receipt, CalendarDays } from "lucide-react";
+import { Plus, X, Calendar as CalendarIcon, BedDouble, FileSignature, ChevronLeft, ChevronRight, Receipt, CalendarDays, RefreshCw, Link2, Moon, Users } from "lucide-react";
 import { api } from "../../api";
-import { localDateStr, todayLocalStr } from "../../utils/dates";
+import { localDateStr, todayLocalStr, daysAgoLocalStr } from "../../utils/dates";
+import { readTenantSlug } from "../../auth/authStore";
+import { API_BASE, IS_MULTI_TENANT } from "../../config";
 
 // ── Shared constants ──────────────────────────────────────────────
 
@@ -68,30 +70,36 @@ export default function RoomManagementRedesign() {
     location.pathname.endsWith("/bookings") ? "bookings" :
     location.pathname.endsWith("/calendar") ? "calendar" :
     location.pathname.endsWith("/arrivals-departures") ? "arrivals" :
+    location.pathname.endsWith("/channels") ? "channels" :
+    location.pathname.endsWith("/night-audit") ? "audit" :
     "rooms";
 
   return (
     <PageShell
       title="Rooms"
       subtitle="Rooms, rates, bookings, and folios"
-      right={<TabNav tab={tab} />}
+      right={<TabNav tab={tab} showChannels={!!flags.room_channel_sync} />}
     >
       {tab === "rooms" && <RoomsTab />}
       {tab === "rates" && <RatesTab />}
-      {tab === "bookings" && <BookingsTab />}
+      {tab === "bookings" && <BookingsTab requireRegistration={!!flags.room_guest_registration} />}
       {tab === "calendar" && <CalendarTab />}
       {tab === "arrivals" && <ArrivalsTab />}
+      {tab === "channels" && (flags.room_channel_sync ? <ChannelsTab /> : <Navigate to="/rooms" replace />)}
+      {tab === "audit" && <NightAuditTab />}
     </PageShell>
   );
 }
 
-function TabNav({ tab }) {
+function TabNav({ tab, showChannels }) {
   const tabs = [
     { key: "rooms", label: "Rooms", path: "/rooms", icon: BedDouble },
     { key: "rates", label: "Rates", path: "/rooms/rates", icon: Receipt },
     { key: "bookings", label: "Bookings", path: "/rooms/bookings", icon: FileSignature },
     { key: "calendar", label: "Calendar", path: "/rooms/calendar", icon: CalendarIcon },
     { key: "arrivals", label: "Arrivals / Departures", path: "/rooms/arrivals-departures", icon: CalendarDays },
+    ...(showChannels ? [{ key: "channels", label: "Channels", path: "/rooms/channels", icon: Link2 }] : []),
+    { key: "audit", label: "Night Audit", path: "/rooms/night-audit", icon: Moon },
   ];
   return (
     <div className="flex gap-2 flex-wrap">
@@ -129,6 +137,7 @@ function RoomsTab() {
   const [roomFormOpen, setRoomFormOpen] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [editingRoom, setEditingRoom] = useState(null);
+  const [dormMapId, setDormMapId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,12 +240,27 @@ function RoomsTab() {
               </tr>
             </thead>
             <tbody>
-              {rooms.map((r) => (
+              {rooms.map((r) => {
+                const bedCount = rooms.filter((c) => c.parent_room_id === r.id).length;
+                return (
                 <tr key={r.id} className="border-b border-(--ui-border) hover:bg-(--ui-muted-surface)">
-                  <td className="py-2 font-medium">{r.room_number}</td>
+                  <td className="py-2 font-medium">
+                    {r.parent_room_id ? <span className="text-(--ui-text-muted)">↳ </span> : null}
+                    {r.room_number}
+                    {bedCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDormMapId(r.id)}
+                        className="ml-2 text-xs underline text-(--ui-text-muted) hover:text-(--ui-text)"
+                      >
+                        <Users size={12} className="inline mr-0.5" />
+                        {bedCount} beds
+                      </button>
+                    )}
+                  </td>
                   <td>{r.room_type_name || "—"}</td>
                   <td>{r.floor || "—"}</td>
-                  <td><Badge tone="default">{r.occupancy_status}</Badge></td>
+                  <td><Badge tone="default">{bedCount > 0 ? "dorm" : r.occupancy_status}</Badge></td>
                   <td>
                     <Select
                       value={r.housekeeping_status}
@@ -255,7 +279,8 @@ function RoomsTab() {
                     </Button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -272,11 +297,60 @@ function RoomsTab() {
         <RoomForm
           initial={editingRoom}
           roomTypes={roomTypes}
+          rooms={rooms}
           onClose={() => setRoomFormOpen(false)}
           onSaved={() => { setRoomFormOpen(false); load(); }}
         />
       )}
+      {dormMapId && <DormMapModal roomId={dormMapId} onClose={() => setDormMapId(null)} />}
     </div>
+  );
+}
+
+// V10 hostel — live dorm map: "7/10 beds" + per-bed occupancy.
+function DormMapModal({ roomId, onClose }) {
+  const toast = useToast();
+  const [map, setMap] = useState(null);
+
+  useEffect(() => {
+    api.get(`/api/rooms/${roomId}/dorm-map`)
+      .then(setMap)
+      .catch((err) => toast.error(err.message));
+  }, [roomId, toast]);
+
+  return (
+    <Modal title={map ? `${map.dorm.room_number} — ${map.beds_occupied}/${map.beds_total} beds tonight` : "Dorm map"} onClose={onClose}>
+      {!map ? (
+        <p className="text-sm text-(--ui-text-muted)">Loading…</p>
+      ) : map.beds.length === 0 ? (
+        <EmptyState title="No beds yet" body="Add beds by creating rooms with this dorm as parent." />
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {map.beds.map((bed) => (
+            <div key={bed.id} className={`rounded-md border p-3 text-sm ${
+              bed.current_booking_id
+                ? "border-(--ui-border) bg-(--ui-muted-surface)"
+                : "border-(--ui-border) bg-(--ui-surface)"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{bed.room_number}</span>
+                <Badge tone={bed.current_booking_id ? "warning" : "success"}>
+                  {bed.current_booking_id ? "Occupied" : "Free"}
+                </Badge>
+              </div>
+              {bed.current_booking_id && (
+                <p className="text-xs text-(--ui-text-muted) mt-1">
+                  {bed.guest_name || "Guest"} · {bed.booking_number}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-end pt-4">
+        <Button tone="plain" onClick={onClose}>Close</Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -346,7 +420,7 @@ function RoomTypeForm({ initial, onClose, onSaved }) {
   );
 }
 
-function RoomForm({ initial, roomTypes, onClose, onSaved }) {
+function RoomForm({ initial, roomTypes, rooms = [], onClose, onSaved }) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -354,16 +428,20 @@ function RoomForm({ initial, roomTypes, onClose, onSaved }) {
     room_number: initial?.room_number || "",
     floor: initial?.floor || "",
     notes: initial?.notes || "",
+    parent_room_id: initial?.parent_room_id || "",
   });
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // A dorm parent is any non-bed room; a bed inherits its dorm's type.
+  const dormCandidates = rooms.filter((r) => !r.parent_room_id && r.id !== initial?.id);
 
   const save = async () => {
-    if (!form.room_type_id) { toast.error("Select a room type"); return; }
+    if (!form.parent_room_id && !form.room_type_id) { toast.error("Select a room type"); return; }
     if (!form.room_number.trim()) { toast.error("Room number required"); return; }
     setSaving(true);
     try {
       const payload = {
-        room_type_id: Number(form.room_type_id),
+        ...(form.room_type_id ? { room_type_id: Number(form.room_type_id) } : {}),
+        parent_room_id: form.parent_room_id ? Number(form.parent_room_id) : null,
         room_number: form.room_number.trim(),
         floor: form.floor || null,
         notes: form.notes || null,
@@ -384,8 +462,14 @@ function RoomForm({ initial, roomTypes, onClose, onSaved }) {
       <div className="space-y-3">
         <Field label="Room Type">
           <Select value={form.room_type_id} onChange={(e) => update("room_type_id", e.target.value)}>
-            <option value="">Select a type…</option>
+            <option value="">{form.parent_room_id ? "Inherit from dorm" : "Select a type…"}</option>
             {roomTypes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Bed in dorm (hostels)">
+          <Select value={form.parent_room_id} onChange={(e) => update("parent_room_id", e.target.value)}>
+            <option value="">Not a bed — standalone room</option>
+            {dormCandidates.map((r) => <option key={r.id} value={r.id}>{r.room_number}</option>)}
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -572,7 +656,7 @@ function RateOverrideForm({ roomTypeId, onClose, onSaved }) {
 
 // ── Bookings tab ──────────────────────────────────────────────────
 
-function BookingsTab() {
+function BookingsTab({ requireRegistration }) {
   const { fmt } = useCurrency();
   const toast = useToast();
   const [bookings, setBookings] = useState([]);
@@ -580,6 +664,7 @@ function BookingsTab() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [folioBookingId, setFolioBookingId] = useState(null);
+  const [checkInBookingId, setCheckInBookingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -597,6 +682,8 @@ function BookingsTab() {
   useEffect(() => { load(); }, [load]);
 
   const doAction = async (id, action) => {
+    // Check-in goes through the guest-registration modal (PK guest register).
+    if (action === "checkin") { setCheckInBookingId(id); return; }
     try {
       await api.post(`/api/room-bookings/${id}/${action}`, {});
       toast.success(`Booking ${action}`);
@@ -671,7 +758,80 @@ function BookingsTab() {
           onSettled={() => { setFolioBookingId(null); load(); }}
         />
       )}
+      {checkInBookingId && (
+        <CheckInModal
+          bookingId={checkInBookingId}
+          requireRegistration={requireRegistration}
+          onClose={() => setCheckInBookingId(null)}
+          onDone={() => { setCheckInBookingId(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// V10 — check-in with guest registration (PK guest register: primary guest
+// CNIC/passport; skip is the audited front-desk escape hatch).
+function CheckInModal({ bookingId, requireRegistration, onClose, onDone }) {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const [guest, setGuest] = useState({ name: "", cnic_passport: "", nationality: "", phone: "" });
+  const update = (k, v) => setGuest((g) => ({ ...g, [k]: v }));
+
+  const submit = async (skip) => {
+    if (!skip && requireRegistration && (!guest.name.trim() || !guest.cnic_passport.trim())) {
+      toast.error("Primary guest name + CNIC/passport required (or skip registration)");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = skip
+        ? { skip_registration: true }
+        : guest.name.trim()
+          ? { guests: [{ ...guest, name: guest.name.trim(), is_primary: true }] }
+          : {};
+      await api.post(`/api/room-bookings/${bookingId}/checkin`, body);
+      toast.success("Checked in");
+      onDone();
+    } catch (err) { toast.error(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal title="Check In — Guest Registration" onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-xs text-(--ui-text-muted)">
+          {requireRegistration
+            ? "Capture the primary guest's ID for the guest register (required)."
+            : "Optionally record the primary guest's details."}
+        </p>
+        <Field label="Guest name">
+          <Input value={guest.name} onChange={(e) => update("name", e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="CNIC / Passport">
+            <Input value={guest.cnic_passport} onChange={(e) => update("cnic_passport", e.target.value)} />
+          </Field>
+          <Field label="Nationality">
+            <Input value={guest.nationality} onChange={(e) => update("nationality", e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Phone">
+          <Input value={guest.phone} onChange={(e) => update("phone", e.target.value)} />
+        </Field>
+      </div>
+      <div className="flex justify-between gap-2 pt-4">
+        <Button tone="plain" onClick={() => submit(true)} disabled={saving}>
+          Skip registration
+        </Button>
+        <div className="flex gap-2">
+          <Button tone="plain" onClick={onClose}>Cancel</Button>
+          <Button tone="primary" onClick={() => submit(false)} disabled={saving}>
+            {saving ? "Checking in…" : "Check In"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -1136,6 +1296,384 @@ function BookingColumn({ title, bookings, fmt }) {
         </div>
       )}
     </SectionCard>
+  );
+}
+
+// ── V10 Channels tab (iCal sync — honest copy: NOT a Booking.com API) ──
+
+function ChannelsTab() {
+  const toast = useToast();
+  const [feeds, setFeeds] = useState([]);
+  const [deadLetters, setDeadLetters] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [syncing, setSyncing] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [f, dl, r] = await Promise.all([
+        api.get("/api/room-channel-feeds"),
+        api.get("/api/room-channel-dead-letters"),
+        api.get("/api/rooms"),
+      ]);
+      setFeeds(f?.feeds || []);
+      setDeadLetters(dl?.dead_letters || []);
+      setRooms(r?.rooms || []);
+    } catch (err) { toast.error(err.message); }
+    finally { setLoading(false); }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const exportUrl = (feed) => {
+    const base = `${API_BASE}/api/public/rooms/ical/${feed.secret}`;
+    const slug = IS_MULTI_TENANT ? readTenantSlug() : null;
+    return slug ? `${base}?tenant=${encodeURIComponent(slug)}` : base;
+  };
+
+  const syncNow = async (feed) => {
+    setSyncing(feed.id);
+    try {
+      const res = await api.post(`/api/room-channel-feeds/${feed.id}/sync`, {});
+      if (res.error) toast.error(`Sync failed: ${res.error}`);
+      else toast.success(`Synced — ${res.events} events, ${res.conflicts} conflicts`);
+      load();
+    } catch (err) { toast.error(err.message); }
+    finally { setSyncing(null); }
+  };
+
+  const rotateSecret = async (feed) => {
+    if (!confirm("Rotate this feed's secret? The old URL stops working immediately — update it on the OTA.")) return;
+    try {
+      await api.post(`/api/room-channel-feeds/${feed.id}/rotate-secret`, {});
+      toast.success("Secret rotated");
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const removeFeed = async (feed) => {
+    if (!confirm(`Delete feed "${feed.name}"? Its imported blocks are removed too.`)) return;
+    try {
+      await api.del(`/api/room-channel-feeds/${feed.id}`);
+      toast.success("Feed deleted");
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const resolveDl = async (dl, action) => {
+    try {
+      await api.post(`/api/room-channel-dead-letters/${dl.id}/${action}`, {});
+      toast.success(action === "resolve" ? "Resolved" : "Dismissed");
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {deadLetters.length > 0 && (
+        <SectionCard className="border-(--ui-danger)">
+          <h3 className="font-semibold text-(--ui-danger) mb-1">
+            ⚠ Sync conflicts — possible double bookings
+          </h3>
+          <p className="text-xs text-(--ui-text-muted) mb-3">
+            An OTA calendar event overlaps a local booking. Relocate or cancel one side, then resolve.
+          </p>
+          <table className="w-full text-sm">
+            <tbody>
+              {deadLetters.map((dl) => (
+                <tr key={dl.id} className="border-b border-(--ui-border)">
+                  <td className="py-2">{dl.feed_name || dl.channel_name || "Feed"}</td>
+                  <td className="text-xs">{String(dl.start_date).slice(0, 10)} → {String(dl.end_date).slice(0, 10)}</td>
+                  <td>vs booking <span className="font-medium">{dl.booking_number}</span></td>
+                  <td className="text-right">
+                    <Button size="sm" tone="primary" onClick={() => resolveDl(dl, "resolve")}>Resolved</Button>{" "}
+                    <Button size="sm" tone="plain" onClick={() => resolveDl(dl, "dismiss")}>Dismiss</Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      )}
+
+      <SectionCard>
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h3 className="font-semibold text-(--ui-text)">iCal Channel Sync</h3>
+            <p className="text-xs text-(--ui-text-muted)">
+              Calendar-level sync with OTAs via iCal feeds. Export feeds give Booking.com / Airbnb your
+              availability; import feeds pull their bookings in as blocks (polled every 10 minutes).
+              This is iCal sync — not a certified Booking.com API connection.
+            </p>
+          </div>
+          <Button tone="primary" size="sm" onClick={() => setFormOpen(true)}>
+            <Plus size={14} /> Add Feed
+          </Button>
+        </div>
+        {loading ? (
+          <p className="text-sm text-(--ui-text-muted)">Loading…</p>
+        ) : feeds.length === 0 ? (
+          <EmptyState
+            title="No channel feeds yet"
+            body="Add an export feed to share your calendar with an OTA, or an import feed to pull an OTA calendar into availability."
+          />
+        ) : (
+          <table className="w-full text-sm mt-3">
+            <thead>
+              <tr className="text-left text-xs text-(--ui-text-muted) border-b border-(--ui-border)">
+                <th className="py-2">Feed</th>
+                <th>Direction</th>
+                <th>Scope</th>
+                <th>Last sync</th>
+                <th>Blocks</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {feeds.map((f) => (
+                <tr key={f.id} className="border-b border-(--ui-border)">
+                  <td className="py-2">
+                    <span className="font-medium">{f.name}</span>
+                    {f.channel_name && <span className="text-xs text-(--ui-text-muted)"> · {f.channel_name}</span>}
+                  </td>
+                  <td><Badge tone={f.direction === "export" ? "default" : "warning"}>{f.direction}</Badge></td>
+                  <td className="text-xs">{f.room_number || f.room_type_name || "All rooms"}</td>
+                  <td className="text-xs">
+                    {f.direction === "import" ? (
+                      f.last_synced_at ? (
+                        <span className={f.last_status === "error" || f.is_stale ? "text-(--ui-danger)" : ""}>
+                          {new Date(f.last_synced_at).toLocaleString()}
+                          {f.last_status === "error" ? " — error" : f.is_stale ? " — stale" : ""}
+                        </span>
+                      ) : <span className="text-(--ui-text-muted)">never</span>
+                    ) : "live"}
+                  </td>
+                  <td>{f.direction === "import" ? f.block_count : "—"}</td>
+                  <td className="text-right whitespace-nowrap">
+                    {f.direction === "export" ? (
+                      <>
+                        <Button size="sm" tone="plain" onClick={() => {
+                          navigator.clipboard?.writeText(exportUrl(f));
+                          toast.success("Feed URL copied — paste it into the OTA's iCal import");
+                        }}>Copy URL</Button>{" "}
+                        <Button size="sm" tone="plain" onClick={() => rotateSecret(f)}>Rotate</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" tone="plain" disabled={syncing === f.id} onClick={() => syncNow(f)}>
+                        <RefreshCw size={12} className={syncing === f.id ? "animate-spin" : ""} /> Sync now
+                      </Button>
+                    )}{" "}
+                    <Button size="sm" tone="plain" onClick={() => removeFeed(f)}>Delete</Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </SectionCard>
+
+      {formOpen && (
+        <ChannelFeedForm
+          rooms={rooms}
+          onClose={() => setFormOpen(false)}
+          onSaved={() => { setFormOpen(false); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChannelFeedForm({ rooms, onClose, onSaved }) {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ direction: "export", name: "", channel_name: "", room_id: "", url: "" });
+  const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form.name.trim()) { toast.error("Name required"); return; }
+    if (form.direction === "import" && (!form.url.trim() || !form.room_id)) {
+      toast.error("Import feeds need the OTA calendar URL and a room");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/api/room-channel-feeds", {
+        direction: form.direction,
+        name: form.name.trim(),
+        channel_name: form.channel_name.trim() || null,
+        room_id: form.room_id ? Number(form.room_id) : null,
+        ...(form.direction === "import" ? { url: form.url.trim() } : {}),
+      });
+      toast.success("Feed created");
+      onSaved();
+    } catch (err) { toast.error(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal title="Add Channel Feed" onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Direction">
+          <Select value={form.direction} onChange={(e) => update("direction", e.target.value)}>
+            <option value="export">Export — give the OTA our calendar</option>
+            <option value="import">Import — pull the OTA's calendar in</option>
+          </Select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Name">
+            <Input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="Booking.com — Room 201" />
+          </Field>
+          <Field label="Channel">
+            <Input value={form.channel_name} onChange={(e) => update("channel_name", e.target.value)} placeholder="Booking.com / Airbnb…" />
+          </Field>
+        </div>
+        <Field label={form.direction === "import" ? "Room (required)" : "Room (optional — blank = all rooms)"}>
+          <Select value={form.room_id} onChange={(e) => update("room_id", e.target.value)}>
+            <option value="">{form.direction === "import" ? "Select a room…" : "All rooms"}</option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>{r.room_number}</option>
+            ))}
+          </Select>
+        </Field>
+        {form.direction === "import" && (
+          <Field label="OTA iCal URL">
+            <Input value={form.url} onChange={(e) => update("url", e.target.value)} placeholder="https://…/calendar.ics" />
+          </Field>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 pt-4">
+        <Button tone="plain" onClick={onClose}>Cancel</Button>
+        <Button tone="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Create Feed"}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── V10 Night Audit tab ───────────────────────────────────────────
+
+function NightAuditTab() {
+  const { fmt } = useCurrency();
+  const toast = useToast();
+  const [snapshots, setSnapshots] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [runDate, setRunDate] = useState("");
+  const [lastRun, setLastRun] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [hist, rep] = await Promise.all([
+        api.get("/api/rooms/night-audit/history"),
+        api.get(`/api/reports/occupancy?from=${daysAgoLocalStr(29)}&to=${todayLocalStr()}`),
+      ]);
+      setSnapshots(hist?.snapshots || []);
+      setSummary(rep?.summary || null);
+    } catch (err) { toast.error(err.message); }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const runAudit = async () => {
+    setRunning(true);
+    try {
+      const snap = await api.post("/api/rooms/night-audit/run", runDate ? { date: runDate } : {});
+      setLastRun(snap);
+      toast.success(`Audit run for ${String(snap.audit_date).slice(0, 10)}`);
+      load();
+    } catch (err) { toast.error(err.message); }
+    finally { setRunning(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            ["Occupancy (30d)", `${summary.occupancy_pct}%`],
+            ["ADR (30d)", fmt(summary.adr)],
+            ["RevPAR (30d)", fmt(summary.revpar)],
+            ["Room revenue (30d)", fmt(summary.room_revenue)],
+          ].map(([label, value]) => (
+            <SectionCard key={label}>
+              <p className="text-xs text-(--ui-text-muted)">{label}</p>
+              <p className="text-xl font-semibold text-(--ui-text)">{value}</p>
+            </SectionCard>
+          ))}
+        </div>
+      )}
+
+      <SectionCard>
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div>
+            <h3 className="font-semibold text-(--ui-text)">Night Audit</h3>
+            <p className="text-xs text-(--ui-text-muted)">
+              Snapshots each hotel night — occupancy, ADR, RevPAR, arrivals/departures, and unsettled
+              folios of departed guests. Runs automatically overnight; re-run any date safely.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input type="date" value={runDate} onChange={(e) => setRunDate(e.target.value)} />
+            <Button tone="primary" size="sm" disabled={running} onClick={runAudit}>
+              <Moon size={14} /> {running ? "Running…" : "Run audit now"}
+            </Button>
+          </div>
+        </div>
+
+        {lastRun?.unsettled_folios?.length > 0 && (
+          <div className="mb-3 rounded-md border border-(--ui-border) bg-(--ui-muted-surface) p-3">
+            <p className="text-sm font-medium text-(--ui-text) mb-1">
+              ⚠ {lastRun.unsettled_folios.length} departed guest(s) with unsettled folios
+            </p>
+            {lastRun.unsettled_folios.map((f) => (
+              <p key={f.folio_id} className="text-xs text-(--ui-text-muted)">
+                {f.booking_number} · {f.customer_name || "Guest"} · {fmt(f.grand_total)}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {snapshots.length === 0 ? (
+          <EmptyState title="No audits yet" body="Run your first night audit — with zero bookings it simply records an empty house." />
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-(--ui-text-muted) border-b border-(--ui-border)">
+                <th className="py-2">Night</th>
+                <th>Occupied</th>
+                <th>Occ %</th>
+                <th>ADR</th>
+                <th>RevPAR</th>
+                <th>Arrivals</th>
+                <th>Departures</th>
+                <th>No-shows</th>
+                <th>Revenue</th>
+                <th>Unsettled</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.map((s) => (
+                <tr key={s.id} className="border-b border-(--ui-border)">
+                  <td className="py-2 font-medium">{String(s.audit_date).slice(0, 10)}</td>
+                  <td>{s.rooms_occupied}/{s.rooms_total}{Number(s.rooms_blocked) > 0 ? ` (+${s.rooms_blocked} OTA)` : ""}</td>
+                  <td>{s.occupancy_pct}%</td>
+                  <td>{fmt(s.adr)}</td>
+                  <td>{fmt(s.revpar)}</td>
+                  <td>{s.arrivals}</td>
+                  <td>{s.departures}</td>
+                  <td>{s.no_shows}</td>
+                  <td>{fmt(s.room_revenue)}</td>
+                  <td>{Number(s.unsettled_folio_total) > 0
+                    ? <Badge tone="danger">{fmt(s.unsettled_folio_total)}</Badge>
+                    : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </SectionCard>
+    </div>
   );
 }
 

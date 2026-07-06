@@ -184,6 +184,10 @@ module.exports = function registerAllRoutes(app, deps) {
   // gated on the rental_online_booking flag inside the handlers.
   require("./public-rentals")(app, deps);
 
+  // V10 — Public direct room booking engine + iCal export feeds. No auth;
+  // gated on room_online_booking / room_channel_sync flags inside handlers.
+  require("./public-rooms")(app, deps);
+
   // F03 — Public tokenized form fill (intake/waivers). No auth; single-use
   // token; resolves tenant via resolvePublicTenantDb; rate-limited.
   require("./public-forms")(app, deps);

@@ -10,6 +10,21 @@
  */
 
 const { generateInvoiceNumber } = require("./customer-invoicing");
+const { resolveTaxForExplicitRate } = require("./tax-snapshot");
+
+// Unpaid online reservations expire and release inventory (denial-of-inventory
+// guard). Gateway on → guest is expected to pay the deposit immediately;
+// gateway off/manual → front desk gets a working day to confirm.
+const ONLINE_RESERVATION_TTL_MINUTES = { gateway: 60, manual: 24 * 60 };
+
+// A 'reserved' booking no longer blocks inventory once its TTL lapses without
+// a deposit — shared predicate between the availability read and the cancel
+// sweep so the two can never disagree.
+const STALE_RESERVATION_PREDICATE = `(
+  b.status = 'reserved'
+  AND b.expires_at IS NOT NULL AND b.expires_at < NOW()
+  AND b.deposit_status NOT IN ('authorized','captured')
+)`;
 
 // ── Booking numbering ─────────────────────────────────────────────
 
@@ -263,22 +278,40 @@ async function getRoom(db, id) {
 }
 
 async function createRoom(db, data) {
+  // V10 hostel: a bed is a child room. It inherits the dorm's type/outlet so
+  // every existing lifecycle/folio/rate path works unmodified. One level only
+  // (a bed can't itself be a dorm).
+  let roomTypeId = data.room_type_id;
+  let outletId = data.outlet_id || null;
+  if (data.parent_room_id) {
+    const { rows: [parent] } = await db.query(
+      "SELECT id, room_type_id, outlet_id, parent_room_id FROM rooms WHERE id = $1",
+      [Number(data.parent_room_id)]
+    );
+    if (!parent) throw Object.assign(new Error("Parent room not found"), { statusCode: 404 });
+    if (parent.parent_room_id) {
+      throw Object.assign(new Error("A bed cannot be nested under another bed"), { statusCode: 400 });
+    }
+    roomTypeId = roomTypeId || parent.room_type_id;
+    outletId = outletId || parent.outlet_id;
+  }
   const { rows: [row] } = await db.query(
     `INSERT INTO rooms
        (room_type_id, outlet_id, room_number, floor,
-        occupancy_status, housekeeping_status, notes, is_active)
+        occupancy_status, housekeeping_status, notes, is_active, parent_room_id)
      VALUES ($1, $2, $3, $4,
-             COALESCE($5, 'vacant'), COALESCE($6, 'clean'), $7, COALESCE($8, TRUE))
+             COALESCE($5, 'vacant'), COALESCE($6, 'clean'), $7, COALESCE($8, TRUE), $9)
      RETURNING *`,
     [
-      data.room_type_id,
-      data.outlet_id || null,
+      roomTypeId,
+      outletId,
       data.room_number,
       data.floor || null,
       data.occupancy_status,
       data.housekeeping_status,
       data.notes || null,
       data.is_active,
+      data.parent_room_id || null,
     ]
   );
   return row;
@@ -315,16 +348,27 @@ async function setHousekeepingStatus(db, id, status) {
     "UPDATE rooms SET housekeeping_status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
     [status, id]
   );
+  if (row) {
+    // Housekeeping stays dorm-level — children inherit (V10 hostel).
+    try {
+      await db.query(
+        "UPDATE rooms SET housekeeping_status = $1, updated_at = NOW() WHERE parent_room_id = $2",
+        [status, id]
+      );
+    } catch { /* pre-v119 tenant */ }
+  }
   return row || null;
 }
 
 // ── Availability (app-level overlap, date-range intersect) ────────
 
 async function checkRoomAvailability(db, { from, to, room_type_id, room_id, excludeBookingId }) {
-  // Build rooms filter (candidate room list)
+  // Build rooms filter (candidate room list). A dorm parent (a room that has
+  // active child beds) is never directly bookable — its beds are (V10 hostel).
   const roomParams = [];
   let rIdx = 0;
-  let roomWhere = "r.is_active = TRUE";
+  let roomWhere = `r.is_active = TRUE
+    AND NOT EXISTS (SELECT 1 FROM rooms c WHERE c.parent_room_id = r.id AND c.is_active = TRUE)`;
   if (room_type_id) {
     rIdx++;
     roomWhere += ` AND r.room_type_id = $${rIdx}`;
@@ -350,7 +394,12 @@ async function checkRoomAvailability(db, { from, to, room_type_id, room_id, excl
   // against active booking rows.
   const conflictParams = [from, to];
   let cIdx = 2;
+  // Overlap math is checkout-day-exclusive by design (check_in < to AND
+  // check_out > from) — a guest leaving on the day another arrives is NOT a
+  // conflict (back-to-back stays). Expired unpaid online reservations stop
+  // blocking inventory immediately (the cancel sweep formalizes them later).
   let conflictWhere = `b.status NOT IN ('cancelled','no_show','completed','invoiced')
+       AND NOT ${STALE_RESERVATION_PREDICATE}
        AND b.check_in_date < $2 AND b.check_out_date > $1`;
   if (room_type_id) {
     cIdx++;
@@ -376,6 +425,31 @@ async function checkRoomAvailability(db, { from, to, room_type_id, room_id, excl
   );
 
   const conflictRoomIds = new Set(conflicts.filter((c) => c.room_id).map((c) => c.room_id));
+
+  // OTA channel blocks (V10 iCal import) count as occupancy. try/catch: the
+  // table only exists from v119 — availability must not break mid-rollout.
+  let channelBlocks = [];
+  try {
+    const blockParams = [from, to];
+    let bIdx = 2;
+    let blockWhere = "cb.start_date < $2 AND cb.end_date > $1";
+    if (room_id) {
+      bIdx++;
+      blockWhere += ` AND cb.room_id = $${bIdx}`;
+      blockParams.push(Number(room_id));
+    }
+    const { rows } = await db.query(
+      `SELECT cb.id, cb.room_id, cb.start_date, cb.end_date, cb.summary, cb.source_feed_id
+       FROM channel_blocks cb
+       WHERE ${blockWhere}`,
+      blockParams
+    );
+    channelBlocks = rows;
+    for (const blk of channelBlocks) {
+      if (blk.room_id) conflictRoomIds.add(blk.room_id);
+    }
+  } catch { /* pre-v119 tenant — no channel sync yet */ }
+
   const available = rooms.filter((r) => !conflictRoomIds.has(r.id));
   return {
     from,
@@ -384,7 +458,42 @@ async function checkRoomAvailability(db, { from, to, room_type_id, room_id, excl
     rooms_available: available.length,
     available,
     conflicts,
+    channel_blocks: channelBlocks,
   };
+}
+
+/**
+ * Cancel 'reserved' bookings whose hold TTL lapsed without a deposit (the
+ * public engine's denial-of-inventory guard). Availability already ignores
+ * them via STALE_RESERVATION_PREDICATE — this sweep formalizes the cancel and
+ * frees the room row. Non-throwing per booking.
+ */
+async function expireStaleRoomReservations(db) {
+  const { rows } = await db.query(
+    `UPDATE room_bookings b
+        SET status = 'cancelled',
+            cancellation_reason = 'Reservation expired unpaid (auto)',
+            updated_at = NOW()
+      WHERE ${STALE_RESERVATION_PREDICATE}
+      RETURNING b.id, b.room_id, b.booking_number`
+  );
+  for (const b of rows) {
+    if (!b.room_id) continue;
+    try {
+      // Free the room only if no other live booking holds it.
+      await db.query(
+        `UPDATE rooms r SET occupancy_status = 'vacant', updated_at = NOW()
+          WHERE r.id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM room_bookings ob
+              WHERE ob.room_id = r.id
+                AND ob.status IN ('reserved','confirmed','checked_in')
+            )`,
+        [b.room_id]
+      );
+    } catch { /* room release is best-effort */ }
+  }
+  return rows;
 }
 
 // ── Bookings ──────────────────────────────────────────────────────
@@ -470,9 +579,43 @@ async function getBooking(db, id) {
   return { ...booking, folio: folio || null };
 }
 
-async function createBooking(db, data, employeeId) {
+/**
+ * THE single booking choke point (V10 task 1). Every booking writer — front
+ * desk, public engine, group flow, any future channel — goes through here;
+ * never a route-local availability check.
+ *
+ * Race fix: pg_advisory_xact_lock on the room TYPE (covers both type-level
+ * and specific-room bookings; beds are child rooms sharing the dorm's type,
+ * so the hostel last-bed race serializes here too). xact-scoped advisory
+ * locks are safe under the Supabase transaction pooler (session-scoped ones
+ * are not). Key includes current_schema() — advisory locks are cluster-wide,
+ * so two tenants' type #3 must not contend.
+ *
+ * @param {object} [opts] { source: 'staff'|'online', expiresAt: ISO|null }
+ */
+async function createBooking(db, data, employeeId, opts = {}) {
+  const source = opts.source || "staff";
   return await db.transaction(async (client) => {
-    // Availability check (inside transaction)
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':room_type:' || $1::text))",
+      [Number(data.room_type_id)]
+    );
+
+    // A dorm parent is never directly bookable — book one of its beds.
+    if (data.room_id) {
+      const { rows: [child] } = await client.query(
+        "SELECT 1 FROM rooms WHERE parent_room_id = $1 AND is_active = TRUE LIMIT 1",
+        [Number(data.room_id)]
+      );
+      if (child) {
+        throw Object.assign(
+          new Error("This room is a dorm — book one of its beds instead"),
+          { statusCode: 400 }
+        );
+      }
+    }
+
+    // Availability check (inside transaction, behind the lock)
     const avail = await checkRoomAvailability(client, {
       from: data.check_in_date,
       to: data.check_out_date,
@@ -480,11 +623,16 @@ async function createBooking(db, data, employeeId) {
       room_id: data.room_id || undefined,
     });
     if (data.room_id) {
-      const conflict = avail.conflicts.find((c) => Number(c.room_id) === Number(data.room_id));
-      if (conflict) {
+      // The room must survive the FULL availability verdict — local booking
+      // conflicts AND OTA channel blocks (V10) both disqualify it.
+      const stillAvailable = avail.available.some((r) => Number(r.id) === Number(data.room_id));
+      if (!stillAvailable) {
+        const conflict = avail.conflicts.find((c) => Number(c.room_id) === Number(data.room_id));
         throw Object.assign(
           new Error(
-            `Room is already booked for the selected dates (conflicting booking ${conflict.booking_number})`
+            conflict
+              ? `Room is already booked for the selected dates (conflicting booking ${conflict.booking_number})`
+              : "Room is blocked for the selected dates (external channel calendar)"
           ),
           { statusCode: 409 }
         );
@@ -511,9 +659,10 @@ async function createBooking(db, data, employeeId) {
          (booking_number, customer_id, outlet_id, created_by,
           room_id, room_type_id, status,
           check_in_date, check_out_date, nights,
-          rate_snapshot, deposit_collected, deposit_method, notes)
+          rate_snapshot, deposit_collected, deposit_method, notes,
+          source, expires_at, group_id)
        VALUES ($1, $2, $3, $4, $5, $6, 'reserved',
-               $7, $8, $9, $10, $11, $12, $13)
+               $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         bookingNumber,
@@ -529,6 +678,9 @@ async function createBooking(db, data, employeeId) {
         data.deposit_collected || 0,
         data.deposit_method || null,
         data.notes || null,
+        source,
+        opts.expiresAt || null,
+        opts.groupId || null,
       ]
     );
 
@@ -584,14 +736,15 @@ async function confirmBooking(db, id) {
       statusCode: 400,
     });
   }
+  // Staff confirmation ends the unpaid-hold TTL — the stay is now committed.
   const { rows: [row] } = await db.query(
-    "UPDATE room_bookings SET status = 'confirmed', updated_at = NOW() WHERE id = $1 RETURNING *",
+    "UPDATE room_bookings SET status = 'confirmed', expires_at = NULL, updated_at = NOW() WHERE id = $1 RETURNING *",
     [id]
   );
   return row;
 }
 
-async function checkInBooking(db, id, data = {}) {
+async function checkInBooking(db, id, data = {}, opts = {}) {
   return await db.transaction(async (client) => {
     const { rows: [cur] } = await client.query(
       "SELECT * FROM room_bookings WHERE id = $1 FOR UPDATE",
@@ -608,15 +761,50 @@ async function checkInBooking(db, id, data = {}) {
       throw Object.assign(new Error("No room assigned to booking"), { statusCode: 400 });
     }
 
+    // V10 guest registration: capture guests presented at the desk, then —
+    // when the tenant enforces registration (room_guest_registration flag,
+    // ON for lodging presets; PK hotels must keep a police-reportable guest
+    // register) — require a primary guest with an ID document number unless
+    // staff explicitly skip (audit-noted).
+    if (Array.isArray(data.guests)) {
+      for (const g of data.guests) {
+        if (!g || !g.name) continue;
+        await addBookingGuest(client, id, g);
+      }
+    }
+    if (opts.requireRegistration && !data.skip_registration) {
+      const { rows: [primary] } = await client.query(
+        `SELECT 1 FROM booking_guests
+          WHERE booking_id = $1 AND is_primary = TRUE AND COALESCE(cnic_passport, '') != ''
+          LIMIT 1`,
+        [id]
+      );
+      if (!primary) {
+        throw Object.assign(
+          new Error("Guest registration required: capture the primary guest's CNIC/passport before check-in (or pass skip_registration)"),
+          { statusCode: 400, code: "REGISTRATION_REQUIRED" }
+        );
+      }
+    }
+
     const { rows: [booking] } = await client.query(
       `UPDATE room_bookings
          SET status = 'checked_in',
              actual_checkin = COALESCE($1, NOW()),
              room_id = $2,
+             expires_at = NULL,
              updated_at = NOW()
        WHERE id = $3 RETURNING *`,
       [data.actual_checkin || null, roomId, id]
     );
+    if (data.skip_registration) {
+      try {
+        await client.query(
+          "UPDATE room_bookings SET notes = COALESCE(notes, '') || $1 WHERE id = $2",
+          ["\n[Guest registration skipped at check-in]", id]
+        );
+      } catch { /* audit note is best-effort */ }
+    }
 
     await client.query(
       "UPDATE rooms SET occupancy_status = 'occupied', updated_at = NOW() WHERE id = $1",
@@ -722,8 +910,39 @@ async function markNoShow(db, id) {
 function normalizeDate(d) {
   if (!d) return null;
   if (typeof d === "string") return d.slice(0, 10);
-  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  if (d instanceof Date) {
+    // pg parses DATE columns to a JS Date at LOCAL midnight — toISOString()
+    // would shift it a day back on UTC+ servers (TZ=Asia/Karachi in prod).
+    // Use local components.
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
   return String(d).slice(0, 10);
+}
+
+/**
+ * Resolve the tax treatment for a room-type charge (V10 folio-tax slice of
+ * the approved proposal — same resolveTaxForExplicitRate entry point as V09
+ * rentals). room_types.tax_inclusive=TRUE forces inclusive treatment for that
+ * type's rates even when the tenant's tax_mode is 'exclusive' (this makes the
+ * previously-dead v49 column real).
+ */
+async function resolveRoomTypeTax(client, roomTypeId, price, quantity = 1) {
+  const { rows: [cp] } = await client.query("SELECT tax_mode FROM company_profile WHERE id = 1");
+  const taxMode = cp?.tax_mode || "none";
+  const { rows: [rt] } = await client.query(
+    "SELECT tax_id, tax_inclusive FROM room_types WHERE id = $1",
+    [roomTypeId]
+  );
+  const inclusive = rt?.tax_inclusive === true ? true : taxMode === "inclusive";
+  const tax = await resolveTaxForExplicitRate(client, {
+    taxId: rt?.tax_id ?? null,
+    price,
+    quantity,
+    taxMode,
+    taxInclusive: inclusive,
+  });
+  return { ...tax, inclusive: taxMode === "none" ? true : inclusive };
 }
 
 async function openFolioInternal(client, booking) {
@@ -738,13 +957,18 @@ async function openFolioInternal(client, booking) {
     [booking.id, subtotal]
   );
   for (const line of rate_breakdown) {
+    const tax = await resolveRoomTypeTax(client, booking.room_type_id, line.rate, 1);
     await client.query(
-      `INSERT INTO folio_lines (folio_id, line_type, description, quantity, unit_price, line_total)
-       VALUES ($1, 'room_night', $2, 1, $3, $3)`,
-      [folio.id, `Room night — ${line.date}`, line.rate]
+      `INSERT INTO folio_lines
+         (folio_id, line_type, description, quantity, unit_price, line_total,
+          tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+       VALUES ($1, 'room_night', $2, 1, $3, $3, $4, $5, $6)`,
+      [folio.id, `Room night — ${line.date}`, line.rate, tax.rate, tax.amount, tax.inclusive]
     );
   }
-  return folio;
+  await recomputeFolioTotals(client, folio.id);
+  const { rows: [fresh] } = await client.query("SELECT * FROM guest_folios WHERE id = $1", [folio.id]);
+  return fresh || folio;
 }
 
 async function openFolio(db, bookingId) {
@@ -777,12 +1001,19 @@ async function getFolio(db, bookingId) {
 }
 
 async function recomputeFolioTotals(client, folioId) {
+  // V10 folio-tax: tax_total = Σ per-line snapshots (+ legacy 'tax'-type
+  // lines). Lines stamped exclusive add their tax ON TOP of line_total in the
+  // grand total; inclusive lines (and pos_sale lines, whose line_total is the
+  // sale's tax-included grand total) already carry their tax inside.
   const { rows } = await client.query(
     `SELECT
        COALESCE(SUM(CASE WHEN line_type = 'room_night' THEN line_total ELSE 0 END), 0) AS room_charge_total,
        COALESCE(SUM(CASE WHEN line_type = 'pos_sale' THEN line_total ELSE 0 END), 0) AS pos_charge_total,
-       COALESCE(SUM(CASE WHEN line_type = 'tax' THEN line_total ELSE 0 END), 0) AS tax_total,
-       COALESCE(SUM(line_total), 0) AS grand_total
+       COALESCE(SUM(CASE WHEN line_type = 'tax' THEN line_total ELSE 0 END), 0)
+         + COALESCE(SUM(tax_amount_at_charge), 0) AS tax_total,
+       COALESCE(SUM(line_total), 0)
+         + COALESCE(SUM(CASE WHEN tax_inclusive_at_charge = FALSE THEN tax_amount_at_charge ELSE 0 END), 0)
+         AS grand_total
      FROM folio_lines WHERE folio_id = $1`,
     [folioId]
   );
@@ -796,7 +1027,7 @@ async function recomputeFolioTotals(client, folioId) {
   );
 }
 
-async function addFolioLine(db, folioId, { line_type, description, quantity, unit_price, sale_id, added_by }) {
+async function addFolioLine(db, folioId, { line_type, description, quantity, unit_price, sale_id, added_by, tax_id }) {
   return await db.transaction(async (client) => {
     const { rows: [folio] } = await client.query(
       "SELECT * FROM guest_folios WHERE id = $1 FOR UPDATE",
@@ -809,11 +1040,26 @@ async function addFolioLine(db, folioId, { line_type, description, quantity, uni
     const qty = Number(quantity ?? 1);
     const price = Number(unit_price ?? 0);
     const lineTotal = qty * price;
+
+    // Manual charges may carry an explicit tax_id (minibar, laundry…);
+    // discounts and untaxed charges stamp 0. Same entry point as room nights.
+    let tax = { rate: 0, amount: 0, inclusive: true };
+    if (tax_id != null && line_type === "manual_charge") {
+      const { rows: [cp] } = await client.query("SELECT tax_mode FROM company_profile WHERE id = 1");
+      const taxMode = cp?.tax_mode || "none";
+      const t = await resolveTaxForExplicitRate(client, {
+        taxId: tax_id, price, quantity: qty, taxMode,
+      });
+      tax = { ...t, inclusive: taxMode === "none" ? true : taxMode === "inclusive" };
+    }
+
     const { rows: [line] } = await client.query(
       `INSERT INTO folio_lines
-         (folio_id, line_type, description, quantity, unit_price, line_total, sale_id, added_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [folioId, line_type, description, qty, price, lineTotal, sale_id || null, added_by || null]
+         (folio_id, line_type, description, quantity, unit_price, line_total, sale_id, added_by,
+          tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [folioId, line_type, description, qty, price, lineTotal, sale_id || null, added_by || null,
+       tax.rate, tax.amount, tax.inclusive]
     );
     await recomputeFolioTotals(client, folioId);
     return line;
@@ -834,21 +1080,54 @@ async function addFolioLine(db, folioId, { line_type, description, quantity, uni
  * @param {number} [opts.employeeId]
  */
 async function attachSaleToFolio(client, { saleId, folioId, amount, description, employeeId }) {
+  // Group bookings (V10): when the folio's booking belongs to a group with a
+  // master folio, the charge routes to the master — one bill for the block.
+  // Single redirect hop (a master folio never points at another master).
+  let targetFolioId = folioId;
+  try {
+    const { rows: [redirect] } = await client.query(
+      `SELECT mf.id AS master_folio_id
+         FROM guest_folios f
+         JOIN room_bookings b   ON b.id = f.booking_id
+         JOIN booking_groups g  ON g.id = b.group_id
+         JOIN guest_folios mf   ON mf.booking_id = g.master_folio_booking_id
+        WHERE f.id = $1
+          AND g.master_folio_booking_id IS NOT NULL
+          AND g.master_folio_booking_id != f.booking_id
+          AND mf.status = 'open'`,
+      [folioId]
+    );
+    if (redirect) targetFolioId = redirect.master_folio_id;
+  } catch { /* pre-v119 tenant — no groups yet */ }
+
   const { rows: [folio] } = await client.query(
     "SELECT * FROM guest_folios WHERE id = $1 FOR UPDATE",
-    [folioId]
+    [targetFolioId]
   );
   if (!folio) throw Object.assign(new Error("Folio not found"), { statusCode: 404 });
   if (folio.status !== "open") {
     throw Object.assign(new Error("Cannot charge to a closed folio"), { statusCode: 400 });
   }
   const amt = Number(amount || 0);
+
+  // The sale's own v83 tax snapshot rides along informationally — its
+  // line_total is the sale's tax-INCLUDED grand total in every mode, so the
+  // line is always stamped inclusive (never re-added on top).
+  let saleTax = 0;
+  try {
+    const { rows: [sale] } = await client.query("SELECT tax_total FROM sales WHERE id = $1", [saleId]);
+    saleTax = Number(sale?.tax_total || 0);
+  } catch { /* tax_total column pre-v83 */ }
+
   await client.query(
-    `INSERT INTO folio_lines (folio_id, line_type, description, quantity, unit_price, line_total, sale_id, added_by)
-     VALUES ($1, 'pos_sale', $2, 1, $3, $3, $4, $5)`,
-    [folioId, description || `POS sale #${saleId}`, amt, saleId, employeeId || null]
+    `INSERT INTO folio_lines
+       (folio_id, line_type, description, quantity, unit_price, line_total, sale_id, added_by,
+        tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+     VALUES ($1, 'pos_sale', $2, 1, $3, $3, $4, $5, 0, $6, TRUE)`,
+    [targetFolioId, description || `POS sale #${saleId}`, amt, saleId, employeeId || null, saleTax]
   );
-  await recomputeFolioTotals(client, folioId);
+  await recomputeFolioTotals(client, targetFolioId);
+  return { folio_id: targetFolioId, redirected: targetFolioId !== folioId };
 }
 
 async function settleFolio(db, bookingId, employeeId, opts = {}) {
@@ -888,6 +1167,10 @@ async function settleFolio(db, bookingId, employeeId, opts = {}) {
 
     const invoiceNumber = await generateInvoiceNumber(client);
 
+    // V10 folio-tax: tax_total = Σ per-line snapshots; subtotal is the net
+    // (grand − tax) in BOTH modes — exclusive lines already added their tax
+    // into grand_total at recompute, inclusive lines carried it inside.
+    const invoiceTax = Number(freshFolio.tax_total || 0);
     const { rows: [invoice] } = await client.query(
       `INSERT INTO customer_invoices
          (invoice_number, customer_id, outlet_id, employee_id, status,
@@ -898,8 +1181,8 @@ async function settleFolio(db, bookingId, employeeId, opts = {}) {
         booking.customer_id,
         booking.outlet_id,
         employeeId,
-        Number(freshFolio.room_charge_total || 0) + Number(freshFolio.pos_charge_total || 0),
-        Number(freshFolio.tax_total || 0),
+        Math.max(0, grandTotal - invoiceTax),
+        invoiceTax,
         grandTotal,
         balanceDue,
         `Folio for room booking ${booking.booking_number}${opts.notes ? " — " + opts.notes : ""}`,
@@ -943,6 +1226,172 @@ async function settleFolio(db, bookingId, employeeId, opts = {}) {
 
     return { invoice, folio_id: folio.id, deposit_applied: depositApplied, balance_due: balanceDue };
   });
+}
+
+// ── Guest registration (V10 — PK legal register) ──────────────────
+
+async function addBookingGuest(clientOrDb, bookingId, g) {
+  const { rows: [guest] } = await clientOrDb.query(
+    `INSERT INTO booking_guests
+       (booking_id, name, cnic_passport, nationality, phone, document_photos, is_primary)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, FALSE))
+     RETURNING *`,
+    [
+      bookingId,
+      g.name,
+      g.cnic_passport || null,
+      g.nationality || null,
+      g.phone || null,
+      JSON.stringify(g.document_photos || []),
+      g.is_primary,
+    ]
+  );
+  return guest;
+}
+
+async function listBookingGuests(db, bookingId) {
+  const { rows } = await db.query(
+    "SELECT * FROM booking_guests WHERE booking_id = $1 ORDER BY is_primary DESC, id ASC",
+    [bookingId]
+  );
+  return rows;
+}
+
+async function deleteBookingGuest(db, bookingId, guestId) {
+  const { rows: [row] } = await db.query(
+    "DELETE FROM booking_guests WHERE id = $1 AND booking_id = $2 RETURNING *",
+    [guestId, bookingId]
+  );
+  return row || null;
+}
+
+/** Date-range guest register (police-reporting reality). Staff-only PII. */
+async function getGuestRegistry(db, { from, to }) {
+  const { rows } = await db.query(
+    `SELECT g.id, g.name, g.cnic_passport, g.nationality, g.phone, g.is_primary,
+            g.created_at AS registered_at,
+            b.booking_number, b.check_in_date, b.check_out_date, b.status,
+            r.room_number
+       FROM booking_guests g
+       JOIN room_bookings b ON b.id = g.booking_id
+       LEFT JOIN rooms r ON r.id = b.room_id
+      WHERE b.check_in_date <= $2 AND b.check_out_date >= $1
+      ORDER BY b.check_in_date ASC, b.id ASC, g.is_primary DESC`,
+    [from, to]
+  );
+  return rows;
+}
+
+// ── Group bookings (V10 — wedding blocks, tour groups) ────────────
+
+/**
+ * Create N rooms in one flow. Each booking goes through the createBooking
+ * choke point (own transaction + lock); on any failure the already-created
+ * bookings are compensating-cancelled so a half-booked block never survives.
+ */
+async function createBookingGroup(db, { name, customer_id, notes, bookings }, employeeId) {
+  const { rows: [group] } = await db.query(
+    "INSERT INTO booking_groups (name, customer_id, notes) VALUES ($1, $2, $3) RETURNING *",
+    [name, customer_id || null, notes || null]
+  );
+  const created = [];
+  try {
+    for (const b of bookings) {
+      const booking = await createBooking(
+        db,
+        { ...b, customer_id: b.customer_id ?? customer_id ?? null },
+        employeeId,
+        { groupId: group.id }
+      );
+      created.push(booking);
+    }
+  } catch (err) {
+    for (const b of created) {
+      try { await cancelBooking(db, b.id, { cancellation_reason: "Group booking failed — auto-rollback" }); }
+      catch { /* best-effort compensation */ }
+    }
+    try { await db.query("DELETE FROM booking_groups WHERE id = $1", [group.id]); }
+    catch { /* leave the empty group if delete races */ }
+    throw err;
+  }
+  return { ...group, bookings: created };
+}
+
+async function getBookingGroup(db, id) {
+  const { rows: [group] } = await db.query(
+    `SELECT g.*, c.name AS customer_name
+       FROM booking_groups g LEFT JOIN customers c ON c.id = g.customer_id
+      WHERE g.id = $1`,
+    [id]
+  );
+  if (!group) return null;
+  const bookings = await listBookings(db, {});
+  const groupBookings = bookings.filter((b) => Number(b.group_id) === Number(id));
+  const totals = groupBookings.reduce(
+    (acc, b) => ({ grand_total: acc.grand_total + Number(b.folio_grand_total || 0) }),
+    { grand_total: 0 }
+  );
+  return { ...group, bookings: groupBookings, combined_folio_total: totals.grand_total };
+}
+
+async function listBookingGroups(db) {
+  const { rows } = await db.query(
+    `SELECT g.*, c.name AS customer_name,
+            (SELECT COUNT(*) FROM room_bookings b WHERE b.group_id = g.id) AS booking_count
+       FROM booking_groups g LEFT JOIN customers c ON c.id = g.customer_id
+      ORDER BY g.id DESC`
+  );
+  return rows;
+}
+
+/** Route all POS charges for the block to one booking's folio. */
+async function setGroupMasterFolio(db, groupId, bookingId) {
+  const { rows: [b] } = await db.query(
+    "SELECT id FROM room_bookings WHERE id = $1 AND group_id = $2",
+    [bookingId, groupId]
+  );
+  if (!b) throw Object.assign(new Error("Booking is not part of this group"), { statusCode: 400 });
+  const { rows: [folio] } = await db.query(
+    "SELECT id, status FROM guest_folios WHERE booking_id = $1",
+    [bookingId]
+  );
+  if (!folio || folio.status !== "open") {
+    throw Object.assign(new Error("Master booking must have an open folio (check it in first)"), { statusCode: 400 });
+  }
+  const { rows: [group] } = await db.query(
+    "UPDATE booking_groups SET master_folio_booking_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    [bookingId, groupId]
+  );
+  return group;
+}
+
+// ── Hostel dorm map (V10 — beds as child rooms) ───────────────────
+
+/** Dorm view: children with live occupancy + tonight's bookings ("7/10 beds"). */
+async function getDormMap(db, dormRoomId) {
+  const { rows: [dorm] } = await db.query(
+    `SELECT r.*, rt.name AS room_type_name FROM rooms r
+     LEFT JOIN room_types rt ON rt.id = r.room_type_id WHERE r.id = $1`,
+    [dormRoomId]
+  );
+  if (!dorm) return null;
+  const { rows: beds } = await db.query(
+    `SELECT r.*,
+            b.id AS current_booking_id, b.booking_number, b.status AS booking_status,
+            b.check_in_date, b.check_out_date, c.name AS guest_name
+       FROM rooms r
+       LEFT JOIN room_bookings b
+         ON b.room_id = r.id
+        AND b.status IN ('reserved','confirmed','checked_in')
+        AND b.check_in_date <= CURRENT_DATE AND b.check_out_date > CURRENT_DATE
+        AND NOT ${STALE_RESERVATION_PREDICATE}
+       LEFT JOIN customers c ON c.id = b.customer_id
+      WHERE r.parent_room_id = $1 AND r.is_active = TRUE
+      ORDER BY r.room_number ASC`,
+    [dormRoomId]
+  );
+  const occupied = beds.filter((b) => b.current_booking_id).length;
+  return { dorm, beds, beds_total: beds.length, beds_occupied: occupied };
 }
 
 // ── Overdue checkout (worker + dashboard) ─────────────────────────
@@ -1033,6 +1482,8 @@ module.exports = {
   setHousekeepingStatus,
   // availability
   checkRoomAvailability,
+  expireStaleRoomReservations,
+  ONLINE_RESERVATION_TTL_MINUTES,
   // bookings
   listBookings,
   getBooking,
@@ -1049,6 +1500,18 @@ module.exports = {
   addFolioLine,
   attachSaleToFolio,
   settleFolio,
+  // guests (V10)
+  addBookingGuest,
+  listBookingGuests,
+  deleteBookingGuest,
+  getGuestRegistry,
+  // groups (V10)
+  createBookingGroup,
+  getBookingGroup,
+  listBookingGroups,
+  setGroupMasterFolio,
+  // hostel (V10)
+  getDormMap,
   // overdue
   getOverdueCheckouts,
   markOverdueEmailSent,
