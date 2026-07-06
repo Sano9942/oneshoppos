@@ -1109,6 +1109,37 @@ function formLink({ storeName, customerName, formName, fillUrl }) {
   };
 }
 
+// ── V02 wholesale backorders (F05 engine) ────────────────────────────────
+function backorderCreated(data) {
+  const { storeName, customerName, itemCount, invoiceNumber, storePhone } = data || {};
+  return {
+    subject: `Part of your order is on backorder${storeName ? ` — ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Items on backorder",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>We've invoiced the items we could fulfill today${invoiceNumber ? ` (invoice <strong>${invoiceNumber}</strong>)` : ""} and placed
+       <strong>${itemCount || "the remaining"}</strong> item${Number(itemCount) === 1 ? "" : "s"} on backorder at the price you ordered at.</p>
+       <p>We'll let you know as soon as the stock arrives — no action needed from you.</p>
+       ${storePhone ? `<p style="color:#64748b;font-size:14px">Questions? Call us at ${storePhone}.</p>` : ""}
+       ${footer("This is an automated update about your order.")}`
+    ),
+  };
+}
+
+function backorderFulfilled(data) {
+  const { storeName, customerName, itemCount, invoiceNumber, storePhone } = data || {};
+  return {
+    subject: `Your backordered items are ready${storeName ? ` — ${storeName}` : ""}`,
+    html: wrapEmailHtml(
+      "Backorder fulfilled",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Good news — <strong>${itemCount || "your"}</strong> backordered item${Number(itemCount) === 1 ? "" : "s"} ${Number(itemCount) === 1 ? "has" : "have"} arrived and been invoiced${invoiceNumber ? ` (invoice <strong>${invoiceNumber}</strong>)` : ""} at your original order price.</p>
+       ${storePhone ? `<p style="color:#64748b;font-size:14px">Questions? Call us at ${storePhone}.</p>` : ""}
+       ${footer("This is an automated update about your backorder.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   // F05 customer notifications (status-change engine)
@@ -1118,6 +1149,9 @@ const TEMPLATES = {
   ticket_invoiced: ticketInvoiced,
   ticket_estimate: ticketEstimate,
   appointment_reminder: appointmentReminder,
+  // V02 wholesale backorders
+  backorder_created: backorderCreated,
+  backorder_fulfilled: backorderFulfilled,
   // F06 scheduling (classes + waitlist)
   class_cancelled: classCancelled,
   waitlist_offer: waitlistOffer,

@@ -79,8 +79,13 @@ async function recomputeBalance(db, invoiceId) {
 
 /**
  * Convert an accepted quotation into a customer invoice.
+ *
+ * V02 — an on-account writer: runs the authoritative credit gate
+ * (services/credit.js, customer row FOR UPDATE) inside the same transaction
+ * as the invoice INSERT. `creditOverrideAuthorized` comes from the route
+ * (caller holds all_access / override_credit_limit).
  */
-async function convertQuotationToInvoice(db, quotationId, employeeId) {
+async function convertQuotationToInvoice(db, quotationId, employeeId, { creditOverrideAuthorized = false } = {}) {
   const { rows: [quotation] } = await db.query(
     "SELECT * FROM quotations WHERE id = $1",
     [quotationId]
@@ -134,28 +139,39 @@ async function convertQuotationToInvoice(db, quotationId, employeeId) {
     }
   } catch { /* keep null on lookup error */ }
 
-  const { rows: [invoice] } = await db.query(
-    `INSERT INTO customer_invoices
-       (invoice_number, customer_id, quotation_id, outlet_id, employee_id, status,
-        subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
-     VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $9, $10) RETURNING *`,
-    [
-      invoiceNumber, quotation.customer_id, quotationId, quotation.outlet_id, employeeId,
-      totals.subtotal, totals.tax_total, Number(quotation.discount_amount || 0), totals.total_amount,
-      dueDate,
-    ]
-  );
+  const invoice = await db.transaction(async (client) => {
+    // Credit gate under FOR UPDATE — serializes against POS Credit-tender
+    // sales and other converters for the same customer.
+    await require("./credit").assertCreditWithinLimit(client, {
+      customerId: quotation.customer_id,
+      amount: totals.total_amount,
+      overrideAuthorized: creditOverrideAuthorized,
+    });
 
-  for (const item of totals.items) {
-    await db.query(
-      `INSERT INTO customer_invoice_items (invoice_id, product_id, variant_id, description, quantity, unit_price, tax_rate, line_total)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [invoice.id, item.product_id || null, item.variant_id || null, item.description, item.quantity, item.unit_price, item.tax_rate, item.line_total]
+    const { rows: [inv] } = await client.query(
+      `INSERT INTO customer_invoices
+         (invoice_number, customer_id, quotation_id, outlet_id, employee_id, status,
+          subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
+       VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $9, $10) RETURNING *`,
+      [
+        invoiceNumber, quotation.customer_id, quotationId, quotation.outlet_id, employeeId,
+        totals.subtotal, totals.tax_total, Number(quotation.discount_amount || 0), totals.total_amount,
+        dueDate,
+      ]
     );
-  }
 
-  // Link quotation back
-  await db.query("UPDATE quotations SET converted_invoice_id = $1 WHERE id = $2", [invoice.id, quotationId]);
+    for (const item of totals.items) {
+      await client.query(
+        `INSERT INTO customer_invoice_items (invoice_id, product_id, variant_id, description, quantity, unit_price, tax_rate, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [inv.id, item.product_id || null, item.variant_id || null, item.description, item.quantity, item.unit_price, item.tax_rate, item.line_total]
+      );
+    }
+
+    // Link quotation back
+    await client.query("UPDATE quotations SET converted_invoice_id = $1 WHERE id = $2", [inv.id, quotationId]);
+    return inv;
+  });
 
   logger.info({ invoiceId: invoice.id, quotationId }, "Quotation converted to invoice");
   return invoice;
@@ -163,10 +179,16 @@ async function convertQuotationToInvoice(db, quotationId, employeeId) {
 
 /**
  * Create invoices in batch for multiple customers with the same items.
+ *
+ * V02 — an on-account writer: each customer's invoice runs the authoritative
+ * credit gate in its own transaction. A hard-blocked customer is SKIPPED
+ * (reported in `skipped`), not fatal — the batch continues, matching the
+ * existing per-customer duplicate-skip behavior.
  */
-async function createBatchInvoices(db, { customerIds, items, dueDate, discountAmount, employeeId, outletId }) {
+async function createBatchInvoices(db, { customerIds, items, dueDate, discountAmount, employeeId, outletId, creditOverrideAuthorized = false }) {
   const totals = computeInvoiceTotals(items, discountAmount || 0);
   const created = [];
+  const skipped = [];
 
   for (const customerId of customerIds) {
     // Tier 0.2 — when caller didn't supply a dueDate, derive per-customer
@@ -201,26 +223,45 @@ async function createBatchInvoices(db, { customerIds, items, dueDate, discountAm
     }
 
     const invoiceNumber = await generateInvoiceNumber(db);
-    const { rows: [invoice] } = await db.query(
-      `INSERT INTO customer_invoices
-         (invoice_number, customer_id, outlet_id, employee_id, status,
-          subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
-       VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $8, $9) RETURNING *`,
-      [invoiceNumber, customerId, outletId || null, employeeId, totals.subtotal, totals.tax_total, discountAmount || 0, totals.total_amount, effectiveDueDate]
-    );
+    try {
+      const invoice = await db.transaction(async (client) => {
+        // V02 credit gate — FOR UPDATE on the customer row; throws 403 on a
+        // hard block without override.
+        await require("./credit").assertCreditWithinLimit(client, {
+          customerId,
+          amount: totals.total_amount,
+          overrideAuthorized: creditOverrideAuthorized,
+        });
 
-    for (const item of totals.items) {
-      await db.query(
-        `INSERT INTO customer_invoice_items (invoice_id, product_id, variant_id, description, quantity, unit_price, tax_rate, line_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [invoice.id, item.product_id || null, item.variant_id || null, item.description, item.quantity, item.unit_price, item.tax_rate, item.line_total]
-      );
+        const { rows: [inv] } = await client.query(
+          `INSERT INTO customer_invoices
+             (invoice_number, customer_id, outlet_id, employee_id, status,
+              subtotal, tax_total, discount_amount, total_amount, balance_due, due_date)
+           VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $8, $9) RETURNING *`,
+          [invoiceNumber, customerId, outletId || null, employeeId, totals.subtotal, totals.tax_total, discountAmount || 0, totals.total_amount, effectiveDueDate]
+        );
+
+        for (const item of totals.items) {
+          await client.query(
+            `INSERT INTO customer_invoice_items (invoice_id, product_id, variant_id, description, quantity, unit_price, tax_rate, line_total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [inv.id, item.product_id || null, item.variant_id || null, item.description, item.quantity, item.unit_price, item.tax_rate, item.line_total]
+          );
+        }
+        return inv;
+      });
+      created.push(invoice);
+    } catch (err) {
+      if (err.code === "CREDIT_LIMIT_EXCEEDED") {
+        logger.info({ customerId, limit: err.limit, outstanding: err.outstanding }, "Batch invoice skipped — credit limit");
+        skipped.push({ customer_id: customerId, reason: "credit_limit_exceeded", limit: err.limit, outstanding: err.outstanding });
+        continue;
+      }
+      throw err;
     }
-
-    created.push(invoice);
   }
 
-  return created;
+  return Object.assign(created, { skipped });
 }
 
 /**

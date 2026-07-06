@@ -97,16 +97,16 @@ module.exports = function registerCustomerRoutes(app, deps) {
         );
         if (!cust) return res.status(404).json({ error: "Customer not found" });
 
-        // Sum unpaid AR. status='paid' is the only terminal state today;
-        // cancelled invoices have status='cancelled' and are excluded by the
-        // != 'paid' AND != 'cancelled' guard.
+        // Sum unpaid AR. Terminal/excluded states: paid, cancelled, and void
+        // (completion-04 — a voided sale's reversed invoice is not exposure;
+        // matches the statement + ar-aging exclusions and sales.js's check).
         let outstanding = 0;
         try {
           const { rows: [agg] } = await db.query(
             `SELECT COALESCE(SUM(balance_due), 0)::numeric AS outstanding
              FROM customer_invoices
              WHERE customer_id = $1
-               AND status NOT IN ('paid', 'cancelled')`,
+               AND status NOT IN ('paid', 'cancelled', 'void')`,
             [id]
           );
           outstanding = Number(agg?.outstanding || 0);

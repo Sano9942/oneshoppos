@@ -200,6 +200,12 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
   app.post("/api/customer-invoices/batch", ...gate, validate(batchInvoiceSchema), async (req, res) => {
     try {
       const { customer_ids, items, due_date, notes, discount_amount } = req.body;
+      // V02 — credit-gate override rides on the caller's permissions; the
+      // gate itself runs inside createBatchInvoices under FOR UPDATE.
+      const creditOverrideAuthorized =
+        Array.isArray(req.employeePerms) &&
+        (req.employeePerms.includes("all_access") ||
+          req.employeePerms.includes("override_credit_limit"));
       const invoices = await createBatchInvoices(deps.db, {
         customerIds: customer_ids,
         items,
@@ -207,8 +213,9 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
         discountAmount: discount_amount,
         employeeId: req.employee.id,
         outletId: null,
+        creditOverrideAuthorized,
       });
-      res.status(201).json({ created: invoices.length, invoices });
+      res.status(201).json({ created: invoices.length, invoices, skipped: invoices.skipped || [] });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
@@ -336,7 +343,14 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
   app.post("/api/customer-invoices/from-quotation/:quotationId", ...gate, async (req, res) => {
     try {
-      const invoice = await convertQuotationToInvoice(deps.db, Number(req.params.quotationId), req.employee.id);
+      const creditOverrideAuthorized =
+        Array.isArray(req.employeePerms) &&
+        (req.employeePerms.includes("all_access") ||
+          req.employeePerms.includes("override_credit_limit"));
+      const invoice = await convertQuotationToInvoice(
+        deps.db, Number(req.params.quotationId), req.employee.id,
+        { creditOverrideAuthorized }
+      );
       res.status(201).json(invoice);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -398,8 +412,11 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
   app.put("/api/customer-invoices/:id/void", ...gate, async (req, res) => {
     try {
+      // V02 (completion-04 parity): a voided invoice is not exposure — zero
+      // balance_due so Σ(balance_due) invariants hold everywhere, matching
+      // what the sale-void path writes for its linked AR invoice.
       const { rows: [invoice] } = await deps.db.query(
-        "UPDATE customer_invoices SET status = 'void', updated_at = NOW() WHERE id = $1 AND status != 'void' RETURNING *",
+        "UPDATE customer_invoices SET status = 'void', balance_due = 0, updated_at = NOW() WHERE id = $1 AND status != 'void' RETURNING *",
         [req.params.id]
       );
       if (!invoice) return res.status(404).json({ error: "Invoice not found or already voided" });

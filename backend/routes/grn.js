@@ -207,6 +207,23 @@ module.exports = function registerGRNRoutes(app, deps) {
       const newReceivedOut = Number(grnItem.qty_received || 0) + qty;
       const overReceived = newReceivedOut > Number(grnItem.qty_ordered);
 
+      // V02 backorders — surface open demand for the just-received product so
+      // the receiving screen can deep-link to the Backorders fulfillment view.
+      // Best-effort: table may not exist on a not-yet-migrated tenant.
+      let openBackorders = null;
+      try {
+        const { rows: [agg] } = await db.query(
+          `SELECT COUNT(*)::int AS count,
+                  COALESCE(SUM(qty_ordered - qty_fulfilled), 0)::numeric AS qty
+             FROM backorders
+            WHERE product_id = $1 AND status IN ('open','partial')`,
+          [productId]
+        );
+        if (agg && Number(agg.count) > 0) {
+          openBackorders = { count: Number(agg.count), qty: Number(agg.qty) };
+        }
+      } catch { /* pre-v110 tenant */ }
+
       res.json({
         item: {
           grn_item_id: grnItem.id,
@@ -218,6 +235,7 @@ module.exports = function registerGRNRoutes(app, deps) {
           serialized: serialRequired,
           serials_recorded: serialRequired ? serial_numbers.length : 0,
         },
+        open_backorders: openBackorders,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

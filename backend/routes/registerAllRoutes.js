@@ -529,6 +529,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
+  // --- V02 WHOLESALE: BACKORDER FULFILLMENT LOOP ---
+  require("./backorders")(app, deps);
+
   // --- ROUTES: SCHEDULES (Phase 2) ---
   require("./schedules")(app, deps);
 

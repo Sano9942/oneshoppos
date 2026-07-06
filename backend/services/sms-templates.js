@@ -37,6 +37,17 @@ const SMS_TEMPLATES = {
   ticket_estimate: (d) =>
     fill("{{storeName}}: Your repair estimate for {{ticketNumber}} is {{estimateTotal}}. Please approve so we can begin. {{storePhone}}", d),
 
+  // V02 wholesale backorders + proof-of-delivery
+  backorder_created: (d) =>
+    fill("{{storeName}}: {{itemCount}} item(s) from your order are on backorder at your order price. We'll notify you when stock arrives.", d),
+  backorder_fulfilled: (d) =>
+    fill("{{storeName}}: Your backordered item(s) have arrived and been invoiced ({{invoiceNumber}}) at your original price. {{storePhone}}", d),
+  order_delivered: (d) =>
+    fill("{{storeName}}: Your order {{orderNumber}} was delivered{{receiverSuffix}}. Thank you!", {
+      ...d,
+      receiverSuffix: d && d.receiverName ? ` (received by ${d.receiverName})` : "",
+    }),
+
   // Appointment reminders (shared by the reminders engine)
   appointment_reminder: (d) =>
     fill(

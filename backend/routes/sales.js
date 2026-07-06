@@ -447,6 +447,26 @@ module.exports = function registerSalesRoutes(app, deps) {
               [item.id],
             );
           }
+
+          // Tier 0.1 wholesale (completion-04 port) — reverse the linked A/R
+          // invoice for an on-account (Credit tender) sale. Without this,
+          // voiding the sale restored stock but left the customer_invoices row
+          // 'sent' with full balance_due, permanently overstating AR
+          // outstanding and consuming the customer's credit limit for a sale
+          // that no longer exists. 'void' is the status the statement
+          // (buildStatementData), ar-aging, and the credit-exposure check all
+          // exclude. Idempotent: the outer sale.voided guard runs this once.
+          if (sale.customer_invoice_id) {
+            await client.query(
+              `UPDATE customer_invoices
+                  SET status = 'void',
+                      balance_due = 0,
+                      updated_at = NOW()
+                WHERE id = $1
+                  AND status NOT IN ('void', 'cancelled')`,
+              [sale.customer_invoice_id]
+            );
+          }
         });
 
         const syncChanges = items.map((item) => ({
@@ -1293,7 +1313,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             `SELECT COALESCE(SUM(balance_due), 0)::numeric AS outstanding
              FROM customer_invoices
              WHERE customer_id = $1
-               AND status NOT IN ('paid', 'cancelled')`,
+               AND status NOT IN ('paid', 'cancelled', 'void')`,
             [customer_id]
           );
           outstanding = Number(agg?.outstanding || 0);
@@ -1303,12 +1323,17 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         const newExposure = outstanding + creditTotal;
         const overLimit = limit > 0 && newExposure > limit;
+        // V02 — set when a perm/PIN override clears a hard block, so the
+        // authoritative in-transaction re-check (services/credit.js, under
+        // FOR UPDATE) knows not to re-block the already-approved sale.
+        let creditOverrideAuthorized = false;
 
         if (overLimit && mode !== "off") {
           const hasPermOverride =
             Array.isArray(req.employeePerms) &&
             (req.employeePerms.includes("all_access") ||
               req.employeePerms.includes("override_credit_limit"));
+          if (mode === "hard" && hasPermOverride) creditOverrideAuthorized = true;
 
           if (mode === "hard" && !hasPermOverride) {
             // Try manager PIN. If absent or invalid → 403.
@@ -1345,6 +1370,7 @@ module.exports = function registerSalesRoutes(app, deps) {
                 },
                 outletId: outlet_id ?? null,
               }).catch(() => { /* audit record is best-effort */ });
+              creditOverrideAuthorized = true;
             } catch (pinErr) {
               return res.status(pinErr.statusCode || 403).json({
                 error: pinErr.message || "Manager PIN verification failed",
@@ -1366,6 +1392,7 @@ module.exports = function registerSalesRoutes(app, deps) {
         creditTender = {
           amount: creditTotal,
           payment_terms_days: termsDays,
+          overrideAuthorized: creditOverrideAuthorized,
         };
       } catch (creditErr) {
         return res.status(500).json({ error: creditErr.message });
@@ -1902,6 +1929,17 @@ module.exports = function registerSalesRoutes(app, deps) {
         // the AR balance reflects the new liability immediately. Linked via
         // sales.customer_invoice_id (v88) so refunds can route to credit_reversal.
         if (creditTender && customer_id) {
+          // V02 — authoritative credit gate under FOR UPDATE on the customer
+          // row. The friendly pre-transaction check above races (two cashiers
+          // both read "under the limit"); this one serializes on-account
+          // writers so a hard block can't be jointly exceeded. Throws 403
+          // CREDIT_LIMIT_EXCEEDED → transaction rolls back.
+          await require("../services/credit").assertCreditWithinLimit(client, {
+            customerId: Number(customer_id),
+            amount: Number(creditTender.amount),
+            overrideAuthorized: creditTender.overrideAuthorized === true,
+          });
+
           // Compute due_date from payment_terms_days. Use CURRENT_DATE so the
           // date is in tenant timezone-naive form (DATE column).
           const termsDays = Number(creditTender.payment_terms_days || 0);
