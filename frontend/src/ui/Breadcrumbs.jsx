@@ -75,6 +75,7 @@ const LABELS = {
   bookings: "Bookings",
   classes: "Classes",
   timetable: "Timetable",
+  members: "Member Check-In",
   projects: "Projects",
   contracts: "Contracts",
   "service-tickets": "Service Tickets",

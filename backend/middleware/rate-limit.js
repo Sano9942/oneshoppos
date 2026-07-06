@@ -127,6 +127,23 @@ const publicRestaurantLimiter = rateLimit({
   },
 });
 
+// Public gym member check-in kiosk (V07). A busy front-desk tablet is a single
+// IP with many legit members, so this is looser than the booking limiter — but
+// still caps a script hammering codes. Real enumeration defense is the random
+// 8-digit member_code + minimal public response; this is defense-in-depth.
+const memberKioskLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MEMBER_KIOSK_MAX) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const tenantKey = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `memberkiosk:${tenantKey}:${req.ip}`;
+  },
+});
+
 // ── M8 Customer Portal ────────────────────────────────────────────────
 // These limiters key on identifiers visible before auth runs — the portal
 // routes mount BEFORE tenant middleware, so req.tenantSlug is not set; we
@@ -235,6 +252,7 @@ module.exports = {
   reviewLimiter,
   publicBookingLimiter,
   publicRestaurantLimiter,
+  memberKioskLimiter,
   customerPortalAuthLimiter,
   customerPortalOtpLimiter,
   customerPortalDataLimiter,

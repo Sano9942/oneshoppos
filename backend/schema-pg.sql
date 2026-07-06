@@ -469,6 +469,7 @@ CREATE TABLE IF NOT EXISTS customers (
   balance NUMERIC(12,2) DEFAULT 0,
   deleted_at TIMESTAMPTZ DEFAULT NULL,
   ntn_cnic TEXT,
+  member_code TEXT,                     -- V07 gym — scannable member-card id (uq index co-located with member_checkins)
   is_blacklisted BOOLEAN DEFAULT false,
   blacklist_reason TEXT,
   blacklisted_at TIMESTAMPTZ,
@@ -1278,7 +1279,9 @@ CREATE TABLE IF NOT EXISTS company_profile (
   --   { enabled, prefixes:[20..29], embed:'price'|'weight', item_code_length,
   --     value_length, value_decimals, item_code_field:'sku'|'plu'|'barcode',
   --     verify_check_digit }
-  barcode_scheme JSONB
+  barcode_scheme JSONB,
+  -- V07 gym — allow N post-expiry member check-ins before the door goes red (0 = strict)
+  member_grace_checkins INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (
@@ -2522,7 +2525,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase4_appointments_classes', false, 'F06 — group class sessions: timetable, capacity, member booking'),
   ('phase4_appointments_waitlists', false, 'F06 — waitlists for full classes/slots with offer + claim flow'),
   ('custom_forms', false, 'F03 form builder — custom intake/waivers/questionnaires (flipped on by clinical/gym/photography/repair presets)'),
-  ('batch_expiry_tracking', false, 'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls')
+  ('batch_expiry_tracking', false, 'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls'),
+  ('member_checkin', false, 'V07 gym — member check-in kiosk + active-membership validation (flipped on by the gym preset)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -3940,6 +3944,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_class_booking_active
   ON class_session_bookings(class_session_id, customer_id)
   WHERE status <> 'cancelled' AND customer_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_class_bookings_session ON class_session_bookings(class_session_id, status);
+
+-- ═══════════════════════════════════════════════════════════════
+-- V07 (v117) — Gym member check-in
+-- Front-desk / kiosk active-membership validation at the door. A check-in row
+-- snapshots the derived membership status; class_session_id links a check-in to
+-- a booked class (NULL = plain floor visit). member_code is the scannable
+-- member-card id (partial-unique so blanked codes don't collide).
+-- ═══════════════════════════════════════════════════════════════
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_member_code ON customers(member_code) WHERE member_code IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS member_checkins (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  class_session_id INTEGER REFERENCES class_sessions(id),   -- NULL = floor visit
+  method TEXT NOT NULL DEFAULT 'kiosk' CHECK (method IN ('kiosk','staff','portal')),
+  membership_status_at_checkin TEXT,                          -- snapshot at the door
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_member_checkins_created ON member_checkins(created_at);
+CREATE INDEX IF NOT EXISTS idx_member_checkins_customer ON member_checkins(customer_id);
 
 -- ═══════════════════════════════════════════════════════════════
 -- F02 (v101) — Packages / session passes

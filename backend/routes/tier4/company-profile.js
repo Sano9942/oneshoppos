@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { getPreset, VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
+const { getPreset, VALID_INDUSTRY_TYPES, getExtraFlagsForPreset, ALL_PRESET_EXTRA_FLAGS } = require("../../config/industry-config");
 const { getFeatureFlagsForModes, VALID_MODES } = require("../../config/mode-registry");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
@@ -186,6 +186,23 @@ module.exports = function createCompanyProfileRouter({
           for (const flagKey of flagsToEnable) {
             await db.query(
               `UPDATE feature_flags SET enabled = true WHERE key = $1`,
+              [flagKey]
+            );
+          }
+
+          // Preset extra flags (V04/V05/V07): F02/F03/F06 sub-features +
+          // preset-specific flags (e.g. gym member_checkin) that modes can't
+          // derive. Reset ALL known extras OFF, then flip this preset's ON —
+          // symmetric with the mode-flag reset above so a preset switch leaves
+          // no stale extras. INSERT-on-conflict covers tenants whose flag row
+          // predates the seeding migration.
+          for (const flagKey of ALL_PRESET_EXTRA_FLAGS) {
+            await db.query(`UPDATE feature_flags SET enabled = false WHERE key = $1`, [flagKey]);
+          }
+          for (const flagKey of getExtraFlagsForPreset(preset.industry_type)) {
+            await db.query(
+              `INSERT INTO feature_flags (key, enabled) VALUES ($1, true)
+               ON CONFLICT (key) DO UPDATE SET enabled = true`,
               [flagKey]
             );
           }

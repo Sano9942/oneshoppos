@@ -184,6 +184,11 @@ module.exports = function registerAllRoutes(app, deps) {
   // token; resolves tenant via resolvePublicTenantDb; rate-limited.
   require("./public-forms")(app, deps);
 
+  // V07 gym — Public member check-in kiosk. No auth; resolves tenant via
+  // resolvePublicTenantDb; rate-limited; minimal PII response (first name +
+  // verdict only). Mounted before tenant middleware to dodge the kiosk traps.
+  require("./member-kiosk")(app, deps);
+
   // M8 — Customer portal (end-customer app). Mounted BEFORE tenant
   // middleware; each route resolves the tenant via resolvePublicTenantDb()
   // and verifies the portal JWT separately (scope="customer").
@@ -689,6 +694,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./restaurant-kiosk")(app, deps);
   require("./bookings")(app, deps);
   require("./classes")(app, deps); // F06 — class sessions timetable + waitlist
+  require("./members")(app, deps); // V07 gym — front-desk member lookup + check-in + today's feed
   require("./projects")(app, deps);
   require("./contracts")(app, deps);
   require("./service-tickets")(app, deps);

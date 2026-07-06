@@ -844,7 +844,36 @@ function getClinicalConfig(industryType) {
   return preset.clinical_config || null;
 }
 
+// ── Preset extra feature flags ──────────────────────────────────────────
+// Flags a preset needs that mode-registry can't derive (modes only enable the
+// base flag per mode). Vertical-depth plans own these: V04 salon, V05 physio,
+// V07 gym flip on the F02/F03/F06 sub-features + any preset-specific flag.
+// Kept in sync with the per-tenant backfill in migrate-pg.js (v117 = gym).
+const PRESET_EXTRA_FLAGS = Object.freeze({
+  gym: [
+    "phase4_appointments_classes",   // F06 — group class timetable
+    "phase4_appointments_waitlists", // F06 — waitlist on full classes
+    "packages_passes",               // F02 — class/PT passes
+    "custom_forms",                  // F03 — liability waivers
+    "member_checkin",                // V07 — door check-in
+  ],
+});
+
+// Every flag any preset can flip on as an extra — used to reset the full set
+// OFF before re-enabling the current preset's, mirroring the mode-flag reset in
+// routes/tier4/company-profile.js so a preset switch leaves no stale extras.
+const ALL_PRESET_EXTRA_FLAGS = Object.freeze([
+  ...new Set(Object.values(PRESET_EXTRA_FLAGS).flat()),
+]);
+
+function getExtraFlagsForPreset(industryType) {
+  return [...(PRESET_EXTRA_FLAGS[industryType] || [])];
+}
+
 module.exports = {
+  PRESET_EXTRA_FLAGS,
+  ALL_PRESET_EXTRA_FLAGS,
+  getExtraFlagsForPreset,
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
   DEFAULT_INDUSTRY_TYPE,

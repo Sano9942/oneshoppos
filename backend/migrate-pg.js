@@ -8587,6 +8587,107 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 117,
+    description:
+      "V07 gym depth — member check-in: member_checkins table + customers.member_code (partial-unique) + company_profile.member_grace_checkins + member_checkin flag; gym extra-flag backfill (classes/waitlists/packages/forms/member_checkin). All tenant-only; warns on the public schema.",
+    up: async (client) => {
+      // 1. member_checkins (tenant-only — FKs to customers/outlets/class_sessions).
+      try {
+        await client.query("SAVEPOINT v117_checkins");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS member_checkins (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            outlet_id INTEGER REFERENCES outlets(id),
+            class_session_id INTEGER REFERENCES class_sessions(id),   -- NULL = floor visit
+            method TEXT NOT NULL DEFAULT 'kiosk' CHECK (method IN ('kiosk','staff','portal')),
+            membership_status_at_checkin TEXT,                          -- snapshot at the door
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_member_checkins_created ON member_checkins(created_at)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_member_checkins_customer ON member_checkins(customer_id)`);
+        await client.query("RELEASE SAVEPOINT v117_checkins");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v117_checkins");
+        console.warn(`[migrate-pg v117] member_checkins skipped: ${err.message}`);
+      }
+
+      // 2. customers.member_code — scannable member-card id, partial-unique on live rows.
+      try {
+        await client.query("SAVEPOINT v117_membercode");
+        await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS member_code TEXT`);
+        await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_member_code ON customers(member_code) WHERE member_code IS NOT NULL`);
+        await client.query("RELEASE SAVEPOINT v117_membercode");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v117_membercode");
+        console.warn(`[migrate-pg v117] customers.member_code skipped: ${err.message}`);
+      }
+
+      // 3. company_profile.member_grace_checkins — tenant grace policy (allow N
+      //    post-expiry check-ins before the door goes red). 0 = strict.
+      try {
+        await client.query("SAVEPOINT v117_grace");
+        await client.query(`ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS member_grace_checkins INTEGER NOT NULL DEFAULT 0`);
+        await client.query("RELEASE SAVEPOINT v117_grace");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v117_grace");
+        console.warn(`[migrate-pg v117] company_profile.member_grace_checkins skipped: ${err.message}`);
+      }
+
+      // 4. member_checkin flag (default OFF; gym backfill below flips it on).
+      try {
+        await client.query("SAVEPOINT v117_flag");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(`
+            INSERT INTO feature_flags (key, enabled, description)
+            VALUES ('member_checkin', false, 'V07 — gym member check-in kiosk + active-membership validation')
+            ON CONFLICT (key) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v117_flag");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v117_flag");
+        console.warn(`[migrate-pg v117] member_checkin flag skipped: ${err.message}`);
+      }
+
+      // 5. Backfill: any industry_type='gym' tenant gets the F06/F02/F03 +
+      //    member_checkin extra flags ON (mirrors v87 wholesale backfill).
+      //    Kept in sync with PRESET_EXTRA_FLAGS.gym in config/industry-config.js.
+      try {
+        await client.query("SAVEPOINT v117_gym_backfill");
+        const { rows: profile } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        if (profile[0]?.industry_type === "gym") {
+          const { rows: ff } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+          `);
+          if (ff.length) {
+            await client.query(`
+              INSERT INTO feature_flags (key, enabled) VALUES
+                ('phase4_appointments_classes', true),
+                ('phase4_appointments_waitlists', true),
+                ('packages_passes', true),
+                ('custom_forms', true),
+                ('member_checkin', true)
+              ON CONFLICT (key) DO UPDATE SET enabled = true
+            `);
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v117_gym_backfill");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v117_gym_backfill");
+        console.warn(`[migrate-pg v117] gym extra-flag backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

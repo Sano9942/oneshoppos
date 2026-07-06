@@ -179,6 +179,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Calendar", path: "/appointments/calendar", icon: CalendarDays, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments", requiredMode: "appointments" },
       { name: "Bookings", path: "/appointments/bookings", icon: CalendarCheck, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments", requiredMode: "appointments" },
       { name: "Timetable", path: "/classes/timetable", icon: CalendarDays, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments_classes", requiredMode: "appointments" },
+      { name: "Member Check-In", path: "/members", icon: CalendarCheck, requiredPerm: "manage_bookings", requiredFlag: "member_checkin" },
     ],
   },
   {

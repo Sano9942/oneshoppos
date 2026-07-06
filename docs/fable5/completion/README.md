@@ -34,7 +34,7 @@
 | 07 | [07-room-management.md](plans/07-room-management.md) | Mode `room_management` — hotel, guesthouse, hostel | 0 | 0 | `main` | planned |
 | 08 | [08-treatment-plans.md](plans/08-treatment-plans.md) | Mode `treatment_plans` — dental_clinic, veterinary, physiotherapy (clinical stack) | 0 | 1 (shared w/ 03) | `main` | planned |
 | 09 | [09-service-projects.md](plans/09-service-projects.md) | Mode `service_projects` — photography_studio (quote→project→contract→invoice) | 0 | 0 | `main` | planned |
-| 10 | [10-subscriptions.md](plans/10-subscriptions.md) | Mode `subscriptions` — gym | 0 | 0 | `main` | planned |
+| 10 | [10-subscriptions.md](plans/10-subscriptions.md) | Mode `subscriptions` — gym | 0 | 0 | `feat/v07-gym-depth` | ✅ done (absorbed into V07, 2026-07-07) — billing spine proven (F02 dunning green); no P0 defects; the one open row ("attendance gate visible at check-in — if designed") is now **built** by V07 (member check-in kiosk + front-desk status). Drift fixed: gym preset now seeds the F06/F02/F03 sub-flags via `PRESET_EXTRA_FLAGS.gym`. |
 | 11 | [11-growth-surface.md](plans/11-growth-surface.md) | Growth/consumer gaps: website builder, marketing automations, reviews collection, payment links, wallet passes, AI cataloging, marketplace sync | 1 | 8 | wiring off `main`; new consumer UI decided per-feature vs `redesign/square` | planned |
 
 **Why this cut (deltas from the §3 seed):**

@@ -42,6 +42,7 @@ const PublicRestaurantMenuPage = lazy(() => import("../pages/public/PublicRestau
 const RestaurantPayPage = lazy(() => import("../pages/public/RestaurantPayPage"));
 const ReservationBookingPage = lazy(() => import("../pages/public/ReservationBookingPage"));
 const FormFillPublic = lazy(() => import("../pages/public/FormFillPublic"));
+const MemberCheckinKiosk = lazy(() => import("../pages/public/MemberCheckinKiosk"));
 
 // M8 — Customer portal (lazy, isolated chunk). Portal is NOT wrapped in
 // the main AuthProvider; it uses its own PortalAuthProvider via PortalLayout.
@@ -211,6 +212,11 @@ export const publicRoutes = [
     key="form-fill"
     path="/forms/fill/:token"
     element={<Suspense fallback={<RouteLoading />}><FormFillPublic /></Suspense>}
+  />,
+  <Route
+    key="member-checkin"
+    path="/member-checkin"
+    element={<Suspense fallback={<RouteLoading />}><MemberCheckinKiosk /></Suspense>}
   />,
   <Route
     key="portal"
