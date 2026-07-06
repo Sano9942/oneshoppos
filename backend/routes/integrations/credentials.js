@@ -37,6 +37,20 @@ module.exports = function registerCredentialRoutes(router, deps) {
           [provider, category || "marketplace", store_url || null, encKey, encSecret, encOauth, encRefresh, encWebhook, config_json || "{}"]
         );
 
+        // V03 — connecting foodpanda/Careem turns the delivery_aggregators surface
+        // ON for this tenant (the flag is a real gate, not decorative; new tenants
+        // get it via the preset seed, existing tenants get it the moment they
+        // connect — so no bulk data migration is needed).
+        if (["foodpanda", "careem"].includes(provider)) {
+          await db.query(
+            `INSERT INTO feature_flags (key, enabled) VALUES ('delivery_aggregators', true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`
+          );
+          try {
+            require("../../middleware/feature-flags").invalidateFeatureFlagCache(req.tenantId);
+          } catch { /* cache invalidation is best-effort */ }
+        }
+
         res.json({ connected: true, provider });
       } catch (err) {
         res.status(500).json({ error: err.message });

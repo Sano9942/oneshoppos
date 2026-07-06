@@ -4,20 +4,19 @@ Three items the V03 plan routed to you for a decision, plus the migration/config
 
 ---
 
-## 1. FBR on aggregator sales — **propose: YES (enqueue like POS), currently NOT wired (pause-list)**
+## 1. FBR on aggregator sales — **APPROVED + WIRED (2026-07-06)**
 
-**Decision needed.** Aggregator orders become real `sales` rows (with the v83 per-line tax snapshot). They are sales, so by the plan's cross-surface lens the default is to enqueue FBR invoices exactly like POS sales — gated on the tenant's `fbr_integration` flag (so it's a no-op for anyone not on FBR).
+**Decision: YES.** Aggregator orders become real `sales` rows (with the v83 per-line tax snapshot). They are sales, so `settleAggregatorSale` now enqueues FBR invoices exactly like the POS anonymous-sale path — gated on the tenant's `fbr_integration` flag (a no-op for anyone not on FBR).
 
-**Why it's not wired yet:** FBR is on the completion pause-list. Taking a compliance action (posting an invoice to FBR's DI API) without sign-off is exactly what the pause-list guards. So `settleAggregatorSale` writes the sale + tax snapshot but does **not** call `enqueueFbrInvoice`. There is a clearly-marked **FBR HOOK POINT** comment at the enqueue site in `services/aggregator-orders.js`.
+**As implemented** (`services/aggregator-orders.js:settleAggregatorSale`, mirroring `routes/sales.js:2294`):
+- Gated on `SELECT enabled FROM feature_flags WHERE key='fbr_integration'`.
+- Assigns the tenant's next `INV-YYYY-NNNNN` invoice number (shared `invoice_sequences` sequence, same as POS).
+- Posts as an **unregistered consumer** (`customer = null`) — aggregator orders carry no NTN/CNIC, exactly how POS handles a walk-in. `enqueueFbrInvoice`'s own credential gate (`tax_mode`/`fbr_api_token`/`ntn`) still applies, so a mis-seeded tenant never backlogs the queue.
+- `tenantSlug` is threaded `processInboundOrder → acceptAndSettle → settleAggregatorSale` (from `resolved.tenant.slug` in the route).
+- Non-blocking: an FBR failure never rolls back the sale.
+- Tested: with `fbr_integration` off, no invoice number is assigned; with it on (+ FBR creds), an `INV-*` number is assigned and an `fbr_invoices` row is enqueued.
 
-**To enable after approval** (one place): at the FBR hook point, after the sale is written, mirror the POS path in `routes/sales.js:2299`:
-```js
-// gated the same way POS is — only fires when fbr_integration is on
-const { buildInvoicePayload, enqueueFbrInvoice } = require("./fbr");
-const payload = buildInvoicePayload(/* sale + items + company */);
-await enqueueFbrInvoice(client, { saleId, invoiceType: "sale", payload, tenantSlug });
-```
-Note: the webhook has no `req`, so `tenantSlug` must be threaded through `processInboundOrder` from the resolved tenant (already available as `resolved.tenant.slug` in the route). **Recommendation: approve YES** — a foodpanda sale that skips FBR while the same item sold at the counter posts to FBR is an audit mismatch.
+**⚠️ Live-enablement guardrail:** posting to FBR's DI API is effectively irreversible (credit-note only, no delete). Before turning `fbr_integration` on for a **live** tenant that also takes aggregator orders, validate one real aggregator sale against the **FBR sandbox** first.
 
 ---
 
@@ -40,7 +39,7 @@ The plan flagged "column check → STOP if migration needed." Verified against `
 - **Dead-letter** — reuses `external_sync_events` (`idempotency_key` UNIQUE). No migration.
 - **New flag `delivery_aggregators`** — added to `DEFAULT_FEATURE_FLAGS` (runtime merge, defaults OFF), `RESTAURANT_SEED_FLAGS` (new restaurant/cafe tenants get it ON at wizard), and a `schema-pg.sql` seed row. **No DDL migration** — the `feature_flags` table already exists and the flag defaults OFF via the in-memory merge.
 
-**One deferred, approval-gated rollout step:** to flip `delivery_aggregators` ON for **existing** restaurant/cafe tenants (new tenants already get it via the seed), a one-line data migration would `UPDATE feature_flags SET enabled = true WHERE key = 'delivery_aggregators'` per restaurant/cafe tenant. That's a migration → pause-list → **not applied**. Until then the flag is OFF for existing tenants and the surface stays inert (correct: nothing appears until a tenant connects an integration anyway).
+**Existing-tenant discoverability — resolved WITHOUT a migration (2026-07-06).** Instead of a bulk `UPDATE feature_flags` data migration, connecting a foodpanda/Careem integration now flips `delivery_aggregators` ON for that tenant (`routes/integrations/credentials.js:/connect` — `INSERT ... ON CONFLICT DO UPDATE SET enabled=true` + cache invalidation). New tenants get it via the preset seed; existing tenants get it the moment they connect an aggregator. The flag is a **real gate** (not decorative), and no bulk migration or pause-list step is needed. The generic BYOK connect UI (gated by `marketplace_integrations`) is already reachable, so there's no chicken-and-egg.
 
 ---
 

@@ -316,6 +316,45 @@ describe("V03 — delivery-aggregator order injection (Postgres)", () => {
     });
   });
 
+  describe("FBR on aggregator sales (gated on fbr_integration)", () => {
+    it("does NOT assign an FBR invoice number when fbr_integration is off", async () => {
+      const payload = foodpandaPayload({ id: "FP-NOFBR", lines: [{ sku: "PROD-002", qty: 1, price: 200 }] });
+      const result = await aggregator.processInboundOrder(db, {
+        source: "foodpanda", payload, config: config({ auto_accept: true }), tenantSlug: "t",
+      });
+      const { rows: [sale] } = await db.query(`SELECT invoice_number FROM sales WHERE id = $1`, [result.sale_id]);
+      expect(sale.invoice_number).toBeNull();
+    });
+
+    it("assigns an FBR invoice number + posts to the queue when fbr_integration is on", async () => {
+      // Give the tenant real FBR config so enqueueFbrInvoice's credential gate passes.
+      await db.query(
+        `UPDATE company_profile SET tax_mode = 'exclusive', fbr_api_token = 'test-token', ntn = '1234567' WHERE id = 1`
+      );
+      await db.query(`INSERT INTO feature_flags (key, enabled) VALUES ('fbr_integration', true)
+                      ON CONFLICT (key) DO UPDATE SET enabled = true`);
+      try {
+        const payload = foodpandaPayload({ id: "FP-FBR", lines: [{ sku: "PROD-001", qty: 1, price: 150 }] });
+        const result = await aggregator.processInboundOrder(db, {
+          source: "foodpanda", payload, config: config({ auto_accept: true }), tenantSlug: "t",
+        });
+        // The FBR-gated branch ran: an INV number was assigned (mirrors POS).
+        const { rows: [sale] } = await db.query(
+          `SELECT invoice_number, fbr_status FROM sales WHERE id = $1`, [result.sale_id]
+        );
+        expect(sale.invoice_number).toMatch(/^INV-\d{4}-\d{5}$/);
+        // An fbr_invoices row was enqueued for this sale (full DI posting is
+        // validated against the FBR sandbox separately, per V03-decisions.md).
+        const { rows: [{ n }] } = await db.query(
+          `SELECT COUNT(*)::int AS n FROM fbr_invoices WHERE sale_id = $1`, [result.sale_id]
+        );
+        expect(n).toBe(1);
+      } finally {
+        await db.query(`UPDATE feature_flags SET enabled = false WHERE key = 'fbr_integration'`);
+      }
+    });
+  });
+
   describe("availability push honesty", () => {
     it("86 push is a no-op (pushed:0) when no aggregator integration is active", async () => {
       const res = await aggregator.pushAvailabilityFor86(db, { productId: 1, available: false });

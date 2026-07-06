@@ -273,6 +273,23 @@ async function ingestOrder(db, { normalized, rawPayload, outletId }) {
 }
 
 /**
+ * Next tenant invoice number. Mirrors routes/sales.js:generateInvoiceNumber so
+ * an aggregator sale gets the same INV-YYYY-NNNNN sequence a POS sale would —
+ * needed for the FBR invoice payload.
+ */
+async function generateInvoiceNumber(client) {
+  const year = new Date().getFullYear();
+  await client.query(
+    "INSERT INTO invoice_sequences (year, last_seq) VALUES ($1, 1) ON CONFLICT(year) DO UPDATE SET last_seq = invoice_sequences.last_seq + 1",
+    [year]
+  );
+  const { rows: [row] } = await client.query(
+    "SELECT last_seq FROM invoice_sequences WHERE year = $1", [year]
+  );
+  return `INV-${year}-${String(row.last_seq).padStart(5, "0")}`;
+}
+
+/**
  * Plate cost of a recipe (kit) = Σ(component qty × component cost_price). Used to
  * snapshot cost_price_at_sale so menu-engineering food-cost % is real for
  * recipes, not the (usually zero) parent product's own cost.
@@ -300,7 +317,7 @@ async function plateCost(client, productId) {
  * decision (see docs/fable5/vertical-depth/plans/V03-fbr-proposal.md). The hook
  * point is marked below.
  */
-async function settleAggregatorSale(db, { webOrder, draftOrderId, employeeId }) {
+async function settleAggregatorSale(db, { webOrder, draftOrderId, employeeId, tenantSlug }) {
   return db.transaction(async (client) => {
     // Idempotency: if this web_order already booked stock, don't double-book.
     const { rows: [wo] } = await client.query(
@@ -437,9 +454,42 @@ async function settleAggregatorSale(db, { webOrder, draftOrderId, employeeId }) 
       }
     }
 
-    // FBR HOOK POINT — see V03-fbr-proposal.md. Aggregator sales are sales; the
-    // default proposal is to enqueue like POS (services/fbr.enqueueFbrInvoice)
-    // gated on fbr_integration. Left out until approved (FBR = pause-list).
+    // FBR Digital Invoicing — enqueue exactly like the POS anonymous-sale path
+    // (routes/sales.js), gated on fbr_integration so it's a no-op for non-FBR
+    // tenants. Aggregator orders are B2C with no NTN/CNIC → posted as an
+    // unregistered consumer (customer = null), same as a POS walk-in. Approved
+    // 2026-07-06; live enablement still needs an FBR-sandbox test per V03-decisions.md.
+    // Non-blocking: an FBR failure never rolls back the sale.
+    try {
+      const { rows: [ff] } = await client.query(
+        "SELECT enabled FROM feature_flags WHERE key = 'fbr_integration'"
+      );
+      if (ff?.enabled) {
+        const invoiceNumber = await generateInvoiceNumber(client);
+        await client.query(
+          "UPDATE sales SET invoice_number = $1 WHERE id = $2 AND invoice_number IS NULL",
+          [invoiceNumber, saleId]
+        );
+        const { buildInvoicePayload, enqueueFbrInvoice } = require("./fbr");
+        const { fetchCategoryIndexes } = require("../category-tree");
+        const categoryTree = await fetchCategoryIndexes(client);
+        const { rows: [company] } = await client.query("SELECT * FROM company_profile LIMIT 1");
+        const { rows: fbrItems } = await client.query(
+          `SELECT si.*, p.name AS product_name, p.category_id
+             FROM sale_items si LEFT JOIN products p ON si.product_id = p.id
+            WHERE si.sale_id = $1`,
+          [saleId]
+        );
+        const payload = buildInvoicePayload(
+          { timestamp: new Date(), invoice_number: invoiceNumber },
+          fbrItems, company, null, categoryTree
+        );
+        await enqueueFbrInvoice(client, { saleId, invoiceType: "sale", payload, tenantSlug });
+        await client.query("UPDATE sales SET fbr_status = 'pending' WHERE id = $1", [saleId]);
+      }
+    } catch (fbrErr) {
+      logger.error({ err: fbrErr, saleId }, "aggregator FBR enqueue failed (non-blocking)");
+    }
 
     await client.query(
       `UPDATE draft_orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
@@ -460,7 +510,7 @@ async function settleAggregatorSale(db, { webOrder, draftOrderId, employeeId }) 
  * existing online-inbox accept path for the KDS half (zero re-entry), then runs
  * the hardened settle for the inventory/accounting half.
  */
-async function acceptAndSettle(db, { webOrderId, employeeId, orderContext = "delivery", outletId }) {
+async function acceptAndSettle(db, { webOrderId, employeeId, orderContext = "delivery", outletId, tenantSlug }) {
   const accept = await inbox.acceptOnlineOrder(db, webOrderId, employeeId, {
     order_context: orderContext,
     outlet_id: outletId,
@@ -471,6 +521,7 @@ async function acceptAndSettle(db, { webOrderId, employeeId, orderContext = "del
       webOrder: accept.webOrder,
       draftOrderId: accept.draftOrderId,
       employeeId,
+      tenantSlug,
     });
   } catch (err) {
     // The kitchen ticket already exists (accept succeeded). A settle failure is
@@ -516,7 +567,7 @@ async function resolvePrimaryOutletId(db) {
  * (idempotent), and — if the tenant has auto-accept on — pushes straight to the
  * kitchen + books the sale. Returns a small status object for the webhook ack.
  */
-async function processInboundOrder(db, { source, payload, config }) {
+async function processInboundOrder(db, { source, payload, config, tenantSlug }) {
   let normalized;
   try {
     normalized = normalizeOrder(source, payload);
@@ -553,6 +604,7 @@ async function processInboundOrder(db, { source, payload, config }) {
         employeeId,
         orderContext: normalized.expedition_type === "pickup" ? "takeout" : "delivery",
         outletId,
+        tenantSlug,
       });
       result.accepted = true;
       result.draft_order_id = accepted.draftOrderId;

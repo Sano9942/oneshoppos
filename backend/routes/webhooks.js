@@ -609,7 +609,17 @@ module.exports = function registerWebhookRoutes(app, deps) {
           secret: resolved.config.webhook_secret,
         });
         if (!verify.ok) {
+          // Fail-closed is security-correct but must not be OPERATIONALLY silent:
+          // a misconfigured secret/header would reject every legit order and the
+          // orders would just vanish. Feed the alerting sliding window so a spike
+          // of rejections on an active integration pages ops instead.
           logger.warn({ source, storeId, reason: verify.reason }, "aggregator webhook signature rejected");
+          try {
+            require("../services/alerting").recordError({
+              tenant: resolved.tenant.slug,
+              message: `aggregator webhook signature rejected (${source}, store ${storeId}): ${verify.reason}`,
+            });
+          } catch { /* alerting is best-effort */ }
           return res.status(401).json({ error: "Invalid signature", reason: verify.reason });
         }
         // 3. Ingest (idempotent on source+order id) + optional zero-touch
@@ -618,6 +628,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
           source,
           payload,
           config: resolved.config,
+          tenantSlug: resolved.tenant.slug,
         });
         return res.json(result);
       } catch (err) {

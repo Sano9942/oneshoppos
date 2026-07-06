@@ -26,7 +26,9 @@ Implemented in `services/aggregator-orders.js:verifyWebhook` + the route in `rou
 ## What needs the platform's real spec (open question for you)
 The exact **header names** and whether the signature is **base64 vs hex** depend on foodpanda's / Careem's live POS-integration docs, which we don't have sandbox access to. The scheme above is configurable at exactly one point (`SIGNATURE_HEADERS` / `TIMESTAMP_HEADERS` + the digest encoding in `verifyWebhook`) — if their real scheme differs, only that function changes, not the pipeline. **Careem ships stub-honest** (labelled "manual" in the hub) until API access is provisioned.
 
-## Approval asks
-1. Approve the HMAC-SHA256 + ±5-min replay-window scheme (or adjust the window).
-2. Confirm the route-before-verify store-id lookup is acceptable (it must be — the secret is per-store; the alternative is a single global secret, which is worse).
-3. On the day foodpanda access is provisioned, confirm the real signature header name + encoding so the one config point can be set before the endpoint is exposed in prod.
+## Status — APPROVED 2026-07-06
+The HMAC-SHA256 + ±5-min replay-window scheme and the route-before-verify store-id lookup are **approved and implemented** (`services/aggregator-orders.js:verifyWebhook`, `routes/webhooks.js`).
+
+**Operational hardening added on approval:** fail-closed is security-correct but must not be *operationally silent* — a misconfigured secret/header would reject every legit order and the revenue would just vanish. So a signature rejection on an active integration now feeds `services/alerting.js:recordError` (the sliding-window email alert), so a spike of rejections pages ops instead of disappearing.
+
+**Remaining gate before PRODUCTION exposure (not a code change — an ops step):** confirm foodpanda's real signature **header name + encoding** (base64 vs hex) from their POS-integration onboarding docs, set the one config point (`SIGNATURE_HEADERS` + the digest line in `verifyWebhook`), and fire one real test order through before enabling the endpoint for a live tenant. Careem stays "manual" until API access is provisioned.
