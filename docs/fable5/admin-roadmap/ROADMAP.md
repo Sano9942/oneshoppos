@@ -104,7 +104,17 @@ Which tenants use which modes/flags — drives roadmap decisions.
 > Sequence 2FA as its own commit with its own tests; verify login manually before merging.
 > Touches `routes/admin/auth.js` + `helpers.js` — the only high-regression-risk area in this roadmap.
 
-### B1 `[ ]` Admin 2FA (TOTP) (M)
+**BUILT 2026-07-08 on `feat/admin-b` (pushed, UNMERGED — awaiting manual gate).**
+Three commits, one per sub-item (B1 1c0ba0c, B2 44d96d8, B3 f734445). 20 new
+integration tests (pg-admin-2fa ×10, pg-admin-session ×5, pg-admin-login-alert
+×5); full pg-admin-* suite green (90 tests). Migrations v125 (TOTP cols on
+super_admins) + v126 (admin_sessions). Deps: otplib@12, qrcode.
+**MANUAL GATE before merge/enable in prod**: enroll TOTP on /admin/security +
+log in end-to-end on local, and save recovery codes for the prod super-admin
+account before enabling there. `ADMIN_ACCESS_TTL`/`ADMIN_REFRESH_TTL` optional
+env overrides (default 1h/7d); B3 alerts need `ALERT_EMAIL` set (already is).
+
+### B1 `[x]` Admin 2FA (TOTP) (M)
 1. Dep: `otplib` (backend only).
 2. Migration (public): `super_admins` + `totp_secret TEXT`, `totp_enabled_at TIMESTAMPTZ`,
    `recovery_codes JSONB` (array of bcrypt hashes).
@@ -127,7 +137,7 @@ Which tenants use which modes/flags — drives roadmap decisions.
 8. **Manual gate before merge**: enroll + log in end-to-end on local, and confirm you've
    saved recovery codes for the prod account before enabling there.
 
-### B2 `[ ]` Session hardening (S/M)
+### B2 `[x]` Session hardening (S/M)
 1. Shorten admin access token to 1h (currently 24h) + add a refresh flow: `admin_sessions`
    table (public) with hashed refresh token + jti, `POST /api/admin/auth/refresh`, rotation
    on use. Mirror the tenant refresh pattern in `routes/auth.js` — don't invent a new one.
@@ -137,7 +147,7 @@ Which tenants use which modes/flags — drives roadmap decisions.
 3. Active-sessions list + "revoke all other sessions" on `/admin/security`.
 4. Tests: refresh rotation, revoked session rejected.
 
-### B3 `[ ]` Login anomaly alerting (S)
+### B3 `[x]` Login anomaly alerting (S)
 1. On successful admin login, compare IP against the last 30 days of
    `admin_security_log` login_success IPs; unseen IP → `alertEmail` ("New admin login from
    <ip>") — fire-and-forget.
