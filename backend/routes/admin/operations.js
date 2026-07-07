@@ -297,6 +297,120 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
+  // ── Aggregator / sync dead-letters (per-tenant external_sync_events) ────
+  // V03 delivery-aggregator order injection (foodpanda/Careem) dead-letters
+  // land in each tenant's external_sync_events with status='dead_letter'.
+  // Same fanout pattern as the Shopify list above.
+  app.get("/api/admin/dead-letters/aggregator", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allEvents = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows } = await tenantDb.query(
+            `SELECT id, direction, entity_type, idempotency_key, status, error_message,
+                    attempt_count, created_at, last_attempt_at
+             FROM external_sync_events
+             WHERE status = 'dead_letter'
+             ORDER BY created_at DESC
+             LIMIT $1`,
+            [limit]
+          );
+          for (const row of rows) {
+            allEvents.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist — skip silently
+        }
+      }
+
+      allEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ events: allEvents.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Dismiss: mark 'failed' so the 30-day sync-event cleanup reaps it. There
+  // is deliberately no admin-side retry — re-injecting an aggregator order
+  // must go through the webhook path with its idempotency key.
+  app.post("/api/admin/dead-letters/aggregator/:tenantId/:id/dismiss", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE external_sync_events SET status = 'failed', processed_at = NOW()
+         WHERE id = $1 AND status = 'dead_letter' RETURNING id`,
+        [req.params.id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Event not found" });
+      logAdminAction(req.admin.email, "aggregator_dead_letter_dismissed", "tenant", req.params.tenantId, { event_id: req.params.id }, req.ip);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Channel-sync dead-letters (V10 lodging OTA conflicts) ───────────────
+  app.get("/api/admin/dead-letters/channel-sync", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allEvents = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows } = await tenantDb.query(
+            `SELECT id, feed_id, external_uid, start_date, end_date, summary, reason,
+                    conflicting_booking_id, status, created_at
+             FROM channel_sync_dead_letters
+             WHERE status = 'open'
+             ORDER BY created_at DESC
+             LIMIT $1`,
+            [limit]
+          );
+          for (const row of rows) {
+            allEvents.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist — skip silently
+        }
+      }
+
+      allEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ events: allEvents.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/dead-letters/channel-sync/:tenantId/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const status = req.body?.status;
+      if (!["resolved", "dismissed"].includes(status)) {
+        return res.status(400).json({ error: "status must be 'resolved' or 'dismissed'" });
+      }
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE channel_sync_dead_letters SET status = $1, updated_at = NOW()
+         WHERE id = $2 AND status = 'open' RETURNING id`,
+        [status, req.params.id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Dead letter not found" });
+      logAdminAction(req.admin.email, "channel_sync_dead_letter_" + status, "tenant", req.params.tenantId, { dead_letter_id: req.params.id }, req.ip);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Payment Webhook Dead-Letters ───────────────────────────────────────
   // Returns recent payment webhook events from the public schema. Used by
   // AdminStuckPayments.jsx to surface unprocessed or anomalous webhooks.

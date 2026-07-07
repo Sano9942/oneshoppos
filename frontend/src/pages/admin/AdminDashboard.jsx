@@ -487,44 +487,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Worker Status */}
-      {workers && (
-        <div className="mb-8 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
-          <h2 className="mb-4 text-lg font-semibold text-(--ui-text)">Worker Status</h2>
-          <div className="space-y-2">
-            {Object.entries(workers).map(([name, w]) => {
-              if (!w || typeof w !== "object") return null;
-              const dotColor = !w.enabled
-                ? "bg-(--ui-border-strong)"
-                : w.running
-                ? "bg-(--ui-success-fg)"
-                : "bg-(--ui-danger)";
-              const stateLabel = !w.enabled ? "disabled" : w.running ? "running" : "stopped";
-              return (
-                <div key={name} className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2.5">
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
-                    <span className="text-sm font-medium text-(--ui-text)">{name}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-(--ui-text-muted)">{stateLabel}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-(--ui-text-muted)">
-                    {w.enabled && w.queue_depth != null && <span>Queue: {w.queue_depth}</span>}
-                    {w.enabled && w.processed_today != null && <span>Today: {w.processed_today}</span>}
-                    {w.last_poll_at && (
-                      <span title={new Date(w.last_poll_at).toLocaleString()}>
-                        {w.last_poll_ago_seconds < 60
-                          ? `${w.last_poll_ago_seconds}s ago`
-                          : w.last_poll_ago_seconds < 3600
-                          ? `${Math.round(w.last_poll_ago_seconds / 60)}m ago`
-                          : `${Math.round(w.last_poll_ago_seconds / 3600)}h ago`}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {workers && <WorkerStatusPanel workers={workers} />}
 
       {/* Orphaned Schema Detector */}
       {orphans && (
@@ -822,6 +785,124 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Worker status panel ──────────────────────────────────────────────────
+// Grouped by domain; drift alerts (env var missing / register failed /
+// enabled-but-stopped) float to the top as an amber banner. Data shape from
+// GET /api/admin/worker-status (see routes/admin/system.js).
+
+const WORKER_GROUPS = [
+  ["Platform", ["email", "cleanup", "orphan_schema_scan", "report_schedule", "catalog_scheduler", "attendance_auto_close"]],
+  ["Billing & subscriptions", ["subscription_grace", "subscription_dunning"]],
+  ["Retail & inventory", ["abc", "anomaly", "expiry_alert", "retail_digest", "shift_auto_close", "hold_expiry"]],
+  ["Restaurant & reservations", ["kds_snapshot", "course_release", "reservation", "reservation_reminder"]],
+  ["Appointments & clinical", ["booking_reminder", "treatment_plan", "recall"]],
+  ["Rentals & lodging", ["rental_overdue", "room_overdue", "channel_sync", "night_audit", "deposit_hold_expiry"]],
+  ["Integrations & compliance", ["fbr", "shopify_sync", "marketplace_sync"]],
+];
+
+const WORKER_ALERT_LABELS = {
+  env_var_missing: "ENV VAR MISSING",
+  register_failed: "REGISTER FAILED",
+  enabled_but_stopped: "STOPPED",
+};
+
+function workerAgo(w) {
+  if (!w.last_poll_at) return null;
+  const s = w.last_poll_ago_seconds;
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  return `${Math.round(s / 3600)}h ago`;
+}
+
+function WorkerRow({ name, w }) {
+  const dotColor = !w.enabled
+    ? "bg-(--ui-border-strong)"
+    : w.running
+    ? "bg-(--ui-success-fg)"
+    : "bg-(--ui-danger)";
+  const stateLabel = !w.enabled ? "disabled" : w.running ? "running" : "stopped";
+  return (
+    <div className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-border) px-4 py-2">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+        <span className="truncate text-sm font-medium text-(--ui-text)">{name.replace(/_/g, " ")}</span>
+        <span className="text-[10px] uppercase tracking-wider text-(--ui-text-muted)">{stateLabel}</span>
+        {w.alert && (
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              w.alert === "env_var_missing" ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)" : "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+            }`}
+            title={w.alert === "env_var_missing" ? `${w.env_var} is not set on the server` : w.register_error || w.alert}
+          >
+            {WORKER_ALERT_LABELS[w.alert] || w.alert}
+          </span>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-3 text-xs text-(--ui-text-muted)">
+        {w.enabled && w.queue_depth != null && <span>Queue: {w.queue_depth}</span>}
+        {w.enabled && w.processed_today != null && <span>Today: {w.processed_today}</span>}
+        {w.last_poll_at && <span title={new Date(w.last_poll_at).toLocaleString()}>{workerAgo(w)}</span>}
+        {w.mode === "manual" && <span title={w.note}>manual</span>}
+      </div>
+    </div>
+  );
+}
+
+function WorkerStatusPanel({ workers }) {
+  const entries = Object.entries(workers).filter(([, w]) => w && typeof w === "object");
+  const byName = Object.fromEntries(entries);
+  const grouped = new Set(WORKER_GROUPS.flatMap(([, names]) => names));
+  const other = entries.map(([n]) => n).filter((n) => !grouped.has(n));
+  const alerts = entries.filter(([, w]) => w.alert);
+
+  return (
+    <div className="mb-8 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+      <h2 className="mb-4 text-lg font-semibold text-(--ui-text)">Worker Status</h2>
+
+      {alerts.length > 0 && (
+        <div className="mb-4 rounded-(--ui-radius-sm) border border-(--ui-warning-fg) bg-(--ui-warning-bg) p-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-(--ui-warning-fg)">
+            {alerts.length} worker {alerts.length === 1 ? "alert" : "alerts"}
+          </p>
+          <ul className="mt-1 space-y-0.5 text-xs text-(--ui-warning-fg)">
+            {alerts.map(([name, w]) => (
+              <li key={name}>
+                <span className="font-semibold">{name.replace(/_/g, " ")}</span>
+                {w.alert === "env_var_missing" && ` — worker exists in code but ${w.env_var} is not set on the server; it has never run.`}
+                {w.alert === "register_failed" && ` — registration failed: ${w.register_error || "unknown error"}.`}
+                {w.alert === "enabled_but_stopped" && ` — enabled but no run recorded within the expected interval.`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {WORKER_GROUPS.map(([group, names]) => {
+          const present = names.filter((n) => byName[n]);
+          if (present.length === 0) return null;
+          return (
+            <div key={group}>
+              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted)">{group}</h3>
+              <div className="space-y-1.5">
+                {present.map((n) => <WorkerRow key={n} name={n} w={byName[n]} />)}
+              </div>
+            </div>
+          );
+        })}
+        {other.length > 0 && (
+          <div>
+            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted)">Other</h3>
+            <div className="space-y-1.5">
+              {other.map((n) => <WorkerRow key={n} name={n} w={byName[n]} />)}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
