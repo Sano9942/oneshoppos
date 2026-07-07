@@ -9,7 +9,7 @@
 Run each; ALL must pass before step 1.
 
 - [ ] `git -C D:/newprojects/oneshoppos status` → clean tree, on `main`.
-- [ ] `git log --oneline origin/main..main | wc -l` → 38 commits (V01–V10 + 3 recovery merges). If the count differs from what you expect, STOP and diff.
+- [ ] `git log --oneline origin/main..main | wc -l` → 42 commits (V01–V10 + 3 recovery merges, incl. the 4 fix-branch commits they pull in). If the count differs from what you expect, STOP and diff.
 - [ ] `git branch --no-merged main` → only `fix/completion-04` remains (stale, content already in main — do NOT merge it).
 - [ ] **Backup**: Supabase dashboard → Database → Backups → confirm a backup from the last 24 h exists (Pro plan: daily + 7-day PITR). Optionally download a snapshot. Do not proceed without this.
 - [ ] `/check-services` (or minimum: `curl "https://api.sanopos.com/api/health?deep=true"` → `status:ok`) — don't deploy onto an already-degraded stack.

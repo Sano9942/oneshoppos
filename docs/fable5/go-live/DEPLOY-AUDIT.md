@@ -10,7 +10,7 @@
 
 ## 1. Consolidation findings
 
-**What ships:** local `main` is 38 commits ahead of `origin/main` (`1cd222b` → post-merge tip).
+**What ships:** local `main` is 42 commits ahead of `origin/main` (`1cd222b` → post-merge tip).
 Contents: V01 (grocery lane), V02 (wholesale depth), V03 (food-service/aggregators), V04 (salon),
 V05 (clinical), V07 (gym), V08 (photography), V09 (rentals), V10 (lodging), platform-study docs,
 plus 3 recovery merges (below). V06, F01–F07, and the Square reskin are already inside origin/main @ v109.
