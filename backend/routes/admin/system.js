@@ -49,6 +49,9 @@ module.exports = function registerSystemRoutes(app, deps) {
     subscription_dunning: "subscription-dunning-check",
     attendance_auto_close: "attendance-auto-close",
     catalog_scheduler: null, // setInterval
+    orphan_schema_scan: "orphan-schema-scan",
+    shopify_sync: null, // setInterval
+    report_schedule: null, // setInterval
   };
 
   app.get("/api/admin/worker-status", requireAllowedIp, requireSuperAdmin, async (req, res) => {
@@ -96,6 +99,15 @@ module.exports = function registerSystemRoutes(app, deps) {
       const attendanceAutoCloseStatus = global.__attendanceAutoCloseWorkerStatus || null;
       // Scheduled catalog changes — 60s setInterval poll.
       const catalogSchedulerStatus = global.__catalogSchedulerStatus || null;
+      // Hourly orphan-schema scan (default ON when pg-boss is wired).
+      const orphanSchemaScanStatus = global.__orphanSchemaScanWorkerStatus || null;
+      // Shopify inventory-event poll (30s) + report-schedule poll (60s).
+      const shopifySyncStatus = global.__shopifySyncWorkerStatus || null;
+      const reportScheduleStatus = global.__reportScheduleWorkerStatus || null;
+      // Boot-time env-gate registry (boot/workers.js) — knows each worker's
+      // env var, whether it's set, and whether registration succeeded. This
+      // is what lets the panel flag "shipped but env var never set" drift.
+      const registry = global.__workerRegistry || {};
 
       // W35: query pgboss.job once for all known queues. Returns a map of
       // queue_name → max(completed_on) timestamp in ms. Failures fall back
@@ -119,22 +131,65 @@ module.exports = function registerSystemRoutes(app, deps) {
         // Pre-pgboss tenants or DB hiccup — fall back to in-memory only.
       }
 
+      // Real backlog per queue — durable, survives redeploys (unlike the
+      // in-memory queueDepth heartbeat field, which resets to 0).
+      const dbDepthByQueue = {};
+      try {
+        const { rows } = await db.query(
+          `SELECT name, COUNT(*)::int AS depth
+           FROM pgboss.job
+           WHERE name = ANY($1) AND state IN ('created', 'retry', 'active')
+           GROUP BY name`,
+          [queueNames]
+        );
+        for (const r of rows) dbDepthByQueue[r.name] = r.depth;
+      } catch (err) {
+        // Fall back to in-memory heartbeat depth below.
+      }
+
       function workerInfo(workerKey, status, pollIntervalMs) {
         const inMemoryAt = status?.lastPollAt || 0;
         const queueName = PG_BOSS_QUEUES[workerKey];
         const dbAt = queueName ? dbLastRunByQueue[queueName] || 0 : 0;
         // Use whichever is newer.
         const lastPollAt = Math.max(inMemoryAt, dbAt) || 0;
+        const reg = registry[workerKey] || null;
 
-        if (!status && !lastPollAt) return { enabled: false, running: false };
         const lastPollAgo = lastPollAt ? Date.now() - lastPollAt : Number.MAX_SAFE_INTEGER;
+        const running = lastPollAt ? lastPollAgo < pollIntervalMs * 2.5 : false;
+        const queueDepth = queueName && dbDepthByQueue[queueName] !== undefined
+          ? dbDepthByQueue[queueName]
+          : status?.queueDepth || 0;
+
+        // Drift/failure alert. Registry only exists on processes booted with
+        // the new boot/workers.js — when absent, fall back to old inference.
+        let alert = null;
+        if (reg) {
+          if (!reg.env_enabled && reg.env_value === null && !reg.default_on && !reg.opt_out) {
+            alert = "env_var_missing"; // code gate exists, Railway var never set
+          } else if (reg.env_enabled && reg.register_error) {
+            alert = "register_failed";
+          } else if (reg.env_enabled && !running) {
+            alert = "enabled_but_stopped"; // no run within 2.5× expected interval
+          }
+        }
+
+        const base = {
+          enabled: reg ? reg.env_enabled : !!(status || lastPollAt),
+          running,
+          env_var: reg ? reg.env_var : null,
+          env_value: reg ? reg.env_value : undefined,
+          registered: reg ? reg.registered : undefined,
+          register_error: reg ? reg.register_error : undefined,
+          alert,
+        };
+        if (!status && !lastPollAt) return base;
         return {
-          enabled: true,
-          running: lastPollAgo < pollIntervalMs * 2.5,
+          ...base,
           last_poll_at: lastPollAt ? new Date(lastPollAt).toISOString() : null,
           last_poll_ago_seconds: lastPollAt ? Math.round(lastPollAgo / 1000) : null,
           processed_today: status?.processedToday || 0,
-          queue_depth: status?.queueDepth || 0,
+          queue_depth: queueDepth,
         };
       }
 
@@ -177,6 +232,9 @@ module.exports = function registerSystemRoutes(app, deps) {
         subscription_dunning: workerInfo("subscription_dunning", subscriptionDunningStatus, 60 * 60 * 1000),
         attendance_auto_close: workerInfo("attendance_auto_close", attendanceAutoCloseStatus, 24 * 60 * 60 * 1000),
         catalog_scheduler: workerInfo("catalog_scheduler", catalogSchedulerStatus, 60_000),
+        orphan_schema_scan: workerInfo("orphan_schema_scan", orphanSchemaScanStatus, 60 * 60 * 1000),
+        shopify_sync: workerInfo("shopify_sync", shopifySyncStatus, 30_000),
+        report_schedule: workerInfo("report_schedule", reportScheduleStatus, 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

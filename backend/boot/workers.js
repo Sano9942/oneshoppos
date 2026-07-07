@@ -7,6 +7,43 @@
 const fs = require("fs");
 const path = require("path");
 
+// ── Worker gate registry ────────────────────────────────────────────────
+// Records every worker's env gate at boot — including workers whose env var
+// is UNSET — so GET /api/admin/worker-status can distinguish "env var
+// missing" (worker shipped but never enabled on Railway) from "enabled but
+// stopped" (worker crashed / never registered). Heartbeat globals alone
+// cannot make that distinction.
+global.__workerRegistry = {};
+
+function recordGate(key, envVar, { defaultOn = false, optOut = false, kind = "pg-boss" } = {}) {
+  const raw = process.env[envVar];
+  let enabled;
+  if (optOut) {
+    // envVar DISABLES the worker (e.g. SHOPIFY_SYNC_WORKER_DISABLED=1)
+    enabled = String(raw ?? "0") !== "1";
+  } else if (defaultOn) {
+    enabled = String(raw ?? "1") !== "0";
+  } else {
+    enabled = String(raw ?? "0") === "1";
+  }
+  global.__workerRegistry[key] = {
+    env_var: envVar,
+    env_value: raw === undefined ? null : String(raw),
+    env_enabled: enabled,
+    default_on: defaultOn,
+    opt_out: optOut,
+    kind,
+    registered: false,
+    register_error: null,
+  };
+  return enabled;
+}
+
+function markRegistered(key) {
+  const entry = global.__workerRegistry[key];
+  if (entry) entry.registered = true;
+}
+
 // Helper: run a function for each active tenant (or once for single-tenant)
 async function forEachActiveTenant(label, fn, deps) {
   const { db, IS_MULTI_TENANT, tenantDbManager } = deps;
@@ -136,9 +173,12 @@ function startSqliteBackup(DATA_DIR, DB_PATH) {
 
 function startShopifyWorker(deps) {
   const { IS_MULTI_TENANT, tenantDbManager, asyncStore, processPendingShopifyInventoryEvents } = deps;
-  if (String(process.env.SHOPIFY_SYNC_WORKER_DISABLED || "0") === "1") return;
+  if (!recordGate("shopify_sync", "SHOPIFY_SYNC_WORKER_DISABLED", { optOut: true, kind: "poller" })) return;
+  global.__shopifySyncWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+  markRegistered("shopify_sync");
 
   setInterval(async () => {
+    global.__shopifySyncWorkerStatus.lastPollAt = Date.now();
     if (!IS_MULTI_TENANT || !tenantDbManager) {
       processPendingShopifyInventoryEvents(20, () => {});
       return;
@@ -164,9 +204,12 @@ function startShopifyWorker(deps) {
 
 function startReportScheduleWorker(deps) {
   const { IS_MULTI_TENANT, tenantDbManager, asyncStore, processPendingReportSchedules } = deps;
-  if (String(process.env.REPORT_SCHEDULE_WORKER_DISABLED || "0") === "1") return;
+  if (!recordGate("report_schedule", "REPORT_SCHEDULE_WORKER_DISABLED", { optOut: true, kind: "poller" })) return;
+  global.__reportScheduleWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+  markRegistered("report_schedule");
 
   setInterval(async () => {
+    global.__reportScheduleWorkerStatus.lastPollAt = Date.now();
     if (!IS_MULTI_TENANT || !tenantDbManager) {
       processPendingReportSchedules(5, () => {});
       return;
@@ -215,9 +258,10 @@ function startAll(deps) {
   startReportScheduleWorker(deps);
 
   // Scheduled catalog changes worker
-  if (process.env.SCHEDULED_CATALOG_WORKER_ENABLED === "1") {
+  if (recordGate("catalog_scheduler", "SCHEDULED_CATALOG_WORKER_ENABLED", { kind: "poller" })) {
     const { applyScheduledChange } = require("../services/catalog-scheduler");
     global.__catalogSchedulerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+    markRegistered("catalog_scheduler");
     const catalogInterval = setInterval(async () => {
       global.__catalogSchedulerStatus.lastPollAt = Date.now();
       try {
@@ -241,15 +285,53 @@ function startAll(deps) {
     }, 60_000);
   }
 
+  // Record every pg-boss worker's env gate up front (even when the env var
+  // is unset) so worker-status can flag env-var drift. The `if` blocks below
+  // still read process.env directly — recordGate mirrors, never replaces,
+  // their semantics. Keys use snake_case to match routes/admin/system.js.
+  const PG_BOSS_GATES = [
+    ["email", "EMAIL_WORKER_ENABLED"],
+    ["fbr", "FBR_WORKER_ENABLED"],
+    ["cleanup", "CLEANUP_WORKER_ENABLED"],
+    ["orphan_schema_scan", "ORPHAN_SCHEMA_SCAN_WORKER_ENABLED", { defaultOn: true }],
+    ["marketplace_sync", "MARKETPLACE_SYNC_WORKER_ENABLED"],
+    ["reservation", "RESERVATION_WORKER_ENABLED"],
+    ["subscription_grace", "SUBSCRIPTION_GRACE_WORKER_ENABLED"],
+    ["subscription_dunning", "SUBSCRIPTION_DUNNING_WORKER_ENABLED"],
+    ["rental_overdue", "RENTAL_OVERDUE_WORKER_ENABLED"],
+    ["hold_expiry", "HOLD_EXPIRY_WORKER_ENABLED"],
+    ["channel_sync", "CHANNEL_SYNC_WORKER_ENABLED"],
+    ["night_audit", "NIGHT_AUDIT_WORKER_ENABLED"],
+    ["deposit_hold_expiry", "DEPOSIT_HOLD_EXPIRY_WORKER_ENABLED"],
+    ["room_overdue", "ROOM_OVERDUE_WORKER_ENABLED"],
+    ["treatment_plan", "TREATMENT_PLAN_WORKER_ENABLED"],
+    ["recall", "RECALL_WORKER_ENABLED"],
+    ["abc", "ABC_WORKER_ENABLED"],
+    ["anomaly", "ANOMALY_WORKER_ENABLED"],
+    ["expiry_alert", "EXPIRY_ALERT_WORKER_ENABLED"],
+    ["retail_digest", "RETAIL_DIGEST_WORKER_ENABLED"],
+    ["shift_auto_close", "SHIFT_AUTO_CLOSE_WORKER_ENABLED"],
+    ["attendance_auto_close", "ATTENDANCE_AUTO_CLOSE_WORKER_ENABLED"],
+    ["course_release", "COURSE_RELEASE_WORKER_ENABLED"],
+    ["kds_snapshot", "KDS_SNAPSHOT_WORKER_ENABLED"],
+    ["reservation_reminder", "RESERVATION_REMINDER_WORKER_ENABLED"],
+    ["booking_reminder", "BOOKING_REMINDER_WORKER_ENABLED", { kind: "poller" }],
+  ];
+  for (const [key, envVar, opts] of PG_BOSS_GATES) recordGate(key, envVar, opts);
+
   // pg-boss workers — email, FBR, and cleanup (requires DATABASE_URL / Postgres)
   if (process.env.DATABASE_URL) {
     const { getBoss } = require("../services/boss");
     // Isolate each worker registration so one failure doesn't kill the rest.
     // Logs full stack so we can trace which worker actually threw.
     const tryRegister = async (label, fn) => {
+      const registryKey = label.replace(/-/g, "_");
       try {
         await fn();
+        markRegistered(registryKey);
       } catch (err) {
+        const entry = global.__workerRegistry[registryKey];
+        if (entry) entry.register_error = err && err.message ? err.message : String(err);
         console.error(`[boss] register ${label} failed:`, err && err.stack ? err.stack : err && err.message ? err.message : err);
       }
     };
@@ -460,6 +542,7 @@ function startAll(deps) {
             processedToday: 0,
             queueDepth: 0,
           };
+          markRegistered("booking_reminder");
           const pollIntervalMs = 5 * 60 * 1000; // 5 minutes
           const pollBookingReminders = async () => {
             global.__bookingReminderWorkerStatus.lastPollAt = Date.now();
@@ -491,4 +574,4 @@ function startAll(deps) {
   }
 }
 
-module.exports = { startAll };
+module.exports = { startAll, recordGate, markRegistered };
