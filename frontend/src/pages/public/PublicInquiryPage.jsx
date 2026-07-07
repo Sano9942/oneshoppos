@@ -8,7 +8,8 @@ import { API_BASE, TURNSTILE_SITE_KEY } from "../../config";
  * Top of the photography funnel: a prospect submits name/contact/event details
  * → POST /api/public/inquiries → a CRM lead + staff notification. Self-contained
  * (raw fetch, no auth), reusing the public booking config endpoint for branding.
- * Turnstile widget renders only when a site key is configured.
+ * Styled with the Square --ui-* tokens to match the other reskinned public pages
+ * (see PublicBookingPage). Turnstile renders only when a site key is configured.
  */
 export default function PublicInquiryPage() {
   const { tenantSlug } = useParams();
@@ -72,20 +73,20 @@ export default function PublicInquiryPage() {
     }
   }
 
-  if (loading) return <div className="min-h-screen grid place-items-center text-slate-500">Loading…</div>;
-  if (error) return <div className="min-h-screen grid place-items-center text-red-600">{error}</div>;
+  if (loading) return <div className="min-h-screen grid place-items-center bg-(--ui-muted-surface) text-(--ui-text-muted)">Loading…</div>;
+  if (error) return <div className="min-h-screen grid place-items-center bg-(--ui-muted-surface) text-(--ui-danger-fg)">{error}</div>;
 
   const studioName = config?.company_name || "the studio";
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4">
-      <div className="max-w-lg mx-auto rounded-2xl bg-white border border-slate-200 p-6 sm:p-8">
+    <div className="min-h-screen bg-(--ui-muted-surface) py-10 px-4">
+      <div className="max-w-lg mx-auto rounded-xl bg-(--ui-surface) border border-(--ui-border) p-6 sm:p-8">
         {config?.logo_url && <img src={config.logo_url} alt={studioName} className="h-12 mb-4" />}
-        <h1 className="text-2xl font-bold text-slate-900">Get in touch</h1>
-        <p className="text-slate-500 mt-1 mb-6">Tell {studioName} about your event and we'll be in touch shortly.</p>
+        <h1 className="text-2xl font-bold text-(--ui-text)">Get in touch</h1>
+        <p className="text-(--ui-text-muted) mt-1 mb-6">Tell {studioName} about your event and we'll be in touch shortly.</p>
 
         {done ? (
-          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-5 text-emerald-700">
+          <div className="rounded-lg bg-(--ui-success-bg) border border-(--ui-success-bg) p-5 text-(--ui-success-fg)">
             Thanks — your inquiry has been sent. We'll reach out soon.
           </div>
         ) : (
@@ -100,27 +101,28 @@ export default function PublicInquiryPage() {
               <Field label="Event date" type="date" value={form.event_date} onChange={(v) => set("event_date", v)} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+              <label className="block text-xs font-medium text-(--ui-text) mb-1">Message</label>
               <textarea
                 rows={4}
                 value={form.message}
                 onChange={(e) => set("message", e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) focus:outline-none"
                 placeholder="Tell us what you're looking for…"
               />
             </div>
             {TURNSTILE_SITE_KEY && <div className="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} />}
-            {formError && <p className="text-sm text-red-600">{formError}</p>}
+            {formError && <p className="text-sm text-(--ui-danger-fg)">{formError}</p>}
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-slate-900 text-white py-3 font-semibold disabled:opacity-60"
+              className="w-full rounded-lg bg-(--ui-primary) text-(--ui-on-primary) py-3 font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-60"
             >
               {submitting ? "Sending…" : "Send inquiry"}
             </button>
           </form>
         )}
       </div>
+      <p className="text-center text-xs text-(--ui-text-muted) mt-4">Powered by SanoPOS</p>
     </div>
   );
 }
@@ -128,8 +130,8 @@ export default function PublicInquiryPage() {
 function Field({ label, value, onChange, type = "text", required, placeholder }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
-        {label}{required && <span className="text-red-500"> *</span>}
+      <label className="block text-xs font-medium text-(--ui-text) mb-1">
+        {label}{required && <span className="text-(--ui-danger)"> *</span>}
       </label>
       <input
         type={type}
@@ -137,7 +139,7 @@ function Field({ label, value, onChange, type = "text", required, placeholder })
         required={required}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+        className="w-full border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:border-(--ui-focus) focus:ring-1 focus:ring-(--ui-focus) focus:outline-none"
       />
     </div>
   );

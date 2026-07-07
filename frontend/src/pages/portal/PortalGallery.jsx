@@ -8,8 +8,9 @@ import { portalApi } from "../../api/portalApi";
  * Two-level UI (list → grid, local state, no routing) mirroring PortalTreatments.
  * Client sees only their own client-visible shots, toggles "pick your favourites",
  * and submits the selection. Images are R2-direct URLs served straight from the
- * API response (never proxied). Self-contained inline Tailwind — no ui/primitives
- * (portal isolation convention).
+ * API response (never proxied). Self-contained — no ui/primitives (portal isolation
+ * convention); styled with the Square --ui-* tokens like the other reskinned portal
+ * pages (see PortalStays).
  */
 export default function PortalGallery() {
   const { tenantSlug } = useParams();
@@ -73,22 +74,22 @@ export default function PortalGallery() {
     }
   }
 
-  if (loading) return <div className="p-6 text-slate-500">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (loading) return <div className="text-(--ui-text-muted)">Loading…</div>;
+  if (error) return <div className="text-(--ui-danger-fg)">{error}</div>;
 
   if (active) {
     const selectedCount = files.filter((f) => f.client_selected).length;
     return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <button onClick={() => setActive(null)} className="text-sm text-blue-600 mb-4">
+      <div className="space-y-4">
+        <button onClick={() => setActive(null)} className="text-sm font-medium text-(--ui-link) hover:underline">
           ← Back to galleries
         </button>
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold">{active.name}</h1>
-          <div className="text-sm text-slate-500">{selectedCount} selected</div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-(--ui-text)">{active.name}</h1>
+          <div className="text-sm text-(--ui-text-muted)">{selectedCount} selected</div>
         </div>
         {files.length === 0 ? (
-          <p className="text-slate-500">No photos have been shared yet — check back soon.</p>
+          <p className="text-(--ui-text-muted)">No photos have been shared yet — check back soon.</p>
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -96,13 +97,13 @@ export default function PortalGallery() {
                 <button
                   key={f.id}
                   onClick={() => toggle(f)}
-                  className={`relative aspect-square overflow-hidden rounded-lg border-2 ${
-                    f.client_selected ? "border-emerald-500" : "border-transparent"
+                  className={`relative aspect-square overflow-hidden rounded-xl border-2 transition-colors ${
+                    f.client_selected ? "border-(--ui-primary)" : "border-transparent hover:border-(--ui-border-strong)"
                   }`}
                 >
                   <img src={f.file_url} alt={f.file_name} loading="lazy" className="h-full w-full object-cover" />
                   {f.client_selected && (
-                    <span className="absolute top-1 right-1 rounded-full bg-emerald-500 text-white text-xs w-6 h-6 flex items-center justify-center">✓</span>
+                    <span className="absolute top-1 right-1 rounded-full bg-(--ui-primary) text-(--ui-on-primary) text-xs w-6 h-6 flex items-center justify-center">✓</span>
                   )}
                 </button>
               ))}
@@ -110,11 +111,11 @@ export default function PortalGallery() {
             <button
               onClick={submit}
               disabled={busy}
-              className="mt-6 w-full rounded-lg bg-emerald-600 text-white py-3 font-semibold disabled:opacity-60"
+              className="mt-2 w-full rounded-full bg-(--ui-primary) text-(--ui-on-primary) py-3 font-semibold hover:bg-(--ui-primary-strong) disabled:opacity-60"
             >
               {busy ? "Submitting…" : `Submit ${selectedCount} selection${selectedCount === 1 ? "" : "s"}`}
             </button>
-            {submitted && <p className="text-emerald-600 text-sm mt-3">Your selection has been sent to the studio.</p>}
+            {submitted && <p className="text-(--ui-success-fg) text-sm">Your selection has been sent to the studio.</p>}
           </>
         )}
       </div>
@@ -122,17 +123,17 @@ export default function PortalGallery() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">My Gallery</h1>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold text-(--ui-text)">My Gallery</h1>
       {projects.length === 0 ? (
-        <p className="text-slate-500">Your photo galleries will appear here once your studio shares them.</p>
+        <p className="text-(--ui-text-muted)">Your photo galleries will appear here once your studio shares them.</p>
       ) : (
         <ul className="space-y-3">
           {projects.map((p) => (
-            <li key={p.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
+            <li key={p.id} className="flex items-center justify-between rounded-xl border border-(--ui-border) bg-(--ui-surface) p-4">
               <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-xs text-slate-500">
+                <div className="font-medium text-(--ui-text)">{p.name}</div>
+                <div className="text-xs text-(--ui-text-muted)">
                   {p.gallery_count} photo{p.gallery_count === 1 ? "" : "s"}
                   {p.selected_count > 0 ? ` · ${p.selected_count} selected` : ""}
                 </div>
@@ -140,7 +141,7 @@ export default function PortalGallery() {
               <button
                 onClick={() => openGallery(p)}
                 disabled={!p.gallery_count}
-                className="text-sm font-semibold rounded px-3 py-1.5 bg-emerald-600 text-white disabled:opacity-40"
+                className="text-sm font-semibold rounded-full px-4 py-1.5 bg-(--ui-primary) text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {p.gallery_count ? "View" : "Pending"}
               </button>
