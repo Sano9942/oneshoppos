@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Info, AlertTriangle, Wrench } from "lucide-react";
-import { API_BASE } from "../config";
+import { API_BASE, IS_MULTI_TENANT } from "../config";
 
 const TYPE_STYLES = {
   info: { bg: "bg-blue-50 border-blue-200", text: "text-blue-800", icon: Info },
@@ -17,7 +17,18 @@ export default function AnnouncementBanner() {
   });
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/announcements/active`)
+    // Pass ?tenant=<slug> so the backend can narrow plan/industry-targeted
+    // announcements to this tenant. Pre-login (no slug) omits it — the backend
+    // then returns only untargeted announcements.
+    let url = `${API_BASE}/api/announcements/active`;
+    if (IS_MULTI_TENANT) {
+      try {
+        const raw = localStorage.getItem("authSession");
+        const slug = raw ? JSON.parse(raw)?.tenant_slug : null;
+        if (slug) url += `?tenant=${encodeURIComponent(slug)}`;
+      } catch { /* ignore malformed session */ }
+    }
+    fetch(url)
       .then(r => r.ok ? r.json() : [])
       .then(data => setAnnouncements(data))
       .catch(() => {});

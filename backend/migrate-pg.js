@@ -9476,6 +9476,25 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 123,
+    description:
+      "Targeted announcements — audience_plan / audience_industry on announcements. NULL = everyone; comma-separated lists narrow a banner to specific plan(s)/industry preset(s). Powers per-plan / per-industry filtering in GET /api/announcements/active (announcements is a public table; the column also lands on the unused tenant-schema copies, harmlessly).",
+    up: async (client) => {
+      try {
+        await client.query("SAVEPOINT v123_ann_audience");
+        await client.query(
+          `ALTER TABLE announcements
+             ADD COLUMN IF NOT EXISTS audience_plan TEXT,
+             ADD COLUMN IF NOT EXISTS audience_industry TEXT`
+        );
+        await client.query("RELEASE SAVEPOINT v123_ann_audience");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v123_ann_audience");
+        console.warn(`[migrate-pg v123] announcements audience columns skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

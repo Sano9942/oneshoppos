@@ -2165,14 +2165,18 @@ CREATE TABLE IF NOT EXISTS tenant_notes (
 CREATE INDEX IF NOT EXISTS idx_tenant_notes_tenant ON tenant_notes(tenant_id);
 
 CREATE TABLE IF NOT EXISTS announcements (
-  id              SERIAL PRIMARY KEY,
-  message         TEXT NOT NULL,
-  type            TEXT DEFAULT 'info',
-  active          BOOLEAN DEFAULT true,
-  starts_at       TIMESTAMPTZ DEFAULT NOW(),
-  ends_at         TIMESTAMPTZ,
-  created_by      TEXT,
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+  id                SERIAL PRIMARY KEY,
+  message           TEXT NOT NULL,
+  type              TEXT DEFAULT 'info',
+  active            BOOLEAN DEFAULT true,
+  starts_at         TIMESTAMPTZ DEFAULT NOW(),
+  ends_at           TIMESTAMPTZ,
+  created_by        TEXT,
+  -- Targeted announcements: NULL = everyone; comma-separated lists narrow to
+  -- specific plan(s) (free/pro) or industry preset(s). See migrate-pg.js v123.
+  audience_plan     TEXT,
+  audience_industry TEXT,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS broadcast_log (

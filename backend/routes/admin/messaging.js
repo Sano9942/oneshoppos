@@ -8,6 +8,45 @@ const { CreateAnnouncementSchema } = require("../../schemas/admin");
 module.exports = function registerMessagingRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
+  // ── Targeted-announcement audience helpers ─────────────────────────────
+  // audience_plan / audience_industry are NULL (= everyone) or a comma-separated
+  // list of plans (free/pro) / industry presets. "all" and empty normalize to NULL.
+  function normalizeAudience(v) {
+    if (v === undefined || v === null) return null;
+    const s = String(v).trim().toLowerCase();
+    if (!s || s === "all") return null;
+    const list = s.split(",").map((x) => x.trim()).filter(Boolean);
+    return list.length ? list.join(",") : null;
+  }
+  function audienceMatches(csv, val) {
+    if (!csv) return true; // NULL/empty = everyone
+    const list = csv.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (!list.length) return true;
+    return val != null && list.includes(String(val).toLowerCase());
+  }
+  // Resolve a caller's plan (registry) + industry (tenant company_profile) from
+  // its slug, cached 60s. The /active endpoint is public and mounted before
+  // tenant middleware, so it can't lean on req.company — it gets ?tenant=<slug>.
+  const _audienceCache = new Map(); // slug -> { plan, industry, at }
+  async function resolveAudience(slug) {
+    if (!/^[a-z0-9_]{3,40}$/.test(slug)) return null;
+    const cached = _audienceCache.get(slug);
+    if (cached && Date.now() - cached.at < 60000) return cached;
+    let plan = null, industry = null;
+    try {
+      const { rows: [t] } = await db.query("SELECT plan FROM tenants WHERE slug = $1", [slug]);
+      if (!t) return null;
+      plan = t.plan || null;
+      try {
+        const { rows: [cp] } = await db.query(`SELECT industry_type FROM tenant_${slug}.company_profile WHERE id = 1`);
+        industry = cp ? cp.industry_type : null;
+      } catch (_) { /* schema/table may be absent — leave industry null */ }
+    } catch (_) { return null; }
+    const val = { plan, industry, at: Date.now() };
+    _audienceCache.set(slug, val);
+    return val;
+  }
+
   // ── Email Queue (pg-boss backed) ───────────────────────────────────────
   // Reads `pgboss.job WHERE name = 'email'`, the live queue. The legacy
   // `public.email_queue` table is no longer written to by enqueueEmail()
@@ -331,13 +370,15 @@ module.exports = function registerMessagingRoutes(app, deps) {
 
   app.post("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, validate(CreateAnnouncementSchema), async (req, res) => {
     try {
-      const { message, type = "info", ends_at } = req.body;
+      const { message, type = "info", ends_at, audience_plan, audience_industry } = req.body;
       if (!message || !message.trim()) return res.status(400).json({ error: "Message is required" });
       if (!["info", "warning", "maintenance"].includes(type)) return res.status(400).json({ error: "Type must be info, warning, or maintenance" });
 
       const { rows } = await db.query(
-        `INSERT INTO announcements (message, type, ends_at, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
-        [message.trim(), type, ends_at || null, req.admin.email]
+        `INSERT INTO announcements (message, type, ends_at, created_by, audience_plan, audience_industry)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [message.trim(), type, ends_at || null, req.admin.email,
+         normalizeAudience(audience_plan), normalizeAudience(audience_industry)]
       );
       logAdminAction(req.admin.email, "announcement_created", "announcement", rows[0].id, { type, message: message.trim().substring(0, 100) }, req.ip);
       return res.status(201).json(rows[0]);
@@ -348,15 +389,25 @@ module.exports = function registerMessagingRoutes(app, deps) {
 
   app.put("/api/admin/announcements/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const { message, type, active, ends_at } = req.body;
+      const { message, type, active, ends_at, audience_plan, audience_industry } = req.body;
+      const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k);
+      // Only overwrite audience columns when the key is actually present in the
+      // body — a partial PUT (e.g. deactivate sends only { active:false }) must
+      // not wipe existing targeting. Passing the key with an empty value clears
+      // it back to "everyone".
       const { rows } = await db.query(
         `UPDATE announcements SET
           message = COALESCE($1, message),
           type = COALESCE($2, type),
           active = COALESCE($3, active),
-          ends_at = $4
-        WHERE id = $5 RETURNING *`,
-        [message, type, active, ends_at !== undefined ? ends_at : null, req.params.id]
+          ends_at = $4,
+          audience_plan = CASE WHEN $5 THEN $6 ELSE audience_plan END,
+          audience_industry = CASE WHEN $7 THEN $8 ELSE audience_industry END
+        WHERE id = $9 RETURNING *`,
+        [message, type, active, ends_at !== undefined ? ends_at : null,
+         has("audience_plan"), normalizeAudience(audience_plan),
+         has("audience_industry"), normalizeAudience(audience_industry),
+         req.params.id]
       );
       if (rows.length === 0) return res.status(404).json({ error: "Announcement not found" });
       logAdminAction(req.admin.email, "announcement_updated", "announcement", req.params.id, { type: rows[0].type }, req.ip);
@@ -378,14 +429,32 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Public: active announcements (no auth — for tenant dashboards) ─────
+  // Optional ?tenant=<slug> narrows targeted announcements to the caller's plan
+  // and industry. Without a slug (e.g. pre-login), only untargeted announcements
+  // (audience_plan AND audience_industry NULL) are returned — we can't confirm a
+  // targeted banner applies, so it stays hidden.
   app.get("/api/announcements/active", async (req, res) => {
     try {
       const { rows } = await db.query(
-        `SELECT id, message, type, starts_at, ends_at FROM announcements
-         WHERE active = true AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
-         ORDER BY created_at DESC LIMIT 5`
+        `SELECT id, message, type, starts_at, ends_at, audience_plan, audience_industry
+           FROM announcements
+          WHERE active = true AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
+          ORDER BY created_at DESC LIMIT 20`
       );
-      return res.json(rows);
+
+      const slug = (req.query.tenant || "").toString().trim().toLowerCase();
+      let plan = null, industry = null;
+      if (slug) {
+        const aud = await resolveAudience(slug);
+        if (aud) { plan = aud.plan; industry = aud.industry; }
+      }
+
+      const visible = rows
+        .filter((a) => audienceMatches(a.audience_plan, plan) && audienceMatches(a.audience_industry, industry))
+        .slice(0, 5)
+        .map(({ audience_plan, audience_industry, ...rest }) => rest);
+
+      return res.json(visible);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

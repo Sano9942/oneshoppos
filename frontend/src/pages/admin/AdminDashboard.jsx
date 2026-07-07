@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Activity, Building2, Server, Users, Database, Zap, AlertTriangle, Clock, HardDrive, DollarSign, TrendingUp, CreditCard, AlertCircle, CheckCircle, Wrench, Megaphone, HardDriveDownload, RefreshCw } from "lucide-react";
 import { API_BASE } from "../../config";
 import { getAdminToken, adminFetch } from "./AdminLogin";
+import { INDUSTRY_LABELS } from "./industryLabels";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -300,7 +301,7 @@ export default function AdminDashboard() {
   const [migrateResult, setMigrateResult] = useState(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
-  const [annForm, setAnnForm] = useState({ message: "", type: "info", ends_at: "" });
+  const [annForm, setAnnForm] = useState({ message: "", type: "info", ends_at: "", audience_plan: "", audience_industry: "" });
 
   useEffect(() => {
     const token = getAdminToken();
@@ -644,6 +645,33 @@ export default function AdminDashboard() {
               className="w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
             />
             <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-(--ui-text-muted)">Audience — plan</span>
+                <select
+                  value={annForm.audience_plan}
+                  onChange={(e) => setAnnForm({ ...annForm, audience_plan: e.target.value })}
+                  className="rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
+                >
+                  <option value="">All plans</option>
+                  <option value="free">Free only</option>
+                  <option value="pro">Pro only</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-(--ui-text-muted)">Audience — industry</span>
+                <select
+                  value={annForm.audience_industry}
+                  onChange={(e) => setAnnForm({ ...annForm, audience_industry: e.target.value })}
+                  className="rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm ui-focus-ring focus:outline-none"
+                >
+                  <option value="">All industries</option>
+                  {Object.entries(INDUSTRY_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               <select
                 value={annForm.type}
                 onChange={(e) => setAnnForm({ ...annForm, type: e.target.value })}
@@ -663,13 +691,18 @@ export default function AdminDashboard() {
               <button
                 onClick={async () => {
                   if (!annForm.message.trim()) return;
-                  const body = { message: annForm.message, type: annForm.type };
+                  const body = {
+                    message: annForm.message,
+                    type: annForm.type,
+                    audience_plan: annForm.audience_plan || null,
+                    audience_industry: annForm.audience_industry || null,
+                  };
                   if (annForm.ends_at) body.ends_at = new Date(annForm.ends_at).toISOString();
                   const r = await adminFetch("/api/admin/announcements", { method: "POST", body: JSON.stringify(body) });
                   if (r.ok) {
                     const created = await r.json();
                     setAnnouncements((prev) => [created, ...prev]);
-                    setAnnForm({ message: "", type: "info", ends_at: "" });
+                    setAnnForm({ message: "", type: "info", ends_at: "", audience_plan: "", audience_industry: "" });
                     setShowAnnouncementForm(false);
                   }
                 }}
@@ -694,6 +727,13 @@ export default function AdminDashboard() {
                     "bg-(--ui-muted-surface) text-(--ui-text)"
                   }`}>{a.type}</span>
                   <span className={`text-sm ${a.active === false ? "text-(--ui-text-muted) line-through" : "text-(--ui-text)"}`}>{a.message}</span>
+                  {(a.audience_plan || a.audience_industry) && (
+                    <span className="text-[10px] text-(--ui-text-muted)">
+                      {a.audience_plan ? `Plan: ${a.audience_plan}` : ""}
+                      {a.audience_plan && a.audience_industry ? " · " : ""}
+                      {a.audience_industry ? `Industry: ${a.audience_industry.split(",").map((k) => INDUSTRY_LABELS[k.trim()] || k.trim()).join(", ")}` : ""}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {a.active !== false && (
