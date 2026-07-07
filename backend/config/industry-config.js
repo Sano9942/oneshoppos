@@ -862,6 +862,15 @@ function getClinicalConfig(industryType) {
 // V07 gym flip on the F02/F03/F06 sub-features + any preset-specific flag.
 // Kept in sync with the per-tenant backfill in migrate-pg.js (v117 = gym).
 const PRESET_EXTRA_FLAGS = Object.freeze({
+  // V04 — salon gets the F02 packages (session/facial packs) + F06 appointment
+  // waitlist sub-features, which the appointments/commissions modes can't
+  // derive. Loyalty/gift-cards/SMS are seeded by seedSalonFlags at signup, NOT
+  // here: they're shared retail-bundle flags and would be stripped by the
+  // ALL_PRESET_EXTRA_FLAGS reset on a preset switch away from salon.
+  salon: [
+    "packages_passes",               // F02 — session/facial packages
+    "phase4_appointments_waitlists", // F06 — waitlist on full slots
+  ],
   gym: [
     "phase4_appointments_classes",   // F06 — group class timetable
     "phase4_appointments_waitlists", // F06 — waitlist on full classes

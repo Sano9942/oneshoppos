@@ -9366,6 +9366,43 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 121,
+    description:
+      "V04 salon depth — client service history / formula notes. One client_service_records row per service line, auto-created (skeleton) at F06 appointment→POS checkout; the stylist fills notes/formula/before-after photos from the appointment drawer or POS post-sale screen. Surfaced as the last-visit panel in the booking view + a Service History tab on the customer profile. Formulas visible to all staff by design (per-record visibility flagged as a future item, not built). Tenant-only.",
+    up: async (client) => {
+      // Client service records — the salon P0. Skeleton rows are written at
+      // checkout (one per service line: customer/appointment/sale/service/
+      // provider prefilled); the stylist enriches notes + formula + photos
+      // afterwards. Savepoint-isolated so it no-ops in the public schema where
+      // the referenced tenant tables (customers/appointments/sales/…) are absent.
+      try {
+        await client.query("SAVEPOINT v121_service_records");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS client_service_records (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            appointment_id INTEGER REFERENCES appointments(id),
+            sale_id INTEGER REFERENCES sales(id),
+            booking_service_id INTEGER REFERENCES booking_services(id),
+            employee_id INTEGER REFERENCES employees(id),
+            service_name TEXT,
+            notes TEXT,
+            formula JSONB NOT NULL DEFAULT '[]'::jsonb,
+            photos JSONB NOT NULL DEFAULT '[]'::jsonb,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_service_records_customer ON client_service_records(customer_id, created_at DESC)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_service_records_appointment ON client_service_records(appointment_id)`);
+        await client.query("RELEASE SAVEPOINT v121_service_records");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v121_service_records");
+        console.warn(`[migrate-pg v121] client_service_records skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

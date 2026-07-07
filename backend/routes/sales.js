@@ -2346,6 +2346,15 @@ module.exports = function registerSalesRoutes(app, deps) {
              WHERE id = $2 AND sale_id IS NULL`,
             [saleId, Number(appointment_id)]
           ).catch((err) => logger.error({ err, appointment_id, saleId }, "[f06] appointment completion failed (non-blocking)"));
+
+          // V04 (salon) — auto-create skeleton service-history records, one per
+          // service on the appointment (customer/appt/sale/service/provider
+          // prefilled). Idempotent + non-blocking: a failure must not fail the
+          // sale. The stylist fills notes/formula/photos afterwards.
+          const clientServiceRecords = require("../services/client-service-records");
+          clientServiceRecords
+            .createSkeletonRecordsForAppointment(db, { saleId, appointmentId: Number(appointment_id) })
+            .catch((err) => logger.error({ err, appointment_id, saleId }, "[v04] service-record skeleton creation failed (non-blocking)"));
         }
 
         // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-

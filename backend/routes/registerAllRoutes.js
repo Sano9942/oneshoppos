@@ -714,6 +714,8 @@ module.exports = function registerAllRoutes(app, deps) {
   // vet_vaccinations gated) + physio handout library (clinical_handouts).
   require("./recalls")(app, deps);
   require("./handouts")(app, deps);
+  // V04 salon — client service history / formula notes (appointments-gated).
+  require("./client-service-records")(app, deps);
 
   // --- F05 customer notifications: per-event channel rules + delivery log ---
   require("./notification-settings")(app, deps);

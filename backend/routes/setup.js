@@ -20,6 +20,7 @@ const {
   seedRetailFlags,
   seedRestaurantFlags,
   seedWholesaleFlags,
+  seedSalonFlags,
   seedRetailSubtypeFlags,
   RETAIL_BUNDLE_INDUSTRIES,
 } = require("../services/retail-flag-preset");
@@ -318,6 +319,11 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           await seedRetailSubtypeFlags(client, industry_type);
         } else if (industry_type === "restaurant" || industry_type === "cafe") {
           await seedRestaurantFlags(client);
+        } else if (industry_type === "salon") {
+          // V04 — salon customer-engagement bundle (loyalty + gift cards + SMS
+          // campaign/provider surfaces). Packages + waitlist come from the
+          // PRESET_EXTRA_FLAGS block above.
+          await seedSalonFlags(client);
         }
 
         // 1g. Wholesale-only flags on top of the retail bundle. All four

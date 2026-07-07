@@ -125,6 +125,24 @@ const WHOLESALE_SEED_FLAGS = [
   "wholesale_van_sales",
 ];
 
+// V04 salon depth — salon signups previously got NO retail seed flags (they
+// skipped every bundle). This is the salon customer-engagement bundle: loyalty
+// + gift cards (approved ON — gift cards are a top salon/spa revenue lever and
+// the salon portal already exposes a loyalty tab) plus the SMS pair that turns
+// on the Marketing → Campaigns surface + provider config, which the plan's SMS
+// appointment reminders and birthday campaign both need to be configurable.
+// All four are inert until the owner sets them up, same as the restaurant
+// bundle they mirror. The appointments/commissions engines themselves come
+// from the salon preset's modes; the F02 packages + F06 waitlist sub-features
+// come from PRESET_EXTRA_FLAGS (industry-config.js), not here — those are
+// mode-underivable and belong in the extra-flags reset set.
+const SALON_SEED_FLAGS = [
+  "phase2g_loyalty",
+  "phase2g_gift_cards",
+  "sms_campaigns",
+  "phase5_sms_providers",
+];
+
 const MULTI_OUTLET_SEED_FLAGS = [
   "context_selection_required",
   "context_header_enforced",
@@ -201,6 +219,17 @@ async function seedWholesaleFlags(client) {
   }
 }
 
+async function seedSalonFlags(client) {
+  for (const key of SALON_SEED_FLAGS) {
+    await client.query(
+      `INSERT INTO feature_flags (key, enabled)
+       VALUES ($1, true)
+       ON CONFLICT (key) DO UPDATE SET enabled = true`,
+      [key]
+    );
+  }
+}
+
 async function seedMultiOutletFlags(client) {
   for (const key of MULTI_OUTLET_SEED_FLAGS) {
     await client.query(
@@ -232,12 +261,14 @@ module.exports = {
   RETAIL_SEED_FLAGS,
   RESTAURANT_SEED_FLAGS,
   WHOLESALE_SEED_FLAGS,
+  SALON_SEED_FLAGS,
   MULTI_OUTLET_SEED_FLAGS,
   RETAIL_SUBTYPE_FLAGS,
   RETAIL_BUNDLE_INDUSTRIES,
   seedRetailFlags,
   seedRestaurantFlags,
   seedWholesaleFlags,
+  seedSalonFlags,
   seedMultiOutletFlags,
   seedRetailSubtypeFlags,
 };

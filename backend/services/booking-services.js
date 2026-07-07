@@ -186,15 +186,29 @@ async function createAppointment(db, data, source = "admin", options = {}) {
         }
       }
 
-      // Schedule reminder (same transaction — an appointment without its
-      // reminder row is worse than a clean retry).
-      if (data.customer_email || data.customer_phone) {
-        const reminderTime = new Date(startAt.getTime() - 60 * 60 * 1000); // 1 hour before
+      // Schedule reminders (same transaction — an appointment without its
+      // reminder row is worse than a clean retry). V04: salon runs SMS-forward
+      // (24h + 1h SMS is the PK salon default; SMS is THE reminder channel).
+      // Other appointment presets keep the single 1h reminder on the best
+      // channel. SMS delivery is truthful via F05 — a scheduled SMS row is only
+      // marked 'sent' if a provider actually dispatched it, so seeding SMS rows
+      // on a tenant without a configured provider never lies, it just no-ops.
+      const { rows: [cp] } = await client.query(
+        "SELECT industry_type FROM company_profile WHERE id = 1"
+      );
+      const smsForward = cp && cp.industry_type === "salon" && !!data.customer_phone;
+      const reminderOffsets = smsForward
+        ? [{ minutes: 24 * 60, channel: "sms" }, { minutes: 60, channel: "sms" }]
+        : (data.customer_email || data.customer_phone)
+          ? [{ minutes: 60, channel: data.customer_email ? "email" : "sms" }]
+          : [];
+      for (const off of reminderOffsets) {
+        const reminderTime = new Date(startAt.getTime() - off.minutes * 60 * 1000);
         if (reminderTime > new Date()) {
           await client.query(
             `INSERT INTO appointment_reminders (appointment_id, minutes_before, channel, scheduled_for)
-             VALUES ($1, 60, $2, $3)`,
-            [row.id, data.customer_email ? "email" : "sms", reminderTime.toISOString()]
+             VALUES ($1, $2, $3, $4)`,
+            [row.id, off.minutes, off.channel, reminderTime.toISOString()]
           );
         }
       }

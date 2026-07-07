@@ -158,8 +158,8 @@ module.exports = function registerBookingRoutes(app, deps) {
       const { from, to } = req.query;
       if (!from || !to) return res.status(400).json({ error: "from and to required" });
       const { rows } = await deps.db.query(
-        `SELECT a.id, a.start_at, a.end_at, a.status, a.employee_id, a.customer_name,
-           bs.name AS service_name, e.name AS employee_name,${SEGMENTS_AGG}
+        `SELECT a.id, a.start_at, a.end_at, a.status, a.employee_id, a.customer_id, a.customer_name,
+           a.service_id, bs.name AS service_name, e.name AS employee_name,${SEGMENTS_AGG}
          FROM appointments a
          JOIN booking_services bs ON bs.id = a.service_id
          LEFT JOIN employees e ON e.id = a.employee_id

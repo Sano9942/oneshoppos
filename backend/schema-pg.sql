@@ -4053,6 +4053,29 @@ CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_waitlist_claim_token ON appointment_waitlist_entries(claim_token) WHERE claim_token IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_waitlist_class_status ON appointment_waitlist_entries(class_session_id, status);
 
+-- v121 (V04 salon depth): per-service client history / colorist formula notes.
+-- Skeleton row auto-created per service line at F06 appointment->POS checkout;
+-- stylist fills notes/formula/photos afterwards. formula = [{label,value}],
+-- photos = R2 keys. Surfaced as the booking-view last-visit panel + a Service
+-- History tab on the customer profile. Visible to all staff (per-record
+-- visibility is a noted future item, not built).
+CREATE TABLE IF NOT EXISTS client_service_records (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  appointment_id INTEGER REFERENCES appointments(id),
+  sale_id INTEGER REFERENCES sales(id),
+  booking_service_id INTEGER REFERENCES booking_services(id),
+  employee_id INTEGER REFERENCES employees(id),
+  service_name TEXT,
+  notes TEXT,
+  formula JSONB NOT NULL DEFAULT '[]'::jsonb,
+  photos JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_service_records_customer ON client_service_records(customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_service_records_appointment ON client_service_records(appointment_id);
+
 CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
   id SERIAL PRIMARY KEY,
   employee_id INTEGER NOT NULL REFERENCES employees(id),
