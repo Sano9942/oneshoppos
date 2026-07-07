@@ -85,6 +85,19 @@ const SMS_TEMPLATES = {
       }
     ),
 
+  // V05 clinical — recall / continuing-care outreach. `recallLabel` is
+  // pre-humanized by the caller ("6-month checkup", "Rabies vaccine").
+  recall_due: (d) =>
+    fill(
+      "{{storeName}}: {{subjectName}} is due for a {{recallLabel}}. Book your visit: {{bookingUrl}} {{storePhone}}",
+      { ...d, recallLabel: (d && d.recallLabel) || (d && d.recallType) || "checkup" }
+    ),
+  vaccination_due: (d) =>
+    fill(
+      "{{storeName}}: {{subjectName}} is due for {{recallLabel}} on {{dueDate}}. Book: {{bookingUrl}} {{storePhone}}",
+      { ...d, recallLabel: (d && d.recallLabel) || "a vaccination" }
+    ),
+
   // F02 membership dunning
   subscription_payment_failed: (d) =>
     fill(

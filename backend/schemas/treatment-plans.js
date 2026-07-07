@@ -36,6 +36,10 @@ const createPatientSubjectSchema = z.object({
   photo_url: z.string().max(2000).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   is_active: z.boolean().optional(),
+  // V05 — structured safety data (string arrays; free text entries).
+  allergies: z.array(z.string().min(1).max(200)).max(100).optional(),
+  medical_alerts: z.array(z.string().min(1).max(200)).max(100).optional(),
+  current_medications: z.array(z.string().min(1).max(200)).max(100).optional(),
 });
 
 const updatePatientSubjectSchema = createPatientSubjectSchema.partial();
@@ -57,6 +61,10 @@ const createPlanSchema = z.object({
   deposit_collected: z.number().min(0).default(0),
   deposit_method: z.string().max(50).nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
+  // V05 — recall config + folio-tax source (copied from template or set directly).
+  recall_interval_months: z.number().int().min(1).max(120).nullable().optional(),
+  recall_type: z.string().min(1).max(80).optional(),
+  tax_id: z.number().int().positive().nullable().optional(),
 });
 
 const updatePlanSchema = z.object({
@@ -69,6 +77,9 @@ const updatePlanSchema = z.object({
   total_sessions_planned: z.number().int().min(1).optional(),
   estimated_total: z.number().min(0).optional(),
   notes: z.string().max(5000).nullable().optional(),
+  recall_interval_months: z.number().int().min(1).max(120).nullable().optional(),
+  recall_type: z.string().min(1).max(80).optional(),
+  tax_id: z.number().int().positive().nullable().optional(),
 }).strict();
 
 const planStatusTransitionSchema = z.object({
@@ -208,6 +219,8 @@ const addFolioLineSchema = z.object({
   description: z.string().min(1).max(500),
   quantity: z.number().min(0.001).default(1),
   unit_price: z.number(),
+  // V05 folio-tax — explicit tax for taxable manual/lab charges.
+  tax_id: z.number().int().positive().nullable().optional(),
 });
 
 const attachSaleToFolioSchema = z.object({

@@ -5467,6 +5467,114 @@ ALTER TABLE sales ADD COLUMN IF NOT EXISTS treatment_folio_id INTEGER REFERENCES
 CREATE INDEX IF NOT EXISTS idx_sales_treatment_folio_id
   ON sales(treatment_folio_id) WHERE treatment_folio_id IS NOT NULL;
 
+-- ── V05 clinical depth (migration v120) ──────────────────────────────
+-- Vet vaccination records — administering writes a row + arms a
+-- 'vaccination' recall at next_due (recall specialization, not a fork).
+CREATE TABLE IF NOT EXISTS vaccination_records (
+  id SERIAL PRIMARY KEY,
+  patient_subject_id INTEGER NOT NULL REFERENCES patient_subjects(id),
+  vaccine_name TEXT NOT NULL,
+  administered_at DATE NOT NULL,
+  treatment_session_id INTEGER REFERENCES treatment_sessions(id),
+  administered_by INTEGER REFERENCES employees(id),
+  next_due DATE,
+  batch_number TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_vaccination_records_subject ON vaccination_records(patient_subject_id);
+
+-- Recall / continuing-care. ONE open recall per customer/subject/type
+-- (partial unique) — re-arming advances the row instead of stacking.
+CREATE TABLE IF NOT EXISTS patient_recalls (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  patient_subject_id INTEGER REFERENCES patient_subjects(id),
+  recall_type TEXT NOT NULL DEFAULT 'checkup',
+  interval_months INTEGER,
+  due_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'due'
+    CHECK (status IN ('due','contacted','booked','completed','dismissed')),
+  source_plan_id INTEGER REFERENCES treatment_plans(id),
+  appointment_id INTEGER REFERENCES appointments(id),
+  vaccination_record_id INTEGER REFERENCES vaccination_records(id),
+  last_contacted_at TIMESTAMPTZ,
+  contact_attempts INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_patient_recalls_due ON patient_recalls(due_date) WHERE status IN ('due','contacted');
+CREATE INDEX IF NOT EXISTS idx_patient_recalls_customer ON patient_recalls(customer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_recalls_open
+  ON patient_recalls(customer_id, COALESCE(patient_subject_id, 0), recall_type)
+  WHERE status IN ('due','contacted','booked');
+
+-- Recall config + folio-tax source travel with the plan (no template FK).
+ALTER TABLE treatment_plan_templates
+  ADD COLUMN IF NOT EXISTS recall_interval_months INTEGER,
+  ADD COLUMN IF NOT EXISTS recall_type TEXT NOT NULL DEFAULT 'checkup',
+  ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id);
+ALTER TABLE treatment_plans
+  ADD COLUMN IF NOT EXISTS recall_interval_months INTEGER,
+  ADD COLUMN IF NOT EXISTS recall_type TEXT NOT NULL DEFAULT 'checkup',
+  ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id);
+
+-- Structured allergies / alerts / medications per patient subject.
+ALTER TABLE patient_subjects
+  ADD COLUMN IF NOT EXISTS allergies JSONB NOT NULL DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS medical_alerts JSONB NOT NULL DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS current_medications JSONB NOT NULL DEFAULT '[]';
+
+-- Folio-tax (treatment slice of the approved proposal — mirrors folio_lines v119).
+ALTER TABLE treatment_folio_lines
+  ADD COLUMN IF NOT EXISTS tax_rate_at_charge      NUMERIC(6,3)  NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS tax_amount_at_charge    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS tax_inclusive_at_charge BOOLEAN       NOT NULL DEFAULT TRUE;
+
+-- Handouts — reusable document library + per-patient delivery (physio).
+CREATE TABLE IF NOT EXISTS handouts (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  file_url TEXT NOT NULL,
+  file_mime TEXT,
+  file_size_bytes BIGINT,
+  uploaded_by INTEGER REFERENCES employees(id),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS handout_assignments (
+  id SERIAL PRIMARY KEY,
+  handout_id INTEGER NOT NULL REFERENCES handouts(id),
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  patient_subject_id INTEGER REFERENCES patient_subjects(id),
+  plan_id INTEGER REFERENCES treatment_plans(id),
+  session_id INTEGER REFERENCES treatment_sessions(id),
+  assigned_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_handout_assignments_customer ON handout_assignments(customer_id);
+
+-- Tenant recall-outreach cadence (days between contact attempts).
+ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS recall_outreach_cadence_days INTEGER NOT NULL DEFAULT 30;
+
+-- V05 clinical flags (default OFF; wizard/preset seeding flips per preset).
+INSERT INTO feature_flags (key, enabled, description) VALUES
+  ('clinical_recalls', false, 'V05 — recall / continuing-care: auto-armed recalls, outreach worker, overdue-patients screen'),
+  ('vet_vaccinations', false, 'V05 — vet vaccination records + printable card + vaccination recalls'),
+  ('clinical_handouts', false, 'V05 — home-exercise / handout library with patient delivery (physio)')
+ON CONFLICT (key) DO NOTHING;
+
+-- V05 recall/handout notification rules (inert until customer_notifications flag on).
+INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+  ('recall.due',             'sms',   'recall_due',      true),
+  ('recall.due',             'email', 'recall_due',      true),
+  ('recall.vaccination_due', 'sms',   'vaccination_due', true),
+  ('recall.vaccination_due', 'email', 'vaccination_due', true),
+  ('handout.shared',         'email', 'handout_shared',  true)
+ON CONFLICT (event, channel) DO NOTHING;
+
 -- ── Phase 2-G Wave 3 — 2-G.5 manager price override (migration v64) ──
 -- Lookup table for cashier-facing override reasons. Editable per tenant so
 -- reason labels stay out of the enum.

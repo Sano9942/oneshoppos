@@ -140,5 +140,63 @@ module.exports = function registerCustomerPortalTreatments(app, deps) {
     }
   });
 
+  // ── V05: handouts shared with me ────────────────────────────────────
+  // Subject-scope re-check: assignments are filtered by the authed
+  // customer's id — a handout assigned to another owner never appears.
+  router.get("/me/handouts", authMw, async (req, res) => {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT ha.id, ha.created_at, ha.plan_id,
+                h.title, h.file_url, h.file_mime, h.tags,
+                ps.name AS subject_name
+           FROM handout_assignments ha
+           JOIN handouts h ON h.id = ha.handout_id AND h.is_active = TRUE
+           LEFT JOIN patient_subjects ps ON ps.id = ha.patient_subject_id
+          WHERE ha.customer_id = $1
+          ORDER BY ha.created_at DESC`,
+        [req.customerId]
+      );
+      res.json({ handouts: rows });
+    } catch (err) {
+      if (String(err.message || "").includes("does not exist")) {
+        return res.json({ handouts: [] });
+      }
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── V05: read-only vaccination card (vet) ──────────────────────────
+  // The subject must belong to the authed customer — an owner can never
+  // read another owner's pet card (completion-08 portal lens).
+  router.get("/me/subjects/:id/vaccination-card", authMw, async (req, res) => {
+    try {
+      const subjectId = Number(req.params.id);
+      const { rows: [subject] } = await req.db.query(
+        `SELECT id, name, subject_type, species, breed, dob
+           FROM patient_subjects
+          WHERE id = $1 AND customer_id = $2`,
+        [subjectId, req.customerId]
+      );
+      if (!subject) return res.status(404).json({ error: "Patient not found" });
+
+      const { rows: records } = await req.db.query(
+        `SELECT vr.id, vr.vaccine_name,
+                vr.administered_at::text AS administered_at,
+                vr.next_due::text AS next_due,
+                vr.batch_number
+           FROM vaccination_records vr
+          WHERE vr.patient_subject_id = $1
+          ORDER BY vr.administered_at DESC, vr.id DESC`,
+        [subjectId]
+      );
+      res.json({ subject, records });
+    } catch (err) {
+      if (String(err.message || "").includes("does not exist")) {
+        return res.status(404).json({ error: "Patient not found" });
+      }
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
   app.use("/api/portal", router);
 };

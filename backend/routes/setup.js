@@ -12,7 +12,7 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config");
+const { getPreset, VALID_INDUSTRY_TYPES, getExtraFlagsForPreset } = require("../config/industry-config");
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
@@ -256,6 +256,40 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
              VALUES ($1, true)
              ON CONFLICT (key) DO UPDATE SET enabled = true`,
             [flagKey]
+          );
+        }
+
+        // 1d-bis. Preset extra flags (PRESET_EXTRA_FLAGS) — sub-features modes
+        // can't derive (gym member_checkin, rental_inspections, lodging
+        // channel sync, clinical recalls/forms…). Previously only the
+        // preset-SWITCH path (tier4/company-profile.js) seeded these, so fresh
+        // signups never got them — V05 wires the wizard too (approved fix).
+        for (const flagKey of getExtraFlagsForPreset(preset.industry_type)) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled)
+             VALUES ($1, true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`,
+            [flagKey]
+          );
+        }
+
+        // 1d-ter. V05 — seed a clinical intake form for clinical presets,
+        // auto-attached on a patient's FIRST appointment (F03 trigger wired
+        // in services/booking-services.js). Idempotent by template name.
+        const CLINICAL_INTAKE_PRESETS = ["clinic", "dental_clinic", "veterinary", "physiotherapy"];
+        if (CLINICAL_INTAKE_PRESETS.includes(industry_type)) {
+          const intakeFields = JSON.stringify([
+            { key: "reason", label: "Reason for visit", type: "text", required: true },
+            { key: "allergies", label: "Known allergies", type: "textarea", required: false },
+            { key: "medications", label: "Current medications", type: "textarea", required: false },
+            { key: "medical_history", label: "Relevant medical history", type: "textarea", required: false },
+            { key: "emergency_contact", label: "Emergency contact (name & phone)", type: "text", required: false },
+          ]);
+          await client.query(
+            `INSERT INTO form_templates (name, entity_scope, fields, require_signature, auto_attach, is_active)
+             SELECT 'Patient Intake', 'customer', $1::jsonb, false, 'first_appointment', true
+             WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Patient Intake')`,
+            [intakeFields]
           );
         }
 

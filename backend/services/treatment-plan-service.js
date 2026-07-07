@@ -9,6 +9,7 @@
  */
 
 const { generateInvoiceNumber } = require("./customer-invoicing");
+const { resolveTaxForExplicitRate } = require("./tax-snapshot");
 
 // ── Status transition table ──────────────────────────────────────────
 
@@ -109,23 +110,33 @@ async function createPatientSubject(db, data) {
   const { rows: [row] } = await db.query(
     `INSERT INTO patient_subjects
        (customer_id, subject_type, name, species, breed, dob, sex, weight_kg,
-        identifier, photo_url, notes, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE))
+        identifier, photo_url, notes, is_active,
+        allergies, medical_alerts, current_medications)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE),
+             COALESCE($13::jsonb, '[]'::jsonb), COALESCE($14::jsonb, '[]'::jsonb), COALESCE($15::jsonb, '[]'::jsonb))
      RETURNING *`,
     [
       data.customer_id, data.subject_type || "self", data.name,
       data.species || null, data.breed || null, data.dob || null,
       data.sex || null, data.weight_kg ?? null, data.identifier || null,
       data.photo_url || null, data.notes || null, data.is_active,
+      data.allergies !== undefined ? JSON.stringify(data.allergies || []) : null,
+      data.medical_alerts !== undefined ? JSON.stringify(data.medical_alerts || []) : null,
+      data.current_medications !== undefined ? JSON.stringify(data.current_medications || []) : null,
     ]
   );
   return row;
 }
 
+// V05: structured safety data — JSONB string-arrays, stringified for pg
+// (node-pg would otherwise serialize a JS array as a Postgres array literal).
+const SUBJECT_JSONB_FIELDS = ["allergies", "medical_alerts", "current_medications"];
+
 async function updatePatientSubject(db, id, data) {
   const allowed = [
     "subject_type", "name", "species", "breed", "dob", "sex", "weight_kg",
     "identifier", "photo_url", "notes", "is_active",
+    ...SUBJECT_JSONB_FIELDS,
   ];
   const sets = [];
   const params = [];
@@ -133,6 +144,11 @@ async function updatePatientSubject(db, id, data) {
   for (const key of allowed) {
     if (data[key] !== undefined) {
       idx++;
+      if (SUBJECT_JSONB_FIELDS.includes(key)) {
+        sets.push(`${key} = $${idx}::jsonb`);
+        params.push(JSON.stringify(data[key] || []));
+        continue;
+      }
       sets.push(`${key} = $${idx}`);
       params.push(data[key]);
     }
@@ -276,11 +292,13 @@ async function createPlan(db, payload, createdBy) {
          (plan_number, customer_id, subject_id, outlet_id, created_by, provider_id,
           title, diagnosis_code, diagnosis_notes, status,
           start_date, expected_end_date, total_sessions_planned, estimated_total,
-          deposit_collected, deposit_method, deposit_paid_at, notes)
+          deposit_collected, deposit_method, deposit_paid_at, notes,
+          recall_interval_months, recall_type, tax_id)
        VALUES ($1, $2, $3, $4, $5, $6,
                $7, $8, $9, 'draft',
                $10, $11, $12, $13,
-               $14, $15, $16, $17)
+               $14, $15, $16, $17,
+               $18, $19, $20)
        RETURNING *`,
       [
         planNumber, payload.customer_id, payload.subject_id || null,
@@ -291,6 +309,9 @@ async function createPlan(db, payload, createdBy) {
         payload.deposit_collected || 0, payload.deposit_method || null,
         payload.deposit_collected > 0 ? new Date().toISOString() : null,
         payload.notes || null,
+        payload.recall_interval_months || null,
+        payload.recall_type || "checkup",
+        payload.tax_id || null,
       ]
     );
 
@@ -325,6 +346,7 @@ async function updatePlan(db, id, data) {
   const allowed = [
     "subject_id", "provider_id", "title", "diagnosis_code", "diagnosis_notes",
     "expected_end_date", "total_sessions_planned", "estimated_total", "notes",
+    "recall_interval_months", "recall_type", "tax_id",
   ];
   const sets = [];
   const params = [];
@@ -375,6 +397,33 @@ async function transitionPlanStatus(db, planId, toStatus, actorId, reason) {
   await logActivity(db, planId, actorId, "status_change",
     `Status: ${current.status} → ${toStatus}${reason ? ` (${reason})` : ""}`,
     { from: current.status, to: toStatus, reason: reason || null });
+
+  // V05 recall hook — completing a plan with recall config arms/advances the
+  // recall. Non-fatal.
+  if (toStatus === "completed") {
+    try {
+      const recalls = require("./recall-service");
+      await recalls.onVisitCompleted(db, { plan: updated });
+    } catch (err) {
+      if (!String(err.message || "").includes("does not exist")) {
+        require("./logger").warn({ err: err.message, planId }, "recall hook (plan complete) failed");
+      }
+    }
+  }
+
+  // V05 (completion 08 gap) — discontinuing a plan releases a still-authorized
+  // gateway deposit pre-auth instead of leaving it to dangle until gateway
+  // expiry. Captured/manual deposits are NOT auto-refunded — that's clinic
+  // policy, handled manually. Non-fatal, mirrors settleFolio's posture.
+  if (toStatus === "discontinued" && updated.deposit_status === "authorized") {
+    try {
+      const deposits = require("./treatment-plan-deposits");
+      await deposits.captureDepositOnSettle(db, planId, { capture: false });
+    } catch (err) {
+      require("./logger").warn({ err: err.message, planId }, "deposit release on discontinue failed");
+    }
+  }
+
   return updated;
 }
 
@@ -501,7 +550,7 @@ async function startSession(db, id) {
 }
 
 async function completeSession(db, sessionId, payload, actorId) {
-  return db.transaction(async (client) => {
+  const completed = await db.transaction(async (client) => {
     const { rows: [session] } = await client.query(
       "SELECT * FROM treatment_sessions WHERE id = $1",
       [sessionId]
@@ -618,6 +667,42 @@ async function completeSession(db, sessionId, payload, actorId) {
     );
     return updated;
   });
+
+  // V05 — advisory allergy warnings for any prescriptions written in this
+  // completion (name-match only; UI labels the limitation). Non-fatal.
+  try {
+    const meds = (payload.prescriptions || []).map((p) => p.medication_name).filter(Boolean);
+    if (meds.length) {
+      const warnings = [];
+      for (const med of meds) {
+        const hits = await checkAllergyConflicts(db, completed.plan_id, med);
+        if (hits.length) warnings.push({ medication_name: med, matched_allergies: hits });
+      }
+      if (warnings.length) completed.allergy_warnings = warnings;
+    }
+  } catch { /* advisory only */ }
+
+  // V05 recall hook — a completed visit advances the plan's recall and closes
+  // any recall booked against this appointment. After the transaction and
+  // non-fatal: a recall failure (e.g. pre-v120 tenant) never rolls back the
+  // clinical write.
+  try {
+    const recalls = require("./recall-service");
+    const { rows: [plan] } = await db.query(
+      "SELECT * FROM treatment_plans WHERE id = $1",
+      [completed.plan_id]
+    );
+    await recalls.onVisitCompleted(db, {
+      plan,
+      sessionAppointmentId: completed.appointment_id || null,
+    });
+  } catch (err) {
+    if (!String(err.message || "").includes("does not exist")) {
+      require("./logger").warn({ err: err.message, sessionId }, "recall hook (completeSession) failed");
+    }
+  }
+
+  return completed;
 }
 
 async function markSessionNoShow(db, sessionId) {
@@ -887,6 +972,33 @@ async function listPrescriptions(db, planId) {
   return rows;
 }
 
+/**
+ * V05 — substring-naive allergy cross-check (by design v1: name-match only,
+ * NOT a drug-interaction engine — the UI labels this limitation). Returns the
+ * list of the subject's allergy entries that name-match the medication.
+ * Warning, never a block: clinician judgment prevails.
+ */
+async function checkAllergyConflicts(db, planId, medicationName) {
+  const med = String(medicationName || "").trim().toLowerCase();
+  if (!med) return [];
+  try {
+    const { rows: [plan] } = await db.query(
+      `SELECT ps.allergies
+         FROM treatment_plans p
+         LEFT JOIN patient_subjects ps ON ps.id = p.subject_id
+        WHERE p.id = $1`,
+      [planId]
+    );
+    const allergies = Array.isArray(plan?.allergies) ? plan.allergies : [];
+    return allergies.filter((a) => {
+      const al = String(a || "").trim().toLowerCase();
+      return al && (med.includes(al) || al.includes(med));
+    });
+  } catch {
+    return []; // pre-v120 tenant / missing columns — no check, no failure
+  }
+}
+
 async function createPrescription(db, sessionId, payload, actorId) {
   const { rows: [session] } = await db.query(
     "SELECT plan_id FROM treatment_sessions WHERE id = $1",
@@ -910,6 +1022,8 @@ async function createPrescription(db, sessionId, payload, actorId) {
       actorId || null,
     ]
   );
+  // Name-match allergy warning rides the response — advisory only.
+  row.allergy_warnings = await checkAllergyConflicts(db, session.plan_id, payload.medication_name);
   return row;
 }
 
@@ -954,14 +1068,42 @@ async function getFolioForPlan(db, planId) {
   return { ...folio, lines };
 }
 
+/**
+ * V05 folio-tax (treatment slice of the approved proposal — same entry point
+ * as V09 rentals / V10 rooms). Non-product charges resolve tax from an
+ * EXPLICIT tax_id; the tenant's tax_mode drives inclusive/exclusive math.
+ */
+async function resolveFolioLineTax(db, { taxId, price, quantity = 1 }) {
+  if (taxId == null) return { rate: 0, amount: 0, inclusive: true };
+  let taxMode = "none";
+  try {
+    const { rows: [cp] } = await db.query("SELECT tax_mode FROM company_profile WHERE id = 1");
+    taxMode = cp?.tax_mode || "none";
+  } catch { /* keep 'none' */ }
+  const t = await resolveTaxForExplicitRate(db, { taxId, price, quantity, taxMode });
+  return { ...t, inclusive: taxMode === "none" ? true : taxMode === "inclusive" };
+}
+
 async function writeSessionFeeLine(db, folioId, sessionId, amount, actorId) {
+  // Session fees inherit the plan's tax_id (copied from the template).
+  let tax = { rate: 0, amount: 0, inclusive: true };
+  try {
+    const { rows: [plan] } = await db.query(
+      `SELECT p.tax_id FROM treatment_folios f
+         JOIN treatment_plans p ON p.id = f.plan_id
+        WHERE f.id = $1`,
+      [folioId]
+    );
+    tax = await resolveFolioLineTax(db, { taxId: plan?.tax_id ?? null, price: amount, quantity: 1 });
+  } catch { /* pre-v120 tenant — untaxed */ }
   const { rows: [line] } = await db.query(
     `INSERT INTO treatment_folio_lines
        (folio_id, line_type, description, quantity, unit_price, line_total,
-        session_id, added_by)
-     VALUES ($1, 'session_fee', $2, 1, $3, $3, $4, $5)
+        session_id, added_by, tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+     VALUES ($1, 'session_fee', $2, 1, $3, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [folioId, `Session fee`, amount, sessionId, actorId || null]
+    [folioId, `Session fee`, amount, sessionId, actorId || null,
+      tax.rate, tax.amount, tax.inclusive]
   );
   await recalcFolioTotals(db, folioId);
   return line;
@@ -971,13 +1113,21 @@ async function addFolioLine(db, folioId, data, actorId) {
   const qty = Number(data.quantity || 1);
   const unit = Number(data.unit_price || 0);
   const total = qty * unit;
+  // Manual/lab charges may carry an explicit tax_id; discounts stamp 0.
+  let tax = { rate: 0, amount: 0, inclusive: true };
+  const lineType = data.line_type || "manual_charge";
+  if (data.tax_id != null && ["manual_charge", "lab_cost"].includes(lineType)) {
+    tax = await resolveFolioLineTax(db, { taxId: data.tax_id, price: unit, quantity: qty });
+  }
   const { rows: [line] } = await db.query(
     `INSERT INTO treatment_folio_lines
-       (folio_id, line_type, description, quantity, unit_price, line_total, added_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (folio_id, line_type, description, quantity, unit_price, line_total, added_by,
+        tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
-    [folioId, data.line_type || "manual_charge", data.description,
-      qty, unit, total, actorId || null]
+    [folioId, lineType, data.description,
+      qty, unit, total, actorId || null,
+      tax.rate, tax.amount, tax.inclusive]
   );
   await recalcFolioTotals(db, folioId);
   return line;
@@ -985,9 +1135,9 @@ async function addFolioLine(db, folioId, data, actorId) {
 
 async function attachSaleToFolio(db, saleId, folioId, actorId) {
   return db.transaction(async (client) => {
-    // Lookup sale total
+    // Lookup sale total + its own v83 tax aggregate
     const { rows: [sale] } = await client.query(
-      "SELECT id, total, timestamp FROM sales WHERE id = $1",
+      "SELECT id, total, tax_total, timestamp FROM sales WHERE id = $1",
       [saleId]
     );
     if (!sale) {
@@ -1000,15 +1150,19 @@ async function attachSaleToFolio(db, saleId, folioId, actorId) {
       "UPDATE sales SET treatment_folio_id = $1 WHERE id = $2",
       [folioId, saleId]
     );
-    // Write folio line
+    // Write folio line. The sale's own tax snapshot travels with the line:
+    // line_total is the sale's GROSS (charged) total, so the tax always sits
+    // INSIDE it at the folio level — stamped inclusive regardless of the
+    // sale's tax_mode. Fixes completion-08's "POS-sale tax buried in gross".
     const total = Number(sale.total || 0);
+    const saleTax = Number(sale.tax_total || 0);
     const { rows: [line] } = await client.query(
       `INSERT INTO treatment_folio_lines
          (folio_id, line_type, description, quantity, unit_price, line_total,
-          sale_id, added_by)
-       VALUES ($1, 'pos_sale', $2, 1, $3, $3, $4, $5)
+          sale_id, added_by, tax_rate_at_charge, tax_amount_at_charge, tax_inclusive_at_charge)
+       VALUES ($1, 'pos_sale', $2, 1, $3, $3, $4, $5, 0, $6, TRUE)
        RETURNING *`,
-      [folioId, `POS sale #${saleId}`, total, saleId, actorId || null]
+      [folioId, `POS sale #${saleId}`, total, saleId, actorId || null, saleTax]
     );
     await recalcFolioTotals(client, folioId);
     return line;
@@ -1016,13 +1170,21 @@ async function attachSaleToFolio(db, saleId, folioId, actorId) {
 }
 
 async function recalcFolioTotals(db, folioId) {
+  // V05 folio-tax: tax_total = Σ per-line snapshots (+ legacy 'tax'-type
+  // lines, which nothing writes but pre-v120 data may carry). Lines stamped
+  // exclusive add their tax ON TOP of line_total in the grand total;
+  // inclusive lines (and pos_sale lines, whose line_total is the sale's
+  // tax-included charged total) already carry their tax inside. Mirrors
+  // room-service.recomputeFolioTotals (V10).
   const { rows: [totals] } = await db.query(
     `SELECT
        COALESCE(SUM(CASE WHEN line_type = 'session_fee' THEN line_total ELSE 0 END), 0) AS session_total,
        COALESCE(SUM(CASE WHEN line_type = 'pos_sale' THEN line_total ELSE 0 END), 0) AS pos_total,
        COALESCE(SUM(CASE WHEN line_type IN ('lab_cost','manual_charge') THEN line_total ELSE 0 END), 0) AS manual_total,
-       COALESCE(SUM(CASE WHEN line_type = 'tax' THEN line_total ELSE 0 END), 0) AS tax_total,
-       COALESCE(SUM(CASE WHEN line_type = 'discount' THEN line_total ELSE 0 END), 0) AS discount_total
+       COALESCE(SUM(CASE WHEN line_type = 'tax' THEN line_total ELSE 0 END), 0) AS legacy_tax,
+       COALESCE(SUM(tax_amount_at_charge), 0) AS snapshot_tax,
+       COALESCE(SUM(CASE WHEN line_type = 'discount' THEN line_total ELSE 0 END), 0) AS discount_total,
+       COALESCE(SUM(CASE WHEN tax_inclusive_at_charge = FALSE THEN tax_amount_at_charge ELSE 0 END), 0) AS exclusive_tax
      FROM treatment_folio_lines
      WHERE folio_id = $1`,
     [folioId]
@@ -1030,9 +1192,14 @@ async function recalcFolioTotals(db, folioId) {
   const sessionTotal = Number(totals.session_total || 0);
   const posTotal = Number(totals.pos_total || 0);
   const manualTotal = Number(totals.manual_total || 0);
-  const taxTotal = Number(totals.tax_total || 0);
+  const legacyTax = Number(totals.legacy_tax || 0);
+  const taxTotal = legacyTax + Number(totals.snapshot_tax || 0);
   const discountTotal = Number(totals.discount_total || 0);
-  const grand = sessionTotal + posTotal + manualTotal + taxTotal + discountTotal;
+  // Legacy 'tax'-type line_totals were additive in the pre-v120 formula and
+  // stay so; snapshot tax is additive only when stamped exclusive.
+  const grand =
+    sessionTotal + posTotal + manualTotal + discountTotal +
+    legacyTax + Number(totals.exclusive_tax || 0);
   await db.query(
     `UPDATE treatment_folios
      SET session_charge_total = $1, pos_charge_total = $2, tax_total = $3,
@@ -1083,8 +1250,12 @@ async function settleFolio(db, folioId, actorId, opts = {}) {
       : 0;
     const totalAfterDeposit = Math.max(0, grand - deposit);
 
-    // Create customer_invoices row
+    // Create customer_invoices row. V05 folio-tax: subtotal is the net
+    // (grand − tax) in BOTH modes — exclusive lines already added their tax
+    // into grand_total at recompute, inclusive lines carried it inside.
+    // Mirrors room-service.settleFolio (V10).
     const invoiceNumber = await generateInvoiceNumber(client);
+    const invoiceTax = Number(refreshed.tax_total || 0);
     const { rows: [invoice] } = await client.query(
       `INSERT INTO customer_invoices
          (invoice_number, customer_id, outlet_id, employee_id, status,
@@ -1093,20 +1264,22 @@ async function settleFolio(db, folioId, actorId, opts = {}) {
        RETURNING *`,
       [
         invoiceNumber, plan.customer_id, plan.outlet_id || null, actorId || null,
-        Number(refreshed.session_charge_total || 0) + Number(refreshed.pos_charge_total || 0),
-        Number(refreshed.tax_total || 0),
+        Math.max(0, grand - invoiceTax),
+        invoiceTax,
         totalAfterDeposit,
       ]
     );
 
-    // Copy folio lines as invoice items
+    // Copy folio lines as invoice items — per-line tax_rate travels from the
+    // snapshot instead of the pre-V05 hardcoded 0 (completion-08 gap).
     for (const line of lines) {
       if (line.line_type === "discount" || line.line_type === "tax") continue;
       await client.query(
         `INSERT INTO customer_invoice_items
            (invoice_id, description, quantity, unit_price, tax_rate, line_total)
-         VALUES ($1, $2, $3, $4, 0, $5)`,
-        [invoice.id, line.description, line.quantity, line.unit_price, line.line_total]
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [invoice.id, line.description, line.quantity, line.unit_price,
+          Number(line.tax_rate_at_charge || 0), line.line_total]
       );
     }
 
@@ -1270,6 +1443,7 @@ module.exports = {
   // prescriptions
   listPrescriptions,
   createPrescription,
+  checkAllergyConflicts,
   // folio
   upsertFolioForPlan,
   getFolio,

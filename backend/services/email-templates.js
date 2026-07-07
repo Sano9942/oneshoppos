@@ -1156,8 +1156,58 @@ function channelSyncConflict({ storeName, bookingNumber, startDate, endDate, fee
   };
 }
 
+// V05 clinical — recall / continuing-care outreach ("time for your 6-month
+// checkup") with a public booking deep link. `recallLabel` pre-humanized by
+// the caller; `subjectName` is the patient (or pet) name.
+function recallDue({ storeName, customerName, subjectName, recallLabel, dueDate, bookingUrl, storePhone }) {
+  return {
+    subject: `${subjectName || customerName || "You"} — time for your ${recallLabel || "checkup"}`,
+    html: wrapEmailHtml("Time for your next visit", `
+      <p>Hi ${customerName || "there"},</p>
+      <p><strong>${subjectName || "You"}</strong> ${subjectName && subjectName !== customerName ? "is" : "are"} due for a
+      <strong>${recallLabel || "checkup"}</strong>${dueDate ? ` (due ${dueDate})` : ""}${storeName ? ` at ${storeName}` : ""}.</p>
+      ${bookingUrl ? `<p><a href="${bookingUrl}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;border-radius:6px;text-decoration:none;">Book an appointment</a></p>` : ""}
+      ${storePhone ? `<p>Or call us at ${storePhone}.</p>` : ""}
+      ${footer(`Sent by ${storeName || "your clinic"} via SanoPOS.`)}
+    `),
+  };
+}
+
+// V05 clinical — vaccination due (vet). Same shape, vaccine-specific copy.
+function vaccinationDue({ storeName, customerName, subjectName, recallLabel, dueDate, bookingUrl, storePhone }) {
+  return {
+    subject: `${subjectName || "Your pet"} — ${recallLabel || "vaccination"} due${dueDate ? ` ${dueDate}` : ""}`,
+    html: wrapEmailHtml("Vaccination due", `
+      <p>Hi ${customerName || "there"},</p>
+      <p><strong>${subjectName || "Your pet"}</strong> is due for <strong>${recallLabel || "a vaccination"}</strong>${dueDate ? ` on ${dueDate}` : ""}${storeName ? ` at ${storeName}` : ""}.</p>
+      <p>Keeping vaccinations on schedule keeps your pet protected.</p>
+      ${bookingUrl ? `<p><a href="${bookingUrl}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;border-radius:6px;text-decoration:none;">Book an appointment</a></p>` : ""}
+      ${storePhone ? `<p>Or call us at ${storePhone}.</p>` : ""}
+      ${footer(`Sent by ${storeName || "your clinic"} via SanoPOS.`)}
+    `),
+  };
+}
+
+// V05 clinical — a handout / home-exercise document was shared with the patient.
+function handoutShared({ storeName, customerName, handoutTitle, portalUrl }) {
+  return {
+    subject: `${storeName || "Your clinic"} shared a document with you${handoutTitle ? `: ${handoutTitle}` : ""}`,
+    html: wrapEmailHtml("New document from your clinic", `
+      <p>Hi ${customerName || "there"},</p>
+      <p><strong>${storeName || "Your clinic"}</strong> shared
+      <strong>${handoutTitle || "a document"}</strong> with you${portalUrl ? " — view it in your patient portal" : ""}.</p>
+      ${portalUrl ? `<p><a href="${portalUrl}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;border-radius:6px;text-decoration:none;">Open portal</a></p>` : ""}
+      ${footer(`Sent by ${storeName || "your clinic"} via SanoPOS.`)}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
+  // V05 clinical recalls + handouts
+  recall_due: recallDue,
+  vaccination_due: vaccinationDue,
+  handout_shared: handoutShared,
   // F05 customer notifications (status-change engine)
   ticket_approved: ticketApproved,
   ticket_in_progress: ticketInProgress,

@@ -370,6 +370,13 @@ function startAll(deps) {
           });
         }
 
+        if (String(process.env.RECALL_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("recall", async () => {
+            const { registerRecallWorker } = require("../workers/recall-worker-boss");
+            await registerRecallWorker(boss, pool);
+          });
+        }
+
         if (String(process.env.ABC_WORKER_ENABLED || "0") === "1") {
           await tryRegister("abc", async () => {
             const { registerAbcWorker } = require("../workers/abc-worker-boss");

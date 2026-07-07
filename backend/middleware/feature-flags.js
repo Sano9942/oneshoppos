@@ -118,6 +118,13 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (M10): flipped ON only when a dental_clinic / veterinary /
   // physiotherapy preset is selected. Keeps Clinical nav hidden otherwise.
   phase4_treatment_plans: false,
+  // V05 clinical depth. `clinical_recalls` is flipped ON for every clinical
+  // preset (PRESET_EXTRA_FLAGS + v120 backfill); `vet_vaccinations` is
+  // veterinary-only; `clinical_handouts` is physiotherapy-only. All three are
+  // individually toggleable per tenant.
+  clinical_recalls: false,
+  vet_vaccinations: false,
+  clinical_handouts: false,
   // F03 form builder — custom intake/waivers/questionnaires. Flipped ON by
   // clinical/gym/photography/repair presets (V05/V06/V07/V08).
   custom_forms: false,

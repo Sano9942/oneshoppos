@@ -275,6 +275,22 @@ async function createAppointment(db, data, source = "admin", options = {}) {
       entityType: "appointment",
       entityId: appt.id,
     });
+
+    // V05 — 'first_appointment' trigger: clinical intake forms fire only on a
+    // customer's FIRST appointment (count includes the row just created).
+    if (appt.customer_id) {
+      const { rows: [c] } = await db.query(
+        "SELECT COUNT(*)::int AS n FROM appointments WHERE customer_id = $1",
+        [appt.customer_id]
+      );
+      if (Number(c?.n) === 1) {
+        await autoAttachForms(db, "first_appointment", {
+          customerId: appt.customer_id,
+          entityType: "appointment",
+          entityId: appt.id,
+        });
+      }
+    }
   } catch (err) {
     try {
       // eslint-disable-next-line no-console

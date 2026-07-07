@@ -54,6 +54,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
         default_estimated_total,
         default_notes,
         default_activities,
+        recall_interval_months,
+        recall_type,
+        tax_id,
       } = req.body || {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
@@ -65,8 +68,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
           (name, description, default_title, default_diagnosis_code,
            default_diagnosis_notes, default_sessions_planned,
            default_estimated_total, default_notes, default_activities,
+           recall_interval_months, recall_type, tax_id,
            created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13)
          RETURNING *`,
         [
           name.trim(),
@@ -78,6 +82,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
           Number(default_estimated_total) || 0,
           default_notes || null,
           JSON.stringify(default_activities || []),
+          recall_interval_months != null ? Number(recall_interval_months) : null,
+          recall_type || "checkup",
+          tax_id != null ? Number(tax_id) : null,
           req.employee?.id || null,
         ]
       );
@@ -101,6 +108,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
         default_notes,
         default_activities,
         is_archived,
+        recall_interval_months,
+        recall_type,
+        tax_id,
       } = req.body || {};
 
       const { rows: [row] } = await deps.db.query(
@@ -115,6 +125,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
              default_notes = COALESCE($9, default_notes),
              default_activities = COALESCE($10::jsonb, default_activities),
              is_archived = COALESCE($11, is_archived),
+             recall_interval_months = CASE WHEN $12::int IS NOT NULL THEN NULLIF($12::int, 0) ELSE recall_interval_months END,
+             recall_type = COALESCE($13, recall_type),
+             tax_id = CASE WHEN $14::int IS NOT NULL THEN NULLIF($14::int, 0) ELSE tax_id END,
              updated_at = NOW()
          WHERE id = $1
          RETURNING *`,
@@ -130,6 +143,9 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
           default_notes ?? null,
           default_activities != null ? JSON.stringify(default_activities) : null,
           typeof is_archived === "boolean" ? is_archived : null,
+          recall_interval_months != null ? Number(recall_interval_months) : null,
+          recall_type ?? null,
+          tax_id != null ? Number(tax_id) : null,
         ]
       );
       if (!row) return res.status(404).json({ error: "Template not found" });
@@ -189,6 +205,10 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
           total_sessions_planned: template.default_sessions_planned,
           estimated_total: template.default_estimated_total,
           notes: template.default_notes,
+          // V05: recall + folio-tax config travel with the plan (no template FK)
+          recall_interval_months: template.recall_interval_months,
+          recall_type: template.recall_type,
+          tax_id: template.tax_id,
         },
         req.employee?.id || null
       );

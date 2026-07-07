@@ -142,7 +142,12 @@ const INDUSTRY_PRESETS = Object.freeze({
     industry_type: "clinic",
     business_model: "service_appointment",
     display_name: "Clinic / Practice",
-    modes: ["appointments"],
+    // V05: generic clinics get the full clinical stack (charting, plans,
+    // recalls) — previously appointments-only, which excluded them from every
+    // clinical record type. Existing tenants were NOT backfilled (approved
+    // decision: no overnight nav change); they opt in by re-applying the
+    // preset in Settings → Business Profile.
+    modes: ["appointments", "treatment_plans"],
     labels: {
       product: "Service",
       products: "Services",
@@ -164,11 +169,18 @@ const INDUSTRY_PRESETS = Object.freeze({
       attendance: true,
       floor_plan: false,
       appointments_today: true,
+      active_treatment_plans: true,
+      overdue_sessions: true,
     },
     onboarding_steps: ["store", "service", "employees", "calendar", "booking"],
     pos_layout_mode: "list",
-    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance", "Clinical"],
     pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+    clinical_config: {
+      chart_preset: "body",
+      subject_type_default: "self",
+      consent_templates: ["general_treatment", "anaesthesia", "surgery"],
+    },
   },
   repair_shop: {
     industry_type: "repair_shop",
@@ -759,7 +771,7 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
   restaurant: ["orders", "loyalty", "profile"],
   cafe: ["orders", "loyalty", "profile"],
   salon: ["appointments", "packages", "invoices", "loyalty", "profile"],
-  clinic: ["appointments", "invoices", "loyalty", "profile"],
+  clinic: ["treatments", "appointments", "invoices", "loyalty", "profile"],
   grocery: ["invoices", "orders", "loyalty", "profile"],
   repair_shop: ["tickets", "invoices", "profile"],
   gym: ["subscriptions", "packages", "invoices", "appointments", "profile"],
@@ -783,7 +795,7 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
 // Preset-specific portal label overrides. Missing keys fall back to defaults.
 const PORTAL_LABEL_OVERRIDES = Object.freeze({
   salon: { appointments_tab: "My Bookings", book_cta: "Book a service" },
-  clinic: { appointments_tab: "My Appointments", book_cta: "Book a visit" },
+  clinic: { treatments_tab: "My Treatments", appointments_tab: "My Appointments", book_cta: "Book a visit" },
   restaurant: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
   cafe: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
   wholesale: { invoices_tab: "Account Invoices", orders_tab: "Purchase Orders" },
@@ -870,6 +882,15 @@ const PRESET_EXTRA_FLAGS = Object.freeze({
   hotel: ["room_channel_sync", "room_guest_registration"],
   guesthouse: ["room_channel_sync", "room_guest_registration"],
   hostel: ["room_channel_sync", "room_guest_registration"],
+  // V05 — every clinical preset gets recalls + intake forms ON (kept in sync
+  // with the v120 backfill for dental/vet/physio; generic clinic was NOT
+  // backfilled — new signups / preset re-apply only). Vaccinations are
+  // vet-only, the handout library physio-only; both stay individually
+  // toggleable for the other clinical presets.
+  clinic: ["clinical_recalls", "custom_forms"],
+  dental_clinic: ["clinical_recalls", "custom_forms"],
+  veterinary: ["clinical_recalls", "custom_forms", "vet_vaccinations"],
+  physiotherapy: ["clinical_recalls", "custom_forms", "clinical_handouts"],
 });
 
 // Every flag any preset can flip on as an extra — used to reset the full set

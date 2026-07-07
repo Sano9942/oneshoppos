@@ -710,6 +710,10 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./rooms")(app, deps);
   require("./treatment-plans")(app, deps);
   require("./treatment-plan-templates")(app, deps);
+  // V05 — recall/continuing-care + vet vaccinations (clinical_recalls /
+  // vet_vaccinations gated) + physio handout library (clinical_handouts).
+  require("./recalls")(app, deps);
+  require("./handouts")(app, deps);
 
   // --- F05 customer notifications: per-event channel rules + delivery log ---
   require("./notification-settings")(app, deps);

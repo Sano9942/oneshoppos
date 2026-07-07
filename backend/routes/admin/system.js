@@ -34,6 +34,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     channel_sync: "channel-sync-poll",
     night_audit: "night-audit-run",
     treatment_plan: "treatment-plan-daily-check",
+    recall: "recall-outreach-check",
     course_release: "course-release-sweep",
     kds_snapshot: "kds-load-snapshot",
     reservation_reminder: "reservation-reminder-check",
@@ -68,6 +69,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const channelSyncStatus = global.__channelSyncWorkerStatus || null;
       const nightAuditStatus = global.__nightAuditWorkerStatus || null;
       const treatmentPlanStatus = global.__treatmentPlanWorkerStatus || null;
+      // V05 clinical — daily 10 AM recall outreach sweep.
+      const recallStatus = global.__recallWorkerStatus || null;
       const courseReleaseStatus = global.__courseReleaseWorkerStatus || null;
       const kdsSnapshotStatus = global.__kdsSnapshotWorkerStatus || null;
       const reservationReminderStatus = global.__reservationReminderWorkerStatus || null;
@@ -147,6 +150,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         channel_sync: workerInfo("channel_sync", channelSyncStatus, 15 * 60_000),
         night_audit: workerInfo("night_audit", nightAuditStatus, 24 * 60 * 60 * 1000),
         treatment_plan: workerInfo("treatment_plan", treatmentPlanStatus, 24 * 60 * 60 * 1000),
+        recall: workerInfo("recall", recallStatus, 24 * 60 * 60 * 1000),
         course_release: workerInfo("course_release", courseReleaseStatus, 60_000),
         kds_snapshot: workerInfo("kds_snapshot", kdsSnapshotStatus, 15 * 60_000),
         reservation_reminder: workerInfo("reservation_reminder", reservationReminderStatus, 15 * 60_000),

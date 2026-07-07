@@ -9101,6 +9101,271 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 120,
+    description:
+      "V05 clinical depth — recall/continuing-care (patient_recalls + template/plan recall config), vet vaccinations (vaccination_records), structured allergies/alerts on patient_subjects, treatment folio-tax slice (tax_id on plans/templates + per-line snapshot on treatment_folio_lines), physio handouts library, recall outreach cadence, clinical_recalls/vet_vaccinations/clinical_handouts flags with clinical-preset backfill + recall/handout notification rules. Tenant-only except the clinic-enablement announcement (public).",
+    up: async (client) => {
+      // 1. Vaccination records (vet) — created before patient_recalls so the
+      //    recall table can reference it for administered→re-arm traceability.
+      try {
+        await client.query("SAVEPOINT v120_vax");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS vaccination_records (
+            id SERIAL PRIMARY KEY,
+            patient_subject_id INTEGER NOT NULL REFERENCES patient_subjects(id),
+            vaccine_name TEXT NOT NULL,
+            administered_at DATE NOT NULL,
+            treatment_session_id INTEGER REFERENCES treatment_sessions(id),
+            administered_by INTEGER REFERENCES employees(id),
+            next_due DATE,
+            batch_number TEXT,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_vaccination_records_subject ON vaccination_records(patient_subject_id)`);
+        await client.query("RELEASE SAVEPOINT v120_vax");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_vax");
+        console.warn(`[migrate-pg v120] vaccination_records skipped: ${err.message}`);
+      }
+
+      // 2. Recalls / continuing care. One OPEN recall per customer/subject/type
+      //    (partial unique) — arming again advances the existing row instead of
+      //    stacking duplicates.
+      try {
+        await client.query("SAVEPOINT v120_recalls");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS patient_recalls (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            patient_subject_id INTEGER REFERENCES patient_subjects(id),
+            recall_type TEXT NOT NULL DEFAULT 'checkup',
+            interval_months INTEGER,
+            due_date DATE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'due'
+              CHECK (status IN ('due','contacted','booked','completed','dismissed')),
+            source_plan_id INTEGER REFERENCES treatment_plans(id),
+            appointment_id INTEGER REFERENCES appointments(id),
+            vaccination_record_id INTEGER REFERENCES vaccination_records(id),
+            last_contacted_at TIMESTAMPTZ,
+            contact_attempts INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_patient_recalls_due ON patient_recalls(due_date) WHERE status IN ('due','contacted')`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_patient_recalls_customer ON patient_recalls(customer_id)`);
+        await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_recalls_open
+          ON patient_recalls(customer_id, COALESCE(patient_subject_id, 0), recall_type)
+          WHERE status IN ('due','contacted','booked')`);
+        await client.query("RELEASE SAVEPOINT v120_recalls");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_recalls");
+        console.warn(`[migrate-pg v120] patient_recalls skipped: ${err.message}`);
+      }
+
+      // 3. Recall config + folio-tax source on templates and plans. Plans have
+      //    no template FK — recall/tax config is copied at instantiation and
+      //    stays editable per-plan.
+      try {
+        await client.query("SAVEPOINT v120_recall_cols");
+        await client.query(`ALTER TABLE treatment_plan_templates
+          ADD COLUMN IF NOT EXISTS recall_interval_months INTEGER,
+          ADD COLUMN IF NOT EXISTS recall_type TEXT NOT NULL DEFAULT 'checkup',
+          ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id)`);
+        await client.query(`ALTER TABLE treatment_plans
+          ADD COLUMN IF NOT EXISTS recall_interval_months INTEGER,
+          ADD COLUMN IF NOT EXISTS recall_type TEXT NOT NULL DEFAULT 'checkup',
+          ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id)`);
+        await client.query("RELEASE SAVEPOINT v120_recall_cols");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_recall_cols");
+        console.warn(`[migrate-pg v120] recall/tax columns skipped: ${err.message}`);
+      }
+
+      // 4. Structured allergies / medical alerts / medications per subject
+      //    (findings 06: free-text notes only today — penicillin must flag at
+      //    prescribe time).
+      try {
+        await client.query("SAVEPOINT v120_subject_safety");
+        await client.query(`ALTER TABLE patient_subjects
+          ADD COLUMN IF NOT EXISTS allergies JSONB NOT NULL DEFAULT '[]',
+          ADD COLUMN IF NOT EXISTS medical_alerts JSONB NOT NULL DEFAULT '[]',
+          ADD COLUMN IF NOT EXISTS current_medications JSONB NOT NULL DEFAULT '[]'`);
+        await client.query("RELEASE SAVEPOINT v120_subject_safety");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_subject_safety");
+        console.warn(`[migrate-pg v120] patient_subjects safety columns skipped: ${err.message}`);
+      }
+
+      // 5. Folio-tax (treatment slice of the approved proposal — V09 rentals,
+      //    V10 rooms). Same per-line snapshot columns as folio_lines v119.
+      try {
+        await client.query("SAVEPOINT v120_folio_tax");
+        await client.query(`ALTER TABLE treatment_folio_lines
+          ADD COLUMN IF NOT EXISTS tax_rate_at_charge      NUMERIC(6,3)  NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tax_amount_at_charge    NUMERIC(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tax_inclusive_at_charge BOOLEAN       NOT NULL DEFAULT TRUE`);
+        await client.query("RELEASE SAVEPOINT v120_folio_tax");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_folio_tax");
+        console.warn(`[migrate-pg v120] treatment folio-tax columns skipped: ${err.message}`);
+      }
+
+      // 6. Handouts — reusable document library + per-patient delivery
+      //    (physio home-exercise; NOT an exercise builder).
+      try {
+        await client.query("SAVEPOINT v120_handouts");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS handouts (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            file_url TEXT NOT NULL,
+            file_mime TEXT,
+            file_size_bytes BIGINT,
+            uploaded_by INTEGER REFERENCES employees(id),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS handout_assignments (
+            id SERIAL PRIMARY KEY,
+            handout_id INTEGER NOT NULL REFERENCES handouts(id),
+            customer_id INTEGER NOT NULL REFERENCES customers(id),
+            patient_subject_id INTEGER REFERENCES patient_subjects(id),
+            plan_id INTEGER REFERENCES treatment_plans(id),
+            session_id INTEGER REFERENCES treatment_sessions(id),
+            assigned_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_handout_assignments_customer ON handout_assignments(customer_id)`);
+        await client.query("RELEASE SAVEPOINT v120_handouts");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_handouts");
+        console.warn(`[migrate-pg v120] handouts skipped: ${err.message}`);
+      }
+
+      // 7. Tenant recall-outreach cadence (days between contact attempts).
+      try {
+        await client.query("SAVEPOINT v120_cadence");
+        await client.query(`ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS recall_outreach_cadence_days INTEGER NOT NULL DEFAULT 30`);
+        await client.query("RELEASE SAVEPOINT v120_cadence");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_cadence");
+        console.warn(`[migrate-pg v120] recall cadence column skipped: ${err.message}`);
+      }
+
+      // 8. Flags (default OFF; clinical backfill below) + notification rules
+      //    (inert until customer_notifications flag on — F05 pattern).
+      try {
+        await client.query("SAVEPOINT v120_flags");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(`
+            INSERT INTO feature_flags (key, enabled, description) VALUES
+              ('clinical_recalls', false, 'V05 — recall / continuing-care: auto-armed recalls, outreach worker, overdue-patients screen'),
+              ('vet_vaccinations', false, 'V05 — vet vaccination records + printable card + vaccination recalls'),
+              ('clinical_handouts', false, 'V05 — home-exercise / handout library with patient delivery (physio)')
+            ON CONFLICT (key) DO NOTHING
+          `);
+        }
+        const { rows: nr } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (nr.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('recall.due',             'sms',   'recall_due',      true),
+              ('recall.due',             'email', 'recall_due',      true),
+              ('recall.vaccination_due', 'sms',   'vaccination_due', true),
+              ('recall.vaccination_due', 'email', 'vaccination_due', true),
+              ('handout.shared',         'email', 'handout_shared',  true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v120_flags");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_flags");
+        console.warn(`[migrate-pg v120] clinical flags skipped: ${err.message}`);
+      }
+
+      // 9. Backfill: existing dental/vet/physio tenants get the new clinical
+      //    surfaces ON (kept in sync with PRESET_EXTRA_FLAGS in
+      //    config/industry-config.js). Existing generic-clinic tenants are
+      //    deliberately NOT flipped — new clinic signups get the full stack
+      //    from the wizard; live clinics opt in by re-applying their preset
+      //    (approved backfill decision: no overnight nav change).
+      try {
+        await client.query("SAVEPOINT v120_preset_backfill");
+        const { rows: profile } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        const preset = profile[0]?.industry_type;
+        const clinicalPresets = ["dental_clinic", "veterinary", "physiotherapy"];
+        if (clinicalPresets.includes(preset)) {
+          const { rows: ff } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+          `);
+          if (ff.length) {
+            await client.query(`
+              INSERT INTO feature_flags (key, enabled) VALUES
+                ('clinical_recalls', true),
+                ('custom_forms', true)
+              ON CONFLICT (key) DO UPDATE SET enabled = true
+            `);
+            if (preset === "veterinary") {
+              await client.query(`
+                INSERT INTO feature_flags (key, enabled) VALUES ('vet_vaccinations', true)
+                ON CONFLICT (key) DO UPDATE SET enabled = true
+              `);
+            }
+            if (preset === "physiotherapy") {
+              await client.query(`
+                INSERT INTO feature_flags (key, enabled) VALUES ('clinical_handouts', true)
+                ON CONFLICT (key) DO UPDATE SET enabled = true
+              `);
+            }
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v120_preset_backfill");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_preset_backfill");
+        console.warn(`[migrate-pg v120] clinical preset backfill skipped: ${err.message}`);
+      }
+
+      // 10. Clinic-enablement announcement (public schema only — the approved
+      //     backfill decision pairs existing-tenants-OFF with a banner telling
+      //     clinics the stack exists).
+      try {
+        await client.query("SAVEPOINT v120_announcement");
+        const { rows: [sch] } = await client.query("SELECT current_schema() AS s");
+        if (sch.s === "public") {
+          await client.query(
+            `INSERT INTO announcements (message, type, active, ends_at, created_by)
+             VALUES ($1, 'info', true, NOW() + INTERVAL '30 days', 'migration-v120')`,
+            [
+              "New for clinics: clinical charting, treatment plans, recalls and patient safety data are now available on the Clinic preset. Re-apply your preset in Settings → Business Profile to enable.",
+            ]
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v120_announcement");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v120_announcement");
+        console.warn(`[migrate-pg v120] announcement skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**
