@@ -9495,6 +9495,33 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 124,
+    description:
+      "Tenant lifecycle event capture (C1) — public.tenant_lifecycle_events: append-only funnel/lifecycle timeline (signup, setup_completed, first_sale, first_week_active, trial_extended, payment_recorded, plan_changed, suspended, activated, expired, dormant_30d, deleted). Partial unique index makes one-time milestones idempotent for the derive job. Pure data capture for Batch E; no user-visible surface yet. Public table (public.-qualified), so the per-tenant migration passes are harmless no-ops.",
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.tenant_lifecycle_events (
+          id          SERIAL PRIMARY KEY,
+          tenant_id   INTEGER NOT NULL,
+          event       TEXT NOT NULL,
+          metadata    JSONB,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_tenant_lifecycle_events_event_time
+          ON public.tenant_lifecycle_events (event, created_at);
+        CREATE INDEX IF NOT EXISTS idx_tenant_lifecycle_events_tenant
+          ON public.tenant_lifecycle_events (tenant_id, created_at);
+        -- One-time milestones are idempotent: inline writers + the derive job use
+        -- ON CONFLICT DO NOTHING against this partial unique index. Recurring events
+        -- (payment_recorded, plan_changed, suspended, activated, expired,
+        -- trial_extended) are deliberately NOT covered, so they append every time.
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_lifecycle_events_onetime
+          ON public.tenant_lifecycle_events (tenant_id, event)
+          WHERE event IN ('signup','setup_completed','first_sale','first_week_active','dormant_30d');
+      `);
+    },
+  },
 ];
 
 /**

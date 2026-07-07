@@ -1,6 +1,8 @@
 /**
  * Admin billing — plan pricing, payments, upgrade requests, billing attention.
  */
+const { recordLifecycleEvent } = require("../../services/lifecycle-events");
+
 module.exports = function registerBillingRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, auditLog, logAdminAction } = deps;
 
@@ -101,6 +103,8 @@ module.exports = function registerBillingRoutes(app, deps) {
 
       for (const t of updated) {
         await auditLog(t.id, `bulk_${action}`, action === "extend_trial" ? { days } : null, `admin:${req.admin.email}`);
+        await recordLifecycleEvent(t.id, action === "extend_trial" ? "trial_extended" : "expired",
+          action === "extend_trial" ? { days } : { via: "bulk_expire" });
       }
       logAdminAction(req.admin.email, "bulk_lifecycle", "tenants", null,
         { action, days: action === "extend_trial" ? days : undefined, count: updated.length, tenant_ids: updated.map((t) => t.id) }, req.ip);
@@ -201,6 +205,7 @@ module.exports = function registerBillingRoutes(app, deps) {
       }
 
       logAdminAction(req.admin.email, "payment_recorded", "tenant", req.params.id, { amount: req.body.amount, method: req.body.method }, req.ip);
+      await recordLifecycleEvent(parseInt(req.params.id, 10), "payment_recorded", { amount: req.body.amount, method: req.body.method, plan, cycle });
       return res.json({
         ok: true,
         plan,
@@ -266,6 +271,9 @@ module.exports = function registerBillingRoutes(app, deps) {
       }
 
       logAdminAction(req.admin.email, "upgrade_request_" + status, "tenant", req.params.id, null, req.ip);
+      if (status === "approved") {
+        await recordLifecycleEvent(rows[0].tenant_id, "plan_changed", { via: "upgrade_request", requested_plan: rows[0].requested_plan || null });
+      }
       return res.json(rows[0]);
     } catch (err) {
       return res.status(500).json({ error: err.message });

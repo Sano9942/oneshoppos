@@ -15,6 +15,9 @@
 
 const { VALID_MODES } = require("../config/mode-registry");
 const { VERTICAL_USAGE_SOURCES } = require("../config/vertical-usage-sources");
+const { recordLifecycleEvent } = require("../services/lifecycle-events");
+
+const DORMANT_MS = 30 * 24 * 60 * 60 * 1000;
 
 const QUEUE_NAME = "adoption-snapshot";
 const CACHE_KEY = "feature_adoption";
@@ -61,11 +64,39 @@ async function snapshotTenant(db, tenant) {
   return row;
 }
 
+// C1 derived lifecycle events, computed from the tenant's own sales history.
+// Folded into this worker (per the roadmap) so C1's derive job needs no extra
+// env var. All one-time events → idempotent via ON CONFLICT DO NOTHING.
+async function deriveLifecycle(db, tenant) {
+  const s = `tenant_${tenant.slug}`;
+  let stats;
+  try {
+    const { rows: [r] } = await db.query(
+      `SELECT MIN("timestamp") AS first_sale,
+              MAX("timestamp") AS last_sale,
+              COUNT(DISTINCT ("timestamp")::date)
+                FILTER (WHERE "timestamp" < $1::timestamptz + INTERVAL '7 days') AS first_week_days
+         FROM ${s}.sales`,
+      [tenant.created_at]
+    );
+    stats = r;
+  } catch { return; } // no sales table / schema not migrated — skip
+  if (stats.first_sale) {
+    await recordLifecycleEvent(tenant.id, "first_sale", { at: stats.first_sale }, { db });
+  }
+  if (Number(stats.first_week_days) >= 3) {
+    await recordLifecycleEvent(tenant.id, "first_week_active", { days: Number(stats.first_week_days) }, { db });
+  }
+  if (stats.last_sale && Date.now() - new Date(stats.last_sale).getTime() > DORMANT_MS) {
+    await recordLifecycleEvent(tenant.id, "dormant_30d", { last_sale: stats.last_sale }, { db });
+  }
+}
+
 async function runSnapshot(db) {
   const started = Date.now();
 
   const { rows: tenants } = await db.query(
-    "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+    "SELECT id, slug, name, created_at FROM tenants WHERE status = 'active' ORDER BY id"
   );
 
   const rows = [];
@@ -82,6 +113,7 @@ async function runSnapshot(db) {
       for (const mode of row.enabled_modes) {
         if (mode in modeAdoption) modeAdoption[mode] += 1;
       }
+      await deriveLifecycle(db, tenant); // C1 derived events (idempotent)
     } catch {
       /* one tenant failing must not abort the sweep */
     }
@@ -147,4 +179,4 @@ async function registerAdoptionSnapshotWorker(boss, db) {
   logger.info("Adoption snapshot worker (pg-boss) registered — every 6h");
 }
 
-module.exports = { registerAdoptionSnapshotWorker, runSnapshot, QUEUE_NAME, CACHE_KEY };
+module.exports = { registerAdoptionSnapshotWorker, runSnapshot, deriveLifecycle, QUEUE_NAME, CACHE_KEY };

@@ -19,6 +19,7 @@
 const { Resend } = require("resend");
 const { TEMPLATES } = require("../services/email-templates");
 const { withTenantContext } = require("./tenant-job-context");
+const { recordLifecycleEvent } = require("../services/lifecycle-events");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,7 @@ async function runBillingLifecycleCheck(boss, pool, logger) {
       `UPDATE tenants SET payment_status = 'expired', updated_at = NOW() WHERE id = $1`,
       [t.id]
     );
+    await recordLifecycleEvent(t.id, "expired", { via: "billing_lifecycle" }, { db: pool });
     const email = await getTenantEmail(pool, t.slug);
     if (email) {
       await sendLifecycleEmail(boss, pool, t.id, "account_locked", email, fromAddress,

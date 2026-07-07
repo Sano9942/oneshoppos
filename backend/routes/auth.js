@@ -950,6 +950,10 @@ module.exports = function registerAuthRoutes(app, deps) {
         console.error("Drip email enqueue failed:", dripErr.message);
       }
 
+      // C1 lifecycle capture — funnel start. Fire-and-forget (never blocks signup).
+      const { recordLifecycleEvent } = require("../services/lifecycle-events");
+      await recordLifecycleEvent(result.tenantId, "signup", { source: "self_service", plan: "free" });
+
       // PR 8: do NOT return setupToken yet — frontend shows "Check your email"
       // screen and the merchant only gets the setup token after verifying.
       res.json({

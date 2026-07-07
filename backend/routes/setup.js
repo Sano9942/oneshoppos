@@ -518,6 +518,17 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         invalidateCompanyProfileCache(tenantForCache?.id ?? "_default");
       } catch { /* non-fatal */ }
 
+      // C1 lifecycle capture — funnel activation milestone (MT only; one-time).
+      try {
+        if (IS_MULTI_TENANT) {
+          const setupTenant = await getSetupTenant(req);
+          if (setupTenant?.id) {
+            const { recordLifecycleEvent } = require("../services/lifecycle-events");
+            await recordLifecycleEvent(setupTenant.id, "setup_completed", { industry: req.body?.industry_type || null });
+          }
+        }
+      } catch { /* fire-and-forget — must never fail setup */ }
+
       // ── Auto-login (PR 6) ──────────────────────────────────────────────
       // After successful setup, hand the merchant a fresh access + refresh
       // token so the frontend can land directly on /dashboard instead of

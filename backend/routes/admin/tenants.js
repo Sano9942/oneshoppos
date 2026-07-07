@@ -5,6 +5,7 @@ const { validate } = require("../../middleware/validate");
 const { CreateTenantSchema } = require("../../schemas/admin");
 const { DEFAULT_FEATURE_FLAGS, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 const { migrate: runMigrate, MIGRATIONS } = require("../../migrate-pg");
+const { recordLifecycleEvent } = require("../../services/lifecycle-events");
 
 /**
  * Build a scoped db wrapper for a single tenant schema.
@@ -136,6 +137,7 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
       logAdminAction(req.admin.email, "tenant_created", "tenant", slug, { plan: plan || "free" }, req.ip);
+      await recordLifecycleEvent(result.tenantId, "signup", { source: "admin", plan: plan || "free" });
       return res.status(201).json({
         message: "Tenant provisioned",
         tenant: { id: result.tenantId, slug, name, status: "active", plan: plan || "free" },
@@ -252,6 +254,7 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       await auditLog(tenant.id, "suspended", { reason: req.body?.reason }, `admin:${req.admin.email}`);
       logAdminAction(req.admin.email, "tenant_suspended", "tenant", req.params.id, null, req.ip);
+      await recordLifecycleEvent(tenant.id, "suspended", req.body?.reason ? { reason: req.body.reason } : null);
       return res.json({ message: `Tenant "${tenant.slug}" suspended` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -274,6 +277,7 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       await auditLog(tenant.id, "activated", null, `admin:${req.admin.email}`);
       logAdminAction(req.admin.email, "tenant_activated", "tenant", req.params.id, null, req.ip);
+      await recordLifecycleEvent(tenant.id, "activated");
       return res.json({ message: `Tenant "${tenant.slug}" activated` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -303,6 +307,7 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       await auditLog(tenant.id, "deleted", null, `admin:${req.admin.email}`);
       logAdminAction(req.admin.email, "tenant_deleted", "tenant", req.params.id, null, req.ip);
+      await recordLifecycleEvent(tenant.id, "deleted");
       return res.json({ message: `Tenant "${tenant.slug}" deleted and schema dropped` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
