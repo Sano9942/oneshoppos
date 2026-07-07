@@ -107,6 +107,14 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (M9): flipped ON only when a hotel/guesthouse/hostel preset
   // is selected. Keeps "Rooms" nav hidden from retail/restaurant tenants.
   phase4_room_management: false,
+  // V10 lodging depth. `room_channel_sync` + `room_guest_registration` are
+  // flipped ON for lodging presets (PRESET_EXTRA_FLAGS + v119 backfill) —
+  // inert until a feed is configured / a check-in happens. Public direct
+  // booking stays OFF everywhere — tenant opt-in (public exposure), same
+  // posture as rental_online_booking.
+  room_channel_sync: false,
+  room_online_booking: false,
+  room_guest_registration: false,
   // Mode-gated (M10): flipped ON only when a dental_clinic / veterinary /
   // physiotherapy preset is selected. Keeps Clinical nav hidden otherwise.
   phase4_treatment_plans: false,

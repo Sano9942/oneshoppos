@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { portalApi } from "../../api/portalApi";
+import { API_BASE } from "../../config";
 
 function statusColor(status) {
   switch (status) {
@@ -33,6 +34,19 @@ export default function PortalStays() {
   const [stays, setStays] = useState([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  // V10: portal stays remains read-only, but deep-links the public booking
+  // engine when the tenant has it enabled. Probe the PUBLIC config endpoint
+  // (raw fetch by design — same precedent as the appointments booking modal);
+  // a 403 means the flag is off and the CTA stays hidden.
+  const [canBookOnline, setCanBookOnline] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/public/rooms/config?tenant=${tenantSlug}`)
+      .then((r) => { if (!cancelled) setCanBookOnline(r.ok); })
+      .catch(() => { if (!cancelled) setCanBookOnline(false); });
+    return () => { cancelled = true; };
+  }, [tenantSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +80,15 @@ export default function PortalStays() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">My Stays</h1>
+        <div className="flex items-center gap-2">
+        {canBookOnline && (
+          <Link
+            to={`/book-room/${tenantSlug}`}
+            className="px-4 py-1.5 rounded-full bg-(--ui-primary) text-white text-sm font-medium"
+          >
+            Book a stay
+          </Link>
+        )}
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -75,6 +98,7 @@ export default function PortalStays() {
           <option value="upcoming">Upcoming</option>
           <option value="past">Past</option>
         </select>
+        </div>
       </div>
 
       {loading ? (

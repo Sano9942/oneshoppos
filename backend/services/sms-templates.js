@@ -75,6 +75,16 @@ const SMS_TEMPLATES = {
       }
     ),
 
+  // V10 lodging — direct booking engine confirmation
+  room_booking_confirmation: (d) =>
+    fill(
+      "{{storeName}}: Booking {{bookingNumber}} received — {{checkInDate}} to {{checkOutDate}}{{holdSuffix}}",
+      {
+        ...d,
+        holdSuffix: d && d.holdUntil ? `. Please pay/confirm by ${fmtWhen(d.holdUntil)} to hold your room.` : ". See you soon!",
+      }
+    ),
+
   // F02 membership dunning
   subscription_payment_failed: (d) =>
     fill(

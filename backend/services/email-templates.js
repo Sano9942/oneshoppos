@@ -1140,6 +1140,22 @@ function backorderFulfilled(data) {
   };
 }
 
+// V10 lodging — OTA iCal import found an external event overlapping a local
+// booking. Staff-facing, urgent: a guest may be double-booked.
+function channelSyncConflict({ storeName, bookingNumber, startDate, endDate, feedName }) {
+  return {
+    subject: `⚠ Channel sync conflict — booking ${bookingNumber || ""}`,
+    html: wrapEmailHtml("Possible double booking", `
+      <p>The OTA calendar <strong>${feedName || "feed"}</strong> has an event
+      (${startDate || "?"} → ${endDate || "?"}) that overlaps your local booking
+      <strong>${bookingNumber || ""}</strong>${storeName ? ` at ${storeName}` : ""}.</p>
+      <p>One of these guests may not have a room. Review the Channels page and
+      relocate or cancel one side, then resolve the conflict entry.</p>
+      ${footer("Automated alert from SanoPOS channel sync.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   // F05 customer notifications (status-change engine)
@@ -1183,6 +1199,7 @@ const TEMPLATES = {
   rental_overdue: rentalOverdue,
   // M9 Room Management
   room_booking_confirmation: roomBookingConfirmation,
+  channel_sync_conflict: channelSyncConflict,
   room_deposit_received: roomDepositReceived,
   room_checkin_reminder: roomCheckinReminder,
   room_folio_receipt: roomFolioReceipt,

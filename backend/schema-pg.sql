@@ -2528,7 +2528,10 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('batch_expiry_tracking', false, 'F07 batch/expiry/lot tracking — GRN batch capture, FEFO consumption, near-expiry alerts, textile rolls'),
   ('member_checkin', false, 'V07 gym — member check-in kiosk + active-membership validation (flipped on by the gym preset)'),
   ('rental_inspections', false, 'V09 rentals — checkout/return condition inspections with photos + damage capture (flipped on by rental presets)'),
-  ('rental_online_booking', false, 'V09 rentals — public/portal online rental reservation (tenant opt-in)')
+  ('rental_online_booking', false, 'V09 rentals — public/portal online rental reservation (tenant opt-in)'),
+  ('room_channel_sync', false, 'V10 lodging — iCal channel sync: export feeds for OTAs + import polling with conflict dead-letters (flipped on by hotel/guesthouse/hostel presets)'),
+  ('room_online_booking', false, 'V10 lodging — public direct booking engine with deposit + unpaid-hold TTL (tenant opt-in)'),
+  ('room_guest_registration', false, 'V10 lodging — enforce primary-guest CNIC/passport capture at check-in + guest registry report (flipped on by lodging presets)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
@@ -4956,6 +4959,134 @@ CREATE INDEX IF NOT EXISTS idx_folio_lines_sale
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS folio_id INTEGER REFERENCES guest_folios(id);
 CREATE INDEX IF NOT EXISTS idx_sales_folio_id
   ON sales(folio_id) WHERE folio_id IS NOT NULL;
+
+-- ── V10 Lodging depth (migration v119) ──────────────────────────────
+-- Folio-tax (rooms slice of the approved proposal): explicit tax on room
+-- types (NULL = untaxed), per-line snapshot on folio lines. room_types
+-- already carries tax_inclusive (v49) — V10 makes it real.
+ALTER TABLE room_types ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id);
+ALTER TABLE room_types ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE folio_lines
+  ADD COLUMN IF NOT EXISTS tax_rate_at_charge      NUMERIC(6,3)  NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS tax_amount_at_charge    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS tax_inclusive_at_charge BOOLEAN       NOT NULL DEFAULT TRUE;
+
+-- Hostel beds: a dorm is a room; beds are child rooms sharing its type/rate.
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS parent_room_id INTEGER REFERENCES rooms(id);
+CREATE INDEX IF NOT EXISTS idx_rooms_parent ON rooms(parent_room_id) WHERE parent_room_id IS NOT NULL;
+
+-- Direct booking engine: unpaid online holds expire (TTL).
+ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'staff';
+ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_room_bookings_expiry
+  ON room_bookings(expires_at) WHERE status = 'reserved' AND expires_at IS NOT NULL;
+
+-- Guest registration (PK legal register). PII — staff-only surfaces.
+CREATE TABLE IF NOT EXISTS booking_guests (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL REFERENCES room_bookings(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  cnic_passport TEXT,
+  nationality TEXT,
+  phone TEXT,
+  document_photos JSONB NOT NULL DEFAULT '[]',  -- R2 keys, non-guessable prefix
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_booking_guests_booking ON booking_guests(booking_id);
+
+-- Group bookings (wedding blocks / tour groups) + master-folio charge routing.
+CREATE TABLE IF NOT EXISTS booking_groups (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  customer_id INTEGER REFERENCES customers(id),
+  master_folio_booking_id INTEGER REFERENCES room_bookings(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES booking_groups(id);
+CREATE INDEX IF NOT EXISTS idx_room_bookings_group ON room_bookings(group_id) WHERE group_id IS NOT NULL;
+
+-- iCal channel sync (v1 channel manager — iCal, NOT the Booking.com API).
+CREATE TABLE IF NOT EXISTS room_channel_feeds (
+  id SERIAL PRIMARY KEY,
+  direction TEXT NOT NULL CHECK (direction IN ('export','import')),
+  name TEXT NOT NULL,
+  channel_name TEXT,                    -- "Booking.com", "Airbnb", …
+  room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  room_type_id INTEGER REFERENCES room_types(id) ON DELETE CASCADE,
+  url TEXT,                             -- import: the OTA calendar URL we poll
+  secret TEXT UNIQUE,                   -- export: unguessable feed credential
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_synced_at TIMESTAMPTZ,
+  last_status TEXT,                     -- 'ok' | 'error'
+  last_error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_room_channel_feeds_dir ON room_channel_feeds(direction, is_active);
+
+-- External OTA events — availability treats these as occupancy.
+CREATE TABLE IF NOT EXISTS channel_blocks (
+  id SERIAL PRIMARY KEY,
+  source_feed_id INTEGER NOT NULL REFERENCES room_channel_feeds(id) ON DELETE CASCADE,
+  room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  external_uid TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,               -- exclusive (RFC 5545 DTEND semantics)
+  summary TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (source_feed_id, external_uid),
+  CHECK (end_date > start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_channel_blocks_room ON channel_blocks(room_id, start_date, end_date);
+
+-- Import conflicts (external event overlapping a local booking) — dead-
+-- lettered + notified, never silent.
+CREATE TABLE IF NOT EXISTS channel_sync_dead_letters (
+  id SERIAL PRIMARY KEY,
+  feed_id INTEGER NOT NULL REFERENCES room_channel_feeds(id) ON DELETE CASCADE,
+  external_uid TEXT NOT NULL,
+  start_date DATE,
+  end_date DATE,
+  summary TEXT,
+  reason TEXT,
+  conflicting_booking_id INTEGER REFERENCES room_bookings(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','dismissed')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (feed_id, external_uid, conflicting_booking_id)
+);
+CREATE INDEX IF NOT EXISTS idx_channel_dead_letters_status ON channel_sync_dead_letters(status);
+
+-- Night audit snapshots (occupancy / ADR / RevPAR per hotel night).
+CREATE TABLE IF NOT EXISTS night_audit_snapshots (
+  id SERIAL PRIMARY KEY,
+  audit_date DATE NOT NULL UNIQUE,
+  rooms_total INTEGER NOT NULL DEFAULT 0,
+  rooms_ooo INTEGER NOT NULL DEFAULT 0,
+  rooms_occupied INTEGER NOT NULL DEFAULT 0,
+  rooms_blocked INTEGER NOT NULL DEFAULT 0,
+  arrivals INTEGER NOT NULL DEFAULT 0,
+  departures INTEGER NOT NULL DEFAULT 0,
+  no_shows INTEGER NOT NULL DEFAULT 0,
+  occupancy_pct NUMERIC(6,2) NOT NULL DEFAULT 0,
+  adr NUMERIC(12,2) NOT NULL DEFAULT 0,
+  revpar NUMERIC(12,2) NOT NULL DEFAULT 0,
+  room_revenue NUMERIC(14,2) NOT NULL DEFAULT 0,
+  unsettled_folio_total NUMERIC(14,2) NOT NULL DEFAULT 0,
+  payload JSONB NOT NULL DEFAULT '{}',
+  run_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- V10 lodging notification rules (inert until customer_notifications flag on).
+INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+  ('room_booking.created', 'email', 'room_booking_confirmation', true),
+  ('room_booking.created', 'sms',   'room_booking_confirmation', true)
+ON CONFLICT (event, channel) DO NOTHING;
 
 -- ── M10 Treatment plans (dental / vet / physio) ─────────────────────
 CREATE TABLE IF NOT EXISTS patient_subjects (

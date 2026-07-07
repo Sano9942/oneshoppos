@@ -31,6 +31,8 @@ module.exports = function registerSystemRoutes(app, deps) {
     booking_reminder: null, // setInterval
     rental_overdue: "rental-overdue-check",
     room_overdue: "room-overdue-check",
+    channel_sync: "channel-sync-poll",
+    night_audit: "night-audit-run",
     treatment_plan: "treatment-plan-daily-check",
     course_release: "course-release-sweep",
     kds_snapshot: "kds-load-snapshot",
@@ -62,6 +64,9 @@ module.exports = function registerSystemRoutes(app, deps) {
       const bookingReminderStatus = global.__bookingReminderWorkerStatus || null;
       const rentalOverdueStatus = global.__rentalOverdueWorkerStatus || null;
       const roomOverdueStatus = global.__roomOverdueWorkerStatus || null;
+      // V10 lodging — 10-min OTA iCal sync + reservation TTL; nightly audit.
+      const channelSyncStatus = global.__channelSyncWorkerStatus || null;
+      const nightAuditStatus = global.__nightAuditWorkerStatus || null;
       const treatmentPlanStatus = global.__treatmentPlanWorkerStatus || null;
       const courseReleaseStatus = global.__courseReleaseWorkerStatus || null;
       const kdsSnapshotStatus = global.__kdsSnapshotWorkerStatus || null;
@@ -139,6 +144,8 @@ module.exports = function registerSystemRoutes(app, deps) {
         booking_reminder: workerInfo("booking_reminder", bookingReminderStatus, 5 * 60_000),
         rental_overdue: workerInfo("rental_overdue", rentalOverdueStatus, 24 * 60 * 60 * 1000),
         room_overdue: workerInfo("room_overdue", roomOverdueStatus, 24 * 60 * 60 * 1000),
+        channel_sync: workerInfo("channel_sync", channelSyncStatus, 15 * 60_000),
+        night_audit: workerInfo("night_audit", nightAuditStatus, 24 * 60 * 60 * 1000),
         treatment_plan: workerInfo("treatment_plan", treatmentPlanStatus, 24 * 60 * 60 * 1000),
         course_release: workerInfo("course_release", courseReleaseStatus, 60_000),
         kds_snapshot: workerInfo("kds_snapshot", kdsSnapshotStatus, 15 * 60_000),

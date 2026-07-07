@@ -8856,6 +8856,251 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 119,
+    description:
+      "V10 lodging depth — folio-tax rooms slice (room_types.tax_id + folio_lines per-line snapshot, makes v49 tax_inclusive real) + hostel beds (rooms.parent_room_id) + direct booking engine (room_bookings.source/expires_at TTL) + guest registration (booking_guests, PK register) + group bookings (booking_groups + room_bookings.group_id, master-folio routing) + iCal channel sync (room_channel_feeds, channel_blocks, channel_sync_dead_letters) + night audit (night_audit_snapshots) + room_channel_sync/room_online_booking/room_guest_registration flags with lodging-preset backfill + room_booking.created notification rules. All tenant-only; warns on the public schema.",
+    up: async (client) => {
+      // 1. Folio-tax (rooms slice of the approved proposal — V09 did rentals).
+      try {
+        await client.query("SAVEPOINT v119_folio_tax");
+        await client.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id)`);
+        await client.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS image_url TEXT`);
+        await client.query(`ALTER TABLE folio_lines
+          ADD COLUMN IF NOT EXISTS tax_rate_at_charge      NUMERIC(6,3)  NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tax_amount_at_charge    NUMERIC(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tax_inclusive_at_charge BOOLEAN       NOT NULL DEFAULT TRUE`);
+        await client.query("RELEASE SAVEPOINT v119_folio_tax");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_folio_tax");
+        console.warn(`[migrate-pg v119] folio-tax columns skipped: ${err.message}`);
+      }
+
+      // 2. Hostel beds — beds as child rooms (no engine fork).
+      try {
+        await client.query("SAVEPOINT v119_beds");
+        await client.query(`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS parent_room_id INTEGER REFERENCES rooms(id)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_rooms_parent ON rooms(parent_room_id) WHERE parent_room_id IS NOT NULL`);
+        await client.query("RELEASE SAVEPOINT v119_beds");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_beds");
+        console.warn(`[migrate-pg v119] parent_room_id skipped: ${err.message}`);
+      }
+
+      // 3. Direct booking engine — unpaid-hold TTL + source attribution.
+      try {
+        await client.query("SAVEPOINT v119_booking_ttl");
+        await client.query(`ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'staff'`);
+        await client.query(`ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_expiry
+          ON room_bookings(expires_at) WHERE status = 'reserved' AND expires_at IS NOT NULL`);
+        await client.query("RELEASE SAVEPOINT v119_booking_ttl");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_booking_ttl");
+        console.warn(`[migrate-pg v119] booking TTL columns skipped: ${err.message}`);
+      }
+
+      // 4. Guest registration (PII — staff-only surfaces).
+      try {
+        await client.query("SAVEPOINT v119_guests");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS booking_guests (
+            id SERIAL PRIMARY KEY,
+            booking_id INTEGER NOT NULL REFERENCES room_bookings(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            cnic_passport TEXT,
+            nationality TEXT,
+            phone TEXT,
+            document_photos JSONB NOT NULL DEFAULT '[]',
+            is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_booking_guests_booking ON booking_guests(booking_id)`);
+        await client.query("RELEASE SAVEPOINT v119_guests");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_guests");
+        console.warn(`[migrate-pg v119] booking_guests skipped: ${err.message}`);
+      }
+
+      // 5. Group bookings + master-folio charge routing.
+      try {
+        await client.query("SAVEPOINT v119_groups");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS booking_groups (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            customer_id INTEGER REFERENCES customers(id),
+            master_folio_booking_id INTEGER REFERENCES room_bookings(id),
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`ALTER TABLE room_bookings ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES booking_groups(id)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_group ON room_bookings(group_id) WHERE group_id IS NOT NULL`);
+        await client.query("RELEASE SAVEPOINT v119_groups");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_groups");
+        console.warn(`[migrate-pg v119] booking_groups skipped: ${err.message}`);
+      }
+
+      // 6. iCal channel sync — feeds, external blocks, conflict dead letters.
+      try {
+        await client.query("SAVEPOINT v119_channel");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS room_channel_feeds (
+            id SERIAL PRIMARY KEY,
+            direction TEXT NOT NULL CHECK (direction IN ('export','import')),
+            name TEXT NOT NULL,
+            channel_name TEXT,
+            room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+            room_type_id INTEGER REFERENCES room_types(id) ON DELETE CASCADE,
+            url TEXT,
+            secret TEXT UNIQUE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            last_synced_at TIMESTAMPTZ,
+            last_status TEXT,
+            last_error TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_room_channel_feeds_dir ON room_channel_feeds(direction, is_active)`);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS channel_blocks (
+            id SERIAL PRIMARY KEY,
+            source_feed_id INTEGER NOT NULL REFERENCES room_channel_feeds(id) ON DELETE CASCADE,
+            room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+            external_uid TEXT NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            summary TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (source_feed_id, external_uid),
+            CHECK (end_date > start_date)
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_channel_blocks_room ON channel_blocks(room_id, start_date, end_date)`);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS channel_sync_dead_letters (
+            id SERIAL PRIMARY KEY,
+            feed_id INTEGER NOT NULL REFERENCES room_channel_feeds(id) ON DELETE CASCADE,
+            external_uid TEXT NOT NULL,
+            start_date DATE,
+            end_date DATE,
+            summary TEXT,
+            reason TEXT,
+            conflicting_booking_id INTEGER REFERENCES room_bookings(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','dismissed')),
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (feed_id, external_uid, conflicting_booking_id)
+          )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_channel_dead_letters_status ON channel_sync_dead_letters(status)`);
+        await client.query("RELEASE SAVEPOINT v119_channel");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_channel");
+        console.warn(`[migrate-pg v119] channel sync schema skipped: ${err.message}`);
+      }
+
+      // 7. Night audit snapshots.
+      try {
+        await client.query("SAVEPOINT v119_audit");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS night_audit_snapshots (
+            id SERIAL PRIMARY KEY,
+            audit_date DATE NOT NULL UNIQUE,
+            rooms_total INTEGER NOT NULL DEFAULT 0,
+            rooms_ooo INTEGER NOT NULL DEFAULT 0,
+            rooms_occupied INTEGER NOT NULL DEFAULT 0,
+            rooms_blocked INTEGER NOT NULL DEFAULT 0,
+            arrivals INTEGER NOT NULL DEFAULT 0,
+            departures INTEGER NOT NULL DEFAULT 0,
+            no_shows INTEGER NOT NULL DEFAULT 0,
+            occupancy_pct NUMERIC(6,2) NOT NULL DEFAULT 0,
+            adr NUMERIC(12,2) NOT NULL DEFAULT 0,
+            revpar NUMERIC(12,2) NOT NULL DEFAULT 0,
+            room_revenue NUMERIC(14,2) NOT NULL DEFAULT 0,
+            unsettled_folio_total NUMERIC(14,2) NOT NULL DEFAULT 0,
+            payload JSONB NOT NULL DEFAULT '{}',
+            run_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        await client.query("RELEASE SAVEPOINT v119_audit");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_audit");
+        console.warn(`[migrate-pg v119] night_audit_snapshots skipped: ${err.message}`);
+      }
+
+      // 8. Feature flags (default OFF) + F05 rules (inert until the
+      //    customer_notifications flag is on).
+      try {
+        await client.query("SAVEPOINT v119_flags");
+        const { rows: ff } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+        `);
+        if (ff.length) {
+          await client.query(`
+            INSERT INTO feature_flags (key, enabled, description) VALUES
+              ('room_channel_sync',       false, 'V10 lodging — iCal channel sync (export feeds + OTA import with conflict dead-letters)'),
+              ('room_online_booking',     false, 'V10 lodging — public direct booking engine with deposit + unpaid-hold TTL'),
+              ('room_guest_registration', false, 'V10 lodging — enforce primary-guest CNIC/passport capture at check-in + registry report')
+            ON CONFLICT (key) DO NOTHING
+          `);
+        }
+        const { rows: nr } = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'notification_rules'
+        `);
+        if (nr.length) {
+          await client.query(`
+            INSERT INTO notification_rules (event, channel, template_key, enabled) VALUES
+              ('room_booking.created', 'email', 'room_booking_confirmation', true),
+              ('room_booking.created', 'sms',   'room_booking_confirmation', true)
+            ON CONFLICT (event, channel) DO NOTHING
+          `);
+        }
+        await client.query("RELEASE SAVEPOINT v119_flags");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_flags");
+        console.warn(`[migrate-pg v119] lodging flags skipped: ${err.message}`);
+      }
+
+      // 9. Backfill: lodging-preset tenants get channel sync + the guest
+      //    register ON (kept in sync with PRESET_EXTRA_FLAGS in
+      //    config/industry-config.js). Mirrors the v118 rental backfill.
+      try {
+        await client.query("SAVEPOINT v119_preset_backfill");
+        const { rows: profile } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        const lodgingPresets = ["hotel", "guesthouse", "hostel"];
+        if (lodgingPresets.includes(profile[0]?.industry_type)) {
+          const { rows: ff } = await client.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'feature_flags'
+          `);
+          if (ff.length) {
+            await client.query(`
+              INSERT INTO feature_flags (key, enabled) VALUES
+                ('room_channel_sync', true),
+                ('room_guest_registration', true)
+              ON CONFLICT (key) DO UPDATE SET enabled = true
+            `);
+          }
+        }
+        await client.query("RELEASE SAVEPOINT v119_preset_backfill");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v119_preset_backfill");
+        console.warn(`[migrate-pg v119] lodging preset backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

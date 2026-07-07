@@ -864,6 +864,12 @@ const PRESET_EXTRA_FLAGS = Object.freeze({
   equipment_hire: ["rental_inspections"],
   furniture_rental: ["rental_inspections"],
   party_supplies: ["rental_inspections"],
+  // V10 — lodging presets get channel sync (their P0 gap; inert until a feed
+  // is configured) + the PK guest register ON by default. Public direct
+  // booking stays OFF (tenant opt-in), deliberately not listed here.
+  hotel: ["room_channel_sync", "room_guest_registration"],
+  guesthouse: ["room_channel_sync", "room_guest_registration"],
+  hostel: ["room_channel_sync", "room_guest_registration"],
 });
 
 // Every flag any preset can flip on as an extra — used to reset the full set

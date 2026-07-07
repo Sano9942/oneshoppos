@@ -331,6 +331,22 @@ function startAll(deps) {
           });
         }
 
+        // V10 lodging: OTA iCal import polling + unpaid-reservation TTL sweep.
+        if (String(process.env.CHANNEL_SYNC_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("channel-sync", async () => {
+            const { registerChannelSyncWorker } = require("../workers/channel-sync-worker-boss");
+            await registerChannelSyncWorker(boss, pool);
+          });
+        }
+
+        // V10 lodging: nightly occupancy/ADR/RevPAR snapshot.
+        if (String(process.env.NIGHT_AUDIT_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("night-audit", async () => {
+            const { registerNightAuditWorker } = require("../workers/night-audit-worker-boss");
+            await registerNightAuditWorker(boss, pool);
+          });
+        }
+
         // F04: releases stale gateway deposit pre-auth holds (rooms/treatments/
         // rentals) so a lapsed hold isn't captured (and declined) at checkout.
         if (String(process.env.DEPOSIT_HOLD_EXPIRY_WORKER_ENABLED || "0") === "1") {

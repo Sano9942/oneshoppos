@@ -1,7 +1,7 @@
 "use strict";
 
 module.exports = function registerRoomRoutes(app, deps) {
-  const { requireFeature, requireMode } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode, getFeatureFlagsMap } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -21,9 +21,16 @@ module.exports = function registerRoomRoutes(app, deps) {
     attachSaleSchema,
     settleFolioSchema,
     depositPreAuthSchema,
+    bookingGuestSchema,
+    createBookingGroupSchema,
+    createChannelFeedSchema,
+    updateChannelFeedSchema,
+    nightAuditRunSchema,
   } = require("../schemas/rooms");
   const rooms = require("../services/room-service");
   const deposits = require("../services/room-deposits");
+  const channelSync = require("../services/room-channel-sync");
+  const nightAudit = require("../services/room-night-audit");
 
   const gate = [requireMode("room_management"), requireFeature("phase4_room_management"), requirePerm("manage_rooms")];
 
@@ -135,11 +142,49 @@ module.exports = function registerRoomRoutes(app, deps) {
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
 
+  // ── V10 Night audit (registered BEFORE /api/rooms/:id — ordering) ──
+
+  app.post("/api/rooms/night-audit/run", ...gate, validate(nightAuditRunSchema), async (req, res) => {
+    try {
+      let date = req.body.date;
+      if (!date) {
+        // Default: the hotel night that just ended (yesterday, tenant TZ).
+        const { toLocalDateStr } = require("../utils/tz");
+        const todayLocal = toLocalDateStr(new Date().toISOString(), req.company?.timezone || "UTC");
+        const d = new Date(`${todayLocal}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 1);
+        date = d.toISOString().slice(0, 10);
+      }
+      const snapshot = await nightAudit.runNightAudit(deps.db, date, req.employee?.id || null);
+      res.status(201).json(snapshot);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.get("/api/rooms/night-audit/history", ...gate, async (req, res) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 30, 120);
+      const { rows } = await deps.db.query(
+        "SELECT s.*, s.audit_date::text AS audit_date FROM night_audit_snapshots s ORDER BY s.audit_date DESC LIMIT $1",
+        [limit]
+      );
+      res.json({ snapshots: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   app.get("/api/rooms/:id", ...gate, async (req, res) => {
     try {
       const row = await rooms.getRoom(deps.db, Number(req.params.id));
       if (!row) return res.status(404).json({ error: "Room not found" });
       res.json(row);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // V10 hostel — dorm map: beds + live occupancy ("7/10 beds").
+  app.get("/api/rooms/:id/dorm-map", ...gate, async (req, res) => {
+    try {
+      const map = await rooms.getDormMap(deps.db, Number(req.params.id));
+      if (!map) return res.status(404).json({ error: "Room not found" });
+      res.json(map);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -228,10 +273,22 @@ module.exports = function registerRoomRoutes(app, deps) {
 
   app.post("/api/room-bookings/:id/checkin", ...gate, validate(checkInSchema), async (req, res) => {
     try {
-      const booking = await rooms.checkInBooking(deps.db, Number(req.params.id), req.body);
+      // V10: lodging presets enforce the PK guest register at check-in
+      // (room_guest_registration flag); skip_registration is the audited
+      // front-desk escape hatch.
+      let requireRegistration = false;
+      try {
+        const flags = await getFeatureFlagsMap(req.tenantId);
+        requireRegistration = flags.room_guest_registration === true;
+      } catch { /* flag lookup best-effort — default unenforced */ }
+      const booking = await rooms.checkInBooking(deps.db, Number(req.params.id), req.body, {
+        requireRegistration,
+      });
       if (!booking) return res.status(404).json({ error: "Booking not found" });
       res.json(booking);
-    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
+    }
   });
 
   app.post("/api/room-bookings/:id/checkout", ...gate, validate(checkOutSchema), async (req, res) => {
@@ -305,22 +362,277 @@ module.exports = function registerRoomRoutes(app, deps) {
 
   app.post("/api/room-bookings/:id/folio/settle", ...gate, validate(settleFolioSchema), async (req, res) => {
     try {
-      const result = await rooms.settleFolio(
-        deps.db,
-        Number(req.params.id),
-        req.employee?.id,
-        req.body || {}
-      );
-      // After folio settles, capture or release deposit.
+      // Idempotent settle/capture ordering (V10 harden): the deposit is
+      // captured BEFORE the folio settles so a crash between the two leaves a
+      // captured-but-unposted deposit that a re-run resolves — the deposit
+      // engine's capture() is a no-op unless status='authorized', and
+      // settleFolio itself locks + refuses a second settle. Order: capture →
+      // settle → (release path handled inside capture:false).
+      const bookingId = Number(req.params.id);
+      let depositError = null;
       try {
-        await deposits.captureDepositOnCheckout(deps.db, Number(req.params.id), {
+        await deposits.captureDepositOnCheckout(deps.db, bookingId, {
           capture: !!req.body?.capture_deposit,
         });
       } catch (depositErr) {
-        // Non-fatal — log but allow settlement response through.
+        // Non-fatal — a manual/gateway-less tenant settles cash-side anyway.
+        depositError = depositErr.message;
         console.warn("[rooms/settle] deposit capture/release failed:", depositErr.message);
       }
-      res.status(201).json(result);
+      const result = await rooms.settleFolio(deps.db, bookingId, req.employee?.id, req.body || {});
+      res.status(201).json({ ...result, deposit_error: depositError });
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // ── V10 Guest registration ──────────────────────────────────────
+
+  app.get("/api/room-bookings/:id/guests", ...gate, async (req, res) => {
+    try {
+      const guests = await rooms.listBookingGuests(deps.db, Number(req.params.id));
+      res.json({ guests });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/room-bookings/:id/guests", ...gate, validate(bookingGuestSchema), async (req, res) => {
+    try {
+      const guest = await rooms.addBookingGuest(deps.db, Number(req.params.id), req.body);
+      res.status(201).json(guest);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/room-bookings/:id/guests/:guestId", ...gate, async (req, res) => {
+    try {
+      const row = await rooms.deleteBookingGuest(deps.db, Number(req.params.id), Number(req.params.guestId));
+      if (!row) return res.status(404).json({ error: "Guest not found" });
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Guest ID document upload → R2 under a non-guessable prefix. Staff-only
+  // PII (this route sits behind manage_rooms; keys never reach the portal).
+  const multer = require("multer");
+  const crypto = require("crypto");
+  const { rasterImageFileFilter, safeExtension } = require("../middleware/upload-validation");
+  const guestDocUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: rasterImageFileFilter,
+  });
+  app.post(
+    "/api/room-bookings/:id/guests/documents",
+    ...gate,
+    guestDocUpload.single("document"),
+    async (req, res) => {
+      try {
+        if (!req.file) return res.status(400).json({ error: "document file required" });
+        const { uploadToR2 } = require("../utils/r2");
+        const ext = safeExtension(req.file.originalname) || ".jpg";
+        const key = `booking-guests/${req.tenantSlug || "st"}/${crypto.randomBytes(12).toString("hex")}${ext}`;
+        const url = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+        res.status(201).json({ key, url });
+      } catch (err) { res.status(500).json({ error: err.message }); }
+    }
+  );
+
+  // Guest registry — the police-reporting report (date range). PII: gated
+  // behind manage_rooms, never exposed to portal payloads.
+  app.get("/api/reports/guest-registry", ...gate, async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      if (!from || !to) return res.status(400).json({ error: "from and to query params required" });
+      const guests = await rooms.getGuestRegistry(deps.db, { from, to });
+      res.json({ from, to, guests });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── V10 Group bookings ──────────────────────────────────────────
+
+  app.get("/api/room-booking-groups", ...gate, async (req, res) => {
+    try {
+      const groups = await rooms.listBookingGroups(deps.db);
+      res.json({ groups });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/room-booking-groups/:id", ...gate, async (req, res) => {
+    try {
+      const group = await rooms.getBookingGroup(deps.db, Number(req.params.id));
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      res.json(group);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/room-booking-groups", ...gate, validate(createBookingGroupSchema), async (req, res) => {
+    try {
+      const group = await rooms.createBookingGroup(deps.db, req.body, req.employee?.id);
+      res.status(201).json(group);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.post("/api/room-booking-groups/:id/master-folio", ...gate, async (req, res) => {
+    try {
+      const group = await rooms.setGroupMasterFolio(
+        deps.db,
+        Number(req.params.id),
+        Number(req.body?.booking_id)
+      );
+      res.json(group);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  // ── V10 Occupancy / ADR / RevPAR report ─────────────────────────
+
+  app.get("/api/reports/occupancy", ...gate, async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      if (!from || !to) return res.status(400).json({ error: "from and to query params required" });
+      const report = await nightAudit.getOccupancyReport(deps.db, { from, to });
+      res.json(report);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── V10 iCal channel feeds (honest copy: iCal sync, NOT a Booking.com
+  //     API integration — that is partner-program gated and out of v1) ──
+
+  const channelGate = [
+    requireMode("room_management"),
+    requireFeature("phase4_room_management"),
+    requireFeature("room_channel_sync"),
+    requirePerm("manage_rooms"),
+  ];
+
+  app.get("/api/room-channel-feeds", ...channelGate, async (req, res) => {
+    try {
+      const { rows } = await deps.db.query(
+        `SELECT f.*, r.room_number, rt.name AS room_type_name,
+                (SELECT COUNT(*) FROM channel_blocks cb WHERE cb.source_feed_id = f.id) AS block_count,
+                (f.direction = 'import' AND f.is_active
+                  AND (f.last_synced_at IS NULL OR f.last_synced_at < NOW() - INTERVAL '${channelSync.FEED_STALE_MINUTES} minutes')
+                ) AS is_stale
+           FROM room_channel_feeds f
+           LEFT JOIN rooms r ON r.id = f.room_id
+           LEFT JOIN room_types rt ON rt.id = f.room_type_id
+          ORDER BY f.id ASC`
+      );
+      // Export URLs are assembled client-side from the secret; return as-is
+      // (staff-only surface — the secret IS the credential OTAs will hold).
+      res.json({ feeds: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/room-channel-feeds", ...channelGate, validate(createChannelFeedSchema), async (req, res) => {
+    try {
+      const secret = req.body.direction === "export" ? channelSync.generateFeedSecret() : null;
+      const { rows: [feed] } = await deps.db.query(
+        `INSERT INTO room_channel_feeds
+           (direction, name, channel_name, room_id, room_type_id, url, secret, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,TRUE)) RETURNING *`,
+        [
+          req.body.direction, req.body.name, req.body.channel_name || null,
+          req.body.room_id || null, req.body.room_type_id || null,
+          req.body.url || null, secret, req.body.is_active,
+        ]
+      );
+      res.status(201).json(feed);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.put("/api/room-channel-feeds/:id", ...channelGate, validate(updateChannelFeedSchema), async (req, res) => {
+    try {
+      const sets = [];
+      const params = [];
+      let idx = 0;
+      for (const key of ["name", "channel_name", "url", "is_active"]) {
+        if (req.body[key] !== undefined) {
+          idx++;
+          sets.push(`${key} = $${idx}`);
+          params.push(req.body[key]);
+        }
+      }
+      if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
+      idx++;
+      params.push(Number(req.params.id));
+      const { rows: [feed] } = await deps.db.query(
+        `UPDATE room_channel_feeds SET ${sets.join(", ")}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
+        params
+      );
+      if (!feed) return res.status(404).json({ error: "Feed not found" });
+      res.json(feed);
+    } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/room-channel-feeds/:id", ...channelGate, async (req, res) => {
+    try {
+      const { rows: [feed] } = await deps.db.query(
+        "DELETE FROM room_channel_feeds WHERE id = $1 RETURNING *",
+        [Number(req.params.id)]
+      );
+      if (!feed) return res.status(404).json({ error: "Feed not found" });
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Rotate an export feed's secret (invalidate a leaked URL).
+  app.post("/api/room-channel-feeds/:id/rotate-secret", ...channelGate, async (req, res) => {
+    try {
+      const { rows: [feed] } = await deps.db.query(
+        "UPDATE room_channel_feeds SET secret = $1, updated_at = NOW() WHERE id = $2 AND direction = 'export' RETURNING *",
+        [channelSync.generateFeedSecret(), Number(req.params.id)]
+      );
+      if (!feed) return res.status(404).json({ error: "Export feed not found" });
+      res.json(feed);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // "Sync now" — run one import feed inline (front desk sanity button).
+  app.post("/api/room-channel-feeds/:id/sync", ...channelGate, async (req, res) => {
+    try {
+      const { rows: [feed] } = await deps.db.query(
+        "SELECT * FROM room_channel_feeds WHERE id = $1 AND direction = 'import'",
+        [Number(req.params.id)]
+      );
+      if (!feed) return res.status(404).json({ error: "Import feed not found" });
+      const { enqueueEmail } = require("../services/email");
+      const result = await channelSync.syncImportFeed(deps.db, feed, {
+        enqueueEmail,
+        staffEmail: req.company?.email || null,
+        storeName: req.company?.store_name || null,
+        tenantSlug: req.tenantSlug || "single",
+        tenant: { slug: req.tenantSlug, name: req.company?.store_name },
+      });
+      res.json(result);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Conflict dead letters — review + resolve/dismiss, never silent.
+  app.get("/api/room-channel-dead-letters", ...channelGate, async (req, res) => {
+    try {
+      const { rows } = await deps.db.query(
+        `SELECT dl.*, f.name AS feed_name, f.channel_name, b.booking_number
+           FROM channel_sync_dead_letters dl
+           LEFT JOIN room_channel_feeds f ON f.id = dl.feed_id
+           LEFT JOIN room_bookings b ON b.id = dl.conflicting_booking_id
+          WHERE dl.status = COALESCE($1, 'open')
+          ORDER BY dl.created_at DESC`,
+        [req.query.status || null]
+      );
+      res.json({ dead_letters: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // (Express 5: no regex-in-param — validate :action in the handler.)
+  app.post("/api/room-channel-dead-letters/:id/:action", ...channelGate, async (req, res) => {
+    try {
+      if (!["resolve", "dismiss"].includes(req.params.action)) {
+        return res.status(400).json({ error: "action must be resolve or dismiss" });
+      }
+      const status = req.params.action === "resolve" ? "resolved" : "dismissed";
+      const { rows: [dl] } = await deps.db.query(
+        "UPDATE channel_sync_dead_letters SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+        [status, Number(req.params.id)]
+      );
+      if (!dl) return res.status(404).json({ error: "Dead letter not found" });
+      res.json(dl);
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 };
