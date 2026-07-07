@@ -6,6 +6,7 @@ import { fmtDate, fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { useToast } from "../../contexts/ToastContext";
+import { ServiceHistoryList } from "./salon/ServiceHistory";
 import {
   Badge,
   Button,
@@ -929,6 +930,7 @@ export default function CustomersRedesign() {
                   { key: "profile", label: "Profile" },
                   { key: "ledger", label: "Ledger", icon: BookOpen },
                   { key: "orders", label: "Order History", icon: Clock },
+                  ...(industry_type === "salon" ? [{ key: "history", label: "Service History", icon: Calendar }] : []),
                 ].map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}
@@ -948,6 +950,12 @@ export default function CustomersRedesign() {
                   </button>
                 ))}
               </div>
+
+              {detailTab === "history" && industry_type === "salon" && (
+                <div className="pt-1">
+                  <ServiceHistoryList customerId={detail.id} />
+                </div>
+              )}
 
               {detailTab === "profile" && (
                 <>

@@ -65,6 +65,10 @@ export function useCheckout({
   // CREDIT_LIMIT_EXCEEDED (hard-mode + no override), open the manager-PIN
   // modal upstream. Caller invokes retryWithManagerPin(pin) to re-submit.
   onCreditLimitExceeded,
+  // V04 salon — the preset drives the walk-in performed-by guard: for a salon
+  // walk-in (no linked appointment) every line must carry an explicit
+  // performer, never silently inherit the cashier.
+  industryType,
 }) {
   const { employee } = useAuth();
 
@@ -281,12 +285,22 @@ export function useCheckout({
       );
       return;
     }
+    const tipNum = Number(tipAmount || 0);
+    const serverNum = serverId ? Number(serverId) : null;
+    // V04 salon walk-in performed-by harden: an appointment checkout already
+    // stamps each line with the segment's stylist, but a walk-in (no linked
+    // appointment) previously fell back to the cashier (serverNum default) —
+    // wrong stylist paid. Require an explicit performer pick (blocking, not a
+    // default) before a salon walk-in can complete.
+    const isSalonWalkIn = industryType === "salon" && !activeAppointmentId;
+    if (isSalonWalkIn && cart.some((i) => !i.staff_id) && !serverNum) {
+      setError?.("Select who performed the service (Performed by) before checkout.");
+      return;
+    }
     setSubmitting(true);
     setError?.("");
     // Phase 2.1 wiring: stamp every cart line with the server (staff_id) so
     // sale_items.staff_id captures server-of-record, and forward tip fields.
-    const tipNum = Number(tipAmount || 0);
-    const serverNum = serverId ? Number(serverId) : null;
     const stampedCart = cart.map((i) => ({
       ...i,
       staff_id: i.staff_id || serverNum,

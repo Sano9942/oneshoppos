@@ -87,8 +87,10 @@ export default function POSCheckoutModal() {
     setShowGuestMode,
     signatureSvg,
     posFlags,
+    activeAppointmentId,
   } = usePOS();
-  const { labels = {}, hasMode } = usePreset();
+  const { labels = {}, hasMode, industry_type } = usePreset();
+  const isSalonWalkIn = industry_type === "salon" && !activeAppointmentId;
   const restaurantOn = hasMode && hasMode("restaurant");
   const giftCardsOn = !!posFlags?.phase2g_gift_cards;
   // Tier 0.1 wholesale — Credit (on-account) tender. Visible when the flag is
@@ -636,6 +638,28 @@ export default function POSCheckoutModal() {
                   )}
                 </button>
               )}
+            </div>
+          )}
+
+          {/* V04 salon — walk-in performed-by (blocking pick; no cashier default).
+              Appointment checkouts stamp the stylist per line, so this only
+              shows for walk-ins. Reuses serverId → sale_items.staff_id. */}
+          {isSalonWalkIn && (
+            <div className="space-y-2 rounded-2xl border-2 border-(--ui-border-strong) bg-(--ui-muted-surface) p-3">
+              <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide">
+                Performed by <span className="text-(--ui-danger-fg)">*</span>
+              </label>
+              <select
+                value={serverId}
+                onChange={(e) => setServerId(e.target.value)}
+                className="w-full px-3 py-2 bg-(--ui-surface) border-2 border-(--ui-border-strong) rounded-xl focus:border-(--ui-focus) focus:ring-0 outline-none text-sm font-medium"
+              >
+                <option value="">— Select stylist —</option>
+                {(employeesList || []).map((e) => (
+                  <option key={e.id} value={e.id}>{e.name || e.username || `Employee #${e.id}`}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-(--ui-text-muted)">Attributes the sale to the stylist for commission — not the cashier.</p>
             </div>
           )}
 

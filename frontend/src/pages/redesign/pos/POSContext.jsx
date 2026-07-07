@@ -82,7 +82,7 @@ export const POSProvider = ({ children }) => {
   // P8 (3.14): tenant-wide tax stance — drives toggle default + visibility.
   const taxMode = company?.tax_mode || "none";
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
-  const { labels: presetLabels, pos_layout_mode } = usePreset();
+  const { labels: presetLabels, pos_layout_mode, industry_type } = usePreset();
 
   // ── Notices (shared across hooks via showNotice / setError) ──────────────
   const [notice, setNotice] = useState("");
@@ -648,6 +648,8 @@ export const POSProvider = ({ children }) => {
       setCreditLimitPrompt(info);
       logErrorState("pos_credit_limit_exceeded", info.message || "Credit limit exceeded", info);
     },
+    // V04 salon — drives the walk-in performed-by guard in completeSale.
+    industryType: industry_type,
   });
 
   // ── Reload parked on outlet change ──────────────────────────────────────
@@ -1111,6 +1113,7 @@ export const POSProvider = ({ children }) => {
     confirmModifiers,
     cancelModifiers,
     employeesList,
+    industryType: industry_type,
     updateQty: cartHook.updateQty,
     setQty: cartHook.setQty,
     removeFromCart: cartHook.removeFromCart,

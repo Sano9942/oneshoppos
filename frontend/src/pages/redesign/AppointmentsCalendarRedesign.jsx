@@ -7,6 +7,8 @@ import { PageShell, SectionCard, Button, Badge, Input } from "../../ui/primitive
 import { ChevronLeft, ChevronRight, Calendar, Plus, X } from "lucide-react";
 import { api } from "../../api";
 import { localDateStr } from "../../utils/dates";
+import { usePreset } from "../../contexts/PresetContext";
+import { AppointmentServiceRecords } from "./salon/ServiceHistory";
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8); // 8 AM to 9 PM
 const EMPLOYEE_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
@@ -34,6 +36,7 @@ export default function AppointmentsCalendarRedesign() {
   const { authHeaders } = useAuth();
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const toast = useToast();
+  const { industry_type } = usePreset();
 
   const [view, setView] = useState("week"); // "week" | "day"
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -134,6 +137,9 @@ export default function AppointmentsCalendarRedesign() {
         service_id: Number(createForm.service_id),
         employee_id: createForm.employee_id ? Number(createForm.employee_id) : undefined,
         customer_name: createForm.customer_name || undefined,
+        // V04 rebooking — preserve the client linkage when prefilled from a
+        // prior appointment so their service history keeps accumulating.
+        customer_id: createForm.customer_id ? Number(createForm.customer_id) : undefined,
         start_at: startAt.toISOString(),
         end_at: endAt.toISOString(),
         notes: createForm.notes || undefined,
@@ -144,6 +150,27 @@ export default function AppointmentsCalendarRedesign() {
       setShowCreateModal(false);
       loadEvents();
     } catch (err) { toast.error(err.message); }
+  };
+
+  // V04 rebooking prompt — prefill the create modal from a finished visit
+  // (same service + stylist + client), defaulted 4 weeks out at the same time.
+  const rebookFrom = (event) => {
+    const base = new Date(event.start_at);
+    const next = new Date(base.getTime() + 28 * 24 * 60 * 60 * 1000);
+    // datetime-local wants a local YYYY-MM-DDTHH:mm string.
+    const pad = (n) => String(n).padStart(2, "0");
+    const localIso = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
+    setCreateForm({
+      service_id: event.service_id ? String(event.service_id) : "",
+      employee_id: event.employee_id ? String(event.employee_id) : "",
+      customer_name: event.customer_name || "",
+      customer_id: event.customer_id || "",
+      start_at: localIso,
+      notes: "",
+      segments: [],
+    });
+    setSelectedEvent(null);
+    setShowCreateModal(true);
   };
 
   const updateStatus = async (id, status) => {
@@ -253,6 +280,18 @@ export default function AppointmentsCalendarRedesign() {
                 <Button size="xs" variant="ghost" onClick={() => updateStatus(selectedEvent.id, "no_show")}>No-Show</Button>
               )}
             </div>
+
+            {/* V04 salon — client service history / last-visit formula */}
+            {industry_type === "salon" && selectedEvent.customer_id && (
+              <div className="mt-4 pt-4 border-t border-(--ui-border)">
+                <AppointmentServiceRecords appointmentId={selectedEvent.id} customerId={selectedEvent.customer_id} />
+                <div className="mt-3">
+                  <Button size="xs" onClick={() => rebookFrom(selectedEvent)}>
+                    <Plus className="w-3.5 h-3.5 mr-1 inline" /> Book next appointment
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
