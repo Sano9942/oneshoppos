@@ -244,6 +244,36 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
+  // ── Impersonation session list (audit + revoke surface) ────────────────
+  // ?active=1 → only sessions still usable (not ended, not revoked, within the
+  // 1h token TTL). Otherwise → recent history (default 20). Revoke reuses the
+  // existing POST /api/admin/impersonate/:sessionId/end route.
+  app.get("/api/admin/impersonation-sessions", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const activeOnly = req.query.active === "1" || req.query.active === "true";
+      const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+      const activeExpr =
+        "s.ended_at IS NULL AND s.revoked_at IS NULL AND s.started_at > NOW() - INTERVAL '1 hour'";
+      const { rows } = await masterDb.query(
+        `SELECT s.id, s.super_admin_id, s.tenant_id, s.started_at, s.ended_at, s.revoked_at,
+                (s.token_jti IS NOT NULL) AS has_jti,
+                t.slug AS tenant_slug, t.name AS tenant_name,
+                sa.email AS admin_email, sa.name AS admin_name,
+                (${activeExpr}) AS is_active
+           FROM impersonation_sessions s
+           JOIN tenants t ON t.id = s.tenant_id
+           LEFT JOIN super_admins sa ON sa.id = s.super_admin_id
+          ${activeOnly ? `WHERE ${activeExpr}` : ""}
+          ORDER BY s.started_at DESC
+          LIMIT $1`,
+        [activeOnly ? 100 : limit]
+      );
+      return res.json({ sessions: rows });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Dead Letter Queue (cross-tenant) ───────────────────────────────────
   app.get("/api/admin/dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {

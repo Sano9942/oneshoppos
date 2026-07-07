@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Download } from "lucide-react";
+import { Download, ShieldAlert } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 import { downloadCsv } from "../../utils/csvExport";
 
@@ -11,11 +11,13 @@ const TABS = [
 
 const ACTION_TYPES = [
   "", "tenant_created", "tenant_updated", "tenant_suspended", "tenant_activated",
-  "tenant_deleted", "pin_reset", "tenant_migrated", "migrate_all",
+  "tenant_deleted", "pin_reset", "tenant_migrated", "migrate_all", "setup_token_regenerated",
   "payment_recorded", "pricing_updated", "impersonation_started", "impersonation_ended",
-  "broadcast_sent", "note_added", "announcement_created", "announcement_deleted",
-  "email_deleted", "email_force_sent", "email_purge_deleted",
-  "ticket_replied", "ticket_deleted", "backup_created", "orphaned_schemas_cleanup",
+  "broadcast_sent", "note_added", "note_deleted", "announcement_created", "announcement_updated", "announcement_deleted",
+  "email_deleted", "email_force_sent", "email_purge_deleted", "email_queue_retried",
+  "ticket_replied", "ticket_status_updated", "ticket_deleted", "dead_letter_retried",
+  "tax_rate_created", "tax_rate_updated", "tax_rate_deleted", "tax_suggestion_reviewed",
+  "backup_created", "backup_verified", "cleanup_run", "orphaned_schemas_cleanup",
 ];
 
 const SECURITY_TYPES = ["", "login_success", "login_failed"];
@@ -35,6 +37,123 @@ function formatDetails(details) {
   } catch {
     return truncate(String(details), 80);
   }
+}
+
+// Active impersonation sessions + revoke, plus recent history. Revoke calls the
+// existing POST /api/admin/impersonate/:sessionId/end route (blacklists the
+// token's jti in the tenant's revoked_tokens + marks the session ended).
+function ImpersonationCard() {
+  const [active, setActive] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const timerRef = useRef(null);
+
+  const loadActive = useCallback(() => {
+    adminFetch("/api/admin/impersonation-sessions?active=1")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
+      .then((res) => setActive(res.sessions || []))
+      .catch(() => {});
+  }, []);
+
+  const loadHistory = useCallback(() => {
+    adminFetch("/api/admin/impersonation-sessions?limit=20")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
+      .then((res) => setHistory(res.sessions || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadActive();
+    timerRef.current = setInterval(loadActive, 30000);
+    return () => clearInterval(timerRef.current);
+  }, [loadActive]);
+
+  const revoke = async (id) => {
+    setBusy(id);
+    try {
+      const r = await adminFetch(`/api/admin/impersonate/${id}/end`, { method: "POST" });
+      if (r.ok) { loadActive(); if (showHistory) loadHistory(); }
+    } finally { setBusy(null); }
+  };
+
+  const toggleHistory = () => {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) loadHistory();
+  };
+
+  return (
+    <div className="mb-4 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={16} className="text-(--ui-text-muted)" />
+          <h2 className="text-sm font-semibold text-(--ui-text)">Impersonation sessions</h2>
+          {active.length > 0 && (
+            <span className="rounded-full bg-(--ui-warning-bg) px-2 py-0.5 text-[10px] font-semibold text-(--ui-warning-fg)">
+              {active.length} active
+            </span>
+          )}
+        </div>
+        <button onClick={toggleHistory} className="ui-focus-ring text-xs font-medium text-(--ui-link) hover:underline">
+          {showHistory ? "Hide history" : "Recent history"}
+        </button>
+      </div>
+
+      {active.length === 0 ? (
+        <p className="text-sm text-(--ui-text-muted)">No active impersonation sessions.</p>
+      ) : (
+        <div className="space-y-2">
+          {active.map((s) => (
+            <div key={s.id} className="flex items-center justify-between rounded-(--ui-radius-sm) border border-(--ui-warning-fg) bg-(--ui-warning-bg) px-3 py-2">
+              <div className="text-sm">
+                <span className="font-medium text-(--ui-text)">{s.tenant_name || s.tenant_slug}</span>
+                <span className="ml-1 text-xs text-(--ui-text-muted)">({s.tenant_slug})</span>
+                <span className="ml-2 text-xs text-(--ui-text-muted)">by {s.admin_email || s.admin_name || `admin #${s.super_admin_id}`}</span>
+                <span className="ml-2 text-xs text-(--ui-text-muted)">· started {s.started_at ? new Date(s.started_at).toLocaleString() : ""}</span>
+              </div>
+              <button
+                onClick={() => revoke(s.id)}
+                disabled={busy === s.id}
+                className="ui-focus-ring rounded-full bg-(--ui-danger) px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                {busy === s.id ? "Revoking..." : "Revoke"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showHistory && (
+        <div className="mt-4 border-t border-(--ui-border) pt-3">
+          {history.length === 0 ? (
+            <p className="text-xs text-(--ui-text-muted)">No impersonation history.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {history.map((s) => (
+                <div key={s.id} className="flex items-center justify-between text-xs">
+                  <div className="text-(--ui-text-muted)">
+                    <span className="font-medium text-(--ui-text)">{s.tenant_name || s.tenant_slug}</span>
+                    <span className="ml-1">by {s.admin_email || `#${s.super_admin_id}`}</span>
+                    <span className="ml-2">{s.started_at ? new Date(s.started_at).toLocaleString() : ""}</span>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    s.is_active
+                      ? "bg-(--ui-warning-bg) text-(--ui-warning-fg)"
+                      : s.revoked_at
+                        ? "bg-(--ui-danger-bg) text-(--ui-danger-fg)"
+                        : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
+                  }`}>
+                    {s.is_active ? "active" : s.revoked_at ? "revoked" : "ended"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminActivity() {
@@ -144,6 +263,9 @@ export default function AdminActivity() {
           </button>
         </div>
       </div>
+
+      {/* Impersonation sessions — active + revoke + recent history */}
+      <ImpersonationCard />
 
       {/* Tabs */}
       <div className="mb-3 flex gap-1">
