@@ -11,15 +11,11 @@ import RouteLoading from "./RouteLoading";
 
 const POSRoute = lazy(() => import("../pages/POSRoute"));
 const POSRestaurantRoute = lazy(() => import("../pages/POSRestaurantRoute"));
-const LandingPagePreview = lazy(() => import("../pages/LandingPagePreview"));
-const LandingEditorial = lazy(() => import("../pages/LandingEditorial"));
-const LandingBrutalist = lazy(() => import("../pages/LandingBrutalist"));
-const LandingLuxury = lazy(() => import("../pages/LandingLuxury"));
-const LandingBazaar = lazy(() => import("../pages/LandingBazaar"));
-const LandingTruckart = lazy(() => import("../pages/LandingTruckart"));
-const LandingY2k = lazy(() => import("../pages/LandingY2k"));
-const LandingShowroom = lazy(() => import("../pages/LandingShowroom"));
-const LandingScrapbook = lazy(() => import("../pages/LandingScrapbook"));
+const MarketingHome = lazy(() => import("../pages/marketing/HomePage"));
+const MarketingIndustry = lazy(() => import("../pages/marketing/IndustryPage"));
+const MarketingIndustriesIndex = lazy(() => import("../pages/marketing/IndustriesIndexPage"));
+const MarketingPricing = lazy(() => import("../pages/marketing/PricingPage"));
+const MarketingWhy = lazy(() => import("../pages/marketing/WhySanoPosPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
 const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
@@ -114,22 +110,17 @@ function HomeRedirect() {
   if (isAuthenticated) return <Navigate to="/context-select" replace />;
   return (
     <Suspense fallback={<RouteLoading />}>
-      <LandingPagePreview />
+      <MarketingHome />
     </Suspense>
   );
 }
 
 export const publicRoutes = [
   <Route key="home" path="/" element={<HomeRedirect />} />,
-  <Route key="landing-preview" path="/landing-preview" element={<Suspense fallback={<RouteLoading />}><LandingPagePreview /></Suspense>} />,
-  <Route key="landing-v2-preview" path="/preview/landing-v2" element={<Suspense fallback={<RouteLoading />}><LandingEditorial /></Suspense>} />,
-  <Route key="landing-brutalist-preview" path="/preview/landing-brutalist" element={<Suspense fallback={<RouteLoading />}><LandingBrutalist /></Suspense>} />,
-  <Route key="landing-luxury-preview" path="/preview/landing-luxury" element={<Suspense fallback={<RouteLoading />}><LandingLuxury /></Suspense>} />,
-  <Route key="landing-bazaar-preview" path="/preview/landing-bazaar" element={<Suspense fallback={<RouteLoading />}><LandingBazaar /></Suspense>} />,
-  <Route key="landing-truckart-preview" path="/preview/landing-truckart" element={<Suspense fallback={<RouteLoading />}><LandingTruckart /></Suspense>} />,
-  <Route key="landing-y2k-preview" path="/preview/landing-y2k" element={<Suspense fallback={<RouteLoading />}><LandingY2k /></Suspense>} />,
-  <Route key="landing-showroom-preview" path="/preview/landing-showroom" element={<Suspense fallback={<RouteLoading />}><LandingShowroom /></Suspense>} />,
-  <Route key="landing-scrapbook-preview" path="/preview/landing-scrapbook" element={<Suspense fallback={<RouteLoading />}><LandingScrapbook /></Suspense>} />,
+  <Route key="mk-industries" path="/industries" element={<Suspense fallback={<RouteLoading />}><MarketingIndustriesIndex /></Suspense>} />,
+  <Route key="mk-industry" path="/industries/:slug" element={<Suspense fallback={<RouteLoading />}><MarketingIndustry /></Suspense>} />,
+  <Route key="mk-pricing" path="/pricing" element={<Suspense fallback={<RouteLoading />}><MarketingPricing /></Suspense>} />,
+  <Route key="mk-why" path="/why-sanopos" element={<Suspense fallback={<RouteLoading />}><MarketingWhy /></Suspense>} />,
   <Route key="setup" path="/setup" element={<SetupWizard />} />,
   <Route key="login" path="/login" element={<Suspense fallback={<RouteLoading />}><LoginPage /></Suspense>} />,
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
