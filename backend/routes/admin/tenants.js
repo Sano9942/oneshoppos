@@ -539,12 +539,18 @@ module.exports = function registerTenantRoutes(app, deps) {
       const tenantDb = await tenantDbManager.getDb(tenant.id);
       const { rows } = await tenantDb.query("SELECT key, enabled, description FROM feature_flags ORDER BY key");
       const rowMap = new Map(rows.map((r) => [r.key, r]));
-      const mergedDefaults = Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => {
+      // Union of DEFAULT_FEATURE_FLAGS keys AND DB rows. DB-seeded flags that
+      // are not in defaults (fbr_integration is the canonical case) used to be
+      // silently dropped here, making them invisible/un-toggleable in /admin.
+      const merged = Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => {
         const existing = rowMap.get(key);
         if (existing) return existing;
         return { key, enabled: !!DEFAULT_FEATURE_FLAGS[key], description: null };
       });
-      return res.json(mergedDefaults.sort((a, b) => a.key.localeCompare(b.key)));
+      for (const row of rows) {
+        if (!(row.key in DEFAULT_FEATURE_FLAGS)) merged.push(row);
+      }
+      return res.json(merged.sort((a, b) => a.key.localeCompare(b.key)));
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -576,6 +582,137 @@ module.exports = function registerTenantRoutes(app, deps) {
       logAdminAction(req.admin.email, "feature_flag_toggled", "tenant", req.params.id, { key, enabled: !!enabled }, req.ip);
       return res.json({ message: "Feature flag updated" });
     } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Modes (per-tenant tenant_modes) ────────────────────────────────────
+  app.get("/api/admin/tenants/:id/modes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { VALID_MODES, MODE_REGISTRY } = require("../../config/mode-registry");
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      let rowMap = new Map();
+      try {
+        const { rows } = await tenantDb.query("SELECT mode, enabled, enabled_at FROM tenant_modes");
+        rowMap = new Map(rows.map((r) => [r.mode, r]));
+      } catch { /* tenant_modes missing on pre-v31 schema */ }
+
+      return res.json(VALID_MODES.map((mode) => ({
+        mode,
+        enabled: rowMap.get(mode)?.enabled === true,
+        enabled_at: rowMap.get(mode)?.enabled_at || null,
+        description: MODE_REGISTRY[mode].description,
+        feature_flags: MODE_REGISTRY[mode].feature_flags_to_enable,
+      })));
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/tenants/:id/modes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { VALID_MODES, getFeatureFlagsForModes } = require("../../config/mode-registry");
+      const { invalidateModeCache } = require("../../middleware/feature-flags");
+      const { mode, enabled } = req.body || {};
+      if (!VALID_MODES.includes(mode)) return res.status(400).json({ error: `Unknown mode: ${mode}` });
+
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      await tenantDb.query(
+        `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (mode) DO UPDATE SET enabled = EXCLUDED.enabled, enabled_at = NOW()`,
+        [mode, !!enabled]
+      );
+      // Cascade the mode's registry flags — same semantics as a preset apply.
+      for (const flagKey of getFeatureFlagsForModes([mode])) {
+        await tenantDb.query(
+          `INSERT INTO feature_flags (key, enabled, updated_by, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [flagKey, !!enabled, `admin:${req.admin.email}`]
+        );
+      }
+
+      invalidateModeCache(tenant.id);
+      invalidateFeatureFlagCache(tenant.id);
+      logAdminAction(req.admin.email, "mode_toggled", "tenant", req.params.id, { mode, enabled: !!enabled }, req.ip);
+      return res.json({ message: "Mode updated" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Flag drift vs. preset-expected set ─────────────────────────────────
+  // expected = mode flags + preset extras + signup bundle (+ multi-outlet
+  // bundle when the tenant has >1 outlet). `missing` = expected but OFF
+  // (drift worth fixing). `extra` = ON but not expected and not a
+  // default-true platform flag — usually a legitimate manual opt-in, shown
+  // as informational only.
+  app.get("/api/admin/tenants/:id/flag-drift", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { expectedFlagsForPreset } = require("../../services/preset-apply");
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const { rows: [profile] } = await tenantDb.query("SELECT industry_type FROM company_profile WHERE id = 1");
+      const industryType = profile?.industry_type || null;
+      if (!industryType) return res.json({ industry_type: null, expected: [], missing: [], extra: [] });
+
+      const { rows: [outletRow] } = await tenantDb.query("SELECT COUNT(*)::int AS c FROM outlets");
+      const outletCount = outletRow?.c || 1;
+
+      const { rows: flagRows } = await tenantDb.query("SELECT key, enabled FROM feature_flags");
+      const enabledSet = new Set();
+      for (const [key, def] of Object.entries(DEFAULT_FEATURE_FLAGS)) { if (def) enabledSet.add(key); }
+      for (const r of flagRows) { if (r.enabled === true) enabledSet.add(r.key); else enabledSet.delete(r.key); }
+
+      const expected = expectedFlagsForPreset(industryType, { outletCount });
+      const missing = expected.filter((k) => !enabledSet.has(k));
+      const extra = [...enabledSet]
+        .filter((k) => !expected.includes(k) && DEFAULT_FEATURE_FLAGS[k] !== true)
+        .sort();
+
+      return res.json({ industry_type: industryType, outlet_count: outletCount, expected, missing, extra });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Re-apply preset (repair action) ────────────────────────────────────
+  app.post("/api/admin/tenants/:id/reapply-preset", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { applyPreset } = require("../../services/preset-apply");
+      const { invalidateModeCache } = require("../../middleware/feature-flags");
+      const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
+      const includeBundles = req.body?.include_bundles === true;
+
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      let industryType = req.body?.industry_type;
+      if (!industryType) {
+        const { rows: [profile] } = await tenantDb.query("SELECT industry_type FROM company_profile WHERE id = 1");
+        industryType = profile?.industry_type;
+      }
+      if (!industryType) return res.status(400).json({ error: "Tenant has no industry_type and none was supplied" });
+
+      const preset = await applyPreset(tenantDb, industryType, { includeBundles });
+
+      invalidateModeCache(tenant.id);
+      invalidateFeatureFlagCache(tenant.id);
+      invalidateCompanyProfileCache(tenant.id);
+      logAdminAction(req.admin.email, "preset_reapplied", "tenant", req.params.id,
+        { industry_type: industryType, include_bundles: includeBundles }, req.ip);
+      return res.json({ message: "Preset re-applied", industry_type: preset.industry_type, modes: preset.modes });
+    } catch (err) {
+      if (/Unknown industry_type/.test(err.message)) return res.status(400).json({ error: err.message });
       return res.status(500).json({ error: err.message });
     }
   });

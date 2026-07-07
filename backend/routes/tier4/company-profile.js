@@ -1,7 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { getPreset, VALID_INDUSTRY_TYPES, getExtraFlagsForPreset, ALL_PRESET_EXTRA_FLAGS } = require("../../config/industry-config");
-const { getFeatureFlagsForModes, VALID_MODES } = require("../../config/mode-registry");
+const { VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
 const { normalizeScheme } = require("../../services/embedded-barcode");
@@ -148,64 +147,13 @@ module.exports = function createCompanyProfileRouter({
             safeTaxMode,
           ]
         );
-        // If industry_type changed, re-derive modes and flags
+        // If industry_type changed, re-derive modes and flags. Sequence lives
+        // in services/preset-apply.js (shared with the super-admin
+        // reapply-preset action — change it there, not here). Bundles are
+        // deliberately NOT re-run on a tenant-side preset switch.
         if (industry_type && VALID_INDUSTRY_TYPES.includes(industry_type)) {
-          const preset = getPreset(industry_type);
-
-          await db.query(
-            `UPDATE company_profile SET
-               industry_type = $1,
-               business_model = $2,
-               industry_preset_version = 1
-             WHERE id = 1`,
-            [preset.industry_type, preset.business_model]
-          );
-
-          // Clear old modes and seed new ones
-          await db.query("DELETE FROM tenant_modes");
-          for (const mode of preset.modes) {
-            await db.query(
-              `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, true, NOW()) ON CONFLICT (mode) DO NOTHING`,
-              [mode]
-            );
-          }
-
-          // Disable all mode-related flags first, then enable the new preset's.
-          // Derived from MODE_REGISTRY so adding a new mode auto-extends the
-          // reset list — no more missed-a-flag bugs when a new mode ships
-          // (see M7 post-mortem: phase4_rentals was missed from the old
-          // hardcoded array, leaving stale flags on production tenants).
-          const ALL_MODE_FLAGS = getFeatureFlagsForModes(VALID_MODES);
-          for (const flagKey of ALL_MODE_FLAGS) {
-            await db.query(
-              `INSERT INTO feature_flags (key, enabled) VALUES ($1, false) ON CONFLICT (key) DO UPDATE SET enabled = false`,
-              [flagKey]
-            );
-          }
-          const flagsToEnable = getFeatureFlagsForModes(preset.modes);
-          for (const flagKey of flagsToEnable) {
-            await db.query(
-              `UPDATE feature_flags SET enabled = true WHERE key = $1`,
-              [flagKey]
-            );
-          }
-
-          // Preset extra flags (V04/V05/V07): F02/F03/F06 sub-features +
-          // preset-specific flags (e.g. gym member_checkin) that modes can't
-          // derive. Reset ALL known extras OFF, then flip this preset's ON —
-          // symmetric with the mode-flag reset above so a preset switch leaves
-          // no stale extras. INSERT-on-conflict covers tenants whose flag row
-          // predates the seeding migration.
-          for (const flagKey of ALL_PRESET_EXTRA_FLAGS) {
-            await db.query(`UPDATE feature_flags SET enabled = false WHERE key = $1`, [flagKey]);
-          }
-          for (const flagKey of getExtraFlagsForPreset(preset.industry_type)) {
-            await db.query(
-              `INSERT INTO feature_flags (key, enabled) VALUES ($1, true)
-               ON CONFLICT (key) DO UPDATE SET enabled = true`,
-              [flagKey]
-            );
-          }
+          const { applyPreset } = require("../../services/preset-apply");
+          await applyPreset(db, industry_type);
 
           // Bust caches so next request picks up changes
           invalidateModeCache();

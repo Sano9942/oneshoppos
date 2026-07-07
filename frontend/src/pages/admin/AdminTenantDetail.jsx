@@ -35,6 +35,33 @@ function usageColor(pct) {
   return "bg-(--ui-success-fg)";
 }
 
+// Grouping for the ~107-flag editor — prefix-driven, mirrors the domain
+// boundaries in backend/middleware/feature-flags.js comments.
+function flagGroup(key) {
+  if (key.startsWith("phase4_restaurant") || key === "delivery_aggregators") return "Restaurant";
+  if (key.startsWith("phase4_appointments") || key === "packages_passes" || key === "member_checkin") return "Appointments & memberships";
+  if (key.startsWith("phase4_service") || key === "phase4_contract_ai" || key === "phase4_workflow_tickets") return "Projects & tickets";
+  if (key === "phase4_rentals" || key.startsWith("rental_")) return "Rentals";
+  if (key === "phase4_room_management" || key.startsWith("room_")) return "Lodging";
+  if (key === "phase4_treatment_plans" || key.startsWith("clinical_") || key === "vet_vaccinations" || key === "custom_forms") return "Clinical";
+  if (key.startsWith("wholesale_")) return "Wholesale";
+  if (key.startsWith("phase2g_") || ["retail_weekly_digest", "receipt_designer_v2", "shift_auto_close", "offline_returns", "kit_bom_engine", "batch_expiry_tracking"].includes(key)) return "Retail";
+  if (key.startsWith("phase5_") || ["marketplace_integrations", "fbr_integration", "e_invoicing_export"].includes(key)) return "Integrations & compliance";
+  if (key.startsWith("reports_")) return "Reports";
+  if (key.startsWith("phase2_")) return "Platform (phase 2)";
+  if (key.startsWith("context_") || key === "kiosk_context_locked") return "Context enforcement";
+  if (key.startsWith("subscription_") || key === "payment_links" || key === "customer_invoicing") return "Billing & subscriptions";
+  if (key.startsWith("sms_") || ["marketing_campaigns", "customer_messaging", "customer_notifications"].includes(key)) return "Marketing & messaging";
+  return "Core";
+}
+
+const FLAG_GROUP_ORDER = [
+  "Core", "Reports", "Platform (phase 2)", "Context enforcement", "Retail",
+  "Restaurant", "Appointments & memberships", "Clinical", "Projects & tickets",
+  "Rentals", "Lodging", "Wholesale", "Billing & subscriptions",
+  "Marketing & messaging", "Integrations & compliance",
+];
+
 export default function AdminTenantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -60,6 +87,12 @@ export default function AdminTenantDetail() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [editingPricing, setEditingPricing] = useState(null); // { id, price, cycle, plan }
   const [verticalUsage, setVerticalUsage] = useState(null);
+  const [modes, setModes] = useState([]);
+  const [drift, setDrift] = useState(null);
+  const [flagSearch, setFlagSearch] = useState("");
+  const [showReapply, setShowReapply] = useState(false);
+  const [reapplyBundles, setReapplyBundles] = useState(false);
+  const [reapplyLoading, setReapplyLoading] = useState(false);
 
   const loadTenant = async () => {
     try {
@@ -108,6 +141,8 @@ export default function AdminTenantDetail() {
       adminFetch(`/api/admin/tenants/${id}/feature-flags`).then(r => r.json()).then(setFeatureFlags).catch(() => {});
       adminFetch(`/api/admin/tenants/${id}/notes`).then(r => r.json()).then(setNotes).catch(() => {});
       adminFetch(`/api/admin/tenants/${id}/vertical-usage`).then(r => r.json()).then(setVerticalUsage).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/modes`).then(r => r.json()).then(d => setModes(Array.isArray(d) ? d : [])).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/flag-drift`).then(r => r.json()).then(setDrift).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -161,10 +196,52 @@ export default function AdminTenantDetail() {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setFeatureFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: !currentEnabled } : f));
+      adminFetch(`/api/admin/tenants/${id}/flag-drift`).then(r => r.json()).then(setDrift).catch(() => {});
     } catch (err) {
       alert(err.message);
     } finally {
       setFlagsLoading(false);
+    }
+  };
+
+  const refreshFlagData = () => {
+    adminFetch(`/api/admin/tenants/${id}/feature-flags`).then(r => r.json()).then(setFeatureFlags).catch(() => {});
+    adminFetch(`/api/admin/tenants/${id}/modes`).then(r => r.json()).then(d => setModes(Array.isArray(d) ? d : [])).catch(() => {});
+    adminFetch(`/api/admin/tenants/${id}/flag-drift`).then(r => r.json()).then(setDrift).catch(() => {});
+    adminFetch(`/api/admin/tenants/${id}/vertical-usage`).then(r => r.json()).then(setVerticalUsage).catch(() => {});
+  };
+
+  const toggleMode = async (mode, enabled) => {
+    setFlagsLoading(true);
+    try {
+      const res = await adminFetch(`/api/admin/tenants/${id}/modes`, {
+        method: "PUT",
+        body: JSON.stringify({ mode, enabled }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      refreshFlagData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setFlagsLoading(false);
+    }
+  };
+
+  const reapplyPreset = async () => {
+    setReapplyLoading(true);
+    try {
+      const res = await adminFetch(`/api/admin/tenants/${id}/reapply-preset`, {
+        method: "POST",
+        body: JSON.stringify({ include_bundles: reapplyBundles }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setShowReapply(false);
+      refreshFlagData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setReapplyLoading(false);
     }
   };
 
@@ -591,24 +668,24 @@ export default function AdminTenantDetail() {
             </div>
           )}
 
-          {/* Feature Flags */}
-          {featureFlags.length > 0 && (
+          {/* Modes */}
+          {modes.length > 0 && (
             <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Feature Flags</h2>
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Modes</h2>
               <div className="space-y-3">
-                {featureFlags.map(flag => (
-                  <div key={flag.key} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-(--ui-text)">{flag.key.replace(/_/g, " ")}</p>
-                      {flag.description && <p className="text-xs text-(--ui-text-muted)">{flag.description}</p>}
+                {modes.map((m) => (
+                  <div key={m.mode} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-(--ui-text)">{MODE_LABELS[m.mode] || m.mode}</p>
+                      <p className="truncate text-xs text-(--ui-text-muted)" title={m.description}>{m.description}</p>
                     </div>
                     <button
-                      onClick={() => toggleFlag(flag.key, flag.enabled)}
+                      onClick={() => toggleMode(m.mode, !m.enabled)}
                       disabled={flagsLoading}
                       className="shrink-0 disabled:opacity-50"
-                      title={flag.enabled ? "Disable" : "Enable"}
+                      title={m.enabled ? `Disable ${m.mode} (also turns its ${m.feature_flags.length} registry flags off)` : `Enable ${m.mode} (also turns its ${m.feature_flags.length} registry flags on)`}
                     >
-                      {flag.enabled ? (
+                      {m.enabled ? (
                         <ToggleRight size={28} className="text-(--ui-primary)" />
                       ) : (
                         <ToggleLeft size={28} className="text-(--ui-border-strong)" />
@@ -616,6 +693,134 @@ export default function AdminTenantDetail() {
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Feature Flags */}
+          {featureFlags.length > 0 && (() => {
+            const missingSet = new Set(drift?.missing || []);
+            const extraSet = new Set(drift?.extra || []);
+            const visible = featureFlags.filter((f) => !flagSearch || f.key.includes(flagSearch.toLowerCase().trim()));
+            const groups = new Map();
+            for (const f of visible) {
+              const g = flagGroup(f.key);
+              if (!groups.has(g)) groups.set(g, []);
+              groups.get(g).push(f);
+            }
+            const orderedGroups = [...FLAG_GROUP_ORDER.filter((g) => groups.has(g)), ...[...groups.keys()].filter((g) => !FLAG_GROUP_ORDER.includes(g))];
+            return (
+              <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                    Feature Flags <span className="ml-1 font-normal normal-case">({featureFlags.filter((f) => f.enabled).length}/{featureFlags.length} on)</span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={flagSearch}
+                      onChange={(e) => setFlagSearch(e.target.value)}
+                      placeholder="Search flags..."
+                      className="ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-1.5 text-xs text-(--ui-text) placeholder:text-(--ui-text-muted)"
+                    />
+                    {drift?.industry_type && (
+                      <button
+                        onClick={() => { setReapplyBundles(false); setShowReapply(true); }}
+                        className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)"
+                      >
+                        Re-apply preset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {missingSet.size > 0 && (
+                  <div className="mb-4 rounded-(--ui-radius-sm) border border-(--ui-warning-fg) bg-(--ui-warning-bg) p-3 text-xs text-(--ui-warning-fg)">
+                    <p className="font-semibold">Preset drift: {missingSet.size} expected {missingSet.size === 1 ? "flag is" : "flags are"} OFF</p>
+                    <p className="mt-1 break-words">{[...missingSet].join(", ")}</p>
+                    <p className="mt-1">"Re-apply preset" restores the preset-expected set.</p>
+                  </div>
+                )}
+
+                <div className="space-y-5">
+                  {orderedGroups.map((g) => (
+                    <div key={g}>
+                      <h3 className="mb-2 border-b border-(--ui-border) pb-1 text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted)">{g}</h3>
+                      <div className="space-y-2.5">
+                        {groups.get(g).map((flag) => (
+                          <div key={flag.key} className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <p className="text-sm font-medium text-(--ui-text)">{flag.key.replace(/_/g, " ")}</p>
+                              {missingSet.has(flag.key) && (
+                                <span className="rounded-full bg-(--ui-warning-bg) px-1.5 py-0.5 text-xs font-semibold text-(--ui-warning-fg)" title="Preset expects this flag ON">
+                                  expected on
+                                </span>
+                              )}
+                              {extraSet.has(flag.key) && (
+                                <span className="rounded-full bg-(--ui-muted-surface) px-1.5 py-0.5 text-xs font-semibold text-(--ui-text-muted)" title="Not part of this preset's expected set — manual opt-in">
+                                  manual
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => toggleFlag(flag.key, flag.enabled)}
+                              disabled={flagsLoading}
+                              className="shrink-0 disabled:opacity-50"
+                              title={flag.enabled ? "Disable" : "Enable"}
+                            >
+                              {flag.enabled ? (
+                                <ToggleRight size={28} className="text-(--ui-primary)" />
+                              ) : (
+                                <ToggleLeft size={28} className="text-(--ui-border-strong)" />
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Re-apply preset modal */}
+          {showReapply && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3" onClick={() => { if (!reapplyLoading) setShowReapply(false); }}>
+              <div className="w-full max-w-md rounded-(--ui-radius-lg) bg-white p-6 shadow-(--ui-shadow-lg)" onClick={(e) => e.stopPropagation()}>
+                <h2 className="mb-2 text-lg font-bold text-(--ui-text)">Re-apply preset</h2>
+                <p className="mb-3 text-sm text-(--ui-text-muted)">
+                  Resets modes and preset-derived flags for
+                  <span className="font-semibold text-(--ui-text)"> {industryLabel(drift?.industry_type)}</span>.
+                  Mode flags and preset extras are reset then re-enabled; flags outside the preset are untouched.
+                </p>
+                <label className="mb-4 flex items-start gap-2 text-sm text-(--ui-text)">
+                  <input
+                    type="checkbox"
+                    checked={reapplyBundles}
+                    onChange={(e) => setReapplyBundles(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Also re-run signup flag bundles
+                    <span className="block text-xs text-(--ui-text-muted)">Re-enables the industry's signup bundle (loyalty, SMS, COD…). May re-enable flags the owner deliberately turned off.</span>
+                  </span>
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowReapply(false)}
+                    disabled={reapplyLoading}
+                    className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-2 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong) disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={reapplyPreset}
+                    disabled={reapplyLoading}
+                    className="ui-focus-ring rounded-full bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:opacity-60"
+                  >
+                    {reapplyLoading ? "Applying..." : "Re-apply"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
