@@ -37,6 +37,7 @@ const PUBLIC_TENANT_PARAM_PATHS = [
   /^\/api\/setup\//,                 // first-run wizard (setup_token-gated)
   /^\/api\/health/,                  // health check
   /^\/api\/company-profile\/currency$/, // CurrencyProvider bootstrap before auth — read-only currency symbol + denominations (anchored: must NOT expose full profile GET/PUT)
+  /^\/api\/billing\/pricing$/,       // public plan pricing for the marketing /pricing page — reads public.plan_pricing only, no tenant scope attached (anchored: other /api/billing/* stays authenticated)
 ];
 
 const CONTEXT_EXEMPT_PATHS = [
