@@ -10,6 +10,7 @@ import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 import DentalChart from "./treatment/DentalChart";
 import BodyChart from "./treatment/BodyChart";
+import AllergyBanner, { matchAllergies } from "./treatment/AllergyBanner";
 
 // ── Shared constants ─────────────────────────────────────────────────
 
@@ -340,6 +341,8 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
   const [completingSession, setCompletingSession] = useState(null);
   const [chartEntries, setChartEntries] = useState([]);
   const [chartAreas, setChartAreas] = useState([]);
+  const [subject, setSubject] = useState(null); // V05 — safety banner + vaccine card
+  const { flags } = useFeatureFlags();
   const toast = useToast();
   const { fmt } = useCurrency();
   const navigate = useNavigate();
@@ -375,6 +378,14 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (innerTab === "chart") loadChart(); }, [innerTab, loadChart]);
+
+  // V05 — resolve the plan's subject for the allergy banner + vaccine card.
+  useEffect(() => {
+    if (!plan?.subject_id || !plan?.customer_id) { setSubject(null); return; }
+    api.get("/api/patient-subjects", { customer_id: plan.customer_id })
+      .then((r) => setSubject((r.subjects || []).find((s) => s.id === plan.subject_id) || null))
+      .catch(() => setSubject(null));
+  }, [plan?.subject_id, plan?.customer_id]);
 
   const handleStatusTransition = async (action) => {
     try {
@@ -416,6 +427,7 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
 
   return (
     <div className="space-y-4">
+      <AllergyBanner subject={subject} />
       <SectionCard>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -427,6 +439,9 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
               <span className="font-mono">{plan.plan_number}</span> · {plan.customer_name}
               {plan.subject_name && <> · <em>{plan.subject_name}</em></>}
               {plan.provider_name && <> · Dr. {plan.provider_name}</>}
+              {flags.vet_vaccinations && plan.subject_id && (
+                <> · <Link to={`/vaccination-card/${plan.subject_id}`} className="text-(--ui-link) hover:underline">Vaccination card</Link></>
+              )}
             </div>
             <div className="text-xs text-(--ui-text-muted) mt-1">
               Progress: {plan.sessions_completed || 0} / {plan.total_sessions_planned} sessions ({plan.progress_pct || 0}%)
@@ -484,6 +499,7 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
         <SessionCompleteModal
           session={completingSession}
           chartAreas={chartAreas}
+          subject={subject}
           onClose={() => setCompletingSession(null)}
           onCompleted={() => { setCompletingSession(null); load(); }}
         />
@@ -630,7 +646,7 @@ function SessionsPanel({ plan, onReload, onCompleteClick }) {
 
 // ── Session complete modal ───────────────────────────────────────────
 
-function SessionCompleteModal({ session, chartAreas, onClose, onCompleted }) {
+function SessionCompleteModal({ session, chartAreas, subject, onClose, onCompleted }) {
   const [soap, setSoap] = useState({ subjective: "", objective: "", assessment: "", plan: "" });
   const [vitals, setVitals] = useState({
     blood_pressure_sys: "", blood_pressure_dia: "", heart_rate: "", temperature_c: "", pain_score: "",
@@ -668,7 +684,13 @@ function SessionCompleteModal({ session, chartAreas, onClose, onCompleted }) {
         prescriptions: rxList.filter((rx) => rx.medication_name),
         chart_entries: chartEntries.filter((ce) => ce.area_code && ce.condition_code),
       };
-      await api.post(`/api/treatment-sessions/${session.id}/complete`, payload);
+      const res = await api.post(`/api/treatment-sessions/${session.id}/complete`, payload);
+      // V05 — server-side name-match allergy backstop (advisory, never a block)
+      if (res?.allergy_warnings?.length) {
+        for (const w of res.allergy_warnings) {
+          toast.warning(`⚠ ${w.medication_name} name-matches recorded allergy: ${w.matched_allergies.join(", ")}`);
+        }
+      }
       toast.success("Session completed");
       onCompleted();
     } catch (err) {
@@ -725,18 +747,29 @@ function SessionCompleteModal({ session, chartAreas, onClose, onCompleted }) {
             <h4 className="text-sm font-semibold">Prescriptions ({rxList.length})</h4>
             <Button size="sm" onClick={addRx}><Plus className="w-3 h-3 inline" /> Add</Button>
           </div>
-          {rxList.map((rx, i) => (
-            <div key={i} className="grid grid-cols-6 gap-1 mb-1 text-xs items-center">
-              <Input className="col-span-2" placeholder="Medication" value={rx.medication_name} onChange={(e) => updateRx(i, "medication_name", e.target.value)} />
-              <Input placeholder="Strength" value={rx.strength} onChange={(e) => updateRx(i, "strength", e.target.value)} />
-              <Input placeholder="Dosage" value={rx.dosage} onChange={(e) => updateRx(i, "dosage", e.target.value)} />
-              <Input placeholder="Frequency" value={rx.frequency} onChange={(e) => updateRx(i, "frequency", e.target.value)} />
-              <div className="flex gap-1">
-                <Input placeholder="Duration" value={rx.duration} onChange={(e) => updateRx(i, "duration", e.target.value)} />
-                <Button size="sm" tone="plain" onClick={() => removeRx(i)}><X className="w-3 h-3" /></Button>
+          {rxList.length > 0 && <div className="mb-2"><AllergyBanner subject={subject} compact /></div>}
+          {rxList.map((rx, i) => {
+            const hits = matchAllergies(subject, rx.medication_name);
+            return (
+              <div key={i} className="mb-1">
+                <div className="grid grid-cols-6 gap-1 text-xs items-center">
+                  <Input className="col-span-2" placeholder="Medication" value={rx.medication_name} onChange={(e) => updateRx(i, "medication_name", e.target.value)} />
+                  <Input placeholder="Strength" value={rx.strength} onChange={(e) => updateRx(i, "strength", e.target.value)} />
+                  <Input placeholder="Dosage" value={rx.dosage} onChange={(e) => updateRx(i, "dosage", e.target.value)} />
+                  <Input placeholder="Frequency" value={rx.frequency} onChange={(e) => updateRx(i, "frequency", e.target.value)} />
+                  <div className="flex gap-1">
+                    <Input placeholder="Duration" value={rx.duration} onChange={(e) => updateRx(i, "duration", e.target.value)} />
+                    <Button size="sm" tone="plain" onClick={() => removeRx(i)}><X className="w-3 h-3" /></Button>
+                  </div>
+                </div>
+                {hits.length > 0 && (
+                  <div className="text-[11px] text-(--ui-danger) mt-0.5">
+                    ⚠ Name-matches recorded allergy: {hits.join(", ")} (name-match check only)
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div>
@@ -1456,19 +1489,34 @@ function TemplateFormModal({ template, onClose, onSaved }) {
     default_sessions_planned: template?.default_sessions_planned || 1,
     default_estimated_total: template?.default_estimated_total || 0,
     default_notes: template?.default_notes || "",
+    // V05 — recall config + folio-tax source (copied onto plans at creation)
+    recall_interval_months: template?.recall_interval_months || "",
+    recall_type: template?.recall_type || "checkup",
+    tax_id: template?.tax_id || "",
   });
+  const [taxes, setTaxes] = useState([]);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+
+  useEffect(() => {
+    api.get("/api/taxes").then((d) => setTaxes(d.taxes || d || [])).catch(() => {});
+  }, []);
 
   const submit = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
     setSaving(true);
     try {
+      const body = {
+        ...form,
+        // 0 clears the value server-side (NULLIF pattern) — "" means untouched
+        recall_interval_months: form.recall_interval_months === "" ? (template ? 0 : null) : Number(form.recall_interval_months),
+        tax_id: form.tax_id === "" ? (template ? 0 : null) : Number(form.tax_id),
+      };
       if (template) {
-        await api.put(`/api/treatment-plan-templates/${template.id}`, form);
+        await api.put(`/api/treatment-plan-templates/${template.id}`, body);
         toast.success("Template updated");
       } else {
-        await api.post("/api/treatment-plan-templates", form);
+        await api.post("/api/treatment-plan-templates", body);
         toast.success("Template created");
       }
       onSaved();
@@ -1506,7 +1554,31 @@ function TemplateFormModal({ template, onClose, onSaved }) {
         <Field label="Default notes" full>
           <Input value={form.default_notes} onChange={(e) => setForm({ ...form, default_notes: e.target.value })} />
         </Field>
+        <Field label="Recall interval (months)">
+          <Input
+            type="number" min="1" max="120" placeholder="e.g. 6 — blank = no recall"
+            value={form.recall_interval_months}
+            onChange={(e) => setForm({ ...form, recall_interval_months: e.target.value })}
+          />
+        </Field>
+        <Field label="Recall type">
+          <Select value={form.recall_type} onChange={(e) => setForm({ ...form, recall_type: e.target.value })}>
+            <option value="checkup">Checkup</option>
+            <option value="hygiene">Hygiene</option>
+            <option value="follow_up">Follow-up</option>
+          </Select>
+        </Field>
+        <Field label="Session-fee tax" full>
+          <Select value={form.tax_id} onChange={(e) => setForm({ ...form, tax_id: e.target.value })}>
+            <option value="">Untaxed</option>
+            {taxes.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.rate}%)</option>)}
+          </Select>
+        </Field>
       </div>
+      <p className="text-[11px] text-(--ui-text-muted) mt-2">
+        Completing a plan or session made from this template automatically arms the recall
+        — the patient appears in Recalls and gets a "time for your {form.recall_type}" reminder.
+      </p>
       <div className="flex justify-end gap-2 mt-4">
         <Button tone="plain" onClick={onClose}>Cancel</Button>
         <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>

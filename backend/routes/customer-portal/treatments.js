@@ -22,6 +22,7 @@ module.exports = function registerCustomerPortalTreatments(app, deps) {
       const { rows } = await req.db.query(
         `SELECT p.id, p.plan_number, p.title, p.status, p.start_date, p.expected_end_date,
                 p.sessions_completed, p.total_sessions_planned, p.final_invoice_id,
+                p.subject_id,
                 ps.name AS subject_name, ps.subject_type,
                 e.name AS provider_name,
                 ci.invoice_number, ci.balance_due
@@ -50,7 +51,7 @@ module.exports = function registerCustomerPortalTreatments(app, deps) {
         `SELECT p.id, p.plan_number, p.title, p.status,
                 p.start_date, p.expected_end_date, p.actual_end_date,
                 p.sessions_completed, p.total_sessions_planned, p.final_invoice_id,
-                p.diagnosis_code,
+                p.diagnosis_code, p.subject_id,
                 ps.name AS subject_name, ps.subject_type,
                 e.name AS provider_name
          FROM treatment_plans p

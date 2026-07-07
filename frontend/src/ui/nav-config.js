@@ -215,6 +215,9 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Calendar", path: "/treatment-plans/calendar", icon: Calendar, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
       { name: "Lab Orders", path: "/treatment-plans/labs", icon: FileText, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
       { name: "Templates", path: "/treatment-plans/templates", icon: ClipboardList, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
+      // V05 clinical depth — overdue-patients recall list + physio handout library
+      { name: "Recalls", path: "/recalls", icon: CalendarDays, requiredPerm: "manage_treatment_plans", requiredFlag: "clinical_recalls", requiredMode: "treatment_plans" },
+      { name: "Handouts", path: "/handouts", icon: FileText, requiredPerm: "manage_treatment_plans", requiredFlag: "clinical_handouts", requiredMode: "treatment_plans" },
     ],
   },
   {

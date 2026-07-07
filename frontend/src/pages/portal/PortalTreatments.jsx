@@ -12,6 +12,8 @@ export default function PortalTreatments() {
   const [plans, setPlans] = useState([]);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [handouts, setHandouts] = useState([]); // V05 — docs shared by the clinic
+  const [vaxCard, setVaxCard] = useState(null); // V05 — per-pet vaccination card
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -20,6 +22,11 @@ export default function PortalTreatments() {
     try {
       const res = await portalApi.get(tenantSlug, "/api/portal/me/treatment-plans");
       setPlans(res.plans || []);
+      // Non-fatal — the handouts endpoint may be feature-gated off.
+      try {
+        const h = await portalApi.get(tenantSlug, "/api/portal/me/handouts");
+        setHandouts(h.handouts || []);
+      } catch { /* section simply hidden */ }
     } catch (err) {
       setError(err.message || "Failed to load plans");
     } finally {
@@ -32,9 +39,17 @@ export default function PortalTreatments() {
   async function openDetail(planId) {
     setSelected(planId);
     setDetail(null);
+    setVaxCard(null);
     try {
       const d = await portalApi.get(tenantSlug, `/api/portal/me/treatment-plans/${planId}`);
       setDetail(d);
+      // V05 — vaccination card for pet subjects (read-only, owner-scoped)
+      if (d?.plan?.subject_type === "pet" && d?.plan?.subject_id) {
+        try {
+          const card = await portalApi.get(tenantSlug, `/api/portal/me/subjects/${d.plan.subject_id}/vaccination-card`);
+          if (card?.records?.length) setVaxCard(card);
+        } catch { /* section simply hidden */ }
+      }
     } catch (err) {
       setError(err.message || "Failed to load plan detail");
     }
@@ -189,6 +204,31 @@ export default function PortalTreatments() {
           </Section>
         )}
 
+        {vaxCard && (
+          <Section title={`Vaccination card — ${vaxCard.subject?.name || ""}`}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-(--ui-text-muted) border-b">
+                  <th className="py-1.5">Date</th>
+                  <th>Vaccine</th>
+                  <th>Batch</th>
+                  <th>Next due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vaxCard.records.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0">
+                    <td className="py-1.5 text-xs">{r.administered_at}</td>
+                    <td className="font-medium">{r.vaccine_name}</td>
+                    <td className="text-xs text-(--ui-text-muted)">{r.batch_number || "—"}</td>
+                    <td className="text-xs">{r.next_due || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+        )}
+
         {detail.plan.invoice_number && (
           <Section title="Invoice">
             <div className="text-sm">
@@ -206,6 +246,24 @@ export default function PortalTreatments() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">My Treatment Plans</h1>
+      {handouts.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Documents from your clinic</h2>
+          <ul className="bg-(--ui-surface) rounded-lg border border-(--ui-border) divide-y divide-(--ui-border)">
+            {handouts.map((h) => (
+              <li key={h.id} className="p-3 text-sm flex justify-between items-center gap-3">
+                <div>
+                  <a href={h.file_url} target="_blank" rel="noreferrer" className="text-(--ui-link) font-medium">
+                    {h.title}
+                  </a>
+                  {h.subject_name && <span className="text-xs text-(--ui-text-muted) ml-2">for {h.subject_name}</span>}
+                </div>
+                <span className="text-xs text-(--ui-text-muted)">{fmtDateTime(h.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {plans.length === 0 ? (
         <div className="text-sm text-(--ui-text-muted)">No treatment plans on file.</div>
       ) : (

@@ -85,7 +85,15 @@ const EMPTY_SUBJECT = {
   weight_kg: "",
   identifier: "",
   notes: "",
+  // V05 structured safety data — comma-separated in the form, arrays on the API
+  allergies: "",
+  medical_alerts: "",
+  current_medications: "",
 };
+
+// Comma-separated form field ⇄ string-array API field.
+const splitList = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+const joinList = (a) => (Array.isArray(a) ? a.join(", ") : "");
 
 const BLOOD_GROUPS = ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
@@ -305,6 +313,9 @@ export default function CustomersRedesign() {
       weight_kg: subject.weight_kg != null ? String(subject.weight_kg) : "",
       identifier: subject.identifier || "",
       notes: subject.notes || "",
+      allergies: joinList(subject.allergies),
+      medical_alerts: joinList(subject.medical_alerts),
+      current_medications: joinList(subject.current_medications),
     });
     setSubjectError("");
     setSubjectModalOpen(true);
@@ -328,6 +339,9 @@ export default function CustomersRedesign() {
       weight_kg: subjectForm.weight_kg === "" ? null : Number(subjectForm.weight_kg),
       identifier: subjectForm.identifier.trim() || null,
       notes: subjectForm.notes.trim() || null,
+      allergies: splitList(subjectForm.allergies),
+      medical_alerts: splitList(subjectForm.medical_alerts),
+      current_medications: splitList(subjectForm.current_medications),
     };
     setSubjectSaving(true);
     setSubjectError("");
@@ -1875,11 +1889,38 @@ export default function CustomersRedesign() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Allergies (comma-separated)</label>
+                  <Input
+                    placeholder="Penicillin, Latex…"
+                    value={subjectForm.allergies}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, allergies: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Medical alerts (comma-separated)</label>
+                  <Input
+                    placeholder="Diabetic, Pacemaker…"
+                    value={subjectForm.medical_alerts}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, medical_alerts: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Current medications (comma-separated)</label>
+                  <Input
+                    placeholder="Metformin 500mg…"
+                    value={subjectForm.current_medications}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, current_medications: e.target.value }))}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-medium text-(--ui-text-muted)">Notes</label>
                 <textarea
                   className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text) min-h-16 resize-y"
-                  placeholder="Relationship, allergies, special notes..."
+                  placeholder="Relationship, special notes..."
                   value={subjectForm.notes}
                   onChange={(e) => setSubjectForm((p) => ({ ...p, notes: e.target.value }))}
                 />

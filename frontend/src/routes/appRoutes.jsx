@@ -124,6 +124,9 @@ const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
 const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
 const RoomManagementRoute = lazy(() => import("../pages/RoomManagementRoute"));
 const TreatmentPlansRoute = lazy(() => import("../pages/TreatmentPlansRoute"));
+const RecallsRedesign = lazy(() => import("../pages/redesign/RecallsRedesign"));
+const VaccinationCardRedesign = lazy(() => import("../pages/redesign/treatment/VaccinationCardRedesign"));
+const HandoutsRedesign = lazy(() => import("../pages/redesign/HandoutsRedesign"));
 const OrderKiosksRoute = lazy(() => import("../pages/OrderKiosksRoute"));
 const FormsRoute = lazy(() => import("../pages/FormsRoute"));
 
@@ -311,6 +314,14 @@ export const appRoutes = [
     <Route path="/treatment-plans/templates" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/chart/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+
+    {/* V05 — clinical depth: recalls (overdue patients), per-pet vaccination
+        card, physio handout library. Flag checks (clinical_recalls /
+        vet_vaccinations / clinical_handouts) are inline in each page; front
+        desk with view_reports can read, so no perm() wrapper here. */}
+    <Route path="/recalls" element={wrap(RecallsRedesign)} />
+    <Route path="/vaccination-card/:subjectId" element={wrap(VaccinationCardRedesign)} />
+    <Route path="/handouts" element={wrap(HandoutsRedesign)} />
 
     {/* F03 — Form builder (intake/waivers/questionnaires). Flag check inline. */}
     <Route path="/settings/forms" element={perm("manage_forms", wrap(FormsRoute))} />
