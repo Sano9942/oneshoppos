@@ -15,6 +15,7 @@
 const crypto = require("crypto");
 const qrcode = require("qrcode");
 const totp = require("../../services/admin-totp");
+const loginAlert = require("../../services/admin-login-alert");
 const { adminTotpLimiter } = require("../../middleware/rate-limit");
 
 // Access tokens are short-lived (1h) and paired with a rotating refresh token
@@ -112,8 +113,12 @@ module.exports = function registerAuthRoutes(app, deps) {
         return res.json({ totp_required: true, pending_token: pendingToken });
       }
 
+      // Anomaly check runs BEFORE we log this login_success, so the current
+      // login can't count itself as "seen".
+      const newIp = await loginAlert.isNewLoginIp(db, admin.email, req.ip);
       const token = await issueAdminSession(admin, req, res);
       logSecurityEvent("login_success", email, req.ip, req.headers["user-agent"], null);
+      if (newIp) loginAlert.alertNewLoginIp({ email: admin.email, ip: req.ip, userAgent: req.headers["user-agent"] }).catch(() => {});
       return res.json({ token, admin: { id: admin.id, name: admin.name, email: admin.email } });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -167,9 +172,11 @@ module.exports = function registerAuthRoutes(app, deps) {
         return res.status(401).json({ error: "Invalid code" });
       }
 
+      const newIp = await loginAlert.isNewLoginIp(db, admin.email, req.ip);
       const token = await issueAdminSession(admin, req, res);
       logSecurityEvent("totp_success", admin.email, req.ip, req.headers["user-agent"], usedRecovery ? { recovery: true } : null);
       logSecurityEvent("login_success", admin.email, req.ip, req.headers["user-agent"], usedRecovery ? { via: "recovery_code" } : { via: "totp" });
+      if (newIp) loginAlert.alertNewLoginIp({ email: admin.email, ip: req.ip, userAgent: req.headers["user-agent"] }).catch(() => {});
       return res.json({ token, admin: { id: admin.id, name: admin.name, email: admin.email }, used_recovery: usedRecovery });
     } catch (err) {
       return res.status(500).json({ error: err.message });
