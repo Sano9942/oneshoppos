@@ -15,6 +15,7 @@ const AdminActivity = lazy(() => import("../pages/admin/AdminActivity"));
 const AdminStuckPayments = lazy(() => import("../pages/admin/AdminStuckPayments"));
 const AdminBilling = lazy(() => import("../pages/admin/AdminBilling"));
 const AdminAdoption = lazy(() => import("../pages/admin/AdminAdoption"));
+const AdminSecurity = lazy(() => import("../pages/admin/AdminSecurity"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 
@@ -32,5 +33,6 @@ export const adminRoutes = [
     <Route path="stuck-payments" element={wrap(AdminStuckPayments)} />
     <Route path="billing" element={wrap(AdminBilling)} />
     <Route path="adoption" element={wrap(AdminAdoption)} />
+    <Route path="security" element={wrap(AdminSecurity)} />
   </Route>,
 ];

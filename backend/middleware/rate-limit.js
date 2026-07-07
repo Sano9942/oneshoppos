@@ -245,6 +245,19 @@ const pinValidateLimiter = rateLimit({
   },
 });
 
+// Hard limiter for the second-step admin TOTP endpoint — 5 attempts / 15 min
+// per IP. Deliberately tight: this is the last gate before a super-admin token
+// is issued, and each attempt is a 6-digit / recovery-code guess.
+const adminTotpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => `admin-totp:${req.ip}`,
+});
+
 module.exports = {
   globalLimiter,
   authLimiter,
@@ -259,4 +272,5 @@ module.exports = {
   manufacturerPortalAuthLimiter,
   manufacturerPortalDataLimiter,
   pinValidateLimiter,
+  adminTotpLimiter,
 };

@@ -9522,6 +9522,40 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 125,
+    description:
+      "Admin 2FA (Batch B1) — TOTP columns on public.super_admins: totp_secret (base32, plaintext — needed to verify codes), totp_enabled_at (NULL = not enrolled), recovery_codes (JSONB array of bcrypt hashes, single-use). Public table, so per-tenant passes are harmless no-ops.",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE public.super_admins ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+        ALTER TABLE public.super_admins ADD COLUMN IF NOT EXISTS totp_enabled_at TIMESTAMPTZ;
+        ALTER TABLE public.super_admins ADD COLUMN IF NOT EXISTS recovery_codes JSONB;
+      `);
+    },
+  },
+  {
+    version: 126,
+    description:
+      "Admin session hardening (Batch B2) — public.admin_sessions: hashed refresh tokens with per-token jti for rotation + revocation. Access tokens drop to 1h; refresh flow mirrors tenant_refresh_tokens. Public table, so per-tenant passes are harmless no-ops.",
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.admin_sessions (
+          id          SERIAL PRIMARY KEY,
+          admin_id    INTEGER NOT NULL REFERENCES public.super_admins(id) ON DELETE CASCADE,
+          token_hash  TEXT NOT NULL,
+          jti         TEXT NOT NULL,
+          user_agent  TEXT,
+          ip_address  TEXT,
+          expires_at  TIMESTAMPTZ NOT NULL,
+          revoked_at  TIMESTAMPTZ,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_admin_sessions_token_hash ON public.admin_sessions (token_hash);
+        CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON public.admin_sessions (admin_id, revoked_at);
+      `);
+    },
+  },
 ];
 
 /**
