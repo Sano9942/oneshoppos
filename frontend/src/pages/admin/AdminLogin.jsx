@@ -12,12 +12,43 @@ import {
 export { writeAdminSession, getAdminToken } from "../../auth/adminAuthStore";
 export { clearAdminSession, getAdminSession } from "../../auth/adminAuthStore";
 
-export function adminFetch(path, options = {}) {
-  const token = getAdminToken();
-  return fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...options.headers },
+// Silent refresh: exchange the httpOnly refresh cookie for a new access token.
+// Coalesced so concurrent 401s trigger only one refresh call.
+let _adminRefreshPromise = null;
+async function refreshAdminToken() {
+  const res = await fetch(`${API_BASE}/api/admin/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
   });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!data?.token) return null;
+  const session = readAdminSession() || {};
+  writeAdminSession({ ...session, token: data.token, loadedAt: Date.now() });
+  return data.token;
+}
+
+export async function adminFetch(path, options = {}) {
+  const doFetch = (tok) =>
+    fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}`, ...options.headers },
+    });
+
+  let res = await doFetch(getAdminToken());
+  if (res.status === 401) {
+    let body = null;
+    try { body = await res.clone().json(); } catch { /* non-JSON 401 */ }
+    if (body?.code === "TOKEN_EXPIRED") {
+      if (!_adminRefreshPromise) {
+        _adminRefreshPromise = refreshAdminToken().finally(() => { _adminRefreshPromise = null; });
+      }
+      const newToken = await _adminRefreshPromise;
+      if (newToken) res = await doFetch(newToken);
+    }
+  }
+  return res;
 }
 
 export default function AdminLogin() {
@@ -51,6 +82,7 @@ export default function AdminLogin() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password: password.trim() }),
       });
@@ -77,6 +109,7 @@ export default function AdminLogin() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/auth/totp`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pending_token: pendingToken, code: code.trim() }),
       });

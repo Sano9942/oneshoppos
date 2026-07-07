@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ShieldCheck, ShieldOff, KeyRound, Copy, Check } from "lucide-react";
+import { ShieldCheck, ShieldOff, KeyRound, Copy, Check, Monitor } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 // Super-admin account security. B1: TOTP 2FA enrollment / disable.
@@ -21,6 +21,10 @@ export default function AdminSecurity() {
   const [disableCode, setDisableCode] = useState("");
   const [showDisable, setShowDisable] = useState(false);
 
+  // active sessions
+  const [sessions, setSessions] = useState([]);
+  const [revoking, setRevoking] = useState(false);
+
   const loadStatus = useCallback(() => {
     setLoading(true);
     adminFetch("/api/admin/auth/totp/status")
@@ -30,7 +34,25 @@ export default function AdminSecurity() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { loadStatus(); }, [loadStatus]);
+  const loadSessions = useCallback(() => {
+    adminFetch("/api/admin/auth/sessions")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load sessions"))))
+      .then((res) => setSessions(res.sessions || []))
+      .catch(() => { /* non-fatal */ });
+  }, []);
+
+  useEffect(() => { loadStatus(); loadSessions(); }, [loadStatus, loadSessions]);
+
+  const revokeOthers = async () => {
+    setRevoking(true); setError("");
+    try {
+      const res = await adminFetch("/api/admin/auth/sessions/revoke-others", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Revoke failed");
+      loadSessions();
+    } catch (err) { setError(err.message); }
+    finally { setRevoking(false); }
+  };
 
   const startSetup = async () => {
     setBusy(true); setError("");
@@ -232,6 +254,46 @@ export default function AdminSecurity() {
             </button>
           </>
         )}
+      </div>
+
+      {/* Active sessions */}
+      <div className="mt-4 rounded-(--ui-radius-lg) border border-(--ui-border) bg-(--ui-surface) p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Monitor size={18} className="text-(--ui-text)" />
+            <h2 className="text-base font-bold text-(--ui-text)">Active sessions</h2>
+          </div>
+          {sessions.length > 1 && (
+            <button
+              onClick={revokeOthers}
+              disabled={revoking}
+              className="ui-focus-ring rounded-full border border-(--ui-danger) px-3 py-1 text-xs font-semibold text-(--ui-danger) hover:bg-(--ui-danger)/10 disabled:opacity-50"
+            >
+              {revoking ? "Revoking…" : "Sign out other sessions"}
+            </button>
+          )}
+        </div>
+        <div className="mt-3 divide-y divide-(--ui-border)">
+          {sessions.length === 0 ? (
+            <p className="text-sm text-(--ui-text-muted)">No active sessions.</p>
+          ) : (
+            sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate text-(--ui-text)">{s.user_agent || "Unknown device"}</p>
+                  <p className="text-xs text-(--ui-text-muted)">
+                    {s.ip_address || "—"} · signed in {new Date(s.created_at).toLocaleString()}
+                  </p>
+                </div>
+                {s.current && (
+                  <span className="ml-3 shrink-0 rounded-full bg-(--ui-success)/15 px-2 py-0.5 text-xs font-semibold text-(--ui-success)">
+                    This device
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

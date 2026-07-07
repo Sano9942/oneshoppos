@@ -12,24 +12,68 @@
  *   POST /api/admin/auth/totp/disable   — (logged-in) disable 2FA (requires a current code).
  *   GET  /api/admin/auth/totp/status    — (logged-in) { enabled }.
  */
+const crypto = require("crypto");
 const qrcode = require("qrcode");
 const totp = require("../../services/admin-totp");
 const { adminTotpLimiter } = require("../../middleware/rate-limit");
 
+// Access tokens are short-lived (1h) and paired with a rotating refresh token
+// (7d) stored hashed in public.admin_sessions. The frontend adminFetch silently
+// refreshes on a 401 TOKEN_EXPIRED — mirrors the tenant AuthProvider flow.
+const ADMIN_ACCESS_TTL = process.env.ADMIN_ACCESS_TTL || "1h";
+const ADMIN_REFRESH_TTL = process.env.ADMIN_REFRESH_TTL || "7d";
+const REFRESH_COOKIE = "adminRefreshToken";
+const REFRESH_COOKIE_PATH = "/api/admin/auth";
+
+function refreshSecret() {
+  return process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+}
+
+function adminCookieOpts() {
+  const prod = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: prod,
+    sameSite: prod ? "None" : "Lax",
+    path: REFRESH_COOKIE_PATH,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
+
 module.exports = function registerAuthRoutes(app, deps) {
   const {
-    db, masterDb, jwt, jwtDefaults, requireAllowedIp, requireSuperAdmin,
+    db, masterDb, jwt, requireAllowedIp, requireSuperAdmin,
     authLimiter, bcrypt, logSecurityEvent, logAdminAction,
   } = deps;
 
-  // Mint the real super-admin access token (shared by the password-only path and
-  // the completed-TOTP path).
-  function signAdminToken(admin) {
+  // Mint the real super-admin access token. `sid` is the refresh session's jti,
+  // so the sessions UI can identify (and preserve) the current session.
+  function signAdminToken(admin, sid) {
     return jwt.sign(
-      { tid: 0, eid: 0, rid: 0, oid: null, aid: admin.id, email: admin.email, role: "super_admin", scope: "admin" },
+      { tid: 0, eid: 0, rid: 0, oid: null, aid: admin.id, email: admin.email, role: "super_admin", scope: "admin", sid: sid || null },
       process.env.JWT_SECRET,
-      { expiresIn: jwtDefaults.accessExpiresIn }
+      { expiresIn: ADMIN_ACCESS_TTL }
     );
+  }
+
+  function signAdminRefresh(admin) {
+    const jti = crypto.randomUUID();
+    const token = jwt.sign({ aid: admin.id, type: "admin_refresh", jti }, refreshSecret(), { expiresIn: ADMIN_REFRESH_TTL });
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    const expiresAt = new Date(jwt.decode(token).exp * 1000).toISOString();
+    return { token, hash, jti, expiresAt };
+  }
+
+  // Create a refresh-session row, set the cookie, and return a matching access token.
+  async function issueAdminSession(admin, req, res) {
+    const { token: refreshToken, hash, jti, expiresAt } = signAdminRefresh(admin);
+    await db.query(
+      `INSERT INTO admin_sessions (admin_id, token_hash, jti, user_agent, ip_address, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [admin.id, hash, jti, (req.headers["user-agent"] || "").slice(0, 300) || null, req.ip || null, expiresAt]
+    );
+    res.cookie(REFRESH_COOKIE, refreshToken, adminCookieOpts());
+    return signAdminToken(admin, jti);
   }
 
   // ── Step 1: password ────────────────────────────────────────────────────
@@ -68,7 +112,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         return res.json({ totp_required: true, pending_token: pendingToken });
       }
 
-      const token = signAdminToken(admin);
+      const token = await issueAdminSession(admin, req, res);
       logSecurityEvent("login_success", email, req.ip, req.headers["user-agent"], null);
       return res.json({ token, admin: { id: admin.id, name: admin.name, email: admin.email } });
     } catch (err) {
@@ -123,7 +167,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         return res.status(401).json({ error: "Invalid code" });
       }
 
-      const token = signAdminToken(admin);
+      const token = await issueAdminSession(admin, req, res);
       logSecurityEvent("totp_success", admin.email, req.ip, req.headers["user-agent"], usedRecovery ? { recovery: true } : null);
       logSecurityEvent("login_success", admin.email, req.ip, req.headers["user-agent"], usedRecovery ? { via: "recovery_code" } : { via: "totp" });
       return res.json({ token, admin: { id: admin.id, name: admin.name, email: admin.email }, used_recovery: usedRecovery });
@@ -231,6 +275,122 @@ module.exports = function registerAuthRoutes(app, deps) {
       const admin = rows[0] || {};
       const recovery = Array.isArray(admin.recovery_codes) ? admin.recovery_codes.length : 0;
       return res.json({ enabled: !!admin.totp_enabled_at, enabled_at: admin.totp_enabled_at || null, recovery_codes_remaining: recovery });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Session refresh (rotating) ──────────────────────────────────────────
+  // Mirrors POST /api/auth/refresh: each refresh consumes the presented token
+  // and issues a fresh one. A revoked token presented again is reuse — every
+  // session for that admin is killed, forcing a full re-login.
+  app.post("/api/admin/auth/refresh", requireAllowedIp, async (req, res) => {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE];
+    if (!refreshToken) return res.status(401).json({ error: "Refresh token missing" });
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, refreshSecret());
+    } catch (err) {
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      const expired = err.name === "TokenExpiredError";
+      return res.status(401).json({ error: expired ? "Refresh token expired" : "Invalid refresh token", code: expired ? "REFRESH_EXPIRED" : "REFRESH_INVALID" });
+    }
+    if (decoded.type !== "admin_refresh") {
+      return res.status(401).json({ error: "Invalid refresh token" });
+    }
+    try {
+      await masterDb.init(db);
+      const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+      const { rows: [session] } = await db.query(
+        "SELECT id, admin_id, revoked_at FROM admin_sessions WHERE token_hash = $1",
+        [tokenHash]
+      );
+      if (!session) {
+        res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        return res.status(401).json({ error: "Refresh token invalid" });
+      }
+      if (session.revoked_at) {
+        // Reuse of a rotated token → revoke the whole family.
+        await db.query(
+          "UPDATE admin_sessions SET revoked_at = NOW() WHERE admin_id = $1 AND revoked_at IS NULL",
+          [session.admin_id]
+        );
+        res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        return res.status(401).json({ error: "Refresh token reuse detected — please sign in again", code: "REFRESH_REUSE" });
+      }
+
+      const { rows: [admin] } = await db.query(
+        "SELECT id, email, name FROM super_admins WHERE id = $1",
+        [session.admin_id]
+      );
+      if (!admin) {
+        res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        return res.status(401).json({ error: "Admin not found" });
+      }
+
+      // Rotate: insert the new session, then mark the old one revoked.
+      const token = await issueAdminSession(admin, req, res);
+      await db.query("UPDATE admin_sessions SET revoked_at = NOW() WHERE id = $1", [session.id]);
+      return res.json({ token });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Logout — revoke the current session + clear the cookie ──────────────
+  app.post("/api/admin/auth/logout", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      await masterDb.init(db);
+      if (req.admin.sid) {
+        await db.query(
+          "UPDATE admin_sessions SET revoked_at = NOW() WHERE admin_id = $1 AND jti = $2 AND revoked_at IS NULL",
+          [req.admin.id, req.admin.sid]
+        );
+      }
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Active sessions list ────────────────────────────────────────────────
+  app.get("/api/admin/auth/sessions", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      await masterDb.init(db);
+      const { rows } = await db.query(
+        `SELECT id, jti, user_agent, ip_address, created_at, expires_at
+           FROM admin_sessions
+          WHERE admin_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+          ORDER BY created_at DESC`,
+        [req.admin.id]
+      );
+      const sessions = rows.map((s) => ({
+        id: s.id,
+        user_agent: s.user_agent,
+        ip_address: s.ip_address,
+        created_at: s.created_at,
+        expires_at: s.expires_at,
+        current: s.jti === req.admin.sid,
+      }));
+      return res.json({ sessions });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Revoke all other sessions ───────────────────────────────────────────
+  app.post("/api/admin/auth/sessions/revoke-others", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      await masterDb.init(db);
+      const { rowCount } = await db.query(
+        `UPDATE admin_sessions SET revoked_at = NOW()
+          WHERE admin_id = $1 AND revoked_at IS NULL
+            AND ($2::text IS NULL OR jti <> $2)`,
+        [req.admin.id, req.admin.sid || null]
+      );
+      logAdminAction(req.admin.email, "admin_sessions_revoked_others", "super_admin", req.admin.id, { revoked: rowCount }, req.ip);
+      return res.json({ revoked: rowCount });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

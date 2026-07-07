@@ -82,7 +82,10 @@ export default function AdminLayout() {
 
         <div className="border-t border-(--ui-border) p-3">
           <button
-            onClick={() => {
+            onClick={async () => {
+              // Best-effort server-side revoke of the current refresh session,
+              // then clear the local token regardless of the result.
+              try { await adminFetch("/api/admin/auth/logout", { method: "POST" }); } catch { /* ignore */ }
               clearAdminSession();
               navigate("/admin/login", { replace: true });
             }}

@@ -1,17 +1,5 @@
 import { useState, useEffect } from "react";
-import { API_BASE as API } from "../../config";
-import { getAdminToken } from "../../auth/adminAuthStore";
-
-const adminFetch = (url, opts = {}) => {
-  return fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getAdminToken()}`,
-      ...opts.headers,
-    },
-  });
-};
+import { adminFetch } from "./AdminLogin";
 
 const PROVINCE_FIELDS = [
   { key: "federal_gst", label: "Federal GST" },
@@ -33,7 +21,7 @@ export default function AdminTaxRates() {
 
   const fetchRates = async () => {
     try {
-      const res = await adminFetch(`${API}/api/admin/tax-rates`);
+      const res = await adminFetch(`/api/admin/tax-rates`);
       const data = await res.json();
       setRates(data.rates || []);
     } catch { /* ignore */ }
@@ -41,7 +29,7 @@ export default function AdminTaxRates() {
 
   const fetchSuggestions = async () => {
     try {
-      const res = await adminFetch(`${API}/api/admin/tax-rate-suggestions`);
+      const res = await adminFetch(`/api/admin/tax-rate-suggestions`);
       const data = await res.json();
       setSuggestions(data.suggestions || []);
     } catch { /* ignore */ }
@@ -55,8 +43,8 @@ export default function AdminTaxRates() {
     try {
       const method = editRow ? "PUT" : "POST";
       const url = editRow
-        ? `${API}/api/admin/tax-rates/${editRow.id}`
-        : `${API}/api/admin/tax-rates`;
+        ? `/api/admin/tax-rates/${editRow.id}`
+        : `/api/admin/tax-rates`;
       const res = await adminFetch(url, { method, body: JSON.stringify(form) });
       if (!res.ok) { const d = await res.json(); setMsg(d.error); return; }
       setEditRow(null);
@@ -69,12 +57,12 @@ export default function AdminTaxRates() {
 
   const deleteRate = async (id) => {
     if (!confirm("Delete this rate?")) return;
-    await adminFetch(`${API}/api/admin/tax-rates/${id}`, { method: "DELETE" });
+    await adminFetch(`/api/admin/tax-rates/${id}`, { method: "DELETE" });
     fetchRates();
   };
 
   const reviewSuggestion = async (id, tenantSlug, status) => {
-    await adminFetch(`${API}/api/admin/tax-rate-suggestions/${id}`, {
+    await adminFetch(`/api/admin/tax-rate-suggestions/${id}`, {
       method: "PUT",
       body: JSON.stringify({ status, tenant_slug: tenantSlug }),
     });

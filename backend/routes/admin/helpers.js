@@ -61,7 +61,7 @@ function createRequireSuperAdmin(verifyAccessToken) {
       if (decoded.role !== "super_admin") {
         return res.status(403).json({ error: "Super-admin access required" });
       }
-      req.admin = { id: decoded.aid, email: decoded.email };
+      req.admin = { id: decoded.aid, email: decoded.email, sid: decoded.sid || null };
       next();
     } catch (err) {
       if (err.name === "TokenExpiredError") {
