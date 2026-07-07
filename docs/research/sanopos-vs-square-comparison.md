@@ -112,7 +112,7 @@ The gaps are mostly **growth/consumer-marketing surface**, not core commerce. Sa
 | Pickup / local delivery / shipping | ✅ | `fulfillment.js`, `couriers.js` |
 | Customer accounts | ✅ | Customer portal (`customer-portal/`) |
 | Abandoned-cart recovery | ❌ | Not found |
-| Product reviews | ❌ | Not found |
+| Product reviews | ✅ | Full pipeline: public submit `products.js:1607` (rate-limited), moderation queue/approve/reject `products.js:1661-1735`, `avg_rating`/`review_count` recalc `products.js:1576`, storefront display `storefront.js:254-328`, admin `ReviewModerationRedesign` |
 | **Marketplace channels (Daraz/Meta/WhatsApp/Google/Shopify/Woo)** | ✅➕ | `integrations/`, `marketplace/` — beyond Square |
 
 ---
@@ -140,7 +140,7 @@ The gaps are mostly **growth/consumer-marketing surface**, not core commerce. Sa
 | Email campaigns | ✅ | `marketing.js`, `email.js` |
 | Text / SMS marketing | ✅ | `sms.js`, `messaging.js` |
 | **Marketing automations** (welcome/birthday/win-back/abandoned) | ❌ | No lifecycle-trigger automations found |
-| Google Reviews collection | ❌ | Not found |
+| Google Reviews collection | ❌ | Not found — no post-sale review-request email/SMS with a Google review link. (Distinct from native **Product reviews**, which SanoPOS has — §6.) This is the real review gap. |
 | Coupons / promotions | ✅ | `promotions.js` (incl. wholesale slab schemes) |
 | Customer directory / CRM + segmentation | ✅ | `customers.js`, `crm.js` (leads, activities) |
 | Loyalty — points (visit/spend/item) | ✅ | `loyalty.js` (earn/redeem/adjust/expire ledger) |

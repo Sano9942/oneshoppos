@@ -265,7 +265,9 @@ export default function IntegrationsHubRedesign() {
     try {
       const result = await api.post("/api/integrations/test", { provider });
       if (result.success) {
-        toast.success(`${provider} connection OK`);
+        // /api/integrations/test is a DB-only check — it confirms credentials
+        // are saved, not that they authenticate. Say so honestly.
+        toast.success(result.message || `${provider} credentials saved`);
       } else {
         toast.error(result.error || "Connection test failed");
       }

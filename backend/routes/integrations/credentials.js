@@ -98,7 +98,15 @@ module.exports = function registerCredentialRoutes(router, deps) {
           return res.json({ success: false, error: "No credentials configured" });
         }
 
-        res.json({ success: true, provider });
+        // This is a DB-only check — it confirms credentials are stored, NOT
+        // that they authenticate against the live marketplace API. Each
+        // channel's own /:provider/test route makes the real outbound call.
+        res.json({
+          success: true,
+          provider,
+          verified: false,
+          message: "Credentials saved. Run the channel's Test to verify against the live API.",
+        });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
