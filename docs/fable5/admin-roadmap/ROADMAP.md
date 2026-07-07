@@ -44,7 +44,11 @@ _Resolved 2026-07-08:_
 
 ## Batch A — §4 ride-alongs (small, high value, already scoped)
 
-### A1 `[ ]` logAdminAction gap closure (S)
+**DONE 2026-07-08 on `feat/admin-ba` (unmerged; 4 commits, 20 new tests all green).**
+Deploy note: A4 adds a new pg-boss worker — set `ADOPTION_SNAPSHOT_WORKER_ENABLED=1`
+on Railway when this batch ships, or the worker-status panel flags it ENV VAR MISSING.
+
+### A1 `[x]` logAdminAction gap closure (S)
 Every admin mutation must write `admin_activity_log`.
 1. Grep every `app.(post|put|delete)` in `backend/routes/admin/*.js`; list routes missing
    `logAdminAction` (known: tax-rates CRUD + tax-rate-suggestions PUT in `compliance.js`;
@@ -55,7 +59,7 @@ Every admin mutation must write `admin_activity_log`.
 3. Test: one integration file asserting an `admin_activity_log` row lands for each
    previously-uncovered mutation.
 
-### A2 `[ ]` Targeted announcements (per plan / per industry) (M)
+### A2 `[x]` Targeted announcements (per plan / per industry) (M)
 1. Migration (public schema, new `MIGRATIONS` entry in `migrate-pg.js`): add
    `audience_plan TEXT NULL` and `audience_industry TEXT NULL` to `announcements`
    (NULL = everyone; comma-separated lists are fine at this scale).
@@ -68,7 +72,7 @@ Every admin mutation must write `admin_activity_log`.
    (all/free/pro) and Industry (all + the 23 presets from `industryLabels.js`).
 4. Tests: active endpoint returns/filters correctly for a matching and a non-matching tenant.
 
-### A3 `[ ]` Impersonation session list + revoke (S)
+### A3 `[x]` Impersonation session list + revoke (S)
 Backend mostly exists (`impersonation_sessions`, `POST /api/admin/impersonate/:sessionId/end`).
 1. New `GET /api/admin/impersonation-sessions?active=1` — masterDb query joined to tenants;
    active = `ended_at IS NULL AND revoked_at IS NULL AND started_at > NOW() - interval '1 hour'`
@@ -78,7 +82,7 @@ Backend mostly exists (`impersonation_sessions`, `POST /api/admin/impersonate/:s
 3. Test: start impersonation via API, list shows it, revoke ends it, token's jti lands in
    the tenant's `revoked_tokens`.
 
-### A4 `[ ]` Feature-adoption matrix (M)
+### A4 `[x]` Feature-adoption matrix (M)
 Which tenants use which modes/flags — drives roadmap decisions.
 1. Worker: extend the hourly orphan-scan pattern — new pg-boss worker
    `adoption-snapshot-worker-boss.js` (env `ADOPTION_SNAPSHOT_WORKER_ENABLED`) that fans out
