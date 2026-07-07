@@ -147,7 +147,11 @@ Which tenants use which modes/flags — drives roadmap decisions.
 
 ## Batch C — analytics foundation + flag ops
 
-### C1 `[ ]` Tenant lifecycle event capture (M) — **build early; data can't be backfilled**
+### C1 `[x]` Tenant lifecycle event capture (M) — **build early; data can't be backfilled**
+**DONE 2026-07-08 on `feat/admin-c1` (off main w/ Batch A; migration v124; 7 tests).**
+Derive half folded into the adoption worker → rides on `ADOPTION_SNAPSHOT_WORKER_ENABLED=1`;
+inline writers need no env var. `expired` writer lives in the email-worker's billing
+grace→expired step (not subscription-grace worker, which is for customer subs).
 1. Migration (public): `tenant_lifecycle_events (id, tenant_id, event TEXT, metadata JSONB,
    created_at TIMESTAMPTZ DEFAULT NOW())` + index on (event, created_at).
 2. Inline writers (cold paths only — never the POS hot path):
