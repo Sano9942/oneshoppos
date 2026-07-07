@@ -294,6 +294,39 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
+        // 1d-quater. V08 — seed photography questionnaires (Event Timeline +
+        // Shot List), auto-attached on project creation (F03 trigger wired in
+        // services/projects.js:createProject). Idempotent by template name.
+        // Existing photography tenants are backfilled by migration v122.
+        if (industry_type === "photography_studio") {
+          const timelineFields = JSON.stringify([
+            { key: "event_date", label: "Event date", type: "date", required: true },
+            { key: "venue", label: "Venue / location", type: "text", required: true },
+            { key: "getting_ready_time", label: "Getting-ready start time", type: "text", required: false },
+            { key: "ceremony_time", label: "Ceremony time", type: "text", required: false },
+            { key: "key_moments", label: "Must-capture moments", type: "textarea", required: false },
+            { key: "family_photo_groups", label: "Family photo groupings", type: "textarea", required: false },
+          ]);
+          const shotlistFields = JSON.stringify([
+            { key: "style", label: "Preferred style", type: "select", options: ["Candid", "Posed", "Mix"], required: false },
+            { key: "must_have_shots", label: "Must-have shots", type: "textarea", required: true },
+            { key: "do_not_photograph", label: "People / things NOT to photograph", type: "textarea", required: false },
+            { key: "inspiration_links", label: "Inspiration / mood-board links", type: "textarea", required: false },
+          ]);
+          await client.query(
+            `INSERT INTO form_templates (name, entity_scope, fields, require_signature, auto_attach, is_active)
+             SELECT 'Event Timeline', 'project', $1::jsonb, false, 'project_created', true
+             WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Event Timeline')`,
+            [timelineFields]
+          );
+          await client.query(
+            `INSERT INTO form_templates (name, entity_scope, fields, require_signature, auto_attach, is_active)
+             SELECT 'Shot List', 'project', $1::jsonb, false, 'project_created', true
+             WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Shot List')`,
+            [shotlistFields]
+          );
+        }
+
         // 1e. Auto-enable compliance features from country pack
         for (const flag of countryPack.compliance_features) {
           await client.query(

@@ -137,6 +137,24 @@ module.exports = function createCRMRouter({
     },
   );
 
+  // V08 — bulk-dismiss junk inquiry leads. Even with Turnstile on the public
+  // inquiry form, spam accumulates; staff mark leads stage='spam' (via PUT) and
+  // clear them in one action here. Registered BEFORE /:id so "spam" isn't
+  // captured as an :id.
+  router.delete(
+    "/api/crm/leads/spam",
+    requirePerm("manage_orders"),
+    requireFeature("crm_quotations"),
+    async (req, res) => {
+      try {
+        const { rowCount } = await db.query("DELETE FROM crm_leads WHERE stage = 'spam'");
+        res.json({ message: "Spam leads dismissed", changed: rowCount || 0 });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
   router.delete(
     "/api/crm/leads/:id",
     requirePerm("manage_orders"),

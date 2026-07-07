@@ -44,6 +44,7 @@ const RestaurantPayPage = lazy(() => import("../pages/public/RestaurantPayPage")
 const ReservationBookingPage = lazy(() => import("../pages/public/ReservationBookingPage"));
 const FormFillPublic = lazy(() => import("../pages/public/FormFillPublic"));
 const MemberCheckinKiosk = lazy(() => import("../pages/public/MemberCheckinKiosk"));
+const PublicInquiryPage = lazy(() => import("../pages/public/PublicInquiryPage"));
 
 // M8 — Customer portal (lazy, isolated chunk). Portal is NOT wrapped in
 // the main AuthProvider; it uses its own PortalAuthProvider via PortalLayout.
@@ -66,6 +67,7 @@ const PortalOrders = lazy(() => import("../pages/portal/PortalOrders"));
 const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
 const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
 const PortalProfile = lazy(() => import("../pages/portal/PortalProfile"));
+const PortalGallery = lazy(() => import("../pages/portal/PortalGallery"));
 
 // Tier 1.4 — Manufacturer portal (lazy, isolated chunk). Parallel to the
 // customer portal: own AuthProvider, own session store, own API client,
@@ -225,6 +227,11 @@ export const publicRoutes = [
     element={<Suspense fallback={<RouteLoading />}><MemberCheckinKiosk /></Suspense>}
   />,
   <Route
+    key="public-inquire"
+    path="/inquire/:tenantSlug"
+    element={<Suspense fallback={<RouteLoading />}><PublicInquiryPage /></Suspense>}
+  />,
+  <Route
     key="portal"
     path="/portal/:tenantSlug"
     element={
@@ -253,6 +260,7 @@ export const publicRoutes = [
     <Route path="loyalty" element={<Suspense fallback={<RouteLoading />}><PortalLoyalty /></Suspense>} />
     <Route path="wallet" element={<Suspense fallback={<RouteLoading />}><PortalWallet /></Suspense>} />
     <Route path="profile" element={<Suspense fallback={<RouteLoading />}><PortalProfile /></Suspense>} />
+    <Route path="gallery" element={<Suspense fallback={<RouteLoading />}><PortalGallery /></Suspense>} />
   </Route>,
   <Route
     key="manufacturer-portal"

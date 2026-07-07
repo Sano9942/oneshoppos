@@ -151,6 +151,85 @@ function AddMilestoneRow({ projectId, onAdded }) {
 }
 
 /* ---- Project Detail View ---- */
+/* ---- V08: staff gallery panel (upload + mark client-visible) ---- */
+function GalleryPanel({ projectId, files, onChange }) {
+  const toast = useToast();
+  const [uploading, setUploading] = useState(false);
+
+  const upload = async (fileList) => {
+    if (!fileList || !fileList.length) return;
+    const fd = new FormData();
+    for (const f of fileList) fd.append("files", f);
+    setUploading(true);
+    try {
+      await api.upload(`/api/projects/${projectId}/files`, fd);
+      toast.success("Photos uploaded");
+      onChange();
+    } catch (err) { toast.error(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const toggleVisible = async (file) => {
+    try {
+      await api.put(`/api/projects/${projectId}/files/${file.id}`, { client_visible: !file.client_visible });
+      onChange();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const selectedCount = files.filter((f) => f.client_selected).length;
+
+  return (
+    <SectionCard className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-(--ui-text)">Gallery</h3>
+        <div className="flex items-center gap-3">
+          {selectedCount > 0 && <span className="text-xs text-(--ui-text-muted)">{selectedCount} client-selected</span>}
+          <label className="text-sm font-medium text-(--ui-primary) cursor-pointer">
+            {uploading ? "Uploading…" : "+ Upload"}
+            <input type="file" accept="image/*" multiple hidden disabled={uploading} onChange={(e) => upload(e.target.files)} />
+          </label>
+        </div>
+      </div>
+      {files.length === 0 ? (
+        <p className="text-sm text-(--ui-text-muted)">No photos yet. Upload shots and mark them client-visible to share on the portal.</p>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          {files.map((f) => (
+            <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden border border-(--ui-border) group">
+              <img src={f.file_url} alt={f.file_name} loading="lazy" className="h-full w-full object-cover" />
+              {f.client_selected && <span className="absolute top-1 left-1 rounded bg-(--ui-success-fg) text-white text-[10px] px-1">picked</span>}
+              <button
+                onClick={() => toggleVisible(f)}
+                className={`absolute bottom-0 inset-x-0 text-[11px] py-1 ${f.client_visible ? "bg-(--ui-success-fg) text-white" : "bg-black/60 text-white"}`}
+              >
+                {f.client_visible ? "Visible" : "Hidden"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/* ---- V08: attached questionnaires (F03) ---- */
+function QuestionnairesCard({ questionnaires }) {
+  if (!questionnaires || questionnaires.length === 0) return null;
+  return (
+    <SectionCard className="p-4">
+      <h3 className="text-sm font-semibold text-(--ui-text) mb-3">Questionnaires</h3>
+      <div className="space-y-2">
+        {questionnaires.map((q) => (
+          <div key={q.id} className="flex items-center justify-between p-2 rounded-lg border border-(--ui-border)">
+            <span className="text-sm text-(--ui-text)">{q.form_name}</span>
+            <Badge tone={q.status === "submitted" ? "success" : "warning"}>{q.status === "submitted" ? "Submitted" : "Pending"}</Badge>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
 function ProjectDetail({ projectId, onBack }) {
   const toast = useToast();
   const { fmt } = useCurrency();
@@ -278,6 +357,10 @@ function ProjectDetail({ projectId, onBack }) {
             )}
             <AddMilestoneRow projectId={projectId} onAdded={load} />
           </SectionCard>
+
+          {/* V08 — questionnaires (F03) + client gallery */}
+          <QuestionnairesCard questionnaires={project.questionnaires} />
+          <GalleryPanel projectId={projectId} files={project.files || []} onChange={load} />
         </div>
 
         {/* Right: Activity Timeline */}

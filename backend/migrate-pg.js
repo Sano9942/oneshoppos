@@ -9403,6 +9403,79 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 122,
+    description:
+      "V08 photography depth — client-facing gallery proofing on project_files (client_visible / client_selected). Two boolean flags turn the internal project file store into a portal proofing surface: staff mark shots client-visible, the client picks their selection on the portal, staff see the picks. Also backfills the photography questionnaire templates (wedding timeline + shot list, auto-attached on project creation via F03) for EXISTING photography_studio tenants — new signups get them from setup.js. Tenant-only.",
+    up: async (client) => {
+      // Gallery proofing flags on the (internal-only) project file store.
+      // client_visible: staff opt a shot into the client's portal gallery.
+      // client_selected: the client's "pick your 20" toggle. Watermarking /
+      // downloads / print-sales are deliberately OUT (proofing-lite — category
+      // leaders integrate Pixieset). Savepoint-isolated: project_files is a
+      // tenant table, absent from the public schema.
+      try {
+        await client.query("SAVEPOINT v122_gallery");
+        await client.query(
+          `ALTER TABLE project_files
+             ADD COLUMN IF NOT EXISTS client_visible BOOLEAN NOT NULL DEFAULT FALSE,
+             ADD COLUMN IF NOT EXISTS client_selected BOOLEAN NOT NULL DEFAULT FALSE`
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS idx_project_files_client_visible
+             ON project_files(project_id) WHERE client_visible = TRUE`
+        );
+        await client.query("RELEASE SAVEPOINT v122_gallery");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v122_gallery");
+        console.warn(`[migrate-pg v122] project_files gallery flags skipped: ${err.message}`);
+      }
+
+      // Backfill photography questionnaire templates for EXISTING photography
+      // studios (new signups seed these in setup.js). Idempotent by name; only
+      // runs when this schema is a photography_studio tenant. Mirrors the V05
+      // clinical-intake backfill pattern. auto_attach='project_created' — the
+      // F03 trigger fired from services/projects.js:createProject.
+      try {
+        await client.query("SAVEPOINT v122_questionnaires");
+        const { rows: [profile] } = await client.query(
+          "SELECT industry_type FROM company_profile WHERE id = 1"
+        );
+        if (profile && profile.industry_type === "photography_studio") {
+          const timelineFields = JSON.stringify([
+            { key: "event_date", label: "Event date", type: "date", required: true },
+            { key: "venue", label: "Venue / location", type: "text", required: true },
+            { key: "getting_ready_time", label: "Getting-ready start time", type: "text", required: false },
+            { key: "ceremony_time", label: "Ceremony time", type: "text", required: false },
+            { key: "key_moments", label: "Must-capture moments", type: "textarea", required: false },
+            { key: "family_photo_groups", label: "Family photo groupings", type: "textarea", required: false },
+          ]);
+          const shotlistFields = JSON.stringify([
+            { key: "style", label: "Preferred style", type: "select", options: ["Candid", "Posed", "Mix"], required: false },
+            { key: "must_have_shots", label: "Must-have shots", type: "textarea", required: true },
+            { key: "do_not_photograph", label: "People / things NOT to photograph", type: "textarea", required: false },
+            { key: "inspiration_links", label: "Inspiration / mood-board links", type: "textarea", required: false },
+          ]);
+          await client.query(
+            `INSERT INTO form_templates (name, entity_scope, fields, require_signature, auto_attach, is_active)
+             SELECT 'Event Timeline', 'project', $1::jsonb, false, 'project_created', true
+             WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Event Timeline')`,
+            [timelineFields]
+          );
+          await client.query(
+            `INSERT INTO form_templates (name, entity_scope, fields, require_signature, auto_attach, is_active)
+             SELECT 'Shot List', 'project', $1::jsonb, false, 'project_created', true
+             WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Shot List')`,
+            [shotlistFields]
+          );
+        }
+        await client.query("RELEASE SAVEPOINT v122_questionnaires");
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT v122_questionnaires");
+        console.warn(`[migrate-pg v122] photography questionnaire backfill skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 /**

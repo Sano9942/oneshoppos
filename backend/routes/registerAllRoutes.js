@@ -192,6 +192,10 @@ module.exports = function registerAllRoutes(app, deps) {
   // token; resolves tenant via resolvePublicTenantDb; rate-limited.
   require("./public-forms")(app, deps);
 
+  // V08 — Public inquiry form → CRM lead. No auth; resolves tenant via
+  // resolvePublicTenantDb; rate-limited; Turnstile-guarded when configured.
+  require("./public-inquiries")(app, deps);
+
   // V07 gym — Public member check-in kiosk. No auth; resolves tenant via
   // resolvePublicTenantDb; rate-limited; minimal PII response (first name +
   // verdict only). Mounted before tenant middleware to dodge the kiosk traps.
@@ -208,6 +212,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/treatments")(app, deps);
   require("./customer-portal/packages")(app, deps);
   require("./customer-portal/forms")(app, deps);
+  require("./customer-portal/gallery")(app, deps);
 
   // Tier 1.4 — Manufacturer portal (distributor's brand-partners). Mounted
   // BEFORE tenant middleware; each route resolves tenant via

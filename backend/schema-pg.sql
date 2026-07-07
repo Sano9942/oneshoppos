@@ -4213,9 +4213,14 @@ CREATE TABLE IF NOT EXISTS project_files (
   file_size INTEGER,
   mime_type TEXT,
   uploaded_by INTEGER REFERENCES employees(id),
+  -- V08: gallery proofing flags. client_visible = staff opted this shot into
+  -- the client's portal gallery; client_selected = the client's "pick your 20".
+  client_visible BOOLEAN NOT NULL DEFAULT FALSE,
+  client_selected BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_files_client_visible ON project_files(project_id) WHERE client_visible = TRUE;
 
 -- Extend quotations for project billing
 ALTER TABLE quotations

@@ -11,6 +11,22 @@ async function createProject(db, data, employeeId) {
   );
 
   await logActivity(db, project.id, employeeId, "status_change", "Project created");
+
+  // V08 — F03 questionnaires: auto-attach any active templates whose trigger is
+  // "project_created" (photography seeds Event Timeline + Shot List). Scoped to
+  // the project's customer so the client can fill them on the portal. Non-fatal:
+  // a form-attach failure must never roll back the project create.
+  if (project.customer_id) {
+    try {
+      const { autoAttachForms } = require("./forms");
+      await autoAttachForms(db, "project_created", {
+        customerId: project.customer_id,
+        entityType: "project",
+        entityId: project.id,
+      });
+    } catch { /* non-fatal */ }
+  }
+
   return project;
 }
 
@@ -58,7 +74,24 @@ async function getProject(db, id) {
     [id]
   );
 
-  return { ...project, milestones, activities, files };
+  // V08 — attached questionnaires (F03 form responses scoped to this project),
+  // so the project page shows pending vs submitted status per form. Tolerant of
+  // schemas where form_responses doesn't exist yet (pre-F03 tenants).
+  let questionnaires = [];
+  try {
+    const { rows } = await db.query(
+      `SELECT fr.id, fr.status, fr.submitted_at, fr.submitted_via, fr.created_at,
+              ft.name AS form_name
+         FROM form_responses fr
+         JOIN form_templates ft ON ft.id = fr.form_template_id
+        WHERE fr.entity_type = 'project' AND fr.entity_id = $1 AND fr.status <> 'void'
+        ORDER BY fr.created_at DESC`,
+      [id]
+    );
+    questionnaires = rows;
+  } catch { /* form_responses absent on pre-F03 schemas */ }
+
+  return { ...project, milestones, activities, files, questionnaires };
 }
 
 async function listProjects(db, filters = {}) {
@@ -127,9 +160,12 @@ async function convertQuotationToProject(db, quotationId, employeeId) {
   if (quotation.estimate_status !== "approved") throw Object.assign(new Error("Quotation must be approved first"), { statusCode: 400 });
 
   const project = await createProject(db, {
+    // `quotations` has no `title` column; fall back to a generated name.
+    // Budget carries the accepted quote total — the column is `total_amount`
+    // (reading `quotation.total` silently dropped the budget to NULL).
     name: quotation.title || `Project from Quotation #${quotation.id}`,
     customer_id: quotation.customer_id,
-    budget: quotation.total,
+    budget: quotation.total_amount,
   }, employeeId);
 
   // Link quotation to project

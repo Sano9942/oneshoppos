@@ -16,6 +16,7 @@ const TAB_LABEL_KEYS = {
   stays: "stays_tab",
   treatments: "treatments_tab",
   packages: "packages_tab",
+  gallery: "gallery_tab",
 };
 
 const TAB_PATHS = {
@@ -31,6 +32,7 @@ const TAB_PATHS = {
   stays: "stays",
   treatments: "treatments",
   packages: "packages",
+  gallery: "gallery",
 };
 
 function PortalShell() {
