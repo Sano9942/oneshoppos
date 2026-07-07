@@ -62,23 +62,34 @@ module.exports = function registerTenantRoutes(app, deps) {
       );
 
       const enriched = await Promise.all(tenants.map(async (t) => {
-        if (t.status !== "active") return { ...t, last_login: null, revenue_this_month: 0, setup_complete: true };
+        if (t.status !== "active") return { ...t, last_login: null, revenue_this_month: 0, setup_complete: true, industry_type: null, modes: [] };
         const s = `tenant_${t.slug}`;
+        let base;
         try {
           const [loginR, revR, setupR] = await Promise.all([
             db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),
             db.query(`SELECT COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('month', NOW())`),
-            db.query(`SELECT setup_complete FROM ${s}.company_profile WHERE id = 1`),
+            db.query(`SELECT setup_complete, industry_type FROM ${s}.company_profile WHERE id = 1`),
           ]);
-          return {
+          base = {
             ...t,
             last_login: loginR.rows[0].ts || null,
             revenue_this_month: Number(revR.rows[0].rev),
             setup_complete: setupR.rows[0]?.setup_complete ?? true,
+            industry_type: setupR.rows[0]?.industry_type || null,
           };
         } catch {
-          return { ...t, last_login: null, revenue_this_month: 0, setup_complete: true };
+          base = { ...t, last_login: null, revenue_this_month: 0, setup_complete: true, industry_type: null };
         }
+        // Modes queried separately so a missing tenant_modes table (pre-v31
+        // schema) doesn't wipe the login/revenue enrichment above.
+        try {
+          const { rows: modeRows } = await db.query(`SELECT mode FROM ${s}.tenant_modes WHERE enabled = true ORDER BY mode`);
+          base.modes = modeRows.map((r) => r.mode);
+        } catch {
+          base.modes = [];
+        }
+        return base;
       }));
 
       return res.json({ tenants: enriched });
@@ -384,6 +395,82 @@ module.exports = function registerTenantRoutes(app, deps) {
       res.json({ all_time: allTimeRes.rows, last_30_days: last30Res.rows, top_users: topUsersRes.rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Vertical Usage ─────────────────────────────────────────────────────
+  // Per-mode adoption counts for one tenant — answers "does this tenant
+  // actually USE the vertical their preset enables?". One count query per
+  // domain table, each individually try/caught (missing table ⇒ row omitted).
+  const VERTICAL_USAGE_SOURCES = [
+    { key: "appointments", label: "Appointments", table: "appointments", mode: "appointments" },
+    { key: "restaurant_checks", label: "Restaurant checks", table: "draft_orders", mode: "restaurant",
+      where: "order_context IS DISTINCT FROM 'retail'" },
+    { key: "service_tickets", label: "Service tickets", table: "service_tickets", mode: "workflow_tickets" },
+    { key: "projects", label: "Projects", table: "service_projects", mode: "service_projects" },
+    { key: "contracts", label: "Contracts", table: "contracts", mode: "service_projects" },
+    { key: "rental_contracts", label: "Rental contracts", table: "rental_contracts", mode: "rentals" },
+    { key: "room_bookings", label: "Room bookings", table: "room_bookings", mode: "room_management" },
+    { key: "treatment_plans", label: "Treatment plans", table: "treatment_plans", mode: "treatment_plans" },
+    { key: "subscriptions", label: "Member subscriptions", table: "customer_subscriptions", mode: "subscriptions" },
+    { key: "member_checkins", label: "Member check-ins", table: "member_checkins", mode: "subscriptions" },
+    { key: "backorders", label: "Backorders", table: "backorders", mode: "wholesale" },
+    { key: "field_visits", label: "Field visits", table: "field_visits", mode: "wholesale" },
+    { key: "gift_cards", label: "Gift cards", table: "gift_cards", mode: null },
+  ];
+
+  app.get("/api/admin/tenants/:id/vertical-usage", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows: [tenant] } = await db.query(
+        "SELECT slug, status FROM tenants WHERE id = $1 AND deleted_at IS NULL",
+        [req.params.id]
+      );
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      if (!/^[a-z0-9_]{3,40}$/.test(tenant.slug)) return res.status(400).json({ error: "Invalid tenant slug" });
+      if (tenant.status !== "active") return res.json({ industry_type: null, business_model: null, modes: [], usage: [] });
+
+      const s = `tenant_${tenant.slug}`;
+
+      let industry_type = null;
+      try {
+        const { rows: [profile] } = await db.query(`SELECT industry_type FROM ${s}.company_profile WHERE id = 1`);
+        industry_type = profile?.industry_type || null;
+      } catch { /* pre-preset schema */ }
+
+      let modes = [];
+      try {
+        const { rows: modeRows } = await db.query(`SELECT mode FROM ${s}.tenant_modes WHERE enabled = true ORDER BY mode`);
+        modes = modeRows.map((r) => r.mode);
+      } catch { /* tenant_modes missing */ }
+
+      const { getPreset } = require("../../config/industry-config");
+      const preset = industry_type ? getPreset(industry_type) : null;
+
+      const usage = [];
+      for (const src of VERTICAL_USAGE_SOURCES) {
+        const where = src.where ? ` WHERE ${src.where}` : "";
+        try {
+          const { rows: [row] } = await db.query(
+            `SELECT COUNT(*)::int AS count, MAX(created_at) AS last_activity FROM ${s}.${src.table}${where}`
+          );
+          usage.push({ key: src.key, label: src.label, mode: src.mode, count: row.count, last_activity: row.last_activity });
+        } catch {
+          try {
+            const { rows: [row] } = await db.query(`SELECT COUNT(*)::int AS count FROM ${s}.${src.table}${where}`);
+            usage.push({ key: src.key, label: src.label, mode: src.mode, count: row.count, last_activity: null });
+          } catch { /* table missing on this schema — omit row */ }
+        }
+      }
+
+      return res.json({
+        industry_type,
+        business_model: preset ? preset.business_model : null,
+        display_name: preset ? preset.display_name : null,
+        modes,
+        usage,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
   });
 

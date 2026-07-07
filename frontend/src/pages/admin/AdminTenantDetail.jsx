@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Database, Download, Eye, MessageSquare, Pause, Pencil, Play, RotateCcw, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 import { downloadCsv } from "../../utils/csvExport";
+import { industryLabel, MODE_LABELS } from "./industryLabels";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -58,6 +59,7 @@ export default function AdminTenantDetail() {
   const [newNote, setNewNote] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
   const [editingPricing, setEditingPricing] = useState(null); // { id, price, cycle, plan }
+  const [verticalUsage, setVerticalUsage] = useState(null);
 
   const loadTenant = async () => {
     try {
@@ -105,6 +107,7 @@ export default function AdminTenantDetail() {
       }).catch(() => {});
       adminFetch(`/api/admin/tenants/${id}/feature-flags`).then(r => r.json()).then(setFeatureFlags).catch(() => {});
       adminFetch(`/api/admin/tenants/${id}/notes`).then(r => r.json()).then(setNotes).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/vertical-usage`).then(r => r.json()).then(setVerticalUsage).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -549,6 +552,44 @@ export default function AdminTenantDetail() {
               </div>
             )}
           </div>
+
+          {/* Verticals */}
+          {verticalUsage && (
+            <div className="rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-5">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">Verticals</h2>
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium text-(--ui-text)">{industryLabel(verticalUsage.industry_type)}</span>
+                {verticalUsage.business_model && (
+                  <span className="rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-xs font-semibold text-(--ui-text-muted)">
+                    {verticalUsage.business_model.replace(/_/g, " ")}
+                  </span>
+                )}
+                {(verticalUsage.modes || []).map((m) => (
+                  <span key={m} className="rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-xs font-semibold text-(--ui-success-fg)">
+                    {MODE_LABELS[m] || m}
+                  </span>
+                ))}
+                {(verticalUsage.modes || []).length === 0 && (
+                  <span className="text-xs text-(--ui-text-muted)">No modes enabled (core retail spine)</span>
+                )}
+              </div>
+              {(verticalUsage.usage || []).filter((u) => u.count > 0).length === 0 ? (
+                <p className="text-xs text-(--ui-text-muted)">No vertical activity recorded yet.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {verticalUsage.usage.filter((u) => u.count > 0).map((u) => (
+                    <div key={u.key} className="rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-3">
+                      <p className="text-lg font-bold text-(--ui-text)">{u.count.toLocaleString()}</p>
+                      <p className="text-xs font-medium text-(--ui-text-muted)">{u.label}</p>
+                      {u.last_activity && (
+                        <p className="mt-0.5 text-xs text-(--ui-text-muted)">last {timeAgo(u.last_activity)}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Feature Flags */}
           {featureFlags.length > 0 && (

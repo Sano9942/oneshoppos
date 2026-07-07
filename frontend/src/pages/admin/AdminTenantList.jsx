@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Download, Plus, Search, Server, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 import { downloadCsv } from "../../utils/csvExport";
+import { industryLabel } from "./industryLabels";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -38,6 +39,7 @@ export default function AdminTenantList() {
   const [tenants, setTenants] = useState([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterIndustry, setFilterIndustry] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -63,8 +65,12 @@ export default function AdminTenantList() {
   const filtered = tenants.filter((t) => {
     const matchSearch = !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.slug.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" || t.status === filterStatus;
-    return matchSearch && matchStatus;
+    const matchIndustry = filterIndustry === "all" || (t.industry_type || "unknown") === filterIndustry;
+    return matchSearch && matchStatus && matchIndustry;
   });
+
+  // Industry filter options from the data actually present (not all 23 presets).
+  const industryOptions = [...new Set(tenants.map((t) => t.industry_type).filter(Boolean))].sort();
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -98,6 +104,7 @@ export default function AdminTenantList() {
               const headers = [
                 { key: "name", label: "Name" },
                 { key: "slug", label: "Slug" },
+                { key: "industry_type", label: "Industry" },
                 { key: "plan", label: "Plan" },
                 { key: "status", label: "Status" },
                 { key: "created_at", label: "Created" },
@@ -137,6 +144,16 @@ export default function AdminTenantList() {
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
         </select>
+        <select
+          value={filterIndustry}
+          onChange={(e) => setFilterIndustry(e.target.value)}
+          className="ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-2 text-sm text-(--ui-text)"
+        >
+          <option value="all">All Industries</option>
+          {industryOptions.map((key) => (
+            <option key={key} value={key}>{industryLabel(key)}</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -154,6 +171,7 @@ export default function AdminTenantList() {
               <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left">
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Name</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Slug</th>
+                <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Industry</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Health</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Plan</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Revenue</th>
@@ -174,6 +192,14 @@ export default function AdminTenantList() {
                 >
                   <td className="px-4 py-3 font-medium text-(--ui-text)">{t.name}</td>
                   <td className="px-4 py-3 text-(--ui-text-muted)">{t.slug}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-(--ui-text)">{industryLabel(t.industry_type)}</span>
+                    {t.modes?.length > 0 && (
+                      <span className="ml-1.5 rounded-full bg-(--ui-muted-surface) px-1.5 py-0.5 text-xs font-semibold text-(--ui-text-muted)" title={t.modes.join(", ")}>
+                        {t.modes.length} {t.modes.length === 1 ? "mode" : "modes"}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-2">
                       <span className={`w-2.5 h-2.5 rounded-full ${healthDot(t).color}`} title={healthDot(t).label} />
