@@ -27,13 +27,18 @@ be one branch + one review. Items inside a batch are ordered by dependency.
 
 ## Batch 0 — decisions & env vars (no code, 15 minutes)
 
-- [ ] **0.1** Decide `SHIFT_AUTO_CLOSE_WORKER_ENABLED=1` on Railway (worker has never run
-      in prod; panel currently flags it). Set it or consciously leave it off.
-- [ ] **0.2** Decide `ADMIN_ALLOWED_IPS` posture. If your IP is dynamic, leave unset and
-      rely on Batch B (2FA) as the compensating control — but write that decision down here.
-- [ ] **0.3** Decide `ANTHROPIC_API_KEY` on Railway (AI insights currently dead in prod).
-- [ ] **0.4** Run `/check-services` (overdue since 2026-07-01) and make it a weekly habit.
-- [ ] **0.5** Merge `feat/admin-refresh` into main and deploy — every later batch builds on it.
+_Resolved 2026-07-08:_
+
+- [x] **0.1** `SHIFT_AUTO_CLOSE_WORKER_ENABLED=1` — **SET** on Railway (prod). Worker now runs;
+      the worker-status panel's `ENV VAR MISSING` flag should clear on next deploy.
+- [x] **0.2** `ADMIN_ALLOWED_IPS` — **left unset** (dynamic IP). Compensating control is
+      Batch B admin TOTP 2FA; ship B before treating this as closed.
+- [x] **0.3** `ANTHROPIC_API_KEY` — **left off** for now. AI insights (`/insights/ask`)
+      stays disabled in prod; not a blocker for any admin batch. Revisit later.
+- [x] **0.4** `/check-services` run 2026-07-08 — all green (0 Sentry issues, all infra healthy).
+      Make it a weekly habit.
+- [x] **0.5** `feat/admin-refresh` fast-forward-merged into `main` (2559f9e) and pushed —
+      Railway + Vercel deploying. Every later batch branches off `main`.
 
 ---
 
