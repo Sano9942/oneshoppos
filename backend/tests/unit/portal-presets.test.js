@@ -21,8 +21,10 @@ describe("M8 portal preset config", () => {
   });
 
   it("returns the documented tab list for each preset category", () => {
+    // salon/gym gained "packages" with F02; clinic gained "treatments" with V05.
     expect(getPortalEnabledTabs("salon")).toEqual([
       "appointments",
+      "packages",
       "invoices",
       "loyalty",
       "profile",
@@ -39,8 +41,16 @@ describe("M8 portal preset config", () => {
     ]);
     expect(getPortalEnabledTabs("gym")).toEqual([
       "subscriptions",
+      "packages",
       "invoices",
       "appointments",
+      "profile",
+    ]);
+    expect(getPortalEnabledTabs("clinic")).toEqual([
+      "treatments",
+      "appointments",
+      "invoices",
+      "loyalty",
       "profile",
     ]);
     expect(getPortalEnabledTabs("car_rental")).toEqual([

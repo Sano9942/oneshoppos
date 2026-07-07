@@ -78,11 +78,15 @@ describe("industry-config", () => {
     expect(p.labels.customer).toBe("Customer");
   });
 
-  it("clinic preset has appointments but not commissions", () => {
+  it("clinic preset has appointments + the V05 clinical stack, not commissions", () => {
     const p = getPreset("clinic");
-    expect(p.modes).toEqual(["appointments"]);
+    // V05: generic clinics gained treatment_plans (charting/plans/recalls) —
+    // previously appointments-only, which excluded them from clinical records.
+    expect(p.modes).toEqual(["appointments", "treatment_plans"]);
     expect(p.modes).not.toContain("commissions");
     expect(p.labels.customer).toBe("Patient");
+    expect(p.clinical_config.chart_preset).toBe("body");
+    expect(p.visible_report_groups).toContain("Clinical");
   });
 
   it("repair_shop preset has workflow_tickets mode", () => {
@@ -99,9 +103,10 @@ describe("industry-config", () => {
     expect(p.onboarding_steps).toContain("membership");
   });
 
-  it("wholesale preset has no extra modes and grid POS", () => {
+  it("wholesale preset has the wholesale mode and grid POS", () => {
     const p = getPreset("wholesale");
-    expect(p.modes).toEqual([]);
+    // Stale-doc fix: Tier 0 gave wholesale its own mode; this test predates it.
+    expect(p.modes).toEqual(["wholesale"]);
     expect(p.pos_layout_mode).toBe("grid");
     expect(p.labels.customer).toBe("Buyer");
   });

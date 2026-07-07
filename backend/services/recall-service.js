@@ -108,7 +108,7 @@ async function armRecall(db, {
      VALUES ($1, $2, $3, $4,
              COALESCE($5::date, (CURRENT_DATE + make_interval(months => $4))::date),
              $6, $7, $8, $9, $10)
-     RETURNING *`,
+     RETURNING *, due_date::text AS due_date`,
     [
       customerId, subjectId || null, recallType, intervalMonths || null,
       dueDate || null,
@@ -230,7 +230,7 @@ async function markContacted(db, id) {
             last_contacted_at = NOW(), contact_attempts = contact_attempts + 1,
             updated_at = NOW()
       WHERE id = $1 AND status IN ('due','contacted')
-      RETURNING *`,
+      RETURNING *, due_date::text AS due_date`,
     [id]
   );
   return row || null;
@@ -241,7 +241,7 @@ async function dismissRecall(db, id, notes) {
     `UPDATE patient_recalls
         SET status = 'dismissed', notes = COALESCE($2, notes), updated_at = NOW()
       WHERE id = $1 AND status IN ('due','contacted','booked')
-      RETURNING *`,
+      RETURNING *, due_date::text AS due_date`,
     [id, notes || null]
   );
   return row || null;
@@ -282,7 +282,7 @@ async function bookRecall(db, id, { appointmentId = null, scheduledAt = null, em
       const { rows: [appt] } = await client.query(
         `INSERT INTO appointments
            (customer_id, employee_id, start_at, end_at, status, notes, source)
-         VALUES ($1, $2, $3, $3 + INTERVAL '60 minutes', 'confirmed', $4, 'admin')
+         VALUES ($1, $2, $3::timestamptz, $3::timestamptz + INTERVAL '60 minutes', 'confirmed', $4, 'admin')
          RETURNING id`,
         [recall.customer_id, employeeId || null, scheduledAt, `Recall follow-up (${recall.recall_type})`]
       ).catch((err) => {
@@ -300,7 +300,7 @@ async function bookRecall(db, id, { appointmentId = null, scheduledAt = null, em
     const { rows: [row] } = await client.query(
       `UPDATE patient_recalls
           SET status = 'booked', appointment_id = $2, updated_at = NOW()
-        WHERE id = $1 RETURNING *`,
+        WHERE id = $1 RETURNING *, due_date::text AS due_date`,
       [id, apptId]
     );
     return row;
@@ -312,7 +312,7 @@ async function completeRecall(db, id) {
   const { rows: [row] } = await db.query(
     `UPDATE patient_recalls SET status = 'completed', updated_at = NOW()
       WHERE id = $1 AND status IN ('due','contacted','booked')
-      RETURNING *`,
+      RETURNING *, due_date::text AS due_date`,
     [id]
   );
   if (!row) return null;
@@ -405,7 +405,7 @@ async function administerVaccination(db, {
        (patient_subject_id, vaccine_name, administered_at, treatment_session_id,
         administered_by, next_due, batch_number, notes)
      VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE), $4, $5, $6, $7, $8)
-     RETURNING *`,
+     RETURNING *, administered_at::text AS administered_at, next_due::text AS next_due`,
     [
       subjectId, String(vaccineName).trim(), administeredAt || null,
       sessionId || null, administeredBy || null, nextDue || null,

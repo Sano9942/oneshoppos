@@ -116,7 +116,15 @@ module.exports = function registerRecallRoutes(app, deps) {
       if (!["due", "contacted"].includes(recall.status)) {
         return res.status(400).json({ error: `Recall is ${recall.status}` });
       }
-      const result = await sendRecallOutreach(req, recall);
+      // Dispatch failure must not block the front desk from stamping the
+      // attempt (e.g. single-tenant mode has no tenantSlug for email routing).
+      let result = null;
+      try {
+        result = await sendRecallOutreach(req, recall);
+      } catch (err) {
+        try { req.log?.warn({ err: err.message, recallId: recall.id }, "recall contact dispatch failed"); } catch {}
+        result = { dispatched: [], reason: "dispatch_failed", error: err.message };
+      }
       const row = await recalls.markContacted(deps.db, recall.id);
       res.json({ recall: row, dispatched: result?.dispatched || [], reason: result?.reason });
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }

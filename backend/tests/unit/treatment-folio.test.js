@@ -97,21 +97,45 @@ describe("recalcFolioTotals", () => {
   });
 
   it("discounts reduce the grand total (negative line_total convention)", async () => {
+    // V05 folio-tax column shape: legacy 'tax'-type lines stay additive;
+    // per-line snapshot tax adds to grand only when stamped exclusive.
     const db = fakeDb([
       ["COALESCE(SUM(CASE WHEN line_type = 'session_fee'", {
         rows: [{
           session_total: "100.00",
           pos_total: "50.00",
           manual_total: "0",
-          tax_total: "15.00",
+          legacy_tax: "15.00",
+          snapshot_tax: "0",
+          exclusive_tax: "0",
           discount_total: "-10.00",
         }],
       }],
     ]);
     await svc.recalcFolioTotals(db, 3);
     const update = db.queries.find((q) => q.sql.includes("UPDATE treatment_folios"));
-    // grand = session + pos + manual + tax + discount = 100 + 50 + 0 + 15 + (-10) = 155
+    // grand = session + pos + manual + discount + legacy tax = 100 + 50 + 0 − 10 + 15 = 155
     expect(update.params[3]).toBe(155);
+  });
+
+  it("V05: exclusive snapshot tax adds on top; inclusive stays inside", async () => {
+    const db = fakeDb([
+      ["COALESCE(SUM(CASE WHEN line_type = 'session_fee'", {
+        rows: [{
+          session_total: "1000.00",
+          pos_total: "550.00",   // sale gross incl. its own 50 tax
+          manual_total: "0",
+          legacy_tax: "0",
+          snapshot_tax: "150.00", // 100 exclusive (session) + 50 inclusive (pos_sale)
+          exclusive_tax: "100.00",
+          discount_total: "0",
+        }],
+      }],
+    ]);
+    await svc.recalcFolioTotals(db, 7);
+    const update = db.queries.find((q) => q.sql.includes("UPDATE treatment_folios"));
+    expect(update.params[2]).toBe(150);  // tax_total = all snapshots
+    expect(update.params[3]).toBe(1650); // 1000 + 550 + 100 exclusive on top
   });
 });
 

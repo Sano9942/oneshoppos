@@ -1135,9 +1135,11 @@ async function addFolioLine(db, folioId, data, actorId) {
 
 async function attachSaleToFolio(db, saleId, folioId, actorId) {
   return db.transaction(async (client) => {
-    // Lookup sale total + its own v83 tax aggregate
+    // Lookup sale total + its own v83 tax aggregate. NOTE: the column is
+    // total_amount — the pre-V05 code selected a non-existent "total" column,
+    // so this endpoint 42703'd on every call (latent, never test-covered).
     const { rows: [sale] } = await client.query(
-      "SELECT id, total, tax_total, timestamp FROM sales WHERE id = $1",
+      "SELECT id, total_amount AS total, tax_total, timestamp FROM sales WHERE id = $1",
       [saleId]
     );
     if (!sale) {
