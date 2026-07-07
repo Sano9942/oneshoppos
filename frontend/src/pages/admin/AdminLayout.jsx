@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail, Activity, Scale, CreditCard, Wallet } from "lucide-react";
+import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail, Activity, Scale, CreditCard, Wallet, Grid3x3 } from "lucide-react";
 import { clearAdminSession, getAdminToken, getAdminSession, adminFetch } from "./AdminLogin";
 
 const NAV_ITEMS = [
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { name: "Support", path: "/admin/support", icon: MessageSquare, badge: true },
   { name: "Emails", path: "/admin/emails", icon: Mail },
   { name: "Activity", path: "/admin/activity", icon: Activity },
+  { name: "Adoption", path: "/admin/adoption", icon: Grid3x3 },
   { name: "Tax Rates", path: "/admin/tax-rates", icon: Scale },
   { name: "Dead Letters", path: "/admin/dead-letters", icon: AlertTriangle },
   { name: "Billing", path: "/admin/billing", icon: Wallet },

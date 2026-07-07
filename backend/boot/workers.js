@@ -315,6 +315,7 @@ function startAll(deps) {
     ["course_release", "COURSE_RELEASE_WORKER_ENABLED"],
     ["kds_snapshot", "KDS_SNAPSHOT_WORKER_ENABLED"],
     ["reservation_reminder", "RESERVATION_REMINDER_WORKER_ENABLED"],
+    ["adoption_snapshot", "ADOPTION_SNAPSHOT_WORKER_ENABLED"],
     ["booking_reminder", "BOOKING_REMINDER_WORKER_ENABLED", { kind: "poller" }],
   ];
   for (const [key, envVar, opts] of PG_BOSS_GATES) recordGate(key, envVar, opts);
@@ -368,6 +369,13 @@ function startAll(deps) {
           await tryRegister("orphan-schema-scan", async () => {
             const { registerOrphanSchemaScanWorker } = require("../workers/orphan-schema-scan-worker-boss");
             await registerOrphanSchemaScanWorker(boss, db);
+          });
+        }
+
+        if (String(process.env.ADOPTION_SNAPSHOT_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("adoption-snapshot", async () => {
+            const { registerAdoptionSnapshotWorker } = require("../workers/adoption-snapshot-worker-boss");
+            await registerAdoptionSnapshotWorker(boss, db);
           });
         }
 

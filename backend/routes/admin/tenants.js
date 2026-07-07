@@ -471,22 +471,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   // Per-mode adoption counts for one tenant — answers "does this tenant
   // actually USE the vertical their preset enables?". One count query per
   // domain table, each individually try/caught (missing table ⇒ row omitted).
-  const VERTICAL_USAGE_SOURCES = [
-    { key: "appointments", label: "Appointments", table: "appointments", mode: "appointments" },
-    { key: "restaurant_checks", label: "Restaurant checks", table: "draft_orders", mode: "restaurant",
-      where: "order_context IS DISTINCT FROM 'retail'" },
-    { key: "service_tickets", label: "Service tickets", table: "service_tickets", mode: "workflow_tickets" },
-    { key: "projects", label: "Projects", table: "service_projects", mode: "service_projects" },
-    { key: "contracts", label: "Contracts", table: "contracts", mode: "service_projects" },
-    { key: "rental_contracts", label: "Rental contracts", table: "rental_contracts", mode: "rentals" },
-    { key: "room_bookings", label: "Room bookings", table: "room_bookings", mode: "room_management" },
-    { key: "treatment_plans", label: "Treatment plans", table: "treatment_plans", mode: "treatment_plans" },
-    { key: "subscriptions", label: "Member subscriptions", table: "customer_subscriptions", mode: "subscriptions" },
-    { key: "member_checkins", label: "Member check-ins", table: "member_checkins", mode: "subscriptions" },
-    { key: "backorders", label: "Backorders", table: "backorders", mode: "wholesale" },
-    { key: "field_visits", label: "Field visits", table: "field_visits", mode: "wholesale" },
-    { key: "gift_cards", label: "Gift cards", table: "gift_cards", mode: null },
-  ];
+  const { VERTICAL_USAGE_SOURCES } = require("../../config/vertical-usage-sources");
 
   app.get("/api/admin/tenants/:id/vertical-usage", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {

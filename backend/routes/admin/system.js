@@ -50,6 +50,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     attendance_auto_close: "attendance-auto-close",
     catalog_scheduler: null, // setInterval
     orphan_schema_scan: "orphan-schema-scan",
+    adoption_snapshot: "adoption-snapshot",
     shopify_sync: null, // setInterval
     report_schedule: null, // setInterval
   };
@@ -101,6 +102,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const catalogSchedulerStatus = global.__catalogSchedulerStatus || null;
       // Hourly orphan-schema scan (default ON when pg-boss is wired).
       const orphanSchemaScanStatus = global.__orphanSchemaScanWorkerStatus || null;
+      const adoptionSnapshotStatus = global.__adoptionSnapshotWorkerStatus || null;
       // Shopify inventory-event poll (30s) + report-schedule poll (60s).
       const shopifySyncStatus = global.__shopifySyncWorkerStatus || null;
       const reportScheduleStatus = global.__reportScheduleWorkerStatus || null;
@@ -233,9 +235,42 @@ module.exports = function registerSystemRoutes(app, deps) {
         attendance_auto_close: workerInfo("attendance_auto_close", attendanceAutoCloseStatus, 24 * 60 * 60 * 1000),
         catalog_scheduler: workerInfo("catalog_scheduler", catalogSchedulerStatus, 60_000),
         orphan_schema_scan: workerInfo("orphan_schema_scan", orphanSchemaScanStatus, 60 * 60 * 1000),
+        adoption_snapshot: workerInfo("adoption_snapshot", adoptionSnapshotStatus, 6 * 60 * 60 * 1000),
         shopify_sync: workerInfo("shopify_sync", shopifySyncStatus, 30_000),
         report_schedule: workerInfo("report_schedule", reportScheduleStatus, 60_000),
       });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Feature-adoption matrix ────────────────────────────────────────────
+  // Reads public.infra_cache (key: 'feature_adoption') populated by the
+  // adoption-snapshot worker (every 6h). ?force=1 recomputes live — a full
+  // cross-tenant fanout, so avoid forcing without reason.
+  app.get("/api/admin/adoption", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const force = req.query.force === "1" || req.query.force === "true";
+
+      if (!force) {
+        const { rows: [cached] } = await db.query(
+          `SELECT payload, computed_at, duration_ms
+           FROM public.infra_cache WHERE cache_key = 'feature_adoption'`
+        );
+        if (cached) {
+          res.set("X-Infra-Cache", "hit");
+          return res.json({
+            ...cached.payload,
+            computed_at: cached.computed_at,
+            snapshot_duration_ms: cached.duration_ms,
+          });
+        }
+      }
+
+      const { runSnapshot } = require("../../workers/adoption-snapshot-worker-boss");
+      const result = await runSnapshot(db);
+      res.set("X-Infra-Cache", "miss");
+      return res.json({ ...result, snapshot_duration_ms: result.durationMs });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
