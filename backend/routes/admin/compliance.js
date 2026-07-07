@@ -5,7 +5,7 @@ const { validate } = require("../../middleware/validate");
 const { CreateTaxRateSchema } = require("../../schemas/admin");
 
 module.exports = function registerComplianceRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager } = deps;
+  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
 
   // ── Tax Rate Reference CRUD (public schema) ────────────────────────────
   app.get("/api/admin/tax-rates", requireAllowedIp, requireSuperAdmin, async (req, res) => {
@@ -27,6 +27,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
         [hs_code, description_en, description_ur || null, federal_gst || 0, punjab_pra || 0, sindh_srb || 0, kpk_kpra || 0, balochistan_bra || 0, exemption_notes || null]
       );
+      logAdminAction(req.admin.email, "tax_rate_created", "tax_rate", rate.id, { hs_code: rate.hs_code }, req.ip);
       res.json(rate);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -48,6 +49,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
         [hs_code, description_en, description_ur, federal_gst, punjab_pra, sindh_srb, kpk_kpra, balochistan_bra, exemption_notes, id]
       );
       if (!rate) return res.status(404).json({ error: "Rate not found" });
+      logAdminAction(req.admin.email, "tax_rate_updated", "tax_rate", rate.id, { hs_code: rate.hs_code }, req.ip);
       res.json(rate);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -58,6 +60,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     try {
       const { rowCount } = await db.query("DELETE FROM public.tax_rate_reference WHERE id = $1", [req.params.id]);
       if (!rowCount) return res.status(404).json({ error: "Rate not found" });
+      logAdminAction(req.admin.email, "tax_rate_deleted", "tax_rate", req.params.id, null, req.ip);
       res.json({ message: "Rate deleted" });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -107,6 +110,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
         }
       }
 
+      logAdminAction(req.admin.email, "tax_suggestion_reviewed", "tax_suggestion", req.params.id, { status, tenant_slug }, req.ip);
       res.json({ message: `Suggestion ${status}`, suggestion });
     } catch (err) {
       res.status(500).json({ error: err.message });

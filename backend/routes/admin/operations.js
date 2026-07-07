@@ -89,6 +89,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
         }
       }
 
+      logAdminAction(req.admin.email, "ticket_status_updated", "support_ticket", req.params.ticketId, { tenant_id: req.params.tenantId, status }, req.ip);
       return res.json({ ticket: rows[0] });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -291,6 +292,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
         return res.status(404).json({ error: "Event not found" });
       }
 
+      logAdminAction(req.admin.email, "dead_letter_retried", "tenant", req.params.tenantId, { event_id: req.params.id }, req.ip);
       return res.json({ event: rows[0] });
     } catch (err) {
       return res.status(500).json({ error: err.message });

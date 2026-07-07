@@ -122,6 +122,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
     try {
       const { cleanupDeadTenants } = require("../../jobs/cleanup-dead-tenants");
       const results = await cleanupDeadTenants({ dryRun: false });
+      logAdminAction(req.admin.email, "cleanup_run", "system", null, { checked: results.checked, deleted: results.deleted, skipped: results.skipped }, req.ip);
       res.json(results);
     } catch (err) {
       res.status(500).json({ error: err.message });

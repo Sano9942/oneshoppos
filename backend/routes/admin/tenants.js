@@ -583,6 +583,7 @@ module.exports = function registerTenantRoutes(app, deps) {
       );
 
       await auditLog(tenant.id, "setup_token_regenerated", { slug: tenant.slug }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "setup_token_regenerated", "tenant", req.params.id, { slug: tenant.slug }, req.ip);
 
       const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
       res.json({
@@ -822,6 +823,7 @@ module.exports = function registerTenantRoutes(app, deps) {
         [req.params.noteId, req.params.id]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Note not found" });
+      logAdminAction(req.admin.email, "note_deleted", "tenant", req.params.id, { note_id: req.params.noteId }, req.ip);
       return res.json({ message: "Note deleted" });
     } catch (err) {
       return res.status(500).json({ error: err.message });

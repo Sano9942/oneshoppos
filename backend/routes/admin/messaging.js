@@ -101,6 +101,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
         [req.params.id]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Email not found or not retriable" });
+      logAdminAction(req.admin.email, "email_queue_retried", "email", req.params.id, null, req.ip);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -358,6 +359,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
         [message, type, active, ends_at !== undefined ? ends_at : null, req.params.id]
       );
       if (rows.length === 0) return res.status(404).json({ error: "Announcement not found" });
+      logAdminAction(req.admin.email, "announcement_updated", "announcement", req.params.id, { type: rows[0].type }, req.ip);
       return res.json(rows[0]);
     } catch (err) {
       return res.status(500).json({ error: err.message });

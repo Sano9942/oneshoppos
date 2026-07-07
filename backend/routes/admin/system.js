@@ -381,6 +381,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const extra = schemasInBackup.filter(s => !expectedSchemas.includes(s));
       const valid = missing.length === 0;
 
+      logAdminAction(req.admin.email, "backup_verified", "system", null, { valid, missing: missing.length, extra: extra.length }, req.ip);
       return res.json({
         valid,
         schemas_in_backup: schemasInBackup.length,
