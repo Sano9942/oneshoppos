@@ -309,6 +309,75 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
+  // ── Test fleet (prefix-scoped bulk view + delete) ──────────────────────
+  // The go-live test tenants share a slug prefix (golv_ by default). This
+  // gives them a one-screen view and a guarded bulk delete. Extend-trial for
+  // the fleet goes through POST /api/admin/tenants/bulk-lifecycle.
+  const FLEET_PREFIX_RE = /^[a-z0-9_]{2,40}$/;
+
+  app.get("/api/admin/test-fleet", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const prefix = String(req.query.prefix || "golv_");
+      if (!FLEET_PREFIX_RE.test(prefix)) return res.status(400).json({ error: "Invalid prefix" });
+      const { rows } = await db.query(
+        `SELECT id, slug, name, status, plan, payment_status, trial_ends_at, grace_ends_at, created_at
+         FROM tenants
+         WHERE slug LIKE $1 AND status != 'deleted'
+         ORDER BY slug`,
+        [prefix + "%"]
+      );
+      return res.json({ prefix, count: rows.length, tenants: rows });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/test-fleet/delete", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const prefix = String(req.body?.prefix || "");
+      const confirm = String(req.body?.confirm || "");
+      if (!FLEET_PREFIX_RE.test(prefix)) return res.status(400).json({ error: "Invalid prefix" });
+      if (confirm !== prefix) {
+        return res.status(400).json({ error: "Type the prefix in 'confirm' to proceed — this drops every matching tenant schema" });
+      }
+
+      const { rows: fleet } = await db.query(
+        "SELECT id, slug FROM tenants WHERE slug LIKE $1 AND status != 'deleted' ORDER BY slug",
+        [prefix + "%"]
+      );
+      if (fleet.length === 0) return res.json({ deleted: [], count: 0 });
+      if (fleet.length > 100) return res.status(400).json({ error: `Refusing to bulk-delete ${fleet.length} tenants (max 100)` });
+
+      const deleted = [];
+      const errors = [];
+      for (const tenant of fleet) {
+        try {
+          // Same safety sequence as DELETE /api/admin/tenants/:id — never
+          // trust a DB-stored slug in raw DDL without re-validating it.
+          if (!/^[a-z0-9_]+$/.test(tenant.slug)) {
+            errors.push({ slug: tenant.slug, error: "invalid slug" });
+            continue;
+          }
+          await db.query(
+            "UPDATE tenants SET status = 'deleted', deleted_at = NOW(), updated_at = NOW() WHERE id = $1",
+            [tenant.id]
+          );
+          await db.query(`DROP SCHEMA IF EXISTS "tenant_${tenant.slug}" CASCADE`);
+          await auditLog(tenant.id, "deleted", { via: "test-fleet" }, `admin:${req.admin.email}`);
+          deleted.push(tenant.slug);
+        } catch (err) {
+          errors.push({ slug: tenant.slug, error: err.message });
+        }
+      }
+
+      logAdminAction(req.admin.email, "test_fleet_deleted", "tenants", null,
+        { prefix, deleted_count: deleted.length, errors }, req.ip);
+      return res.json({ deleted, count: deleted.length, errors });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Tenant Stats ───────────────────────────────────────────────────────
   app.get("/api/admin/tenants/:id/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {

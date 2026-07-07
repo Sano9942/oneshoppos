@@ -53,6 +53,83 @@ module.exports = function registerBillingRoutes(app, deps) {
     }
   });
 
+  // ── Bulk lifecycle (trial extend / expire) ─────────────────────────────
+  // Batch tool for managing trial fleets (e.g. the golv_* test tenants).
+  // extend_trial: pushes trial_ends_at forward from whichever is later
+  // (current trial end or now) and puts the tenant back in 'trial' state.
+  // expire_now: payment_status='expired' — requireActiveSubscription blocks
+  // writes on next request (free-plan tenants stay usable by design).
+  app.post("/api/admin/tenants/bulk-lifecycle", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { tenant_ids, action } = req.body || {};
+      const days = Number(req.body?.days) || 30;
+      if (!Array.isArray(tenant_ids) || tenant_ids.length === 0) {
+        return res.status(400).json({ error: "tenant_ids array is required" });
+      }
+      if (tenant_ids.length > 100) {
+        return res.status(400).json({ error: "Max 100 tenants per batch" });
+      }
+      if (!["extend_trial", "expire_now"].includes(action)) {
+        return res.status(400).json({ error: "action must be 'extend_trial' or 'expire_now'" });
+      }
+      if (action === "extend_trial" && (days < 1 || days > 365)) {
+        return res.status(400).json({ error: "days must be between 1 and 365" });
+      }
+
+      const ids = tenant_ids.map((n) => parseInt(n, 10)).filter(Number.isInteger);
+      let updated;
+      if (action === "extend_trial") {
+        ({ rows: updated } = await db.query(
+          `UPDATE tenants
+           SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + make_interval(days => $1),
+               payment_status = 'trial',
+               grace_ends_at = NULL,
+               updated_at = NOW()
+           WHERE id = ANY($2) AND status != 'deleted'
+           RETURNING id, slug, trial_ends_at, payment_status`,
+          [days, ids]
+        ));
+      } else {
+        ({ rows: updated } = await db.query(
+          `UPDATE tenants
+           SET payment_status = 'expired', updated_at = NOW()
+           WHERE id = ANY($1) AND status != 'deleted'
+           RETURNING id, slug, trial_ends_at, payment_status`,
+          [ids]
+        ));
+      }
+
+      for (const t of updated) {
+        await auditLog(t.id, `bulk_${action}`, action === "extend_trial" ? { days } : null, `admin:${req.admin.email}`);
+      }
+      logAdminAction(req.admin.email, "bulk_lifecycle", "tenants", null,
+        { action, days: action === "extend_trial" ? days : undefined, count: updated.length, tenant_ids: updated.map((t) => t.id) }, req.ip);
+      return res.json({ action, updated: updated.length, tenants: updated });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Global payments list ───────────────────────────────────────────────
+  app.get("/api/admin/payments", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+      const { rows } = await masterDb.query(
+        `SELECT pr.*, t.slug AS tenant_slug, t.name AS tenant_name
+         FROM payment_records pr
+         LEFT JOIN tenants t ON t.id = pr.tenant_id
+         ORDER BY pr.recorded_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
+      const { rows: [count] } = await masterDb.query("SELECT COUNT(*)::int AS total FROM payment_records");
+      return res.json({ payments: rows, total: count.total, limit, offset });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Record Payment ─────────────────────────────────────────────────────
   app.post("/api/admin/tenants/:id/record-payment", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {

@@ -49,6 +49,12 @@ export default function AdminTenantList() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
+  const [fleet, setFleet] = useState(null);
+  const [showFleetDelete, setShowFleetDelete] = useState(false);
+  const [fleetDeleteConfirm, setFleetDeleteConfirm] = useState("");
+  const [fleetActing, setFleetActing] = useState(false);
 
   const loadTenants = () => {
     adminFetch("/api/admin/tenants")
@@ -58,9 +64,57 @@ export default function AdminTenantList() {
       })
       .then((data) => { if (data) setTenants(data.tenants || []); })
       .finally(() => setLoading(false));
+    adminFetch("/api/admin/test-fleet").then((r) => r.json()).then(setFleet).catch(() => {});
   };
 
   useEffect(() => { loadTenants(); }, []);
+
+  const toggleSelected = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const bulkLifecycle = async (tenantIds, action, days) => {
+    setBulkActing(true);
+    try {
+      const res = await adminFetch("/api/admin/tenants/bulk-lifecycle", {
+        method: "POST",
+        body: JSON.stringify({ tenant_ids: tenantIds, action, days }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setSelected(new Set());
+      loadTenants();
+      return d;
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
+  const deleteFleet = async () => {
+    setFleetActing(true);
+    try {
+      const res = await adminFetch("/api/admin/test-fleet/delete", {
+        method: "POST",
+        body: JSON.stringify({ prefix: fleet.prefix, confirm: fleetDeleteConfirm }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setShowFleetDelete(false);
+      setFleetDeleteConfirm("");
+      loadTenants();
+      alert(`Deleted ${d.count} test tenants${d.errors?.length ? ` (${d.errors.length} errors)` : ""}`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setFleetActing(false);
+    }
+  };
 
   const filtered = tenants.filter((t) => {
     const matchSearch = !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.slug.toLowerCase().includes(search.toLowerCase());
@@ -124,6 +178,80 @@ export default function AdminTenantList() {
         </div>
       </div>
 
+      {/* Test fleet card */}
+      {fleet?.count > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+          <div className="text-sm text-(--ui-text)">
+            <span className="font-semibold">Test fleet</span>
+            <span className="ml-2 text-(--ui-text-muted)">
+              {fleet.count} tenants matching <code className="rounded bg-white px-1 py-0.5 font-mono text-xs">{fleet.prefix}*</code>
+              {(() => {
+                const soonest = fleet.tenants
+                  .map((t) => safeDateParse(t.trial_ends_at))
+                  .filter(Boolean)
+                  .sort((a, b) => a - b)[0];
+                return soonest ? ` · soonest trial expiry ${soonest.toLocaleDateString()}` : "";
+              })()}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              disabled={bulkActing}
+              onClick={async () => {
+                const d = await bulkLifecycle(fleet.tenants.map((t) => t.id), "extend_trial", 30);
+                if (d) alert(`Extended trial for ${d.updated} test tenants by 30 days`);
+              }}
+              className="ui-focus-ring rounded-full bg-(--ui-primary) px-3 py-1.5 text-xs font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:opacity-50"
+            >
+              {bulkActing ? "Working..." : "Extend all +30d"}
+            </button>
+            <button
+              disabled={fleetActing}
+              onClick={() => { setFleetDeleteConfirm(""); setShowFleetDelete(true); }}
+              className="ui-focus-ring rounded-full bg-(--ui-danger) px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              Delete fleet
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-(--ui-surface) px-4 py-2.5">
+          <span className="text-sm font-semibold text-(--ui-text)">{selected.size} selected</span>
+          <div className="flex gap-2">
+            <button
+              disabled={bulkActing}
+              onClick={async () => {
+                const d = await bulkLifecycle([...selected], "extend_trial", 30);
+                if (d) alert(`Extended trial for ${d.updated} tenants by 30 days`);
+              }}
+              className="ui-focus-ring rounded-full bg-(--ui-primary) px-3 py-1.5 text-xs font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:opacity-50"
+            >
+              Extend trial +30d
+            </button>
+            <button
+              disabled={bulkActing}
+              onClick={async () => {
+                if (!confirm(`Expire ${selected.size} tenant(s) now? Writes will be blocked until payment (free-plan tenants are unaffected).`)) return;
+                const d = await bulkLifecycle([...selected], "expire_now");
+                if (d) alert(`Expired ${d.updated} tenants`);
+              }}
+              className="ui-focus-ring rounded-full bg-(--ui-danger) px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              Expire now
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-3 py-1.5 text-xs font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="mb-4 flex gap-3">
         <div className="relative flex-1">
@@ -169,6 +297,14 @@ export default function AdminTenantList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-(--ui-border) bg-(--ui-muted-surface) text-left">
+                <th className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((t) => selected.has(t.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((t) => t.id)) : new Set())}
+                    title="Select all (filtered)"
+                  />
+                </th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Name</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Slug</th>
                 <th className="px-4 py-3 font-semibold text-(--ui-text-muted)">Industry</th>
@@ -190,6 +326,13 @@ export default function AdminTenantList() {
                   className="cursor-pointer border-b border-(--ui-border) transition hover:bg-(--ui-muted-surface)"
                   onClick={() => navigate(`/admin/tenants/${t.id}`)}
                 >
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3 font-medium text-(--ui-text)">{t.name}</td>
                   <td className="px-4 py-3 text-(--ui-text-muted)">{t.slug}</td>
                   <td className="px-4 py-3">
@@ -381,6 +524,44 @@ export default function AdminTenantList() {
                 className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-2 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong)"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fleet Delete Confirmation Modal */}
+      {showFleetDelete && fleet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3" onClick={() => { if (!fleetActing) setShowFleetDelete(false); }}>
+          <div className="w-full max-w-md rounded-(--ui-radius-lg) bg-white p-6 shadow-(--ui-shadow-lg)" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-2 text-lg font-bold text-(--ui-danger)">Delete Test Fleet</h2>
+            <p className="mb-4 text-sm text-(--ui-text-muted)">
+              This permanently drops <span className="font-semibold text-(--ui-danger)">{fleet.count} tenant schemas</span> matching{" "}
+              <code className="rounded bg-(--ui-muted-surface) px-1.5 py-0.5 font-mono text-sm">{fleet.prefix}*</code>.
+              Type <code className="rounded bg-(--ui-muted-surface) px-1.5 py-0.5 font-mono text-sm font-semibold text-(--ui-danger)">{fleet.prefix}</code> to confirm.
+            </p>
+            <input
+              value={fleetDeleteConfirm}
+              onChange={(e) => setFleetDeleteConfirm(e.target.value)}
+              placeholder={fleet.prefix}
+              className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-white px-3 py-2 font-mono text-sm text-(--ui-text)"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFleetDelete(false)}
+                disabled={fleetActing}
+                className="ui-focus-ring rounded-full bg-(--ui-muted-surface) px-4 py-2 text-sm font-semibold text-(--ui-text) transition hover:bg-(--ui-border-strong) disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={fleetDeleteConfirm !== fleet.prefix || fleetActing}
+                onClick={deleteFleet}
+                className="ui-focus-ring rounded-full bg-(--ui-danger) px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+              >
+                {fleetActing ? "Deleting..." : `Delete ${fleet.count} tenants`}
               </button>
             </div>
           </div>
