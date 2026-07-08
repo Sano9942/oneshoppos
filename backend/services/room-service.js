@@ -1005,10 +1005,14 @@ async function recomputeFolioTotals(client, folioId) {
   // lines). Lines stamped exclusive add their tax ON TOP of line_total in the
   // grand total; inclusive lines (and pos_sale lines, whose line_total is the
   // sale's tax-included grand total) already carry their tax inside.
+  // V7: manual_charge lines (minibar, laundry, incidentals) were counted in
+  // grand_total but bucketed into neither room_charge_total nor pos_charge_total,
+  // so the breakdown didn't reconcile with the bill. Fold them into the
+  // pos/incidentals bucket alongside pos_sale lines.
   const { rows } = await client.query(
     `SELECT
        COALESCE(SUM(CASE WHEN line_type = 'room_night' THEN line_total ELSE 0 END), 0) AS room_charge_total,
-       COALESCE(SUM(CASE WHEN line_type = 'pos_sale' THEN line_total ELSE 0 END), 0) AS pos_charge_total,
+       COALESCE(SUM(CASE WHEN line_type IN ('pos_sale', 'manual_charge') THEN line_total ELSE 0 END), 0) AS pos_charge_total,
        COALESCE(SUM(CASE WHEN line_type = 'tax' THEN line_total ELSE 0 END), 0)
          + COALESCE(SUM(tax_amount_at_charge), 0) AS tax_total,
        COALESCE(SUM(line_total), 0)
@@ -1043,14 +1047,19 @@ async function addFolioLine(db, folioId, { line_type, description, quantity, uni
 
     // Manual charges may carry an explicit tax_id (minibar, laundry…);
     // discounts and untaxed charges stamp 0. Same entry point as room nights.
-    let tax = { rate: 0, amount: 0, inclusive: true };
+    // V7: derive the inclusive snapshot from the tenant's tax_mode instead of
+    // hardcoding true — a tax-exclusive tenant must not stamp lines inclusive
+    // (harmless for a zero-tax line's math, but the snapshot was dishonest and
+    // would mis-bucket the tax if a rate were ever attached to that line).
+    const { rows: [cp] } = await client.query("SELECT tax_mode FROM company_profile WHERE id = 1");
+    const taxMode = cp?.tax_mode || "none";
+    const modeInclusive = taxMode !== "exclusive"; // 'inclusive' and 'none' → true
+    let tax = { rate: 0, amount: 0, inclusive: modeInclusive };
     if (tax_id != null && line_type === "manual_charge") {
-      const { rows: [cp] } = await client.query("SELECT tax_mode FROM company_profile WHERE id = 1");
-      const taxMode = cp?.tax_mode || "none";
       const t = await resolveTaxForExplicitRate(client, {
         taxId: tax_id, price, quantity: qty, taxMode,
       });
-      tax = { ...t, inclusive: taxMode === "none" ? true : taxMode === "inclusive" };
+      tax = { ...t, inclusive: modeInclusive };
     }
 
     const { rows: [line] } = await client.query(
