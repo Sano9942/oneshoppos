@@ -218,69 +218,13 @@ module.exports = function registerReturnsRoutes(app, deps) {
         .json({ error: "Outlet ID is required for restocking" });
     }
 
-    // B16 fix: validate each returned item against original sale.
-    // F1 (Apr 28 2026): subtract qty already returned for this sale so a
-    // partially-refunded sale can't be refunded a second time at full qty.
-    if (original_sale_id) {
-      try {
-        const { rows: saleItems } = await db.query(
-          `SELECT product_id, variant_id, SUM(quantity) AS sold_qty
-           FROM sale_items WHERE sale_id = $1
-           GROUP BY product_id, variant_id`,
-          [original_sale_id],
-        );
-        if (!saleItems || saleItems.length === 0) {
-          return res.status(400).json({ error: "Original sale not found or has no items" });
-        }
-
-        const { rows: priorReturned } = await db.query(
-          `SELECT ri.product_id, ri.variant_id, SUM(ri.quantity) AS refunded_qty
-           FROM return_items ri
-           JOIN returns r ON r.id = ri.return_id
-           WHERE r.original_sale_id = $1
-           GROUP BY ri.product_id, ri.variant_id`,
-          [original_sale_id],
-        );
-
-        const remainingMap = {};
-        saleItems.forEach((r) => {
-          const key = `${r.product_id}_${r.variant_id ?? "null"}`;
-          remainingMap[key] = Number(r.sold_qty);
-        });
-        priorReturned.forEach((r) => {
-          const key = `${r.product_id}_${r.variant_id ?? "null"}`;
-          if (key in remainingMap) {
-            remainingMap[key] -= Number(r.refunded_qty);
-          }
-        });
-
-        for (const item of items) {
-          const key = `${item.product_id}_${item.variant_id ?? "null"}`;
-          if (!(key in remainingMap)) {
-            return res.status(400).json({
-              error: item.variant_id
-                ? `Variant ${item.variant_id} of product ${item.product_id} was not part of the original sale`
-                : `Product ${item.product_id} was not part of the original sale`,
-            });
-          }
-          const remaining = remainingMap[key];
-          if (remaining <= 0) {
-            return res.status(400).json({
-              error: item.variant_id
-                ? `Variant ${item.variant_id} of product ${item.product_id} has already been fully refunded for this sale`
-                : `Product ${item.product_id} has already been fully refunded for this sale`,
-            });
-          }
-          if (item.quantity > remaining) {
-            return res.status(400).json({
-              error: `Cannot refund ${item.quantity} units of product ${item.product_id}; only ${remaining} remaining (the rest was already refunded against this sale)`,
-            });
-          }
-        }
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    }
+    // B16 fix + F1 (Apr 28 2026) + M2 (WS1c): the per-line remaining-qty check
+    // against the original sale now runs INSIDE the return transaction under a
+    // `FOR UPDATE` lock on the sale row (see the `validateAgainstSale` block at
+    // the top of the tx below). Doing it outside the tx let two concurrent
+    // returns with different/absent idempotency keys both pass the check and
+    // both insert, so cumulative refunds could exceed the sold qty. The lock
+    // serializes concurrent returns for the same sale.
 
     // Validate web_order_id when provided (web order return flow)
     if (web_order_id && !original_sale_id) {
@@ -445,6 +389,78 @@ module.exports = function registerReturnsRoutes(app, deps) {
       const shiftId = shiftRows.length ? shiftRows[0].id : null;
 
       const returnId = await db.transaction(async (client) => {
+        // M2 (WS1c): lock the sale row + re-check remaining qty INSIDE the tx so
+        // two concurrent returns for the same sale serialize here — the second
+        // waits for the first to commit, then sees its return_items and computes
+        // the correct remaining qty. Prevents a double-refund race that the
+        // partial unique index (identical idempotency keys only) can't catch.
+        if (original_sale_id) {
+          const { rows: lockRows } = await client.query(
+            "SELECT id FROM sales WHERE id = $1 FOR UPDATE",
+            [original_sale_id],
+          );
+          if (!lockRows.length) {
+            throw Object.assign(new Error("Original sale not found"), { statusCode: 400 });
+          }
+
+          const { rows: saleItems } = await client.query(
+            `SELECT product_id, variant_id, SUM(quantity) AS sold_qty, MAX(price_at_sale) AS unit_price
+             FROM sale_items WHERE sale_id = $1
+             GROUP BY product_id, variant_id`,
+            [original_sale_id],
+          );
+          if (!saleItems || saleItems.length === 0) {
+            throw Object.assign(new Error("Original sale not found or has no items"), { statusCode: 400 });
+          }
+
+          const { rows: priorReturned } = await client.query(
+            `SELECT ri.product_id, ri.variant_id, SUM(ri.quantity) AS refunded_qty
+             FROM return_items ri
+             JOIN returns r ON r.id = ri.return_id
+             WHERE r.original_sale_id = $1
+             GROUP BY ri.product_id, ri.variant_id`,
+            [original_sale_id],
+          );
+
+          const remainingMap = {};
+          const priceMap = {};
+          saleItems.forEach((r) => {
+            const key = `${r.product_id}_${r.variant_id ?? "null"}`;
+            remainingMap[key] = Number(r.sold_qty);
+            priceMap[key] = Number(r.unit_price);
+          });
+          priorReturned.forEach((r) => {
+            const key = `${r.product_id}_${r.variant_id ?? "null"}`;
+            if (key in remainingMap) {
+              remainingMap[key] -= Number(r.refunded_qty);
+            }
+          });
+
+          for (const item of items) {
+            const key = `${item.product_id}_${item.variant_id ?? "null"}`;
+            if (!(key in remainingMap)) {
+              throw Object.assign(new Error(
+                item.variant_id
+                  ? `Variant ${item.variant_id} of product ${item.product_id} was not part of the original sale`
+                  : `Product ${item.product_id} was not part of the original sale`,
+              ), { statusCode: 400 });
+            }
+            const remaining = remainingMap[key];
+            if (remaining <= 0) {
+              throw Object.assign(new Error(
+                item.variant_id
+                  ? `Variant ${item.variant_id} of product ${item.product_id} has already been fully refunded for this sale`
+                  : `Product ${item.product_id} has already been fully refunded for this sale`,
+              ), { statusCode: 400 });
+            }
+            if (item.quantity > remaining) {
+              throw Object.assign(new Error(
+                `Cannot refund ${item.quantity} units of product ${item.product_id}; only ${remaining} remaining (the rest was already refunded against this sale)`,
+              ), { statusCode: 400 });
+            }
+          }
+        }
+
         const { rows } = await client.query(
           `INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id,
            policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id, idempotency_key)
@@ -759,6 +775,12 @@ module.exports = function registerReturnsRoutes(app, deps) {
             });
           }
         } catch { /* fall through to generic 500 */ }
+      }
+      // Validation errors thrown from inside the tx (M2 qty checks, H5 amount
+      // caps, H6 store_credit precondition, credit_reversal preconditions)
+      // carry a statusCode — honor it instead of masking them as a 500.
+      if (err && err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message });
       }
       res.status(500).json({ error: err.message });
     }
