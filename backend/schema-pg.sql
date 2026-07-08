@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS categories (
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   tax_id INTEGER,
-  hs_code TEXT
+  hs_code TEXT,
+  default_margin_percent NUMERIC
 );
 
 CREATE TABLE IF NOT EXISTS taxes (

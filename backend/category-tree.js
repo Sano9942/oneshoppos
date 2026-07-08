@@ -18,6 +18,8 @@ function normalizeCategoryRow(row) {
     is_active: Number(row.is_active == null ? 1 : row.is_active),
     tax_id: row.tax_id == null ? null : Number(row.tax_id),
     hs_code: row.hs_code || null,
+    default_margin_percent:
+      row.default_margin_percent == null ? null : Number(row.default_margin_percent),
   };
 }
 
@@ -138,7 +140,7 @@ function enrichCategories(rows, directProductCounts = {}) {
 async function fetchCategoryRows(db) {
   return dbAllAsync(
     db,
-    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code
+    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code, default_margin_percent
      FROM categories
      ORDER BY sort_order ASC, name ASC, id ASC`,
   );
@@ -186,7 +188,7 @@ async function getCategoryById(db, categoryId) {
   if (!categoryId) return null;
   return dbGetAsync(
     db,
-    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code
+    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code, default_margin_percent
      FROM categories WHERE id = $1`,
     [Number(categoryId)],
   );

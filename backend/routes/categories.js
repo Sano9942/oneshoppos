@@ -109,6 +109,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
         is_active = 1,
         tax_id = null,
         hs_code = null,
+        default_margin_percent = null,
       } = req.body || {};
       const validationError = await validateParentConstraints({
         parentId: parent_id,
@@ -122,8 +123,8 @@ module.exports = function registerCategoryRoutes(app, deps) {
         parent_id == null || parent_id === "" ? null : Number(parent_id);
 
       const { rows } = await db.query(
-        `INSERT INTO categories (name, description, parent_id, sort_order, is_active, tax_id, hs_code)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, description, parent_id, sort_order, is_active, tax_id, hs_code`,
+        `INSERT INTO categories (name, description, parent_id, sort_order, is_active, tax_id, hs_code, default_margin_percent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, description, parent_id, sort_order, is_active, tax_id, hs_code, default_margin_percent`,
         [
           String(name).trim(),
           description || null,
@@ -132,6 +133,9 @@ module.exports = function registerCategoryRoutes(app, deps) {
           Number(is_active) === 0 ? false : true,
           tax_id || null,
           hs_code || null,
+          default_margin_percent === "" || default_margin_percent == null
+            ? null
+            : Number(default_margin_percent),
         ],
       );
       res.json(rows[0]);
@@ -144,7 +148,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     try {
       const { id } = req.params;
       const { rows: existRows } = await db.query(
-        `SELECT id, name, description, parent_id, sort_order, is_active
+        `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code, default_margin_percent
          FROM categories WHERE id = $1`,
         [id],
       );
@@ -179,6 +183,10 @@ module.exports = function registerCategoryRoutes(app, deps) {
         req.body && Object.prototype.hasOwnProperty.call(req.body, "hs_code")
           ? req.body.hs_code
           : existing.hs_code;
+      const nextMargin =
+        req.body && Object.prototype.hasOwnProperty.call(req.body, "default_margin_percent")
+          ? req.body.default_margin_percent
+          : existing.default_margin_percent;
 
       const validationError = await validateParentConstraints({
         categoryId: id,
@@ -207,8 +215,8 @@ module.exports = function registerCategoryRoutes(app, deps) {
 
       const { rowCount } = await db.query(
         `UPDATE categories
-         SET name = $1, description = $2, parent_id = $3, sort_order = $4, is_active = $5, tax_id = $6, hs_code = $7
-         WHERE id = $8`,
+         SET name = $1, description = $2, parent_id = $3, sort_order = $4, is_active = $5, tax_id = $6, hs_code = $7, default_margin_percent = $8
+         WHERE id = $9`,
         [
           String(nextName).trim(),
           nextDescription || null,
@@ -219,6 +227,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
           Number(nextIsActive) === 0 ? false : true,
           nextTaxId || null,
           nextHsCode || null,
+          nextMargin === "" || nextMargin == null ? null : Number(nextMargin),
           id,
         ],
       );

@@ -128,12 +128,19 @@ module.exports = function mountImportRoutes(app, deps) {
 
         // Pre-fetch lookup tables + existing non-NULL SKUs (for F9 DB-collision check)
         const [catRows, brandRows, taxRows, skuRows] = await Promise.all([
-          db.query("SELECT id, name FROM categories"),
+          db.query("SELECT id, name, default_margin_percent FROM categories"),
           db.query("SELECT id, name FROM brands"),
           db.query("SELECT id, name FROM taxes"),
           db.query("SELECT sku FROM products WHERE sku IS NOT NULL"),
         ]);
         const catMap = new Map(catRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
+        // WS4 cost→price: category id → default markup %. Used to auto-fill a
+        // missing selling_price from cost_price on import.
+        const catMarginMap = new Map(
+          catRows.rows
+            .filter((r) => r.default_margin_percent != null)
+            .map((r) => [r.id, Number(r.default_margin_percent)]),
+        );
         const brandMap = new Map(brandRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const taxMap = new Map(taxRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const dbSkus = new Set(skuRows.rows.map((r) => String(r.sku).toLowerCase()));
@@ -150,6 +157,17 @@ module.exports = function mountImportRoutes(app, deps) {
           const rowErrors = [];
 
           if (!r.name) rowErrors.push("name is required");
+
+          // Resolve category first — its default margin can auto-fill a missing
+          // selling price (WS4 cost→price rule).
+          let category_id = null;
+          if (r.category) {
+            category_id = catMap.get(String(r.category).toLowerCase()) || null;
+            if (!category_id) rowErrors.push(`category "${r.category}" not found`);
+          }
+
+          const costPrice = parseFloat(r.cost_price || "0") || 0;
+
           // F11: distinguish between empty and non-numeric so the error is
           // actionable. The previous wording said "is required and must be a
           // number" even when the field had content like "Rs 850" — which
@@ -157,7 +175,15 @@ module.exports = function mountImportRoutes(app, deps) {
           const priceRaw = String(r.selling_price ?? r.price ?? "").trim();
           let sellingPrice = NaN;
           if (!priceRaw) {
-            rowErrors.push("selling_price is required");
+            // WS4 cost→price: derive retail from cost × (1 + category margin%)
+            // when the row has a cost and its category carries a default markup.
+            // Only then is a missing selling_price acceptable.
+            const margin = category_id != null ? catMarginMap.get(category_id) : null;
+            if (margin != null && costPrice > 0) {
+              sellingPrice = Math.round(costPrice * (1 + margin / 100) * 100) / 100;
+            } else {
+              rowErrors.push("selling_price is required");
+            }
           } else {
             sellingPrice = parseFloat(priceRaw);
             if (isNaN(sellingPrice)) {
@@ -180,12 +206,7 @@ module.exports = function mountImportRoutes(app, deps) {
             }
           }
 
-          // Lookup foreign keys
-          let category_id = null;
-          if (r.category) {
-            category_id = catMap.get(String(r.category).toLowerCase()) || null;
-            if (!category_id) rowErrors.push(`category "${r.category}" not found`);
-          }
+          // Lookup remaining foreign keys
           let brand_id = null;
           if (r.brand) {
             brand_id = brandMap.get(String(r.brand).toLowerCase()) || null;
@@ -207,7 +228,7 @@ module.exports = function mountImportRoutes(app, deps) {
               sku: r.sku || null,
               barcode: r.barcode || null,
               price: sellingPrice,
-              cost_price: parseFloat(r.cost_price || "0") || 0,
+              cost_price: costPrice,
               category_id,
               brand_id,
               tax_id,

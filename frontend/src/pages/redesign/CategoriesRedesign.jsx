@@ -30,6 +30,7 @@ const EMPTY = {
   sort_order: "0",
   tax_id: "",
   hs_code: "",
+  default_margin_percent: "",
 };
 
 export default function CategoriesRedesign() {
@@ -102,6 +103,8 @@ export default function CategoriesRedesign() {
       sort_order: String(row.sort_order ?? 0),
       tax_id: row.tax_id ? String(row.tax_id) : "",
       hs_code: row.hs_code || "",
+      default_margin_percent:
+        row.default_margin_percent != null ? String(row.default_margin_percent) : "",
     });
     setModalOpen(true);
   };
@@ -119,6 +122,8 @@ export default function CategoriesRedesign() {
         sort_order: Number(form.sort_order || 0),
         tax_id: form.tax_id ? Number(form.tax_id) : null,
         hs_code: form.hs_code || null,
+        default_margin_percent:
+          form.default_margin_percent === "" ? null : Number(form.default_margin_percent),
       };
       if (form.id) {
         await api.put(`/api/categories/${form.id}`, payload);
@@ -493,6 +498,24 @@ export default function CategoriesRedesign() {
                   setForm((p) => ({ ...p, hs_code: e.target.value }))
                 }
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                Default margin %
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                value={form.default_margin_percent}
+                placeholder="e.g. 25"
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, default_margin_percent: e.target.value }))
+                }
+              />
+              <p className="mt-1 text-xs text-(--ui-text-muted)">
+                Auto-fills a product's retail price from its cost on import when no price is given.
+              </p>
             </div>
           </div>
           <ModalFooter>

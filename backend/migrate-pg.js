@@ -9601,6 +9601,16 @@ const MIGRATIONS = [
       await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
     },
   },
+  {
+    version: 129,
+    description:
+      "WS4 auto-stock Phase 1 — categories.default_margin_percent: optional per-category markup used to auto-fill a product's retail price from its cost on import/GRN when no selling price is supplied. Tenant-scoped table, so the public pass is a guarded no-op.",
+    up: async (client) => {
+      await client.query(
+        `ALTER TABLE IF EXISTS categories ADD COLUMN IF NOT EXISTS default_margin_percent NUMERIC`,
+      );
+    },
+  },
 ];
 
 /**
