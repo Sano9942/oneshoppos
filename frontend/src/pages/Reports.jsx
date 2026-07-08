@@ -40,6 +40,7 @@ import {
   PackageX,
   Boxes,
   Globe,
+  Stethoscope,
 } from "lucide-react";
 
 import { api } from "../api";
@@ -156,6 +157,7 @@ import MultichannelTab from "./reports/ReportsMultichannel";
 import CommissionSummaryTab from "./reports/ReportsCommissions";
 import KdsAnalyticsTab from "./reports/KdsAnalyticsTab";
 import MenuEngineeringTab from "./reports/MenuEngineeringTab";
+import ClinicalTab from "./reports/ClinicalTab";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
   const {
@@ -562,9 +564,17 @@ const GROUPS = [
   },
   {
     label: "Restaurant",
+    mode: "restaurant",
     tabs: [
-      { id: "kds-analytics", label: "KDS Analytics", icon: Activity },
-      { id: "menu-engineering", label: "Menu Engineering", icon: LayoutGrid },
+      { id: "kds-analytics", label: "KDS Analytics", icon: Activity, flag: "phase4_restaurant_kds_analytics" },
+      { id: "menu-engineering", label: "Menu Engineering", icon: LayoutGrid, flag: "phase4_restaurant_menu_engineering" },
+    ],
+  },
+  {
+    label: "Clinical",
+    mode: "treatment_plans",
+    tabs: [
+      { id: "clinical", label: "Clinical Overview", icon: Stethoscope, flag: "phase4_treatment_plans" },
     ],
   },
 ];
@@ -752,6 +762,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <KdsAnalyticsTab />;
     case "menu-engineering":
       return <MenuEngineeringTab />;
+    case "clinical":
+      return <ClinicalTab />;
     default:
       return null;
   }
@@ -798,12 +810,16 @@ const TAB_ALIASES = {
 export default function Reports() {
   const { isBootstrapping, authHeaders } = useAuth();
   const toast = useToast();
-  const { visible_report_groups } = usePreset();
+  const { visible_report_groups, hasMode } = usePreset();
   const { flags } = useFeatureFlags(authHeaders);
-  // Filter groups for sidebar — null = show all, array = show only listed groups
-  const presetGroups = visible_report_groups
+  // Filter groups for sidebar — null = show all, array = show only listed groups.
+  // A group with a `mode` is vertical-specific (Restaurant, Clinical): only show
+  // it when the tenant runs that mode, so null-group retailers stop inheriting
+  // F&B / clinical analytics they never enabled.
+  const presetGroups = (visible_report_groups
     ? GROUPS.filter((g) => visible_report_groups.includes(g.label))
-    : GROUPS;
+    : GROUPS
+  ).filter((g) => !g.mode || hasMode(g.mode));
   // Drop feature-flagged tabs whose flag is off (e.g. the premium
   // reports_inventory_health_plus tabs would otherwise render and 403 on click).
   const sidebarGroups = presetGroups
