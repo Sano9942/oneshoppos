@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { PageShell, SectionCard, Button } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
@@ -16,6 +16,28 @@ const TABS = [
 // Entities that support the WS4 supplier-catalog column-mapping step.
 const MAPPABLE = new Set(["products", "customers", "suppliers"]);
 
+// Convert AI-extracted invoice line items into a CSV File that flows straight
+// through the normal products import pipeline (validation, auto-SKU, duplicate
+// detection). Extracted rows carry cost but no retail price, so we derive
+// selling_price from a shopkeeper-set default markup — they review it in the
+// preview before importing.
+const INVOICE_COLS = ["name", "selling_price", "cost_price", "stock_quantity", "unit", "barcode"];
+function invoiceRowsToCsvFile(rows, markupPct) {
+  const m = Number(markupPct) || 0;
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [INVOICE_COLS.join(",")];
+  for (const r of rows) {
+    const cost = Number(r.cost_price) || 0;
+    const price = Math.round(cost * (1 + m / 100) * 100) / 100;
+    const out = { ...r, selling_price: price || cost };
+    lines.push(INVOICE_COLS.map((c) => esc(out[c])).join(","));
+  }
+  return new File([lines.join("\n")], "invoice.csv", { type: "text/csv" });
+}
+
 export default function ImportRedesign() {
   const [activeTab, setActiveTab] = useState("products");
   const [file, setFile] = useState(null);
@@ -27,6 +49,9 @@ export default function ImportRedesign() {
   const [inspect, setInspect] = useState(null); // { headers, target_fields, suggested, ... }
   const [columnMap, setColumnMap] = useState({}); // { theirHeader: ourField }
   const fileRef = useRef(null);
+  const invoiceRef = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [invoiceMarkup, setInvoiceMarkup] = useState(25);
   const { success, error: showError } = useToast();
 
   const resetState = useCallback(() => {
@@ -126,6 +151,42 @@ export default function ImportRedesign() {
     }
   }, [file, activeTab, mapMode, columnMap, success, showError, resetState]);
 
+  // AI invoice-photo scan: image -> extracted rows -> CSV -> existing preview.
+  const handleInvoiceScan = useCallback(
+    async (e) => {
+      const img = e.target.files?.[0];
+      if (invoiceRef.current) invoiceRef.current.value = "";
+      if (!img) return;
+      setScanning(true);
+      setMapMode(false);
+      setPreview(null);
+      setInspect(null);
+      setColumnMap({});
+      try {
+        const fd = new FormData();
+        fd.append("file", img);
+        const res = await api.upload("/api/ai/invoice-extract", fd);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not read invoice");
+        if (!data.rows?.length) {
+          showError("No product lines found in that image — try a clearer photo");
+          return;
+        }
+        const csv = invoiceRowsToCsvFile(data.rows, invoiceMarkup);
+        setFile(csv);
+        await runPreview(csv, null);
+        success(
+          `Extracted ${data.rows.length} item${data.rows.length !== 1 ? "s" : ""} — review, then import`,
+        );
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        setScanning(false);
+      }
+    },
+    [invoiceMarkup, runPreview, showError, success],
+  );
+
   const validRows = preview?.rows?.filter((r) => !r._errors?.length) ?? [];
   const errorRows = preview?.rows?.filter((r) => r._errors?.length) ?? [];
   const columns = preview?.rows?.length
@@ -194,6 +255,59 @@ export default function ImportRedesign() {
               Supplier catalog — my file has custom column names (map them to our fields)
             </span>
           </label>
+        )}
+
+        {/* Invoice photo scan (AI) — products only */}
+        {activeTab === "products" && (
+          <div className="mb-4 flex flex-col gap-3 rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-muted-surface) p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-(--ui-text)">Scan a supplier invoice photo</p>
+                <p className="mt-0.5 text-xs text-(--ui-text-muted)">
+                  Snap or upload a challan/invoice — AI reads the line items into the preview below to review and import.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <label className="flex items-center gap-1.5 text-xs text-(--ui-text-muted)">
+                  Markup %
+                  <input
+                    type="number"
+                    min="0"
+                    value={invoiceMarkup}
+                    onChange={(e) => setInvoiceMarkup(e.target.value)}
+                    disabled={scanning || loading || importing}
+                    className="w-16 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-2 py-1.5 text-sm text-(--ui-text)"
+                  />
+                </label>
+                <input
+                  ref={invoiceRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleInvoiceScan}
+                  disabled={scanning || loading || importing}
+                />
+                <Button
+                  tone="primary"
+                  disabled={scanning || loading || importing}
+                  onClick={() => invoiceRef.current?.click()}
+                >
+                  {scanning ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Reading invoice…
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      Scan invoice photo
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Drop zone */}
