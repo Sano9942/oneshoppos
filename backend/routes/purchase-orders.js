@@ -395,14 +395,10 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
 
         const grnNumber = `GRN-${Date.now()}`;
 
-        const grnId = await db.transaction(async (client) => {
-          // 1. Update PO status
-          await client.query(
-            "UPDATE purchase_orders SET status = 'Received' WHERE id = $1",
-            [id]
-          );
-
-          // 2. Create GRN header
+        const grnResult = await db.transaction(async (client) => {
+          // 1. Create GRN header. PO status is decided at the END of the tx,
+          //    once we know how much of the PO has now been received
+          //    cumulatively (M5: no blanket status→'Received' on a partial).
           const { rows: [grnRow] } = await client.query(
             `INSERT INTO goods_received_notes (grn_number, po_id, outlet_id, received_by, notes)
              VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -410,10 +406,16 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
           );
           const newGrnId = grnRow.id;
 
+          // M5: value RECEIVED on THIS GRN — the payable to book. Billing the
+          // full po.total_cost on a partial receipt over-invoiced the supplier.
+          let receivedValue = 0;
+
           for (const item of poItems) {
             const qtyReceived = hasPartialReceive
               ? (receivedMap[item.product_id] ?? 0)
               : item.quantity;
+
+            receivedValue += Number(qtyReceived) * Number(item.cost_price || 0);
 
             await client.query(
               `INSERT INTO grn_items (grn_id, product_id, qty_ordered, qty_received, cost_price)
@@ -464,8 +466,58 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
             }
           }
 
-          return newGrnId;
+          // M5: decide PO status from CUMULATIVE received across every GRN for
+          // this PO, not a blanket 'Received'. A partial receipt keeps the PO
+          // 'Approved' so the outstanding remainder stays receivable (only
+          // 'Approved' POs can be received, per the guard above) — no orphaned
+          // back-order.
+          const { rows: lines } = await client.query(
+            `SELECT poi.quantity AS ordered,
+                    COALESCE((
+                      SELECT SUM(gi.qty_received)
+                      FROM grn_items gi
+                      JOIN goods_received_notes g ON g.id = gi.grn_id
+                      WHERE g.po_id = $1 AND gi.product_id = poi.product_id
+                    ), 0) AS received
+             FROM purchase_order_items poi
+             WHERE poi.po_id = $1`,
+            [id]
+          );
+          const fullyReceived = lines.every(
+            (r) => Number(r.received) >= Number(r.ordered)
+          );
+          await client.query(
+            "UPDATE purchase_orders SET status = $1 WHERE id = $2",
+            [fullyReceived ? "Received" : "Approved", id]
+          );
+
+          // M5: auto-create the supplier invoice INSIDE the tx (was a silent
+          // try/catch OUTSIDE the tx — a throw there left stock received with
+          // no payable). Bill the value received on THIS GRN, so a partial
+          // receipt books only its own payable; each later receipt adds its own.
+          if (po.supplier_id && receivedValue > 0) {
+            const invNumber = `INV-${grnNumber}`;
+            const { rows: [supplier] } = await client.query(
+              "SELECT payment_terms, credit_days FROM suppliers WHERE id = $1",
+              [po.supplier_id]
+            );
+            let dueDate = po.due_date || null;
+            if (supplier && supplier.payment_terms === "credit" && Number(supplier.credit_days || 0) > 0) {
+              const d = new Date();
+              d.setDate(d.getDate() + Number(supplier.credit_days));
+              dueDate = d.toISOString().slice(0, 10);
+            }
+            await client.query(
+              `INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [po.supplier_id, po.id, newGrnId, invNumber, Math.round(receivedValue * 100) / 100, dueDate]
+            );
+          }
+
+          return { grnId: newGrnId, fullyReceived };
         });
+
+        const grnId = grnResult.grnId;
 
         const syncChanges = poItems.map((item) => ({
           product_id: item.product_id,
@@ -481,40 +533,19 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
         }));
         enqueueInventorySyncEvents(syncChanges, {}, () => {});
 
-        // Auto-create supplier invoice for this GRN
-        if (po.supplier_id && po.total_cost > 0) {
-          try {
-            const invNumber = `INV-${grnNumber}`;
-            const { rows: [supplier] } = await db.query(
-              "SELECT payment_terms, credit_days FROM suppliers WHERE id = $1",
-              [po.supplier_id]
-            );
-            let dueDate = po.due_date || null;
-            if (supplier && supplier.payment_terms === "credit" && Number(supplier.credit_days || 0) > 0) {
-              const d = new Date();
-              d.setDate(d.getDate() + Number(supplier.credit_days));
-              dueDate = d.toISOString().slice(0, 10);
-            }
-            await db.query(
-              `INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-              [po.supplier_id, po.id, grnId, invNumber, po.total_cost, dueDate]
-            );
-          } catch {
-            // best-effort
-          }
-        }
-
         createNotification(
           "po_received",
           "PO Received",
-          `GRN ${grnNumber} received for PO #${id}`,
+          `GRN ${grnNumber} received for PO #${id}${grnResult.fullyReceived ? "" : " (partial)"}`,
           "/purchase-orders",
         );
         res.json({
-          message: "PO received. GRN created.",
+          message: grnResult.fullyReceived
+            ? "PO received in full. GRN created."
+            : "PO partially received. GRN created; remaining quantity still receivable.",
           grn_number: grnNumber,
           grn_id: grnId,
+          fully_received: grnResult.fullyReceived,
         });
       } catch (err) {
         res.status(500).json({ error: err.message });
