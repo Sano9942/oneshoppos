@@ -2678,6 +2678,28 @@ module.exports = function registerSalesRoutes(app, deps) {
         });
       }
     } catch (err) {
+      // Racing duplicate: two requests with the same idempotency_key both pass
+      // the pre-flight SELECT, then the second INSERT trips the unique index
+      // (23505). The first request already committed the sale — return the
+      // friendly 409 duplicate response (mirrors returns.js) instead of a raw
+      // 500 that the POS would surface as a scary transaction failure.
+      if (err && err.code === "23505" && idempotency_key) {
+        try {
+          const { rows: [dup] } = await db.query(
+            "SELECT id, invoice_number FROM sales WHERE idempotency_key = $1",
+            [idempotency_key]
+          );
+          if (dup) {
+            return res.status(409).json({
+              success: true,
+              duplicate: true,
+              saleId: dup.id,
+              invoiceNumber: dup.invoice_number,
+              code: "duplicate_sale",
+            });
+          }
+        } catch { /* fall through to generic handling below */ }
+      }
       if (err.statusCode) {
         // 2-G.15 Day 4: insufficient_stock now carries `available` +
         // `product_id` so the POS can render the backorder/oversell modal
