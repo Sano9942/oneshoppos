@@ -84,6 +84,81 @@ async function resolveTenantDbForGatewayRef(gatewayRef) {
 }
 
 /**
+ * Resolve the tenant that owns an inbound marketplace webhook (Daraz / Meta /
+ * WhatsApp). These platforms don't carry a slug in the payload, so — mirroring
+ * resolveTenantDbForGatewayRef above — we scan active tenants, load the
+ * provider's active integration_settings row, and let `matchFn(config, cfgJson,
+ * db)` decide. First hit wins. If exactly one tenant has an active integration
+ * for the provider and nothing matched explicitly, fall back to it (single-
+ * seller install with no account id configured) and log the assumption.
+ *
+ * `matchFn` may be async (it can query the tenant db, e.g. an existing order
+ * map row). Returns `{ db, tenant, config, cfgJson }` or null.
+ */
+async function resolveTenantByIntegration(provider, matchFn) {
+  const tenantDbMgr = require("../tenant-db-manager-pg");
+  let tenants = [];
+  try {
+    const { rows } = await masterDb.query(
+      "SELECT id, slug FROM tenants WHERE status = 'active' ORDER BY id"
+    );
+    tenants = rows;
+  } catch (err) {
+    _logger.error({ err, provider }, "marketplace webhook tenant list failed");
+    return null;
+  }
+
+  const candidates = [];
+  for (const t of tenants) {
+    let db;
+    try {
+      db = await tenantDbMgr.getDb(t.id);
+    } catch (err) {
+      _logger.warn({ err, slug: t.slug, provider }, "marketplace webhook getDb failed — skipping");
+      continue;
+    }
+    let config;
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT * FROM integration_settings WHERE provider = $1 AND is_active = true",
+        [provider]
+      );
+      config = row;
+    } catch (err) {
+      if (!/does not exist/i.test(err.message)) {
+        _logger.warn({ err, slug: t.slug, provider }, "marketplace webhook integration load error");
+      }
+      continue;
+    }
+    if (!config) continue;
+
+    let cfgJson = {};
+    try {
+      cfgJson = config.config_json
+        ? (typeof config.config_json === "string" ? JSON.parse(config.config_json) : config.config_json)
+        : {};
+    } catch { cfgJson = {}; }
+
+    const ctx = { db, tenant: t, config, cfgJson };
+    candidates.push(ctx);
+    try {
+      if (await matchFn(config, cfgJson, db)) return ctx;
+    } catch (err) {
+      _logger.warn({ err, slug: t.slug, provider }, "marketplace webhook matchFn error");
+    }
+  }
+
+  if (candidates.length === 1) {
+    _logger.info(
+      { provider, slug: candidates[0].tenant.slug },
+      "marketplace webhook: no explicit account match — using sole active integration"
+    );
+    return candidates[0];
+  }
+  return null;
+}
+
+/**
  * Process a verified payment webhook event.
  * @param {Object} opts
  * @param {string} opts.provider - Payment provider key (e.g. 'xpay', 'sandbox')
@@ -428,6 +503,35 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
   return { ok: false, statusCode: 404, error: "Unknown transaction" };
 }
 
+// Map a Daraz/Lazada order status onto a web_orders.fulfillment_status value.
+// Unknown/early statuses stay 'unfulfilled'.
+function darazFulfillmentStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (["delivered"].includes(s)) return "fulfilled";
+  if (["shipped", "ready_to_ship"].includes(s)) return "shipped";
+  if (["canceled", "cancelled"].includes(s)) return "cancelled";
+  if (["returned"].includes(s)) return "returned";
+  return "unfulfilled";
+}
+
+// Pull an order out of a Meta commerce webhook change entry. Meta's payloads
+// vary by product (commerce_orders vs page); read defensively and return null
+// when the change doesn't describe an order so we skip non-order events.
+function extractMetaOrder(change) {
+  const v = change?.value || {};
+  const orderId = v.order_id || v.id || v.buyer_order_id || v.merchant_order_id;
+  if (!orderId) return null;
+  const isInstagram =
+    v.channel === "INSTAGRAM" || String(change?.field || "").toLowerCase().includes("instagram");
+  return {
+    external_order_id: String(orderId),
+    external_order_number: String(v.order_number || v.merchant_order_id || orderId),
+    status: v.order_status || v.state || change?.field || null,
+    total: Number(v.total_amount || v.amount || v.order_total || 0) || 0,
+    source: isInstagram ? "instagram" : "facebook",
+  };
+}
+
 module.exports = function registerWebhookRoutes(app, deps) {
   const paymentGateway = require("../services/payment-gateway");
   const logger = _logger;
@@ -502,8 +606,51 @@ module.exports = function registerWebhookRoutes(app, deps) {
   app.post("/api/webhooks/meta", webhookLimiter, async (req, res) => {
     try {
       const { object, entry } = req.body || {};
-      logger.info({ object, entries: entry?.length }, "Meta webhook received");
-      res.json({ success: true });
+      const entries = Array.isArray(entry) ? entry : [];
+      logger.info({ object, entries: entries.length }, "Meta webhook received");
+
+      // Meta stamps the page / commerce-account id on each entry; route to the
+      // tenant whose facebook integration owns one of those ids.
+      const entryIds = entries.map((e) => String(e?.id || "")).filter(Boolean);
+      const resolved = await resolveTenantByIntegration("facebook", (config, cfg) => {
+        const ids = [cfg.commerce_account_id, cfg.page_id, cfg.business_account_id]
+          .filter(Boolean).map(String);
+        return entryIds.some((id) => ids.includes(id));
+      });
+      if (!resolved) {
+        logger.warn({ object, entryIds }, "Meta webhook: no matching tenant integration — acking");
+        // Ack (200) so Meta doesn't retry a payload we can't route.
+        return res.json({ success: true });
+      }
+
+      const db = resolved.db;
+      let written = 0;
+      for (const e of entries) {
+        for (const ch of (e?.changes || [])) {
+          const order = extractMetaOrder(ch);
+          if (!order) continue;
+          const { rows: [wo] } = await db.query(
+            `INSERT INTO web_orders
+               (source, external_order_id, external_order_number, grand_total,
+                payment_status, fulfillment_status, order_status, raw_payload, ordered_at)
+             VALUES ($1, $2, $3, $4, 'paid', 'unfulfilled', 'open', $5, NOW())
+             ON CONFLICT (source, external_order_id) DO UPDATE
+               SET raw_payload = EXCLUDED.raw_payload, updated_at = NOW()
+             RETURNING id`,
+            [order.source, order.external_order_id, order.external_order_number,
+             order.total, JSON.stringify(ch)]
+          );
+          await db.query(
+            `INSERT INTO facebook_order_map (web_order_id, fb_order_id, source, fb_status, last_synced_at)
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (fb_order_id) DO UPDATE SET fb_status = EXCLUDED.fb_status, last_synced_at = NOW()`,
+            [wo.id, order.external_order_id, order.source, order.status]
+          );
+          written++;
+        }
+      }
+      logger.info({ slug: resolved.tenant.slug, written }, "Meta webhook orders written");
+      res.json({ success: true, written });
     } catch (err) {
       logger.error({ err }, "Meta webhook processing error");
       res.status(500).json({ error: "Internal error" });
@@ -527,36 +674,61 @@ module.exports = function registerWebhookRoutes(app, deps) {
   app.post("/api/webhooks/whatsapp", webhookLimiter, async (req, res) => {
     try {
       const { entry } = req.body || {};
-      const changes = entry?.[0]?.changes || [];
+      const entries = Array.isArray(entry) ? entry : [];
 
-      for (const change of changes) {
-        const messages = change.value?.messages || [];
-        for (const msg of messages) {
-          logger.info({ from: msg.from, type: msg.type }, "WhatsApp message received");
+      // Resolve the tenant that owns this WhatsApp account. Previously this
+      // handler used require("../db-pg") — the public pool with no search_path —
+      // so every insert into tenant-scoped messaging_threads/messages failed
+      // "relation does not exist" and was swallowed. entry[].id is the WhatsApp
+      // Business Account id; change.value.metadata.phone_number_id is the sending
+      // number — match either against the tenant's whatsapp integration config.
+      const wabaIds = entries.map((e) => String(e?.id || "")).filter(Boolean);
+      const phoneNumberIds = [];
+      for (const e of entries) {
+        for (const ch of (e?.changes || [])) {
+          const pnid = ch?.value?.metadata?.phone_number_id;
+          if (pnid) phoneNumberIds.push(String(pnid));
+        }
+      }
+      const resolved = await resolveTenantByIntegration("whatsapp", (config, cfg) => {
+        const ids = [cfg.business_account_id, cfg.phone_number_id].filter(Boolean).map(String);
+        return wabaIds.some((id) => ids.includes(id)) || phoneNumberIds.some((id) => ids.includes(id));
+      });
+      if (!resolved) {
+        logger.warn({ wabaIds }, "WhatsApp webhook: no matching tenant integration — acking");
+        return res.json({ success: true });
+      }
 
-          // Dual-write into generic messaging inbox
-          try {
-            const { findOrCreateThread, addMessage } = require("../services/messaging");
-            const db = require("../db-pg");
-            const thread = await findOrCreateThread(db, {
-              channel: "whatsapp",
-              channelIdentifier: msg.from,
-            });
-            await addMessage(db, {
-              threadId: thread.id,
-              direction: "inbound",
-              content: msg.text?.body || msg.caption || `[${msg.type}]`,
-              messageType: msg.type || "text",
-              externalId: msg.id,
-              senderType: "customer",
-            });
-          } catch (inboxErr) {
-            logger.error({ err: inboxErr }, "Failed to write WhatsApp message to inbox");
+      const db = resolved.db;
+      const { findOrCreateThread, addMessage } = require("../services/messaging");
+      let stored = 0;
+      for (const e of entries) {
+        for (const change of (e?.changes || [])) {
+          const messages = change.value?.messages || [];
+          for (const msg of messages) {
+            logger.info({ from: msg.from, type: msg.type, slug: resolved.tenant.slug }, "WhatsApp message received");
+            try {
+              const thread = await findOrCreateThread(db, {
+                channel: "whatsapp",
+                channelIdentifier: msg.from,
+              });
+              await addMessage(db, {
+                threadId: thread.id,
+                direction: "inbound",
+                content: msg.text?.body || msg.caption || `[${msg.type}]`,
+                messageType: msg.type || "text",
+                externalId: msg.id,
+                senderType: "customer",
+              });
+              stored++;
+            } catch (inboxErr) {
+              logger.error({ err: inboxErr, slug: resolved.tenant.slug }, "Failed to write WhatsApp message to inbox");
+            }
           }
         }
       }
 
-      res.json({ success: true });
+      res.json({ success: true, stored });
     } catch (err) {
       logger.error({ err }, "WhatsApp webhook processing error");
       res.status(500).json({ error: "Internal error" });
@@ -566,12 +738,59 @@ module.exports = function registerWebhookRoutes(app, deps) {
   // POST /api/webhooks/daraz — Daraz order status push notifications
   app.post("/api/webhooks/daraz", webhookLimiter, async (req, res) => {
     try {
-      const { trade_order_id, status, timestamp } = req.body || {};
-      if (!trade_order_id) return res.status(400).json({ error: "Missing order ID" });
+      const body = req.body || {};
+      const { trade_order_id, order_id, status, timestamp, seller_id, seller_short_code } = body;
+      const orderId = String(trade_order_id || order_id || "");
+      if (!orderId) return res.status(400).json({ error: "Missing order ID" });
 
-      logger.info({ trade_order_id, status, timestamp }, "Daraz webhook received");
+      logger.info({ orderId, status, timestamp, seller_id }, "Daraz webhook received");
 
-      res.json({ success: true });
+      // Route to the seller's tenant: prefer a seller-id match against config,
+      // else the tenant that already has this order mapped (status push on a
+      // previously-pulled order). resolveTenantByIntegration falls back to the
+      // sole active daraz integration when nothing matches explicitly.
+      const resolved = await resolveTenantByIntegration("daraz", async (config, cfg, db) => {
+        const sellerIds = [cfg.seller_id, cfg.seller_short_code].filter(Boolean).map(String);
+        if (seller_id && sellerIds.includes(String(seller_id))) return true;
+        if (seller_short_code && sellerIds.includes(String(seller_short_code))) return true;
+        try {
+          const { rows } = await db.query(
+            "SELECT 1 FROM daraz_order_map WHERE daraz_order_id = $1 LIMIT 1",
+            [orderId]
+          );
+          return rows.length > 0;
+        } catch {
+          return false;
+        }
+      });
+      if (!resolved) {
+        logger.warn({ orderId, seller_id }, "Daraz webhook: no matching tenant integration — acking");
+        return res.json({ success: true });
+      }
+
+      const db = resolved.db;
+      const orderNumber = String(body.order_number || orderId);
+      const { rows: [wo] } = await db.query(
+        `INSERT INTO web_orders
+           (source, external_order_id, external_order_number, fulfillment_status, raw_payload, ordered_at)
+         VALUES ('daraz', $1, $2, $3, $4, NOW())
+         ON CONFLICT (source, external_order_id) DO UPDATE
+           SET fulfillment_status = EXCLUDED.fulfillment_status,
+               raw_payload = EXCLUDED.raw_payload,
+               updated_at = NOW()
+         RETURNING id`,
+        [orderId, orderNumber, darazFulfillmentStatus(status), JSON.stringify(body)]
+      );
+      await db.query(
+        `INSERT INTO daraz_order_map (web_order_id, daraz_order_id, daraz_order_number, daraz_status, last_synced_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (daraz_order_id) DO UPDATE
+           SET daraz_status = EXCLUDED.daraz_status, last_synced_at = NOW()`,
+        [wo.id, orderId, orderNumber, status || null]
+      );
+
+      logger.info({ slug: resolved.tenant.slug, orderId, status }, "Daraz webhook order upserted");
+      res.json({ success: true, web_order_id: wo.id });
     } catch (err) {
       logger.error({ err }, "Daraz webhook processing error");
       res.status(500).json({ error: "Internal error" });
