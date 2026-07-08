@@ -3,6 +3,7 @@ const logger = require("../services/logger");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
 const { resolveTaxSnapshot } = require("../services/tax-snapshot");
+const { resolvePriceForContext } = require("../services/pricing");
 const { verifyManagerPin } = require("../services/manager-pin");
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
@@ -1190,6 +1191,118 @@ module.exports = function registerSalesRoutes(app, deps) {
       try { logger.warn?.({ err: pricingErr }, "auto-pricing skipped"); } catch {}
     }
 
+    // H1 — server-side price authority. The POS client asserts item.price;
+    // never trust it as the source of monetary truth. Re-resolve each line's
+    // price through the shared price-list cascade (resolvePriceForContext —
+    // the same authority storefront/quote/field use) and reject a sale whose
+    // client subtotal falls materially BELOW what the server would charge.
+    // Overcharge is allowed (open-price / weighted / misc lines legitimately
+    // price above catalog); only undercharge is a leak. Lines are excluded
+    // from the gate when they carry a manager-approved price override
+    // (overridesByIndex — already audited), a downward group price-book
+    // override (autoPricingBreakdown.priceBookApplied — server-authorized
+    // above), a bundle (composite pricing), or no product id (custom line).
+    try {
+      const priceBookLineKeys = new Set(
+        (autoPricingBreakdown.priceBookApplied || []).map(
+          (a) => `${a.product_id}:${a.variant_id == null ? "null" : Number(a.variant_id)}`,
+        ),
+      );
+      let serverAuthSubtotal = 0;
+      let clientAuthSubtotal = 0;
+      let gatedAny = false;
+      for (let i = 0; i < cartItems.length; i++) {
+        const item = cartItems[i];
+        if (item.is_bundle) continue;
+        if (overridesByIndex[i]) continue;
+        const productId = Number(item.original_product_id || item.id) || null;
+        if (!productId) continue;
+        const variantId = item.variant_id != null ? Number(item.variant_id) : null;
+        const key = `${productId}:${variantId == null ? "null" : variantId}`;
+        if (priceBookLineKeys.has(key)) continue;
+        const clientPrice = Number(item.price);
+        const qty = Number(item.quantity);
+        if (!isFinite(clientPrice) || !isFinite(qty)) continue;
+        let serverPrice = clientPrice; // fail-open per line on resolution error
+        try {
+          const resolved = await resolvePriceForContext(db, {
+            productId,
+            variantId,
+            qty,
+            outletId: Number(outlet_id) || null,
+            channelId: null,
+            customerId: customer_id || null,
+          });
+          if (resolved && isFinite(Number(resolved.price))) {
+            serverPrice = Number(resolved.price);
+          }
+        } catch (priceErr) {
+          try { logger.warn?.({ err: priceErr, productId }, "H1 price resolve skipped"); } catch {}
+          continue;
+        }
+        serverAuthSubtotal += serverPrice * qty;
+        clientAuthSubtotal += clientPrice * qty;
+        gatedAny = true;
+      }
+      if (gatedAny) {
+        // Tolerance absorbs float/rounding noise (NUMERIC(12,2) round-on-write);
+        // a real undercharge exceeds it by design.
+        const tol = Math.max(1, serverAuthSubtotal * 0.01);
+        if (clientAuthSubtotal < serverAuthSubtotal - tol) {
+          return res.status(400).json({
+            error:
+              "Sale total does not match current pricing. Please re-scan the cart and try again.",
+            code: "PRICE_MISMATCH",
+            server_subtotal: Number(serverAuthSubtotal.toFixed(2)),
+            client_subtotal: Number(clientAuthSubtotal.toFixed(2)),
+          });
+        }
+      }
+    } catch (h1Err) {
+      // A bug in the gate must never silently drop a sale; log and proceed.
+      try { logger.warn?.({ err: h1Err }, "H1 price-authority gate errored"); } catch {}
+    }
+
+    // H2 — per-line tax snapshot resolution (read-only, moved ahead of the
+    // total so tax_mode='exclusive' can add tax onto the total below, and so
+    // downstream tender checks see the tax-inclusive figure). The cascade
+    // lives in services/tax-snapshot.js — shared with storefront quotes,
+    // layaway settle, pay-at-table, quotation convert, and manual orders.
+    const taxMode = (req.company && req.company.tax_mode) || "none";
+    const taxSnapshot = await resolveTaxSnapshot(db, {
+      items: cartItems.map((x) => ({
+        productId: Number(x.original_product_id || x.id) || null,
+        price: x.price,
+        quantity: x.quantity,
+      })),
+      taxMode,
+      taxInclusive:
+        typeof tax_inclusive_in === "boolean" ? tax_inclusive_in : undefined,
+      outletId: Number(outlet_id),
+      tenantId: req.tenantId,
+    });
+    const taxInclusiveResolved = taxSnapshot.taxInclusive;
+    const taxByIndex = taxSnapshot.lines;
+    const taxTotalSnapshot = taxSnapshot.taxTotal;
+    const subtotalSnapshot = taxSnapshot.subtotal;
+
+    // H3 — loyalty redemption value. points_redeemed is a POINTS count (the
+    // POS client sends it as points, mirroring useLoyaltyWallet.js); its cash
+    // value is governed by company_profile.loyalty_redeem_rate ("PKR off per
+    // 100 points", default 10 — the same rate the POS applies client-side),
+    // NOT a hardcoded 1:1. The over-redemption / balance-floor guards run
+    // under FOR UPDATE inside the transaction (see the loyalty block below).
+    const pointsRedeemedInt = Math.max(
+      0,
+      Math.floor(Number(points_redeemed) || 0),
+    );
+    const rawRedeemRate = req.company ? req.company.loyalty_redeem_rate : null;
+    const loyaltyRedeemRate =
+      rawRedeemRate == null || !isFinite(Number(rawRedeemRate))
+        ? 10
+        : Number(rawRedeemRate);
+    const redemptionValue = pointsRedeemedInt * (loyaltyRedeemRate / 100);
+
     // 1. Calculate Expected Total (subtotal minus manual discount)
     const subtotal = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
@@ -1199,8 +1312,18 @@ module.exports = function registerSalesRoutes(app, deps) {
       discount_type === "percent"
         ? (subtotal * parseFloat(discount_amount || 0)) / 100
         : parseFloat(discount_amount || 0);
-    const totalAmount =
-      subtotal - discountValue - autoDiscountValue - parseFloat(points_redeemed || 0);
+    // H2 — in exclusive mode the snapshot's tax sits ON TOP of the gross and
+    // must be added to the total (inclusive mode already has tax baked into
+    // the line prices, so it stays untouched). H3 — clamp to >= 0 so an
+    // over-value redemption can never drive goods out for free / negative.
+    const totalAmount = Math.max(
+      0,
+      subtotal -
+        discountValue -
+        autoDiscountValue -
+        redemptionValue +
+        (taxInclusiveResolved ? 0 : Number(taxTotalSnapshot || 0)),
+    );
 
     // Determine the actual payments to record
     let finalPayments = payments;
@@ -1425,27 +1548,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       } catch { /* ignore idempotency check errors */ }
     }
 
-    // P8 (3.14) — Per-line tax snapshot resolution (read-only, before tx).
-    // The cascade lives in services/tax-snapshot.js — shared with storefront
-    // quotes, layaway settle, pay-at-table, quotation convert, and manual
-    // orders so every sale writer resolves tax identically.
-    const taxMode = (req.company && req.company.tax_mode) || "none";
-    const taxSnapshot = await resolveTaxSnapshot(db, {
-      items: cartItems.map((x) => ({
-        productId: Number(x.original_product_id || x.id) || null,
-        price: x.price,
-        quantity: x.quantity,
-      })),
-      taxMode,
-      taxInclusive:
-        typeof tax_inclusive_in === "boolean" ? tax_inclusive_in : undefined,
-      outletId: Number(outlet_id),
-      tenantId: req.tenantId,
-    });
-    const taxInclusiveResolved = taxSnapshot.taxInclusive;
-    const taxByIndex = taxSnapshot.lines;
-    const taxTotalSnapshot = taxSnapshot.taxTotal;
-    const subtotalSnapshot = taxSnapshot.subtotal;
+    // (Per-line tax snapshot resolved earlier, ahead of the total — see H2.)
 
     // Start Transaction Logic
     try {
@@ -1595,7 +1698,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             discountValue,
             discount_type,
             points_earned,
-            points_redeemed,
+            pointsRedeemedInt,
             notes || null,
             activeShift.id,
             idempotency_key || null,
@@ -2028,23 +2131,40 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // Update customer loyalty: tier-aware points + total_spend + auto-upgrade
         if (customer_id) {
-          // Fetch customer's current tier multiplier (default 1.0 if no tier)
+          // H3 — lock the customer row (FOR UPDATE OF c) while we read the
+          // multiplier AND the live points balance, so two concurrent
+          // redemptions can't both read the old balance and both apply.
+          // Mirrors the guard the admin adjust path already has (loyalty.js).
           const { rows: [custTier] } = await client.query(
-            `SELECT lt.points_multiplier FROM customers c
-             LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
-             WHERE c.id = $1`,
+            `SELECT lt.points_multiplier, COALESCE(c.loyalty_points, 0) AS loyalty_points
+               FROM customers c
+               LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
+              WHERE c.id = $1
+              FOR UPDATE OF c`,
             [customer_id]
           );
+          // H3 — a redemption may never exceed the customer's actual balance
+          // (client posts points_redeemed; nothing else verifies ownership).
+          const currentPoints = Number(custTier?.loyalty_points || 0);
+          if (pointsRedeemedInt > currentPoints) {
+            throw Object.assign(
+              new Error(
+                `Insufficient loyalty points: redeeming ${pointsRedeemedInt}, ` +
+                `available ${currentPoints}.`,
+              ),
+              { statusCode: 400, code: "INSUFFICIENT_LOYALTY_POINTS" },
+            );
+          }
           const multiplier = Number(custTier?.points_multiplier) || 1.0;
           // Backend-authoritative: recalculate points_earned with tier multiplier
           const effectivePointsEarned = points_earned > 0
             ? Math.floor(points_earned * multiplier)
             : 0;
 
-          if (effectivePointsEarned > 0 || points_redeemed > 0) {
+          if (effectivePointsEarned > 0 || pointsRedeemedInt > 0) {
             await client.query(
               "UPDATE customers SET loyalty_points = loyalty_points + $1 - $2 WHERE id = $3",
-              [effectivePointsEarned, points_redeemed, customer_id]
+              [effectivePointsEarned, pointsRedeemedInt, customer_id]
             );
             // Update the sale row with the actual (multiplied) points_earned
             if (effectivePointsEarned !== points_earned) {
@@ -2071,14 +2191,14 @@ module.exports = function registerSalesRoutes(app, deps) {
                   ]
                 );
               }
-              if (Number(points_redeemed) > 0) {
+              if (pointsRedeemedInt > 0) {
                 await client.query(
                   `INSERT INTO loyalty_transactions
                      (customer_id, type, points, reference_type, reference_id, note)
                    VALUES ($1, 'redeem', $2, 'sale', $3, $4)`,
                   [
                     customer_id,
-                    Number(points_redeemed),
+                    pointsRedeemedInt,
                     newSaleId,
                     `Redeemed on sale #${newSaleId}`,
                   ]

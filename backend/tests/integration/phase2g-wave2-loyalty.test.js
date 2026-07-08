@@ -138,9 +138,13 @@ describe("Phase 2-G Wave 2 — 2-G.3 loyalty ledger writes + tier discount", () 
     await setFlag("phase2g_loyalty", true);
     // Give customer a starting balance to redeem from.
     await db.query(`UPDATE customers SET loyalty_points = 50 WHERE id = 1`);
+    // H3 (WS1b): points_redeemed is a POINTS count valued at
+    // loyalty_redeem_rate (PKR per 100 pts, default 10) — NOT 1:1. So 10 pts
+    // discounts 10*10/100 = 1.00 off a 100 sale → total 99. The payment must
+    // cover the total (L5 coverage), so tender 99 not the old 1:1 assumption.
     const res = await req.post("/api/sales").send({
       cartItems: [{ id: 1, name: "Widget A", price: 100, quantity: 1 }],
-      payments: [{ method: "Cash", amount: 90 }],
+      payments: [{ method: "Cash", amount: 99 }],
       outlet_id: 1,
       employee_id: 1,
       customer_id: 1,

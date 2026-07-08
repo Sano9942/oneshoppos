@@ -58,6 +58,11 @@ describe("P8 — Tax snapshot at sale-write (Postgres)", () => {
     // tax_id on both so gst wins. Product 1: gst=17. Product 2: gst=5.
     await db.query("UPDATE products SET tax_id = NULL, gst = 17 WHERE id = 1");
     await db.query("UPDATE products SET tax_id = NULL, gst = 5 WHERE id = 2");
+    // H1 (WS1b) — the sale path now re-resolves each line's price server-side
+    // and rejects an undercharge vs catalog. These carts price product 2 at
+    // 50 (its "Snack" persona), so align the catalog to match; product 1 is
+    // already 100. Tax-amount assertions are unchanged (still price-based).
+    await db.query("UPDATE products SET price = 50 WHERE id = 2");
     // The seeded outlet_tax_profile (if any) and category-tree must not
     // shadow these — we clear category_id to keep the test deterministic.
     await db.query("UPDATE products SET category_id = NULL WHERE id IN (1, 2)");

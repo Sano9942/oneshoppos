@@ -71,6 +71,15 @@ describe("V02 — backorders / partial fulfillment", () => {
     );
     hardBuyer = h[0].id;
 
+    // H1 (WS1b) — the sale path now re-resolves each line's price server-side
+    // and rejects an undercharge vs catalog. These carts price P1/P2/P3 at
+    // 50/100/10 (the backorder snapshot amounts these tests assert on), so
+    // align the catalog to match. (Tests 5–6 exercise the storefront path,
+    // which already reprices server-side, and are unaffected.)
+    await db.query("UPDATE products SET price = 50 WHERE id = 1");
+    await db.query("UPDATE products SET price = 100 WHERE id = 2");
+    await db.query("UPDATE products SET price = 10 WHERE id = 3");
+
     // Deterministic stock for product 2 at outlet 1.
     await db.query(
       `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES (2, 1, 60)
