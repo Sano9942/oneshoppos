@@ -60,6 +60,21 @@ async function calculateCommissionsForSale(db, saleId) {
     }
     const sale = saleRows[0];
 
+    // M4 idempotency: a sale can be commission-calc'd twice — once by the POS
+    // checkout auto-hook (sales.js) and again by a manager's manual recalc
+    // (commissions.js POST /calculate). Both call this engine with a bare
+    // INSERT, so without a pre-delete the second run writes a *second* full set
+    // of commission_earnings for the same (employee, sale) → payroll double-pay.
+    // Clear this sale's still-pending commission rows first so a recalc REPLACES
+    // rather than duplicates. Approved/paid rows are left intact (never silently
+    // un-pay actioned payroll); tip rows (earning_type='tip', sale_id NULL) never
+    // match this predicate.
+    await client.query(
+      `DELETE FROM commission_earnings
+       WHERE sale_id = $1 AND earning_type = 'commission' AND status = 'pending'`,
+      [saleId],
+    );
+
     const { rows: items } = await client.query(
       `SELECT si.*, p.category_id, p.brand_id
        FROM sale_items si
