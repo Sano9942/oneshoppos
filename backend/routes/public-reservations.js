@@ -42,7 +42,9 @@ module.exports = function registerPublicReservationsRoutes(app, deps) {
           return res.status(400).json({ error: "Invalid date — expected YYYY-MM-DD" });
         }
 
-        // Generate 30-min slots 09:00–22:00.
+        // Generate 30-min slots 09:00–22:00. NOTE: slots are anchored to UTC
+        // wall-clock (…Z) and stored reservations are matched in the same UTC
+        // frame below — the whole endpoint is internally consistent in UTC.
         const slots = [];
         for (let h = 9; h < 22; h++) {
           for (const m of [0, 30]) {
@@ -53,11 +55,19 @@ module.exports = function registerPublicReservationsRoutes(app, deps) {
           }
         }
 
+        // Filter booked reservations by an explicit UTC day range, NOT
+        // `reservation_start::date = $1` — that cast uses the DB session
+        // TimeZone, so under a non-UTC session a reservation would fall on a
+        // different calendar date than the (UTC-anchored) slots and read as
+        // available → double-book. A [dayStartUtc, nextDayUtc) range keeps the
+        // filter in the same UTC frame as slot generation + the match below.
+        const dayStartUtc = `${dateStr}T00:00:00.000Z`;
+        const dayEndUtc = new Date(Date.parse(dayStartUtc) + 86400000).toISOString();
         const { rows: booked } = await db.query(
           `SELECT reservation_start FROM reservations
-           WHERE reservation_start::date = $1::date
+           WHERE reservation_start >= $1 AND reservation_start < $2
              AND status IN ('pending','confirmed','seated')`,
-          [dateStr]
+          [dayStartUtc, dayEndUtc]
         );
         const bookedSet = new Set(
           booked.map((r) => new Date(r.reservation_start).toISOString().slice(0, 16))
