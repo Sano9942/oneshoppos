@@ -9,7 +9,7 @@
  * (invoice numbering).
  */
 
-const { generateInvoiceNumber } = require("./customer-invoicing");
+const { generateInvoiceNumber, recomputeBalance } = require("./customer-invoicing");
 const { resolveTaxForExplicitRate } = require("./tax-snapshot");
 const contractsService = require("./contracts");
 const depositEngine = require("./deposit-engine");
@@ -510,6 +510,45 @@ async function checkoutContract(db, id, data, employeeId) {
       throw Object.assign(new Error(`Cannot check out contract in status '${current.status}'`), { statusCode: 400 });
     }
 
+    // V5: re-check physical availability at checkout. getItemAvailability's
+    // overlap window filters on `expected_return > from`, so a unit still out on
+    // an OVERDUE contract (expected_return already past) is invisible to it and
+    // would be re-let. Count units currently checked out on OTHER contracts for
+    // each line's item (any expected_return — overdue included) and block if
+    // handing these out would oversubscribe the fleet.
+    const { rows: coLines } = await client.query(
+      `SELECT rental_item_id, SUM(quantity) AS qty
+         FROM rental_contract_lines
+        WHERE contract_id = $1 AND rental_item_id IS NOT NULL
+        GROUP BY rental_item_id`,
+      [id]
+    );
+    for (const line of coLines) {
+      const { rows: [it] } = await client.query(
+        "SELECT total_quantity, name FROM rental_items WHERE id = $1",
+        [line.rental_item_id]
+      );
+      const total = Number(it?.total_quantity || 0);
+      if (total <= 0) continue; // 0 = untracked fleet size; don't block
+      const { rows: [out] } = await client.query(
+        `SELECT COALESCE(SUM(rcl.quantity), 0) AS out_qty
+           FROM rental_contracts rc
+           JOIN rental_contract_lines rcl ON rcl.contract_id = rc.id
+          WHERE rcl.rental_item_id = $1
+            AND rc.status = 'checked_out'
+            AND rc.id <> $2`,
+        [line.rental_item_id, id]
+      );
+      const alreadyOut = Number(out.out_qty || 0);
+      const need = Number(line.qty || 0);
+      if (alreadyOut + need > total) {
+        throw Object.assign(
+          new Error(`Cannot check out: ${it?.name || "item"} is still out on another rental (${alreadyOut}/${total} out, ${need} requested). Return the overdue unit first.`),
+          { statusCode: 409, code: "rental_unavailable" }
+        );
+      }
+    }
+
     const sets = ["status = 'checked_out'", "actual_checkin = COALESCE($1, NOW())", "updated_at = NOW()"];
     const params = [data.actual_checkin || null];
     let idx = 1;
@@ -728,9 +767,14 @@ async function generateInvoiceFromContract(db, id, employeeId) {
     const grandTotal = inclusive ? baseTotal : baseTotal + taxTotal;
 
     // Manual deposit (cash/card at counter) + any captured gateway hold both
-    // count as money already collected against the rental (F04) → a payment.
+    // count as money already collected against the rental (F04). V4 fix: the
+    // invoice books the FULL grand total with balance_due = grandTotal, then the
+    // deposit is posted as an actual customer_invoice_payments row below and
+    // recomputeBalance derives amount_paid/balance_due/status. The old path
+    // netted the deposit straight into balance_due while amount_paid stayed 0,
+    // so amount_paid + balance_due ≠ total_amount and no payment was recorded.
     const deposit = Number(contract.deposit_collected || 0) + Number(contract.deposit_captured_amount || 0);
-    const balanceDue = Math.max(0, grandTotal - deposit);
+    const balanceDue = grandTotal;
 
     const { rows: [invoice] } = await client.query(
       `INSERT INTO customer_invoices
@@ -778,6 +822,23 @@ async function generateInvoiceFromContract(db, id, employeeId) {
          VALUES ($1, 'Damage charge', 1, $2, 0, $2)`,
         [invoice.id, damageTotal]
       );
+    }
+
+    // Post the collected deposit as a payment against the invoice, then let
+    // recomputeBalance set amount_paid + balance_due + status coherently.
+    if (deposit > 0) {
+      await client.query(
+        `INSERT INTO customer_invoice_payments
+           (invoice_id, amount, payment_method, payment_type, notes, recorded_by)
+         VALUES ($1, $2, $3, 'payment', $4, $5)`,
+        [invoice.id, deposit, contract.deposit_method || "cash", "Rental deposit", employeeId]
+      );
+      const rb = await recomputeBalance(client, invoice.id);
+      if (rb) {
+        invoice.amount_paid = rb.amount_paid;
+        invoice.balance_due = rb.balance_due;
+        invoice.status = rb.status;
+      }
     }
 
     await client.query(
