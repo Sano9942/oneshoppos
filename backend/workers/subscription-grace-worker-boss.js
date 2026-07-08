@@ -64,20 +64,29 @@ async function registerSubscriptionGraceWorker(boss, pool) {
 async function checkGracePeriods(db, logger, tenantSlug) {
   let count = 0;
 
-  // Active subscriptions past their grace period with unpaid renewal invoices → past_due
+  // Active subscriptions past their grace period whose LATEST renewal invoice
+  // is still unpaid → past_due.
+  //
+  // M9: the previous predicate wrapped ORDER BY/LIMIT inside EXISTS, which is a
+  // no-op — EXISTS only cares whether ≥1 row matches, so it fired if ANY past
+  // run was ever unpaid. A subscriber who missed one old invoice but is current
+  // now was wrongly flagged active→past_due→expired. Pull the balance_due of the
+  // single most-recent run instead and test only that one. COALESCE(...,0)
+  // leaves a subscription with no runs yet untouched.
   const { rows: overdue } = await db.query(
     `SELECT cs.id
      FROM customer_subscriptions cs
      WHERE cs.status = 'active'
        AND cs.grace_period_end IS NOT NULL
        AND cs.grace_period_end < NOW()
-       AND EXISTS (
-         SELECT 1 FROM subscription_runs sr
+       AND COALESCE((
+         SELECT ci.balance_due
+         FROM subscription_runs sr
          JOIN customer_invoices ci ON ci.id = sr.invoice_id
          WHERE sr.subscription_id = cs.id
-           AND ci.balance_due > 0
-         ORDER BY sr.period_start DESC LIMIT 1
-       )`
+         ORDER BY sr.period_start DESC
+         LIMIT 1
+       ), 0) > 0`
   );
 
   for (const { id } of overdue) {
@@ -109,4 +118,4 @@ async function checkGracePeriods(db, logger, tenantSlug) {
   return count;
 }
 
-module.exports = { registerSubscriptionGraceWorker };
+module.exports = { registerSubscriptionGraceWorker, checkGracePeriods };
