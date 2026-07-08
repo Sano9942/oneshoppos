@@ -11,6 +11,7 @@
 
 const { generateInvoiceNumber, computeInvoiceTotals, recomputeBalance } = require("./customer-invoicing");
 const { encryptSecret, decryptSecret } = require("./crypto");
+const stockLedger = require("./stock-ledger");
 
 // ── Ticket numbering ──────────────────────────────────────────────
 
@@ -462,57 +463,28 @@ async function getDeviceHistory(db, { imei, serial_number, excludeTicketId } = {
 
 // ── Parts / labor / fee lines (a NEW stock writer) ─────────────────
 
-// Decrement outlet stock for a part (mirrors the sales.js FOR UPDATE
-// discipline). Serialized parts flip their chosen serial to 'sold'.
+// Decrement outlet stock for a part. Delegates the multi-table + batch-ledger
+// write to the shared stock-ledger helper (same FOR UPDATE discipline as the
+// sale path, and — the L6-L8 fix — it drains stock_batches via FEFO so tracked
+// parts don't drift the batch ledger). Serialized parts flip their serial to 'sold'.
 async function decrementPartStock(client, { productId, variantId, outletId, qty, serialId }) {
-  if (variantId) {
-    const { rows: [row] } = await client.query(
-      `SELECT COALESCE(quantity, 0) AS available FROM variant_outlet_stock
-       WHERE variant_id = $1 AND outlet_id = $2 FOR UPDATE`,
-      [variantId, outletId]
-    );
-    if (!row || Number(row.available) < qty) {
-      throw Object.assign(new Error("Insufficient stock for this part"), { statusCode: 400, code: "insufficient_stock" });
-    }
-    await client.query(
-      `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
-         VALUES ($1, $2, 0 - $3::numeric)
-         ON CONFLICT (variant_id, outlet_id)
-         DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
-      [variantId, outletId, qty]
-    );
-    await client.query("UPDATE product_variants SET stock = stock - $1 WHERE id = $2", [qty, variantId]);
-    await client.query("UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
-  } else {
-    const { rows: [row] } = await client.query(
-      `SELECT COALESCE(quantity, 0) AS available FROM outlet_stock
-       WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
-      [productId, outletId]
-    );
-    if (!row || Number(row.available) < qty) {
-      throw Object.assign(new Error("Insufficient stock for this part"), { statusCode: 400, code: "insufficient_stock" });
-    }
-    await client.query("UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
-  }
+  await stockLedger.decrementStock(client, {
+    productId, variantId: variantId || null, outletId, qty,
+    refType: "service_ticket", movementType: "sale",
+  });
   if (serialId) {
     await client.query("UPDATE product_serial_numbers SET status = 'sold' WHERE id = $1", [serialId]);
   }
 }
 
 // Reverse of decrementPartStock — used by remove-part and cancel-restock.
+// Returns units to both on-hand stock and the batch ledger via the shared helper.
 async function restockPartStock(client, { productId, variantId, outletId, qty, serialId }) {
-  if (variantId) {
-    await client.query(
-      `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
-         VALUES ($1, $2, $3::numeric)
-         ON CONFLICT (variant_id, outlet_id)
-         DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
-      [variantId, outletId, qty]
-    );
-    await client.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [qty, variantId]);
-    await client.query("UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
-  } else if (productId) {
-    await client.query("UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3", [qty, productId, outletId]);
+  if (productId) {
+    await stockLedger.incrementStock(client, {
+      productId, variantId: variantId || null, outletId, qty,
+      refType: "service_ticket",
+    });
   }
   if (serialId) {
     await client.query("UPDATE product_serial_numbers SET status = 'available', sale_id = NULL WHERE id = $1", [serialId]);

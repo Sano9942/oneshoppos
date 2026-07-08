@@ -10,6 +10,7 @@
 // sales.js). Component consumption reuses the shared kit-engine so rounding and
 // stable lock order are identical to the sale path.
 const kitEngine = require("../services/kit-engine");
+const stockLedger = require("../services/stock-ledger");
 
 module.exports = function registerStockConversionRoutes(app, deps) {
   const { db, requirePerm, requireFeature } = deps;
@@ -59,12 +60,12 @@ module.exports = function registerStockConversionRoutes(app, deps) {
             components: comps,
           });
 
-          // Produce the assembled output stock.
-          await client.query(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
-               ON CONFLICT (product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
-            [outputProductId, outlet_id, outputQty]
-          );
+          // Produce the assembled output stock (helper keeps the batch ledger
+          // reconciled for track_batches outputs; no-op for untracked).
+          await stockLedger.incrementStock(client, {
+            productId: outputProductId, outletId: outlet_id, qty: outputQty,
+            refType: "stock_conversion",
+          });
 
           const { rows: [conv] } = await client.query(
             `INSERT INTO stock_conversions
@@ -100,26 +101,13 @@ module.exports = function registerStockConversionRoutes(app, deps) {
           throw Object.assign(new Error("At least one output line is required"), { statusCode: 400 });
         }
 
-        // Consume the source (lock + shortfall check).
-        const { rows: [src] } = await client.query(
-          `SELECT COALESCE(quantity, 0) AS available
-             FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
-          [sourceProductId, outlet_id]
-        );
-        const available = Number(src?.available ?? 0);
-        if (available < sourceQty) {
-          throw Object.assign(new Error("Insufficient stock of the source product to disassemble"), {
-            statusCode: 400,
-            code: "insufficient_stock",
-            product_id: sourceProductId,
-            available,
-            requested: sourceQty,
-          });
-        }
-        await client.query(
-          `UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3`,
-          [sourceQty, sourceProductId, outlet_id]
-        );
+        // Consume the source (lock + shortfall check + FEFO batch drain via the
+        // shared helper — the L6-L8 fix so a tracked source doesn't leave the
+        // batch ledger drifting after disassembly).
+        await stockLedger.decrementStock(client, {
+          productId: sourceProductId, outletId: outlet_id, qty: sourceQty,
+          movementType: "adjust", refType: "stock_conversion",
+        });
 
         const { rows: [conv] } = await client.query(
           `INSERT INTO stock_conversions
@@ -142,19 +130,11 @@ module.exports = function registerStockConversionRoutes(app, deps) {
           const vid = o.variant_id ? Number(o.variant_id) : null;
           const unitCost = o.unit_cost != null && o.unit_cost !== "" ? kitEngine.roundQty(o.unit_cost) : null;
 
-          await client.query(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
-               ON CONFLICT (product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
-            [pid, outlet_id, q]
-          );
-          if (vid) {
-            await client.query(
-              `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity) VALUES ($1, $2, $3)
-                 ON CONFLICT (variant_id, outlet_id) DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
-              [vid, outlet_id, q]
-            );
-            await client.query(`UPDATE product_variants SET stock = stock + $1 WHERE id = $2`, [q, vid]);
-          }
+          // Produce output stock across all stock tables + batch ledger.
+          await stockLedger.incrementStock(client, {
+            productId: pid, variantId: vid, outletId: outlet_id, qty: q,
+            refType: "stock_conversion",
+          });
           await client.query(
             `INSERT INTO stock_conversion_lines
                (conversion_id, product_id, variant_id, quantity, direction, unit_cost)
