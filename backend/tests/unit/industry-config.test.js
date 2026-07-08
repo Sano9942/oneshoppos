@@ -74,7 +74,10 @@ describe("industry-config", () => {
   it("cafe preset has restaurant mode but no floor_plan widget", () => {
     const p = getPreset("cafe");
     expect(p.modes).toEqual(["restaurant"]);
-    expect(p.dashboard_widgets.floor_plan).toBe(false);
+    // WS2e — vertical dashboard_widgets keys (floor_plan / appointments_today /
+    // active_treatment_plans / overdue_sessions) were dropped: they had no
+    // dashboard consumer, so advertising them was dishonest.
+    expect(p.dashboard_widgets.floor_plan).toBeUndefined();
     expect(p.labels.customer).toBe("Customer");
   });
 

@@ -190,7 +190,8 @@ describe("Tenant Preset Engine — Setup + Bootstrap", () => {
       expect(res.body.preset.labels.customer).toBe("Guest");
       expect(res.body.preset.enabled_modes).toContain("restaurant");
       expect(res.body.preset.pos_layout_mode).toBe("list");
-      expect(res.body.preset.dashboard_widgets.floor_plan).toBe(true);
+      // WS2e — the decorative floor_plan widget key was dropped (no consumer).
+      expect(res.body.preset.dashboard_widgets.floor_plan).toBeUndefined();
     });
 
     it("returns preset data for general_retail tenant", async () => {

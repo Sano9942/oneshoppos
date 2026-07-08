@@ -59,10 +59,16 @@ export default function DashboardRedesign() {
 
   // Feature flags (for AI chat panel)
   const { flags } = useFeatureFlags(authHeaders);
-  const { dashboard_widgets, presetLoaded, hasMode } = usePreset();
-  // 2-G.16 Merchant home cards — only show when the tenant is in a retail
-  // preset. Clinical / restaurant tenants keep the original dashboard.
-  const showRetailCards = !isCashier && typeof hasMode === "function" && hasMode("retail");
+  const { dashboard_widgets, presetLoaded, hasMode, business_model } = usePreset();
+  // 2-G.16 Merchant home cards (staff-of-day + cash-position) — only for the
+  // buy/sell retail family. No preset ever declared a "retail" mode, so the old
+  // hasMode("retail") gate was dead: it fail-opened to true pre-load (flashing
+  // the cards for everyone) then went false for every tenant once the preset
+  // loaded. Gate on the real signal — the buy_sell / b2b_distribution business
+  // models — and wait for presetLoaded so nothing flashes. Service / food /
+  // clinical / rental / subscription tenants keep the original dashboard.
+  const RETAIL_BUSINESS_MODELS = ["buy_sell", "b2b_distribution"];
+  const showRetailCards = !isCashier && presetLoaded && RETAIL_BUSINESS_MODELS.includes(business_model);
   // Tier 0.5 — wholesale dashboard cards. Render when the tenant has the
   // `wholesale` mode set. Cashiers don't see A/R surfaces.
   const showWholesaleCards = !isCashier && typeof hasMode === "function" && hasMode("wholesale");

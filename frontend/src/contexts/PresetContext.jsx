@@ -33,8 +33,7 @@ const DEFAULT_PRESET = {
   business_model: "buy_sell",
   labels: DEFAULT_LABELS,
   dashboard_widgets: {
-    inventory_alerts: true, top_products: true, trends: true,
-    attendance: true, floor_plan: false, appointments_today: false,
+    inventory_alerts: true, top_products: true, trends: true, attendance: true,
   },
   onboarding_steps: ["store", "product", "employees", "shift", "sale"],
   pos_layout_mode: "grid",
