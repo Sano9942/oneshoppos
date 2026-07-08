@@ -7,8 +7,9 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { usePreset, DEFAULT_UNIT_VOCABULARY, isWeightedUnit } from "../../contexts/PresetContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag, Layers } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag, Layers, Sparkles } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
@@ -122,6 +123,33 @@ export default function ProductFormPage() {
   const [customerGroups, setCustomerGroups] = useState([]);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const { success: toastSuccess, error: toastError } = useToast();
+  const [genning, setGenning] = useState(false);
+
+  // Generate a description + tags from the product name (+ category/brand) via
+  // the catalog AI endpoint. Overwrites description, fills tags. Shows a clear
+  // toast if AI isn't configured on the server (key not set).
+  const generateContent = async () => {
+    if (!form.name.trim()) { toastError("Enter a product name first"); return; }
+    setGenning(true);
+    try {
+      const category = categories.find((c) => String(c.id) === String(form.category_id))?.name || undefined;
+      const brand = brands.find((b) => String(b.id) === String(form.brand_id))?.name || undefined;
+      const out = await api.post("/api/ai/product-content", {
+        name: form.name.trim(), category, brand, unit: form.unit || undefined,
+      });
+      setForm((p) => ({
+        ...p,
+        description: out.description || p.description,
+        tags: Array.isArray(out.tags) && out.tags.length ? out.tags.join(", ") : p.tags,
+      }));
+      toastSuccess("Description generated");
+    } catch (err) {
+      toastError(err.message || "Could not generate — is AI enabled?");
+    } finally {
+      setGenning(false);
+    }
+  };
   const updVariant = (key, field, value) =>
     setVariants((prev) => prev.map((v) => v._key === key ? { ...v, [field]: value } : v));
 
@@ -487,7 +515,19 @@ export default function ProductFormPage() {
                 <Input value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. Blue T-Shirt" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-(--ui-text-muted)">Description</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-(--ui-text-muted)">Description</label>
+                  <button
+                    type="button"
+                    onClick={generateContent}
+                    disabled={genning || !form.name.trim()}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-(--ui-primary) hover:underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                    title="Generate a description and tags from the product name using AI"
+                  >
+                    <Sparkles size={12} />
+                    {genning ? "Generating…" : "Generate with AI"}
+                  </button>
+                </div>
                 <textarea
                   value={form.description}
                   onChange={(e) => upd("description", e.target.value)}
