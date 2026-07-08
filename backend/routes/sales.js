@@ -1347,6 +1347,29 @@ module.exports = function registerSalesRoutes(app, deps) {
       mainPaymentMethod = finalPayments[0].method;
     }
 
+    // L5 — payment coverage. Previously only a Credit tender was checked for
+    // coverage; cash/card/split/wallet could tender LESS than the sale total
+    // and the sale still recorded the full total_amount (a reconciliation
+    // leak). Enforce Σ(sale_payments) >= total_amount for every real tender.
+    // Charge-to-room / charge-to-plan legitimately defer payment (empty
+    // finalPayments, settled on the folio later) so they're exempt.
+    if (!chargeToFolio && !chargeToTreatmentFolio) {
+      const totalTendered = (finalPayments || []).reduce(
+        (s, p) => s + Number(p?.amount || 0),
+        0,
+      );
+      if (totalTendered + 0.01 < Number(totalAmount)) {
+        return res.status(400).json({
+          error:
+            `Payments (${totalTendered.toFixed(2)}) do not cover the sale total ` +
+            `(${Number(totalAmount).toFixed(2)}).`,
+          code: "INSUFFICIENT_PAYMENT",
+          tendered: Number(totalTendered.toFixed(2)),
+          total_amount: Number(Number(totalAmount).toFixed(2)),
+        });
+      }
+    }
+
     // Blacklist check — reject sale if customer is blacklisted
     if (customer_id) {
       const { rows: [custRow] } = await db.query(
