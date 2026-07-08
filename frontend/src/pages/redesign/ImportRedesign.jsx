@@ -130,7 +130,12 @@ export default function ImportRedesign() {
   const errorRows = preview?.rows?.filter((r) => r._errors?.length) ?? [];
   const columns = preview?.rows?.length
     ? Object.keys(preview.rows[0]).filter(
-        (k) => k !== "_errors" && k !== "_row" && k !== "_suggestion",
+        (k) =>
+          k !== "_errors" &&
+          k !== "_row" &&
+          k !== "_suggestion" &&
+          k !== "_sku_generated" &&
+          k !== "_price_source",
       )
     : [];
 
@@ -341,6 +346,22 @@ export default function ImportRedesign() {
                           {columns.map((col) => (
                             <td key={col} className="px-3 py-2 text-(--ui-text) max-w-48 truncate">
                               {row[col] ?? ""}
+                              {col === "sku" && row._sku_generated && (
+                                <span
+                                  className="ml-1 text-xs uppercase text-(--ui-text-muted)"
+                                  title="Auto-generated because this item had no barcode or SKU — edit the file first if you want your own code"
+                                >
+                                  auto
+                                </span>
+                              )}
+                              {col === "price" && row._price_source === "margin" && (
+                                <span
+                                  className="ml-1 text-xs uppercase text-(--ui-text-muted)"
+                                  title="Derived from the category's default margin — review before importing"
+                                >
+                                  margin
+                                </span>
+                              )}
                             </td>
                           ))}
                           <td className="px-3 py-2">
