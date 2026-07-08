@@ -436,6 +436,13 @@ module.exports = function registerReturnsRoutes(app, deps) {
             }
           });
 
+          // H5 (WS1c): cap the refund AMOUNT, not just the qty. The only guard
+          // used to be quantity; total_refund and per-line refund_price came
+          // straight from the client and were never capped at the sold price,
+          // so a 1-unit return of a 10-rupee item could refund 10000. We reuse
+          // the sold unit price (same figure the check-eligibility preview's
+          // suggested_refund uses) as the ceiling.
+          let maxRefundableThisReturn = 0;
           for (const item of items) {
             const key = `${item.product_id}_${item.variant_id ?? "null"}`;
             if (!(key in remainingMap)) {
@@ -458,6 +465,24 @@ module.exports = function registerReturnsRoutes(app, deps) {
                 `Cannot refund ${item.quantity} units of product ${item.product_id}; only ${remaining} remaining (the rest was already refunded against this sale)`,
               ), { statusCode: 400 });
             }
+            // H5: per-line refund price cannot exceed the price the unit sold
+            // for (small epsilon absorbs NUMERIC rounding).
+            const unitPrice = priceMap[key];
+            if (Number.isFinite(unitPrice) && Number(item.refund_price) > unitPrice + 0.01) {
+              throw Object.assign(new Error(
+                `Refund price ${item.refund_price} exceeds the sold price ${unitPrice} for product ${item.product_id}`,
+              ), { statusCode: 400 });
+            }
+            const capPrice = Number.isFinite(unitPrice) ? unitPrice : Number(item.refund_price);
+            maxRefundableThisReturn += capPrice * Number(item.quantity);
+          }
+          // H5: the header total cannot exceed the sold value of the returned
+          // lines. Combined with the per-line qty cap (<= remaining) this bounds
+          // cumulative refunds at the sold value even across multiple returns.
+          if (Number(total_refund) > maxRefundableThisReturn + 0.01) {
+            throw Object.assign(new Error(
+              `Total refund ${total_refund} exceeds the maximum refundable value ${Math.round(maxRefundableThisReturn * 100) / 100} for the returned items`,
+            ), { statusCode: 400 });
           }
         }
 

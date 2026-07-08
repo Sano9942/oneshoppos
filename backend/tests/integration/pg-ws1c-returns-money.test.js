@@ -106,4 +106,59 @@ describe("WS1c — Returns money-path hardening", () => {
     );
     expect(rows[0].refunded).toBeLessThanOrEqual(1);
   });
+
+  // ── H5 — refund amount caps ────────────────────────────────────────────────
+  it("H5 — rejects a per-line refund_price above the sold price", async () => {
+    const saleId = await sell([{ id: 1, quantity: 1, price: 100, cost_price: 60 }]);
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: 1,
+      employee_id: ADMIN_ID,
+      total_refund: 10000,
+      refund_method: "Cash",
+      reason: "over-refund by price",
+      items: [{ product_id: 1, quantity: 1, refund_price: 10000 }],
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error || "")).toMatch(/exceeds|sold price/i);
+
+    // Nothing persisted.
+    const { rows } = await db.query(
+      "SELECT COUNT(*)::int AS n FROM returns WHERE original_sale_id = $1",
+      [saleId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  it("H5 — rejects total_refund above the returned lines' sold value", async () => {
+    const saleId = await sell([{ id: 1, quantity: 1, price: 100, cost_price: 60 }]);
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: 1,
+      employee_id: ADMIN_ID,
+      total_refund: 5000, // header inflated even though line price is honest
+      refund_method: "Cash",
+      reason: "over-refund by total",
+      items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error || "")).toMatch(/exceeds|maximum refundable/i);
+  });
+
+  it("H5 — accepts an honest refund at the sold price", async () => {
+    const saleId = await sell([{ id: 1, quantity: 1, price: 100, cost_price: 60 }]);
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: 1,
+      employee_id: ADMIN_ID,
+      total_refund: 100,
+      refund_method: "Cash",
+      reason: "honest refund",
+      items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
+    });
+    expect(res.status).toBe(200);
+  });
 });
