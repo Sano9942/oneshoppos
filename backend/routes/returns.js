@@ -687,6 +687,32 @@ module.exports = function registerReturnsRoutes(app, deps) {
           );
         }
 
+        // H6 (WS1c): store_credit refund — actually credit the customer wallet
+        // inside the tx. Previously store_credit was advertised but only
+        // recorded the return + restocked; the customer's balance never moved
+        // (store kept the goods AND the money). Mirror the sale-time wallet
+        // debit (sales.js) as a credit + a customer_wallet_ledger row.
+        if (refund_method === "store_credit") {
+          if (!customer_id) {
+            throw Object.assign(
+              new Error("store_credit refund requires a customer to credit"),
+              { statusCode: 400 },
+            );
+          }
+          const refund = Number(total_refund);
+          if (refund > 0) {
+            await client.query(
+              "UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2",
+              [refund, customer_id],
+            );
+            await client.query(
+              `INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note)
+               VALUES ($1, 'credit', $2, 'return', $3, $4)`,
+              [customer_id, refund, retId, `Store credit for Return #${retId}`],
+            );
+          }
+        }
+
         return retId;
       });
 

@@ -161,4 +161,62 @@ describe("WS1c — Returns money-path hardening", () => {
     });
     expect(res.status).toBe(200);
   });
+
+  // ── H6 — store_credit actually credits the wallet ──────────────────────────
+  it("H6 — store_credit return raises the wallet balance by exactly the refund + writes a ledger row", async () => {
+    const saleId = await sell([{ id: 1, quantity: 2, price: 100, cost_price: 60 }]);
+
+    const before = await db.query("SELECT balance::numeric AS bal FROM customers WHERE id = 1");
+    const startBal = Number(before.rows[0].bal);
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: 1,
+      employee_id: ADMIN_ID,
+      customer_id: 1,
+      total_refund: 200,
+      refund_method: "store_credit",
+      reason: "store credit refund",
+      items: [{ product_id: 1, quantity: 2, refund_price: 100 }],
+    });
+    expect(res.status).toBe(200);
+    const returnId = res.body.id;
+
+    const after = await db.query("SELECT balance::numeric AS bal FROM customers WHERE id = 1");
+    expect(Number(after.rows[0].bal)).toBeCloseTo(startBal + 200, 2);
+
+    const { rows: ledger } = await db.query(
+      `SELECT type, amount::numeric AS amount, reference_type, reference_id
+         FROM customer_wallet_ledger
+        WHERE customer_id = 1 AND reference_type = 'return' AND reference_id = $1`,
+      [returnId],
+    );
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].type).toBe("credit");
+    expect(Number(ledger[0].amount)).toBeCloseTo(200, 2);
+  });
+
+  it("H6 — store_credit refund without a customer is rejected", async () => {
+    const saleId = await sell([{ id: 1, quantity: 1, price: 100, cost_price: 60 }]);
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: 1,
+      employee_id: ADMIN_ID,
+      // no customer_id
+      total_refund: 100,
+      refund_method: "store_credit",
+      reason: "store credit without customer",
+      items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error || "")).toMatch(/customer/i);
+
+    // The whole tx rolled back — no return row persisted.
+    const { rows } = await db.query(
+      "SELECT COUNT(*)::int AS n FROM returns WHERE original_sale_id = $1",
+      [saleId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
 });
