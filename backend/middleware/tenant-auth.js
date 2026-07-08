@@ -135,6 +135,22 @@ async function loadTenantAndPerms(req, res, next) {
         if (revoked) {
           return res.status(401).json({ error: "Token revoked", code: "TOKEN_REVOKED" });
         }
+
+        // Impersonation belt-and-suspenders: ending an impersonation session
+        // inserts the jti into the tenant's revoked_tokens table best-effort —
+        // that insert can silently fail (logged, not fatal) and leave the token
+        // usable for its full 1h TTL. The session's revoked_at (in the public
+        // registry) is always stamped, so cross-check it here for impersonation
+        // tokens. public.-qualified so it resolves regardless of search_path.
+        if (decoded.impersonating) {
+          const { rows: [sess] } = await permDb.query(
+            "SELECT 1 FROM public.impersonation_sessions WHERE token_jti = $1 AND revoked_at IS NOT NULL",
+            [decoded.jti]
+          );
+          if (sess) {
+            return res.status(401).json({ error: "Impersonation session ended", code: "TOKEN_REVOKED" });
+          }
+        }
       }
 
       const { rows: [empRevoke] } = await permDb.query(
