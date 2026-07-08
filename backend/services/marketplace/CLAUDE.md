@@ -1,6 +1,6 @@
 # Marketplace Clients — Claude Guide
 
-Abstract base class plus platform adapters for the Integrations Hub (`routes/integrations/`). Gated by the `marketplace_integrations` feature flag per tenant. Credentials live in `integration_settings`, encrypted via `services/crypto.js` (AES-256-GCM). Background sync: `workers/marketplace-sync-worker-boss.js` (`MARKETPLACE_SYNC_WORKER_ENABLED=1`) — `marketplace-order-poll` every 10 minutes, `marketplace-feed-check` every 6 hours (Google only). **Both worker handlers are stubs** — they enumerate active tenants/integrations and log intent but never call `DarazClient.pullOrders()`, `MetaCommerceClient.pullOrders()`, or `GoogleMerchantClient.checkFeedStatus()`. Cron fires, nothing imports. Inbound webhooks: `POST /api/webhooks/{daraz,meta,whatsapp}`, mounted before tenant middleware. Only `POST /api/webhooks/xpay` is HMAC-verified — Meta/WhatsApp GET handlers check verify tokens, but the Meta, WhatsApp, and Daraz POST handlers are not signature-verified.
+Abstract base class plus platform adapters for the Integrations Hub (`routes/integrations/`). Gated by the `marketplace_integrations` feature flag per tenant. Credentials live in `integration_settings`, encrypted via `services/crypto.js` (AES-256-GCM). Background sync: `workers/marketplace-sync-worker-boss.js` (`MARKETPLACE_SYNC_WORKER_ENABLED=1`) is **MANUAL-ONLY — it schedules no cron**. It unschedules the legacy `marketplace-order-poll`/`marketplace-feed-check` crons on boot and reports `mode: "manual"`; outbound sync (pull orders / sync products / feed check) runs only when a tenant triggers it from the Integrations Hub. Inbound webhooks (`POST /api/webhooks/{daraz,meta,whatsapp}`, mounted before tenant middleware) **are wired** as of WS3: they resolve the tenant (scan active tenants, match the payload's account id against the provider's active `integration_settings`), then Daraz/Meta upsert `web_orders` (+ `daraz_order_map`/`facebook_order_map`) and WhatsApp writes the tenant messaging inbox. They are still **not signature-verified** — only `POST /api/webhooks/xpay` is HMAC-verified; Meta/WhatsApp GET handlers check verify tokens, but the Meta/WhatsApp/Daraz POST handlers trust the payload (rate-limited only).
 
 ---
 
@@ -137,7 +137,7 @@ No adapter writes to `external_sync_events` directly — that happens at the rou
 3. Add extra methods (e.g. `checkFeedStatus`) for non-standard polling needs.
 4. Register the route in `routes/integrations/index.js` — `hub.js` reads `integration_settings` generically and needs no per-adapter changes.
 5. Add a webhook handler in `routes/webhooks.js` if the platform pushes events (verify HMAC/signature if the platform supports it — most current handlers don't).
-6. Extend `workers/marketplace-sync-worker-boss.js` poll/feed-check loops for the new platform (current loops are stubs — see top of file).
+6. Sync is manual (Integrations Hub) — `workers/marketplace-sync-worker-boss.js` schedules no cron, so there's no poll loop to extend. If the platform pushes, wire the inbound handler in `routes/webhooks.js` (step 5) instead.
 7. Gate all routes with `requireFeature('marketplace_integrations')`.
 8. Store credentials via `services/crypto.js` — never raw in DB.
 

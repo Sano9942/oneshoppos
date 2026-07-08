@@ -136,23 +136,19 @@ so the worker doesn't loop forever on an unconfigured tenant.
 
 ## `marketplace-sync-worker-boss.js`
 
-Export: `registerMarketplaceSyncWorker(boss, pool)`
+Export: `registerMarketplaceSyncWorker(boss)` (no `pool` — it schedules nothing that needs one)
 Env: `MARKETPLACE_SYNC_WORKER_ENABLED=1`
-Heartbeat: `global.__marketplaceSyncWorkerStatus`
+Heartbeat: `global.__marketplaceSyncWorkerStatus` (`mode: "manual"`, `note` explaining background sync isn't implemented)
 
-**2 queues:**
-
-| Queue | Schedule | What it does |
-|---|---|---|
-| `marketplace-order-poll` | `*/10 * * * *`, `singletonKey: "marketplace-order-poll"` | Poll Daraz/Facebook orders for tenants with active `integration_settings` rows. |
-| `marketplace-feed-check` | `0 */6 * * *`, `singletonKey: "marketplace-feed-check"` | Check Google Merchant feed status. |
-
-**Both handlers are currently stubs** — they log intent (`"Polling Daraz orders"`,
-`"Checking Google Merchant feed status"`) but the actual client calls
-(`DarazClient.pullOrders`, `MetaCommerceClient.pullOrders`,
-`GoogleMerchantClient.checkFeedStatus`) are commented out in source. The cron fires on
-schedule; nothing is actually imported or checked yet. Don't assume this worker is doing
-real sync work without re-reading the source — this may change.
+**No queues, no cron.** The decorative version used to register two empty crons
+(`marketplace-order-poll` every 10 min, `marketplace-feed-check` every 6h) that fired and
+logged intent but never called any client. Those are gone. On boot the worker now
+*unschedules* those legacy names defensively (`LEGACY_SCHEDULES`, best-effort via
+`boss.unschedule`) and logs that it is MANUAL-ONLY. Marketplace sync happens only when a
+tenant triggers it from the Integrations Hub (Pull Orders / Sync Products in
+`routes/integrations/*`). Inbound marketplace *webhooks* (`routes/webhooks.js`) are the
+only push path and they are wired (Daraz/Meta write `web_orders`, WhatsApp writes the
+messaging inbox) — that's separate from this worker.
 
 ---
 

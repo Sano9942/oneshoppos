@@ -53,7 +53,7 @@ Long-poll helper shared by real-time surfaces (KDS, floor plan, booking calendar
 ## Subdirectory Modules
 
 ### `couriers/`
-Adapter pattern for courier API integration. Single entry point: `index.js` exports `getAdapter(adapterKey, config)` — maps a slug string to a class instance. Config nominally comes from the `courier_integrations` DB row, but `routes/couriers.js` passes `courier.config_json` as raw text into adapters; adapters expect a nested object but may receive an unparsed string. Decryption of credentials via `services/crypto.js` is expected to happen upstream, but verify the route layer before assuming config is already parsed and decrypted.
+Adapter pattern for courier API integration. Single entry point: `index.js` exports `getAdapter(adapterKey, config)` — maps a slug string to a class instance. Config comes from the `courier_integrations` DB row via `routes/couriers.js`, which (as of WS3 C2) builds the adapter config through `buildCourierAdapterConfig(row)`: it `decryptSecret()`s `api_key`/`api_secret` and `JSON.parse`s `config_json` (a TEXT column) into an object before handing it over. So adapters receive **decrypted credentials and a parsed config object** — `this.config.config_json?.cost_center` (TCS), PostEx address codes, DHL/FedEx `account_number` resolve correctly. Credentials are encrypted on write (`PUT /api/couriers/:id`) and back-filled for legacy rows by migration v127.
 
 **Class hierarchy**: `BaseCourierAdapter` (abstract, all methods throw) → named adapters; `GenericAdapter` (manual-entry no-ops, never throws) → `BykeaAdapter`, `PakPostAdapter`.
 
@@ -150,7 +150,7 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 ## Key Conventions and Gotchas
 
 ### Encryption format
-All integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. Always call `decryptSecret()` before passing config to any adapter. Courier adapters receive pre-decrypted config — decryption happens in the route layer, not in the adapter.
+All integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. Always call `decryptSecret()` before passing config to any adapter. Courier and WooCommerce credentials are AES-256-GCM encrypted like Shopify/marketplace (WS3 C2 closed the plaintext gap). Courier adapters receive pre-decrypted config with a parsed `config_json` object — decryption + JSON parse happen in the route layer (`routes/couriers.js:buildCourierAdapterConfig`), not in the adapter.
 
 ### pg-boss usage
 - Always get the shared instance via `getBoss()` from `boss.js` — never construct `PgBoss` directly
