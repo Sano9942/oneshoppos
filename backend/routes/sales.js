@@ -2342,9 +2342,27 @@ module.exports = function registerSalesRoutes(app, deps) {
         );
         if (customer_id && walletPayments.length > 0) {
           const walletTotal = walletPayments.reduce(
-            (s, p) => s + p.amount,
+            (s, p) => s + Number(p.amount || 0),
             0,
           );
+          // H4 — lock + re-check inside the tx. The pre-transaction balance
+          // read (above) races: two concurrent wallet sales can both pass it
+          // and both debit, driving the wallet negative. Re-read the row under
+          // FOR UPDATE and assert coverage before debiting — the same
+          // serialization the credit tender (assertCreditWithinLimit) uses.
+          const { rows: [walletRow] } = await client.query(
+            "SELECT COALESCE(balance, 0) AS balance FROM customers WHERE id = $1 FOR UPDATE",
+            [customer_id]
+          );
+          const lockedBalance = Number(walletRow?.balance || 0);
+          if (lockedBalance + 0.001 < walletTotal) {
+            throw Object.assign(
+              new Error(
+                `Insufficient wallet balance: required ${walletTotal}, available ${lockedBalance}`,
+              ),
+              { statusCode: 400, code: "insufficient_wallet" },
+            );
+          }
           await client.query(
             "UPDATE customers SET balance = COALESCE(balance, 0) - $1 WHERE id = $2",
             [walletTotal, customer_id]
