@@ -458,4 +458,105 @@ describe("Import preview shape (F7) — unified rows[] response", () => {
       expect(res.body.valid).toBe(2);
     });
   });
+
+  // ─── Phase 1 fast-entry: auto-SKU generation for code-less rows ────────────
+  describe("POST /api/import/products — auto-SKU for code-less rows", () => {
+    it("mints a SKU when a row has neither sku nor barcode (default on)", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["Loose Item No Code", 120]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[0]._sku_generated).toBe(true);
+      expect(res.body.rows[0].sku).toMatch(/^SKU-\d+$/);
+    });
+
+    it("does NOT mint a SKU when the row already has a barcode", async () => {
+      const buf = csvBuffer(
+        ["name", "barcode", "selling_price"],
+        [["Has Barcode No Sku", "8964000112233", 200]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0]._sku_generated).toBe(false);
+      expect(res.body.rows[0].sku).toBeNull();
+    });
+
+    it("does NOT mint a SKU when ?auto_sku=0", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["No Code Disabled", 90]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1&auto_sku=0")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0]._sku_generated).toBe(false);
+      expect(res.body.rows[0].sku).toBeNull();
+    });
+
+    it("respects a custom ?sku_prefix", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["Prefixed Codeless", 60]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1&sku_prefix=SHOP-")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0].sku).toMatch(/^SHOP-\d+$/);
+    });
+
+    it("persists the generated SKU on actual import", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["Persisted Codeless Widget", 77]],
+      );
+      const res = await req
+        .post("/api/import/products")
+        .attach("file", buf, "products.csv");
+      expect(res.body.imported).toBe(1);
+      const { rows } = await db.query(
+        "SELECT sku FROM products WHERE name = 'Persisted Codeless Widget'",
+      );
+      expect(rows[0].sku).toMatch(/^SKU-\d+$/);
+    });
+  });
+
+  // ─── Phase 1 fast-entry: price-source transparency marker ──────────────────
+  describe("POST /api/import/products — _price_source marker", () => {
+    it("marks price as 'file' when supplied in the row", async () => {
+      const buf = csvBuffer(
+        ["name", "sku", "selling_price"],
+        [["Priced In File", "PSRC-FILE-1", 500]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0]._price_source).toBe("file");
+    });
+
+    it("marks price as 'margin' when derived from category markup", async () => {
+      // Insert a category with a default markup (safe regardless of a unique
+      // constraint on name — insert only if absent).
+      await db.query(
+        `INSERT INTO categories (name, default_margin_percent)
+         SELECT 'MarginCat', 50
+         WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'MarginCat')`,
+      );
+      const buf = csvBuffer(
+        ["name", "sku", "category", "cost_price", "selling_price"],
+        [["Margin Derived", "PSRC-MARGIN-1", "MarginCat", 100, ""]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[0]._price_source).toBe("margin");
+      expect(res.body.rows[0].price).toBe(150); // 100 * (1 + 50%)
+    });
+  });
 });

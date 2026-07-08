@@ -107,6 +107,26 @@ module.exports = function mountImportRoutes(app, deps) {
   }
 
   // ---------------------------------------------------------------------------
+  // Helper: auto-SKU generation (Phase 1 fast-entry). A product with neither a
+  // SKU nor a barcode is unscannable at POS, so when auto_sku is on (default) we
+  // mint a sequential code (<prefix><zero-padded seq>) for those rows. The seed
+  // starts past any existing <prefix><number> SKU so generated codes can't
+  // collide with previously generated ones.
+  // ---------------------------------------------------------------------------
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  function seedSkuSequence(existingSkusLower, prefixLower) {
+    const re = new RegExp(`^${escapeRegExp(prefixLower)}(\\d+)$`);
+    let max = 0;
+    for (const s of existingSkusLower) {
+      const m = re.exec(s);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return max;
+  }
+
+  // ---------------------------------------------------------------------------
   // POST /api/import/products
   // ---------------------------------------------------------------------------
   app.post(
@@ -144,6 +164,14 @@ module.exports = function mountImportRoutes(app, deps) {
         const brandMap = new Map(brandRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const taxMap = new Map(taxRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const dbSkus = new Set(skuRows.rows.map((r) => String(r.sku).toLowerCase()));
+
+        // Auto-SKU (Phase 1 fast-entry): mint codes for code-less rows so nothing
+        // is unscannable at POS. On by default; ?auto_sku=0 disables it, and
+        // ?sku_prefix overrides the "SKU-" prefix. skuSeq advances past existing
+        // <prefix><number> codes so generated SKUs never collide.
+        const autoSku = req.query.auto_sku !== "0";
+        const skuPrefix = (req.query.sku_prefix ? String(req.query.sku_prefix) : "SKU-").trim() || "SKU-";
+        let skuSeq = autoSku ? seedSkuSequence(dbSkus, skuPrefix.toLowerCase()) : 0;
 
         const valid = [];
         const errors = [];
@@ -222,12 +250,30 @@ module.exports = function mountImportRoutes(app, deps) {
           if (rowErrors.length) {
             errors.push({ row: rowNum, data: r, errors: rowErrors });
           } else {
+            // Mint a SKU for code-less rows (no sku AND no barcode) when auto_sku
+            // is enabled; otherwise leave sku NULL as before. _sku_generated and
+            // _price_source are advisory preview markers so the shopkeeper can
+            // see (and confirm) which codes/prices the system filled in — they
+            // are ignored by the INSERT below, which cherry-picks columns.
+            const barcodeRaw = String(r.barcode || "").trim();
+            let finalSku = skuRaw || null;
+            let skuGenerated = false;
+            if (autoSku && !skuRaw && !barcodeRaw) {
+              do {
+                skuSeq += 1;
+                finalSku = `${skuPrefix}${String(skuSeq).padStart(5, "0")}`;
+              } while (dbSkus.has(finalSku.toLowerCase()) || skuFirstRow.has(finalSku.toLowerCase()));
+              dbSkus.add(finalSku.toLowerCase());
+              skuGenerated = true;
+            }
             valid.push({
               row: rowNum,
               name: r.name,
-              sku: r.sku || null,
+              sku: finalSku,
+              _sku_generated: skuGenerated,
               barcode: r.barcode || null,
               price: sellingPrice,
+              _price_source: priceRaw ? "file" : "margin",
               cost_price: costPrice,
               category_id,
               brand_id,
