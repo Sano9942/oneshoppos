@@ -1,5 +1,12 @@
 const XLSX = require("xlsx");
-const { getMapper, getTemplate, listSources } = require("../services/import/mappers");
+const {
+  getMapper,
+  getTemplate,
+  listSources,
+  getTargetFields,
+  buildColumnMapper,
+  suggestColumnMap,
+} = require("../services/import/mappers");
 
 module.exports = function mountImportRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
@@ -45,6 +52,37 @@ module.exports = function mountImportRoutes(app, deps) {
   }
 
   // ---------------------------------------------------------------------------
+  // Helper: parse an optional column_map (WS4 supplier-catalog import). Sent as
+  // a multipart form field (JSON string) alongside the file, or a query param.
+  // Returns a plain { "Their Header": "our_field" } object, or null.
+  // ---------------------------------------------------------------------------
+  function parseColumnMap(req) {
+    const raw = req.body?.column_map ?? req.query?.column_map;
+    if (!raw) return null;
+    if (typeof raw === "object") return raw;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helper: resolve the row shape for an import request. A supplier-catalog
+  // column_map takes precedence over a competitor ?source= mapper; if neither
+  // is present the raw rows pass through unchanged.
+  // ---------------------------------------------------------------------------
+  function resolveMappedRows(raw, source, columnMap, entity) {
+    if (columnMap) {
+      const mapper = buildColumnMapper(columnMap);
+      if (mapper) return mapper(raw);
+    }
+    if (source) return applySourceMapper(raw, source, entity);
+    return raw;
+  }
+
+  // ---------------------------------------------------------------------------
   // Helper: build unified preview response. Merges valid[] + errors[] back into
   // a single ordered rows[] array (one entry per input data row, in original
   // file order), with `_row` (line number) and `_errors` (string[], empty when
@@ -80,8 +118,9 @@ module.exports = function mountImportRoutes(app, deps) {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
         const source = req.query.source ? String(req.query.source).toLowerCase() : null;
+        const columnMap = parseColumnMap(req);
         const raw = parseFile(req.file.buffer, req.file.originalname);
-        const mapped = source ? applySourceMapper(raw, source, "products") : raw;
+        const mapped = resolveMappedRows(raw, source, columnMap, "products");
         const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
@@ -235,8 +274,9 @@ module.exports = function mountImportRoutes(app, deps) {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
         const source = req.query.source ? String(req.query.source).toLowerCase() : null;
+        const columnMap = parseColumnMap(req);
         const raw = parseFile(req.file.buffer, req.file.originalname);
-        const mapped = source ? applySourceMapper(raw, source, "customers") : raw;
+        const mapped = resolveMappedRows(raw, source, columnMap, "customers");
         const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
@@ -333,7 +373,9 @@ module.exports = function mountImportRoutes(app, deps) {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-        const rows = parseFile(req.file.buffer, req.file.originalname).map(normaliseRow);
+        const columnMap = parseColumnMap(req);
+        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const rows = resolveMappedRows(raw, null, columnMap, "suppliers").map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
         const isPreview = req.query.preview === "1";
@@ -645,6 +687,55 @@ module.exports = function mountImportRoutes(app, deps) {
         return res.json({ imported, errors });
       } catch (err) {
         console.error("Import payments error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/import/:entity/inspect
+  // WS4 supplier-catalog import. Parse an uploaded file and return its raw
+  // column headers + a sample row + our canonical target fields + a suggested
+  // auto-mapping. The frontend renders a "map their header → our field" step,
+  // then re-uploads for preview/import with a `column_map` form field.
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/api/import/:entity/inspect",
+    requirePerm("all_access"),
+    upload.single("file"),
+    (req, res) => {
+      try {
+        const { entity } = req.params;
+        const targetFields = getTargetFields(entity);
+        if (!targetFields) {
+          return res.status(400).json({
+            error: `Column mapping is not supported for "${entity}". Supported: products, customers, suppliers`,
+          });
+        }
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+        const raw = parseFile(req.file.buffer, req.file.originalname);
+        if (!raw.length) {
+          return res.status(400).json({ error: "File is empty or has no data rows" });
+        }
+
+        // Collect the union of keys across the first few rows — the first row
+        // alone can miss columns that are blank in row 1.
+        const headerSet = new Set();
+        for (const r of raw.slice(0, 20)) {
+          for (const k of Object.keys(r)) headerSet.add(k);
+        }
+        const headers = [...headerSet];
+
+        return res.json({
+          headers,
+          sample: raw[0],
+          row_count: raw.length,
+          target_fields: targetFields,
+          suggested: suggestColumnMap(headers, entity),
+        });
+      } catch (err) {
+        console.error("Import inspect error:", err);
         return res.status(500).json({ error: err.message });
       }
     },
