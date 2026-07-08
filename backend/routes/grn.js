@@ -85,11 +85,15 @@ module.exports = function registerGRNRoutes(app, deps) {
   app.post("/api/grn/:id/scan-receive", requirePerm("manage_orders"), async (req, res) => {
     try {
       const { id } = req.params;
-      const { barcode, quantity, serial_numbers } = req.body;
+      const { barcode, quantity, serial_numbers, product_id } = req.body;
       const qty = Math.max(1, parseInt(quantity, 10) || 1);
+      const nameQuery = String(req.body.name || req.body.query || "").trim();
+      const hasBarcode = !!(barcode && barcode.trim());
 
-      if (!barcode || !barcode.trim()) {
-        return res.status(400).json({ error: "Barcode is required" });
+      // WS4: accept a barcode, an explicit product_id (a confirmed name-match
+      // pick), or a name/query to fuzzy-match against this GRN's lines.
+      if (!hasBarcode && !product_id && !nameQuery) {
+        return res.status(400).json({ error: "Provide a barcode, a product name, or select a product" });
       }
 
       // 1. Verify GRN exists
@@ -98,47 +102,97 @@ module.exports = function registerGRNRoutes(app, deps) {
       );
       if (!grn) return res.status(404).json({ error: "GRN not found" });
 
-      // 2. Find product by barcode (products table OR product_variants table).
-      // 2-G.6: also capture variant_id when the scanned barcode resolves to a
-      // specific variant, so any serials we create get tagged with it.
-      const trimmed = barcode.trim();
+      // 2. Resolve the product. Priority: confirmed product_id → barcode/sku/
+      // variant scan → fuzzy name-match (returns candidates for confirmation).
       let productId = null;
       let productName = null;
       let variantId = null;
-
-      const { rows: [prod] } = await db.query(
-        `SELECT id, name, serial_required, default_warranty_months
-           FROM products
-          WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)`,
-        [trimmed]
-      );
       let serialRequired = false;
       let defaultWarrantyMonths = null;
-      if (prod) {
+
+      if (product_id) {
+        const { rows: [prod] } = await db.query(
+          `SELECT id, name, serial_required, default_warranty_months
+             FROM products WHERE id = $1 AND deleted_at IS NULL`,
+          [product_id]
+        );
+        if (!prod) {
+          return res.status(404).json({ error: "Selected product not found" });
+        }
         productId = prod.id;
         productName = prod.name;
         serialRequired = prod.serial_required === true;
         defaultWarrantyMonths = prod.default_warranty_months;
-      } else {
-        const { rows: [variant] } = await db.query(
-          `SELECT pv.id AS variant_id, pv.product_id, p.name,
-                  p.serial_required, p.default_warranty_months
-             FROM product_variants pv
-             JOIN products p ON p.id = pv.product_id
-            WHERE p.deleted_at IS NULL AND pv.barcode = $1`,
+      } else if (hasBarcode) {
+        // 2-G.6: also capture variant_id when the scanned barcode resolves to a
+        // specific variant, so any serials we create get tagged with it.
+        const trimmed = barcode.trim();
+        const { rows: [prod] } = await db.query(
+          `SELECT id, name, serial_required, default_warranty_months
+             FROM products
+            WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)`,
           [trimmed]
         );
-        if (variant) {
-          productId = variant.product_id;
-          productName = variant.name;
-          variantId = variant.variant_id;
-          serialRequired = variant.serial_required === true;
-          defaultWarrantyMonths = variant.default_warranty_months;
+        if (prod) {
+          productId = prod.id;
+          productName = prod.name;
+          serialRequired = prod.serial_required === true;
+          defaultWarrantyMonths = prod.default_warranty_months;
+        } else {
+          const { rows: [variant] } = await db.query(
+            `SELECT pv.id AS variant_id, pv.product_id, p.name,
+                    p.serial_required, p.default_warranty_months
+               FROM product_variants pv
+               JOIN products p ON p.id = pv.product_id
+              WHERE p.deleted_at IS NULL AND pv.barcode = $1`,
+            [trimmed]
+          );
+          if (variant) {
+            productId = variant.product_id;
+            productName = variant.name;
+            variantId = variant.variant_id;
+            serialRequired = variant.serial_required === true;
+            defaultWarrantyMonths = variant.default_warranty_months;
+          }
         }
-      }
-
-      if (!productId) {
-        return res.status(404).json({ error: `No product found for barcode "${trimmed}"` });
+        if (!productId) {
+          return res.status(404).json({ error: `No product found for barcode "${trimmed}"` });
+        }
+      } else {
+        // WS4 name-match fallback — a supplier line with no barcode. Fuzzy-match
+        // by name against the products actually on this GRN and return the top
+        // candidates for the operator to confirm (never auto-receive a guess).
+        try {
+          const { rows: cands } = await db.query(
+            `SELECT p.id, p.name, p.barcode,
+                    round(public.similarity(p.name, $2::text)::numeric, 2) AS sim,
+                    gi.qty_ordered, gi.qty_received
+               FROM grn_items gi
+               JOIN products p ON gi.product_id = p.id
+              WHERE gi.grn_id = $1
+                AND p.deleted_at IS NULL
+                AND public.similarity(p.name, $2::text) > 0.3
+              ORDER BY public.similarity(p.name, $2::text) DESC
+              LIMIT 5`,
+            [id, nameQuery]
+          );
+          return res.json({
+            needs_confirmation: true,
+            query: nameQuery,
+            candidates: cands.map((c) => ({
+              product_id: c.id,
+              name: c.name,
+              barcode: c.barcode,
+              similarity: Number(c.sim),
+              qty_ordered: Number(c.qty_ordered),
+              qty_received: Number(c.qty_received),
+            })),
+          });
+        } catch (e) {
+          return res.status(400).json({
+            error: "Name matching is unavailable (pg_trgm extension not installed).",
+          });
+        }
       }
 
       // 3. Find the matching grn_item

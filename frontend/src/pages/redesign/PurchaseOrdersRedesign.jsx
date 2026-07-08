@@ -113,6 +113,8 @@ export default function PurchaseOrdersRedesign() {
   // pause the scan flow and prompt for the serial number before firing the
   // receive POST. serialPrompt shape: { barcode, productName } | null
   const [serialPrompt, setSerialPrompt] = useState(null);
+  // WS4 GRN name-match: { query, candidates:[{product_id,name,barcode,similarity,...}] } | null
+  const [nameMatchPrompt, setNameMatchPrompt] = useState(null);
   const [serialInput, setSerialInput] = useState("");
   const serialInputRef = useRef(null);
 
@@ -634,10 +636,46 @@ export default function PurchaseOrdersRedesign() {
       });
       applyScanResult(data.item);
     } catch (e) {
+      // WS4: no exact barcode/sku match — fall back to a fuzzy name search
+      // against this GRN's lines so a supplier line without a barcode can still
+      // be received (operator confirms the match, we never auto-receive).
+      try {
+        const nameRes = await api.post(`/api/grn/${scanGrnId}/scan-receive`, {
+          name: trimmed,
+        });
+        if (nameRes?.needs_confirmation) {
+          if (nameRes.candidates?.length) {
+            setNameMatchPrompt({ query: trimmed, candidates: nameRes.candidates });
+          } else {
+            setScanError(`No product on this GRN matches "${trimmed}"`);
+            errorBeep();
+          }
+          return;
+        }
+      } catch {
+        // fall through to the original barcode error below
+      }
       setScanError(e.message || "Scan failed");
       errorBeep();
     }
   }, [scanGrnId, scanItems, applyScanResult, errorBeep]);
+
+  // WS4: operator confirmed a fuzzy name-match candidate — receive it by id.
+  const confirmNameMatch = useCallback(async (productId) => {
+    if (!scanGrnId) return;
+    setScanError("");
+    try {
+      const data = await api.post(`/api/grn/${scanGrnId}/scan-receive`, {
+        product_id: productId,
+      });
+      applyScanResult(data.item);
+      setNameMatchPrompt(null);
+      setTimeout(() => scanInputRef.current?.focus(), 50);
+    } catch (e) {
+      setScanError(e.message || "Receive failed");
+      errorBeep();
+    }
+  }, [scanGrnId, applyScanResult, errorBeep]);
 
   // 2-G.6: commit a single serial for the currently-open serial prompt.
   // We receive ONE unit per submission (same model as the rest of the scan
@@ -1175,6 +1213,41 @@ export default function PurchaseOrdersRedesign() {
                 </div>
               ) : null}
 
+              {/* WS4 name-match: candidate picker when a typed name (no barcode)
+                  fuzzy-matches products on this GRN. Operator confirms. */}
+              {nameMatchPrompt ? (
+                <div className="mb-3 rounded-(--ui-radius-sm) bg-(--ui-warning-bg) p-3">
+                  <div className="mb-2 text-xs font-semibold text-(--ui-warning-fg)">
+                    No barcode match for “{nameMatchPrompt.query}”. Did you mean:
+                  </div>
+                  <div className="space-y-1.5">
+                    {nameMatchPrompt.candidates.map((c) => (
+                      <div
+                        key={c.product_id}
+                        className="flex items-center justify-between gap-2 rounded-(--ui-radius-sm) bg-white px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm text-(--ui-text)">{c.name}</div>
+                          <div className="text-[11px] text-(--ui-text-muted)">
+                            {c.barcode ? `${c.barcode} · ` : ""}
+                            {c.qty_received}/{c.qty_ordered} received ·{" "}
+                            {Math.round((c.similarity || 0) * 100)}% match
+                          </div>
+                        </div>
+                        <Button tone="primary" onClick={() => confirmNameMatch(c.product_id)}>
+                          Receive
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    <Button onClick={() => { setNameMatchPrompt(null); setTimeout(() => scanInputRef.current?.focus(), 50); }}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Barcode input — plain <input> for ref forwarding */}
               <div className="mb-3">
                 <input
@@ -1183,7 +1256,7 @@ export default function PurchaseOrdersRedesign() {
                   placeholder={
                     serialPrompt
                       ? "Finish serial entry above first…"
-                      : "Scan barcode or type and press Enter..."
+                      : "Scan barcode, or type a product name, then Enter…"
                   }
                   disabled={!!serialPrompt}
                   autoFocus

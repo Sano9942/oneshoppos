@@ -253,11 +253,11 @@ module.exports = function mountImportRoutes(app, deps) {
                         round(m.sim::numeric, 2) AS sim
                    FROM unnest($1::text[]) WITH ORDINALITY AS q(name, idx)
                    JOIN LATERAL (
-                     SELECT p.id, p.name, p.sku, similarity(p.name, q.name) AS sim
+                     SELECT p.id, p.name, p.sku, public.similarity(p.name, q.name) AS sim
                        FROM products p
                       WHERE p.deleted_at IS NULL
-                        AND similarity(p.name, q.name) > 0.45
-                      ORDER BY similarity(p.name, q.name) DESC
+                        AND public.similarity(p.name, q.name) > 0.45
+                      ORDER BY public.similarity(p.name, q.name) DESC
                       LIMIT 1
                    ) m ON true`,
                 [namesForMatch],

@@ -2,6 +2,11 @@
 -- Run with: SET search_path = 'tenant_slug'; \i schema-pg.sql
 -- All timestamps stored as TIMESTAMPTZ (UTC). No more dual UTC/LOCAL system.
 
+-- Database-global extensions (installed once into public; tenant search_path is
+-- '<schema>', public so unqualified/public-qualified functions resolve). pg_trgm
+-- backs fuzzy product name-matching on import + GRN scan-receive (WS4).
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
 -- ── Foundation tables ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS categories (

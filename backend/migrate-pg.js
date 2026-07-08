@@ -9594,11 +9594,14 @@ const MIGRATIONS = [
     description:
       "WS4 auto-stock Phase 1 — enable pg_trgm for fuzzy product name-matching on import preview + GRN scan-receive. Extension is database-global; CREATE EXTENSION IF NOT EXISTS is idempotent and a no-op on Supabase where trigram support is pre-installed. Per-tenant passes are harmless no-ops.",
     up: async (client) => {
-      // Database-global; IF NOT EXISTS makes both the public and per-tenant
-      // passes idempotent. Backend connects as postgres, which can create it.
-      // The import/GRN name-match callers still wrap similarity() in try/catch
-      // so they degrade gracefully if the extension is ever absent.
-      await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+      // Install into public explicitly: tenant queries run with
+      // search_path = '<tenant>', public, so keeping similarity() in public
+      // makes it resolvable from every tenant schema without qualification.
+      // Database-global + IF NOT EXISTS → the public pass creates it and every
+      // per-tenant pass is a no-op. Backend connects as postgres, which can
+      // create it. Import/GRN callers still wrap similarity() in try/catch so
+      // they degrade gracefully if the extension is ever absent.
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public`);
     },
   },
   {
