@@ -228,6 +228,7 @@ module.exports = function registerAuthRoutes(app, deps) {
           pos_search_config: presetConfig.pos_search_config,
           visible_report_groups: presetConfig.visible_report_groups,
           unit_vocabulary: presetConfig.unit_vocabulary,
+          clinical_config: presetConfig.clinical_config || null,
           enabled_modes: enabledModes,
         };
       } catch {

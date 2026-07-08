@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { usePreset } from "../../contexts/PresetContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
 import { Plus, X, ClipboardList, Calendar as CalendarIcon, FileText, FlaskConical, FileSignature, Receipt, Stethoscope, Activity } from "lucide-react";
 import { api } from "../../api";
@@ -36,6 +37,26 @@ const CONDITION_OPTIONS = [
   "healthy", "caries", "restoration", "extraction", "crown",
   "root_canal", "missing", "implant", "mobility", "plaque", "gingivitis", "custom",
 ];
+
+// Map a tenant's clinical_config.chart_preset (dental_clinic→"dental",
+// veterinary→"vet_body", clinic/physiotherapy→"body") onto the seeded
+// chart_areas preset_key. "dental" is not a seeded key ("dental_adult" is), and
+// "vet_body" is served as species-specific canine/feline sets — default to
+// canine and let the ChartPanel dropdown switch species. Without this map a
+// vet/physio tenant would silently fall back to the human adult dental chart.
+const CHART_PRESET_ALIASES = {
+  dental: "dental_adult",
+  dental_adult: "dental_adult",
+  dental_primary: "dental_primary",
+  vet_body: "vet_body_canine",
+  vet_body_canine: "vet_body_canine",
+  vet_body_feline: "vet_body_feline",
+  body: "body",
+};
+
+function resolveChartPreset(chartPreset) {
+  return CHART_PRESET_ALIASES[chartPreset] || "dental_adult";
+}
 
 // ── Root page ────────────────────────────────────────────────────────
 
@@ -343,6 +364,8 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
   const [chartAreas, setChartAreas] = useState([]);
   const [subject, setSubject] = useState(null); // V05 — safety banner + vaccine card
   const { flags } = useFeatureFlags();
+  const { clinical_config } = usePreset();
+  const chartPreset = resolveChartPreset(clinical_config?.chart_preset);
   const toast = useToast();
   const { fmt } = useCurrency();
   const navigate = useNavigate();
@@ -368,13 +391,13 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
     } catch { /* ignore */ }
   }, [planId]);
 
-  // Load chart areas based on preset (we just load all three — preset selection is a later refinement)
+  // Load chart areas for the tenant's clinical preset (dental / body / vet),
+  // resolved from clinical_config.chart_preset onto the seeded preset_key.
   useEffect(() => {
-    // Default to dental_adult; user/preset could override
-    api.get("/api/chart-areas", { preset: "dental_adult" })
+    api.get("/api/chart-areas", { preset: chartPreset })
       .then((r) => setChartAreas(r.areas || []))
       .catch(() => setChartAreas([]));
-  }, []);
+  }, [chartPreset]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (innerTab === "chart") loadChart(); }, [innerTab, loadChart]);
@@ -488,6 +511,7 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
           plan={plan}
           entries={chartEntries}
           onAddEntry={handleAddChartEntry}
+          defaultPreset={chartPreset}
         />
       )}
       {innerTab === "labs" && <LabOrdersPanel planId={planId} orders={plan.lab_orders || []} onReload={load} />}
@@ -812,8 +836,8 @@ function SessionCompleteModal({ session, chartAreas, subject, onClose, onComplet
 
 // ── Chart panel ──────────────────────────────────────────────────────
 
-function ChartPanel({ plan, entries }) {
-  const [preset, setPreset] = useState("dental_adult");
+function ChartPanel({ plan, entries, defaultPreset = "dental_adult" }) {
+  const [preset, setPreset] = useState(defaultPreset);
   const [bodyAreas, setBodyAreas] = useState([]);
 
   useEffect(() => {

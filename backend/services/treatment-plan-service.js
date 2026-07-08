@@ -619,6 +619,7 @@ async function completeSession(db, sessionId, payload, actorId) {
     }
 
     // 4. Chart entries
+    await assertValidChartAreas(client, (payload.chart_entries || []).map((ce) => ce.area_code));
     for (const ce of payload.chart_entries || []) {
       await client.query(
         `INSERT INTO session_chart_entries
@@ -747,6 +748,27 @@ async function listChartAreas(db, preset) {
   return rows;
 }
 
+// Server-side guard: chart-area codes must correspond to a seeded anatomy area.
+// The chart_areas catalog is preset-agnostic here on purpose — codes are unique
+// enough across dentition/body/vet presets that a global existence check reliably
+// rejects typos/bogus codes without needing to know the plan's preset. Throws a
+// 400 if any code is unknown.
+async function assertValidChartAreas(db, areaCodes) {
+  const codes = [...new Set((areaCodes || []).filter(Boolean).map(String))];
+  if (!codes.length) return;
+  const { rows } = await db.query(
+    `SELECT DISTINCT area_code FROM chart_areas WHERE area_code = ANY($1)`,
+    [codes]
+  );
+  const known = new Set(rows.map((r) => r.area_code));
+  const bad = codes.filter((c) => !known.has(c));
+  if (bad.length) {
+    const err = new Error(`Unknown chart area code(s): ${bad.join(", ")}`);
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
 async function getPlanChart(db, planId) {
   // Aggregated view: latest entry per area across all sessions for this plan
   const { rows } = await db.query(
@@ -763,6 +785,7 @@ async function getPlanChart(db, planId) {
 }
 
 async function addChartEntry(db, sessionId, data) {
+  await assertValidChartAreas(db, [data.area_code]);
   const { rows: [row] } = await db.query(
     `INSERT INTO session_chart_entries
        (session_id, area_code, condition_code, severity, notes, color_marker)

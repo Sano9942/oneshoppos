@@ -42,6 +42,7 @@ const DEFAULT_PRESET = {
   pos_search_config: { show_barcode: true, show_sku: true, show_price: true },
   enabled_modes: [],
   unit_vocabulary: DEFAULT_UNIT_VOCABULARY,
+  clinical_config: null,
 };
 
 const PresetContext = createContext({
