@@ -91,7 +91,7 @@ module.exports = function mountInsightAIRoutes(app, deps) {
       const Anthropic = require("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const response = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 500,
         system: `You are a retail analytics assistant for ${storeName}. Answer concisely based on this data:\n${contextString}`,
         messages: [{ role: "user", content: question.trim() }],
