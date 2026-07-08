@@ -9,10 +9,16 @@
  * No external dependencies — uses Node.js built-in Intl.DateTimeFormat.
  */
 
-const SQLITE_FMT = (ms) => {
+// Emit an explicit-UTC ISO 8601 timestamp ("YYYY-MM-DDTHH:MM:SSZ"). The trailing
+// `Z` is load-bearing: these strings are bound as query params against
+// `timestamptz` columns. A naive "YYYY-MM-DD HH:MM:SS" string (the old shape) is
+// interpreted by Postgres in the *session* TimeZone, so under a non-UTC session
+// (local dev often is) the day boundary lands hours off and reports mis-bucket.
+// With `Z`, Postgres parses it as UTC regardless of session TZ.
+const UTC_FMT = (ms) => {
   const d = new Date(ms);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
 };
 
 /**
@@ -60,17 +66,17 @@ function localMidnightUtcMs(dateStr, tz) {
 
 /**
  * Convert a local date string to the UTC start bound (inclusive).
- * '2026-03-06', 'America/New_York' → '2026-03-06 05:00:00'
+ * '2026-03-06', 'America/New_York' → '2026-03-06T05:00:00Z'
  */
 function toUtcStart(dateStr, tz) {
   if (!dateStr) return null;
   const safeTz = isValidTz(tz) ? tz : "UTC";
-  return SQLITE_FMT(localMidnightUtcMs(dateStr, safeTz));
+  return UTC_FMT(localMidnightUtcMs(dateStr, safeTz));
 }
 
 /**
  * Convert a local date string to the UTC end bound (exclusive — start of next day).
- * '2026-03-06', 'America/New_York' → '2026-03-07 05:00:00'
+ * '2026-03-06', 'America/New_York' → '2026-03-07T05:00:00Z'
  *
  * Use with `timestamp < toUtcEnd(...)` (strict less-than) to cover the full day.
  */
@@ -81,7 +87,7 @@ function toUtcEnd(dateStr, tz) {
   const [year, month, day] = dateStr.split("-").map(Number);
   const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
   const nextDayStr = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, "0")}-${String(nextDay.getUTCDate()).padStart(2, "0")}`;
-  return SQLITE_FMT(localMidnightUtcMs(nextDayStr, safeTz));
+  return UTC_FMT(localMidnightUtcMs(nextDayStr, safeTz));
 }
 
 /**
