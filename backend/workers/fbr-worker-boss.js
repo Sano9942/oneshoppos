@@ -10,6 +10,7 @@
  */
 
 const { postToFbr } = require("../services/fbr");
+const alerting = require("../services/alerting");
 
 async function handleFbrInvoiceJob(job, pool, logger) {
   const { tenantSlug, invoiceId } = job.data;
@@ -129,7 +130,41 @@ async function handleFbrInvoiceJob(job, pool, logger) {
       if (invoice.return_id) {
         await pool.query(`UPDATE ${schema}.returns SET fbr_status = 'failed' WHERE id = $1`, [invoice.return_id]);
       }
-      logger.error({ tenantSlug, invoiceId, retryCount }, "FBR invoice failed permanently");
+      logger.error({ tenantSlug, invoiceId, retryCount, err: err.message }, "FBR invoice failed permanently");
+
+      // Don't fail silently. Before this, a permanently-failed invoice (e.g. an
+      // invalid FBR token) only surfaced on the /fbr dashboard — which was
+      // nav-hidden for every tenant (WS2d). Two operator signals now fire:
+      // 1) alerting sliding window → ops email on a spike of FBR failures.
+      alerting
+        .recordError({
+          tenant: tenantSlug,
+          message: `FBR invoice ${invoiceId} failed permanently after ${retryCount} attempts: ${err.message}`,
+        })
+        .catch((alertErr) => logger.warn({ err: alertErr, tenantSlug, invoiceId }, "FBR alerting failed (non-fatal)"));
+      // 2) durable per-tenant dead-letter (visible in /admin/dead-letters/aggregator).
+      try {
+        await pool.query(
+          `INSERT INTO ${schema}.external_sync_events
+             (direction, entity_type, idempotency_key, status, error_message, payload, attempt_count, last_attempt_at, processed_at)
+           VALUES ('outbound', 'fbr_invoice', $1, 'dead_letter', $2, $3, $4, NOW(), NOW())
+           ON CONFLICT (idempotency_key) DO UPDATE
+             SET status = 'dead_letter', error_message = EXCLUDED.error_message,
+                 attempt_count = EXCLUDED.attempt_count, last_attempt_at = NOW()`,
+          [
+            `fbr_invoice_${invoiceId}`,
+            String(err.message || "unknown").slice(0, 500),
+            JSON.stringify({ invoiceId, sale_id: invoice.sale_id, return_id: invoice.return_id }),
+            retryCount,
+          ]
+        );
+      } catch (dlErr) {
+        // external_sync_events may not exist on pre-aggregator tenants — non-fatal.
+        if (!/does not exist/i.test(dlErr.message)) {
+          logger.warn({ err: dlErr, tenantSlug, invoiceId }, "FBR dead-letter write failed (non-fatal)");
+        }
+      }
+
       return; // don't rethrow — let pg-boss treat as completed (we've recorded failure)
     }
 
