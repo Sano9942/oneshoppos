@@ -1492,7 +1492,33 @@ module.exports = function registerSalesRoutes(app, deps) {
             Array.isArray(req.employeePerms) &&
             (req.employeePerms.includes("all_access") ||
               req.employeePerms.includes("override_credit_limit"));
-          if (mode === "hard" && hasPermOverride) creditOverrideAuthorized = true;
+          if (mode === "hard" && hasPermOverride) {
+            creditOverrideAuthorized = true;
+            // V2: the perm path (all_access / override_credit_limit) clears a
+            // HARD credit block just like the manager-PIN path below — but it
+            // used to do so silently, leaving no audit row while the PIN path
+            // wrote one. Record the same approval event so a permission-based
+            // override is auditable too. Self-authorized: the acting employee
+            // holds the override permission, so requester == approver.
+            await recordApprovalEvent(db, {
+              policyId: null,
+              actionType: "credit_limit_override",
+              referenceType: "sale_pending",
+              referenceId: null,
+              requestedBy: authenticatedEmployeeId,
+              approvedBy: authenticatedEmployeeId,
+              status: "approved",
+              reason: `Credit-limit override (permission): outstanding ${outstanding}, this sale ${creditTotal}, limit ${limit}`,
+              metadata: {
+                customer_id,
+                credit_limit: limit,
+                outstanding,
+                credit_amount: creditTotal,
+                override_method: "permission",
+              },
+              outletId: outlet_id ?? null,
+            }).catch(() => { /* audit record is best-effort */ });
+          }
 
           if (mode === "hard" && !hasPermOverride) {
             // Try manager PIN. If absent or invalid → 403.
