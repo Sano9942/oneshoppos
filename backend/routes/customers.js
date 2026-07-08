@@ -949,15 +949,23 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
         const note = reason || "Loyalty points transfer";
 
-        // Ledger: debit sender
+        // M8: this moves LOYALTY POINTS, not wallet cash. Writing to
+        // customer_wallet_ledger denominated points as currency and left
+        // customers.loyalty_points and the loyalty audit trail permanently
+        // disagreeing. Record in loyalty_transactions instead (type implies
+        // sign: 'redeem' for the sender losing points, 'earn' for the
+        // receiver gaining them) — consistent with loyalty.js / sales.js.
         await client.query(
-          "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES ($1, 'debit', $2, 'points_transfer', $3, $4)",
+          `INSERT INTO loyalty_transactions
+             (customer_id, type, points, reference_type, reference_id, note)
+           VALUES ($1, 'redeem', $2, 'points_transfer', $3, $4)`,
           [from_customer_id, pts, to_customer_id, `${note} → ${toRows[0].name}`],
         );
 
-        // Ledger: credit receiver
         await client.query(
-          "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES ($1, 'credit', $2, 'points_transfer', $3, $4)",
+          `INSERT INTO loyalty_transactions
+             (customer_id, type, points, reference_type, reference_id, note)
+           VALUES ($1, 'earn', $2, 'points_transfer', $3, $4)`,
           [to_customer_id, pts, from_customer_id, `${note} ← ${fromRows[0].name}`],
         );
 
