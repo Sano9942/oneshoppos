@@ -1,3 +1,5 @@
+const stockLedger = require("../services/stock-ledger");
+
 module.exports = function registerSupplierReturnsRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
 
@@ -89,17 +91,20 @@ module.exports = function registerSupplierReturnsRoutes(app, deps) {
             [returnId, item.product_id || item.id, item.variant_id || null, item.quantity, item.unit_price || item.cost_price || 0, item.reason || null]
           );
 
-          if (item.variant_id) {
-            await client.query(
-              "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
-              [item.quantity, item.variant_id]
-            );
-          } else {
-            await client.query(
-              "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-              [item.quantity, item.product_id || item.id, outlet_id]
-            );
-          }
+          // WS1a: route through the shared stock helper. The old variant path
+          // touched ONLY product_variants.stock, leaving variant_outlet_stock and
+          // outlet_stock (and the batch ledger) drifting; the product path took no
+          // lock and no negative guard. decrementStock fixes all three: FOR UPDATE,
+          // availability gate, all-three-tables, and FEFO batch consumption.
+          await stockLedger.decrementStock(client, {
+            productId: item.product_id || item.id,
+            variantId: item.variant_id || null,
+            outletId: outlet_id,
+            qty: item.quantity,
+            movementType: "adjust",
+            refType: "supplier_return",
+            refId: returnId,
+          });
         }
 
         return returnId;
@@ -118,7 +123,8 @@ module.exports = function registerSupplierReturnsRoutes(app, deps) {
 
       res.json({ message: "Supplier return processed", id: result });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      // WS1a: surface the typed insufficient_stock 400 from the stock helper.
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 };

@@ -1,6 +1,7 @@
 const { validate } = require("../middleware/validate");
 const { CreatePOSchema } = require("../schemas/purchase-orders");
 const batchStock = require("../services/batch-stock");
+const stockLedger = require("../services/stock-ledger");
 
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -425,12 +426,18 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
               [item.cost_price, item.product_id]
             );
 
-            await client.query(
-              `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-              [item.product_id, outlet_id, qtyReceived, qtyReceived]
-            );
+            // WS1a: route the on-hand bump through the shared stock helper (upsert
+            // outlet_stock; PO lines are product-level only — no variant column).
+            // manageBatch:false because GRN receipt creates a fresh lot via
+            // receiveBatch below rather than returning to an existing batch.
+            await stockLedger.incrementStock(client, {
+              productId: item.product_id,
+              outletId: outlet_id,
+              qty: qtyReceived,
+              manageBatch: false,
+              refType: "po_receive",
+              refId: newGrnId,
+            });
 
             // F07: for batch-tracked products, decompose the received qty into a
             // stock_batches lot inside the SAME tx that bumped outlet_stock — so

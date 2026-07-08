@@ -351,11 +351,22 @@ module.exports = function registerSalesRoutes(app, deps) {
         );
 
         await db.transaction(async (client) => {
-          // Mark the sale as voided
-          await client.query(
-            "UPDATE sales SET voided = true, void_reason = $1 WHERE id = $2",
+          // WS1a (M1): claim the void atomically. The pre-tx read above is a fast
+          // fail only — without an in-tx guard two concurrent voids both pass it,
+          // both restore stock, both reverse the AR invoice, and both enqueue an
+          // FBR debit note. The conditional UPDATE lets exactly one win; if it
+          // updates zero rows another void already claimed it, so abort (409)
+          // before touching stock.
+          const { rowCount: claimed } = await client.query(
+            "UPDATE sales SET voided = true, void_reason = $1 WHERE id = $2 AND (voided IS NULL OR voided = false)",
             [void_reason, id]
           );
+          if (!claimed) {
+            throw Object.assign(new Error("Sale is already voided"), {
+              statusCode: 409,
+              code: "already_voided",
+            });
+          }
 
           // Restore stock for each item back to the outlet
           for (const item of items) {
@@ -514,7 +525,9 @@ module.exports = function registerSalesRoutes(app, deps) {
           message: "Sale voided successfully. Stock has been restored.",
         });
       } catch (err) {
-        res.status(500).json({ error: err.message });
+        // WS1a (M1): honor the 409 raised when a concurrent void already claimed
+        // this sale, instead of masking it as a generic 500.
+        res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
       }
     },
   );

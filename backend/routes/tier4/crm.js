@@ -1,6 +1,7 @@
 const express = require("express");
 const kitEngine = require("../../services/kit-engine");
 const batchStock = require("../../services/batch-stock");
+const stockLedger = require("../../services/stock-ledger");
 const nodemailer = require("nodemailer");
 
 // ─── FBR E-INVOICING PLACEHOLDER ───────────────────────────────────────
@@ -691,26 +692,13 @@ module.exports = function createCRMRouter({
           const sid = saleRows[0].id;
 
           for (const it of items) {
-            // F01: this convert path decrements outlet_stock without FOR UPDATE
-            // (a documented completion-01 concurrency gap — NOT fixed here). It
-            // must not process kits: decrementing a kit's own (empty) row would
-            // silently oversell components. Hard-reject with a clear message.
+            // Kits hold no stock of their own — decrementing a kit's (empty) row
+            // would silently oversell components. Hard-reject; convert at POS
+            // where kit-engine explodes the bill of materials safely.
             if ((await kitEngine.getBomType(client, it.product_id)) === "kit") {
               throw Object.assign(
                 new Error("This quotation contains a kit/bundle product — convert it to a sale at POS instead."),
                 { statusCode: 400, code: "kit_not_supported" }
-              );
-            }
-            // F07: this convert path decrements outlet_stock with NO FOR UPDATE
-            // (the documented completion-01 concurrency gap). Bolting batch
-            // consumption onto an unlocked decrement would race the batch ledger
-            // against the total → guaranteed drift. Hard-reject batch-tracked
-            // products here (same stance as kits) until the base decrement is
-            // hardened; sell them at POS where FEFO consumption is safe.
-            if (await batchStock.isTracked(client, it.product_id)) {
-              throw Object.assign(
-                new Error("This quotation contains a batch/expiry-tracked product — convert it to a sale at POS instead."),
-                { statusCode: 400, code: "batch_tracked_not_supported" }
               );
             }
             const qty = Number(it.quantity || 0);
@@ -721,10 +709,19 @@ module.exports = function createCRMRouter({
               "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, tax_rate_at_sale, tax_amount_at_sale) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
               [sid, it.product_id, it.variant_id || null, qty, Number(it.unit_price || 0), 0, lineRate, lineTax]
             );
-            await client.query(
-              "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-              [qty, it.product_id, quote.outlet_id]
-            );
+            // WS1a: route through the shared stock helper — FOR UPDATE + availability
+            // gate + all-three-tables (variant-aware) + FEFO batch consumption.
+            // Closes the documented completion-01 concurrency gap; batch-tracked
+            // products are now safe here (no longer rejected).
+            await stockLedger.decrementStock(client, {
+              productId: it.product_id,
+              variantId: it.variant_id || null,
+              outletId: quote.outlet_id,
+              qty,
+              movementType: "sale",
+              refType: "quotation_convert",
+              refId: sid,
+            });
           }
 
           await client.query(

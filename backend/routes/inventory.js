@@ -2,6 +2,7 @@ const { validate } = require("../middleware/validate");
 const { CreateTransferSchema, CreateAdjustmentSchema } = require("../schemas/inventory");
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
+const stockLedger = require("../services/stock-ledger");
 
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -140,40 +141,33 @@ module.exports = function registerInventoryRoutes(app, deps) {
           [product_id, variant_id || null, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
         );
 
-        // 2. Always adjust product-level outlet_stock (keeps legacy rollup honest)
-        await client.query(
-          "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-          [quantity, product_id, from_outlet_id],
-        );
-        await client.query(
-          `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-           VALUES ($1, $2, $3)
-           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
-          [product_id, to_outlet_id, quantity],
-        );
-
-        // 3. Variant-aware moves: also update variant_outlet_stock at both
-        // outlets + keep product_variants.stock rollup balanced (transfer is
-        // a zero-sum move across outlets, but we update both outlets'
-        // variant_outlet_stock rows regardless).
-        if (variant_id) {
-          await client.query(
-            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
-               VALUES ($1, $2, 0 - $3::numeric)
-               ON CONFLICT (variant_id, outlet_id)
-               DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
-            [variant_id, from_outlet_id, quantity],
-          );
-          await client.query(
-            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
-               VALUES ($1, $2, $3::numeric)
-               ON CONFLICT (variant_id, outlet_id)
-               DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
-            [variant_id, to_outlet_id, quantity],
-          );
-          // product_variants.stock is the cross-outlet rollup — a transfer
-          // doesn't change it, so no update here.
-        }
+        // 2. WS1a: move the on-hand total through the shared stock helper.
+        // decrementStock at source takes the FOR UPDATE + availability gate the
+        // old in-tx decrement lacked (closing the oversell race) and writes all
+        // three tables when a variant is present; incrementStock mirrors it at
+        // the destination. Because the source subtracts and the destination adds
+        // the same qty to product_variants.stock, the cross-outlet rollup nets to
+        // zero — correct for a transfer. Batch identity is moved separately below
+        // (transferBatches preserves batch_number/expiry), so skip the helper's
+        // own batch handling on both legs.
+        await stockLedger.decrementStock(client, {
+          productId: product_id,
+          variantId: variant_id || null,
+          outletId: from_outlet_id,
+          qty: quantity,
+          manageBatch: false,
+          refType: "transfer",
+          refId: transferRow.id,
+        });
+        await stockLedger.incrementStock(client, {
+          productId: product_id,
+          variantId: variant_id || null,
+          outletId: to_outlet_id,
+          qty: quantity,
+          manageBatch: false,
+          refType: "transfer",
+          refId: transferRow.id,
+        });
 
         // 4. F07: move batch IDENTITY, not just quantity. FEFO-consume at source
         // and recreate the consumed slices at the destination preserving
@@ -216,7 +210,9 @@ module.exports = function registerInventoryRoutes(app, deps) {
       );
       res.json({ message: "Transfer completed successfully" });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      // WS1a: the in-tx availability gate throws a typed 400 (insufficient_stock);
+      // surface it instead of masking every failure as a 500.
+      res.status(err.statusCode || 500).json({ error: err.message, code: err.code });
     }
   });
 
@@ -597,27 +593,59 @@ module.exports = function registerInventoryRoutes(app, deps) {
         );
 
         if (autoAdjust) {
-          // Get items with variance
+          // Get items with variance. WS1a: carry variant_id so a variant/batch
+          // catalog no longer silently desyncs on a cycle count.
           const { rows: variances } = await client.query(`
-            SELECT sci.product_id, sci.system_qty, sci.counted_qty, (sci.counted_qty - sci.system_qty) as variance
+            SELECT sci.product_id, sci.variant_id, sci.system_qty, sci.counted_qty, (sci.counted_qty - sci.system_qty) as variance
             FROM stock_count_items sci
             WHERE sci.stock_count_id = $1 AND sci.counted_qty != sci.system_qty
           `, [req.params.id]);
 
           for (const v of variances) {
+            const variance = Number(v.variance);
             // Create stock adjustment
             await client.query(
-              `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason)
-               VALUES ($1, $2, $3, $4, $5)`,
-              [v.product_id, count.outlet_id, req.employee?.id || null, v.variance, `Stock count ${count.count_number}`]
+              `INSERT INTO stock_adjustments (product_id, variant_id, outlet_id, employee_id, quantity_change, reason)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [v.product_id, v.variant_id || null, count.outlet_id, req.employee?.id || null, variance, `Stock count ${count.count_number}`]
             );
-            // Update outlet_stock
-            await client.query(
-              `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-              [v.product_id, count.outlet_id, v.variance, v.variance]
-            );
+            // WS1a: route the on-hand correction through the shared stock helper so
+            // variant_outlet_stock + the product_variants rollup move in lockstep
+            // with outlet_stock. A count is an authoritative correction, so the
+            // downward path skips the availability gate (gate:false). The batch
+            // ledger is reconciled separately via adjustBatches ('adjust' movement),
+            // so the helper skips its own batch handling (manageBatch:false).
+            if (variance > 0) {
+              await stockLedger.incrementStock(client, {
+                productId: v.product_id,
+                variantId: v.variant_id || null,
+                outletId: count.outlet_id,
+                qty: variance,
+                manageBatch: false,
+                refType: "stock_count",
+                refId: Number(req.params.id),
+              });
+            } else {
+              await stockLedger.decrementStock(client, {
+                productId: v.product_id,
+                variantId: v.variant_id || null,
+                outletId: count.outlet_id,
+                qty: -variance,
+                gate: false,
+                manageBatch: false,
+                refType: "stock_count",
+                refId: Number(req.params.id),
+              });
+            }
+            await batchStock.adjustBatches(client, {
+              productId: v.product_id,
+              variantId: v.variant_id || null,
+              outletId: count.outlet_id,
+              delta: variance,
+              movementType: "adjust",
+              refType: "stock_count",
+              refId: Number(req.params.id),
+            });
           }
         }
       });
