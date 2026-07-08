@@ -549,6 +549,50 @@ module.exports = function registerCustomerPortalData(app, deps) {
     }
   });
 
+  // ── GET /me/contracts ─────────────────────────────────────────────
+  // Read-only rental agreements for the signed-in customer (rentals presets).
+  router.get("/me/contracts", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT rc.id, rc.contract_number, rc.status, rc.rental_start, rc.expected_return,
+                rc.actual_return, rc.deposit_collected, rc.rental_fee_total, rc.late_fee,
+                rc.final_total,
+                COALESCE(string_agg(DISTINCT ri.name, ', '), '') AS items
+         FROM rental_contracts rc
+         LEFT JOIN rental_contract_lines rcl ON rcl.contract_id = rc.id
+         LEFT JOIN rental_items ri ON ri.id = rcl.rental_item_id
+         WHERE rc.customer_id = $1
+         GROUP BY rc.id
+         ORDER BY rc.rental_start DESC
+         LIMIT 100`,
+        [req.customerId]
+      );
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /me/tickets ───────────────────────────────────────────────
+  // Read-only repair/service tickets for the signed-in customer (repair preset).
+  router.get("/me/tickets", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT id, ticket_number, status, title, description,
+                deposit_amount, expected_completion, actual_completion,
+                created_at, updated_at
+         FROM service_tickets
+         WHERE customer_id = $1
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [req.customerId]
+      );
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /me/loyalty ───────────────────────────────────────────────
   router.get("/me/loyalty", authMw, customerPortalDataLimiter, async (req, res) => {
     try {
