@@ -2,6 +2,23 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   const { db, requirePerm } = deps;
   const bcrypt = require("bcryptjs");
   const { validate } = require("../middleware/validate");
+  const { isValidTz } = require("../utils/tz");
+
+  // Resolve the tenant's IANA timezone for local-day math. attendance timestamps
+  // are timestamptz (absolute instants); `col::date` without a zone casts in the
+  // DB *session* TZ (UTC on Supabase), which is a full day off near local midnight
+  // for tenants east/west of UTC — the source of the duplicate-check-in window.
+  // Prefer the profile loaded by middleware, fall back to a cheap direct read.
+  async function resolveTenantTz(req) {
+    let tz = req.company?.timezone;
+    if (!tz) {
+      try {
+        const { rows: [cp] } = await db.query("SELECT timezone FROM company_profile WHERE id = 1");
+        tz = cp?.timezone;
+      } catch { /* fall through to UTC */ }
+    }
+    return isValidTz(tz) ? tz : "UTC";
+  }
   const {
     PinStatusSchema,
     PinCheckinSchema,
@@ -67,8 +84,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     return Boolean(row);
   }
 
-  async function getEmployeeStatusForToday(employeeId, outletId = null) {
-    const today = new Date().toISOString().slice(0, 10);
+  async function getEmployeeStatusForToday(employeeId, outletId = null, tz = "UTC") {
+    // $2 is the tenant IANA tz; "today" is derived in that zone in-SQL so the
+    // day boundary matches how pin-checkin/checkout group sessions (WS5 L1).
     let paramIdx = 2;
     const outletClause = outletId ? ` AND outlet_id = $${++paramIdx}` : "";
     const outletParams = outletId ? [Number(outletId)] : [];
@@ -76,10 +94,10 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     const { rows: [openSession] } = await db.query(
       `SELECT * FROM attendance_sessions
        WHERE employee_id = $1 AND session_end IS NULL
-         AND session_start::date = $2${outletClause}
+         AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause}
        ORDER BY session_start DESC
        LIMIT 1`,
-      [Number(employeeId), today, ...outletParams]
+      [Number(employeeId), tz, ...outletParams]
     );
 
     // Reset paramIdx for second query
@@ -91,9 +109,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
          COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
          COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
        FROM attendance_sessions
-       WHERE employee_id = $1 AND session_start::date = $2${outletClause2}
+       WHERE employee_id = $1 AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause2}
          AND session_end IS NOT NULL`,
-      [Number(employeeId), today, ...outletParams]
+      [Number(employeeId), tz, ...outletParams]
     );
 
     if (openSession) {
@@ -111,8 +129,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     const { rows: [countRow] } = await db.query(
       `SELECT COUNT(*) AS cnt
        FROM attendance_sessions
-       WHERE employee_id = $1 AND session_start::date = $2${outletClause3}`,
-      [Number(employeeId), today, ...outletParams]
+       WHERE employee_id = $1 AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause3}`,
+      [Number(employeeId), tz, ...outletParams]
     );
 
     return {
@@ -258,16 +276,16 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         }
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const tz = await resolveTenantTz(req);
       const outletClause = outletId ? " AND outlet_id = $3" : "";
       const outletParams = outletId ? [outletId] : [];
 
-      // Find open session (if any)
+      // Find open session (if any). "Today" is the tenant-local day (WS5 L1).
       const { rows: [openSession] } = await db.query(
         `SELECT * FROM attendance_sessions
          WHERE employee_id = $1 AND session_end IS NULL
-           AND session_start::date = $2${outletClause}`,
-        [emp.id, today, ...outletParams]
+           AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause}`,
+        [emp.id, tz, ...outletParams]
       );
 
       // Sum all completed sessions today
@@ -276,9 +294,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
            COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
            COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
          FROM attendance_sessions
-         WHERE employee_id = $1 AND session_start::date = $2${outletClause}
+         WHERE employee_id = $1 AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause}
            AND session_end IS NOT NULL`,
-        [emp.id, today, ...outletParams]
+        [emp.id, tz, ...outletParams]
       );
 
       if (openSession) {
@@ -295,8 +313,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       // No open session — check if they had any sessions today
       const { rows: [countRow] } = await db.query(
         `SELECT COUNT(*) AS cnt FROM attendance_sessions
-         WHERE employee_id = $1 AND session_start::date = $2${outletClause}`,
-        [emp.id, today, ...outletParams]
+         WHERE employee_id = $1 AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date${outletClause}`,
+        [emp.id, tz, ...outletParams]
       );
       const status = Number(countRow.cnt) > 0 ? "clocked_out" : "not_clocked_in";
       res.json({
@@ -323,7 +341,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       );
       if (!emp) return res.status(401).json({ error: "Unauthorized" });
 
-      const status = await getEmployeeStatusForToday(emp.id, outletId);
+      const status = await getEmployeeStatusForToday(emp.id, outletId, await resolveTenantTz(req));
       res.json({
         employee: { id: emp.id, name: emp.name },
         ...status,
@@ -387,22 +405,24 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         } catch (_) { /* geofence columns may not exist yet */ }
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const tz = await resolveTenantTz(req);
       const now = new Date().toISOString();
 
-      // F1: Auto-close any stale open sessions from previous days (fire-and-forget)
+      // F1: Auto-close any stale open sessions from previous days (fire-and-forget).
+      // "Previous day" is the tenant's LOCAL day, not the UTC day.
       await db.query(
         `UPDATE attendance_sessions
          SET session_end = session_start, session_type = 'auto_closed'
-         WHERE employee_id = $1 AND session_end IS NULL AND session_start::date < $2`,
-        [emp.id, today]
+         WHERE employee_id = $1 AND session_end IS NULL
+           AND (session_start AT TIME ZONE $2)::date < (NOW() AT TIME ZONE $2)::date`,
+        [emp.id, tz]
       ).catch(() => {}); // non-critical
 
       const { rows: [openSession] } = await db.query(
         `SELECT * FROM attendance_sessions
          WHERE employee_id = $1 AND session_end IS NULL
-           AND session_start::date = $2`,
-        [emp.id, today]
+           AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date`,
+        [emp.id, tz]
       );
 
       if (openSession && openSession.session_type === "work") {
@@ -418,12 +438,12 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         });
       }
 
-      // Find or create today's day-level attendance record
+      // Find or create today's day-level attendance record (tenant-local day)
       const { rows: [dayRecord] } = await db.query(
         `SELECT id FROM employee_attendance
          WHERE employee_id = $1 AND outlet_id = $2
-           AND check_in::date = $3`,
-        [emp.id, outlet_id, today]
+           AND (check_in AT TIME ZONE $3)::date = (NOW() AT TIME ZONE $3)::date`,
+        [emp.id, outlet_id, tz]
       );
 
       let attendanceId;
@@ -490,14 +510,14 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         }
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const tz = await resolveTenantTz(req);
       const now = new Date().toISOString();
 
       const { rows: [openWork] } = await db.query(
         `SELECT * FROM attendance_sessions
          WHERE employee_id = $1 AND session_type = 'work' AND session_end IS NULL
-           AND session_start::date = $2`,
-        [emp.id, today]
+           AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date`,
+        [emp.id, tz]
       );
       if (!openWork)
         return res.status(400).json({ error: "Not clocked in", status: "not_clocked_in" });
@@ -520,9 +540,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         `SELECT COALESCE(SUM(duration_hours), 0) AS net_work_hours
          FROM attendance_sessions
          WHERE employee_id = $1 AND session_type = 'work'
-           AND session_start::date = $2
+           AND (session_start AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date
            AND session_end IS NOT NULL`,
-        [emp.id, today]
+        [emp.id, tz]
       );
       const netHours = totals.net_work_hours;
       const isEndOfDay = !break_reason;
@@ -533,8 +553,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
           `UPDATE employee_attendance
            SET check_out = $1, hours = $2, status = 'checked_out'
            WHERE employee_id = $3 AND outlet_id = $4
-             AND check_in::date = $5`,
-          [now, netHours, emp.id, openWork.outlet_id, today]
+             AND (check_in AT TIME ZONE $5)::date = (NOW() AT TIME ZONE $5)::date`,
+          [now, netHours, emp.id, openWork.outlet_id, tz]
         );
       } else {
         // Start the break session immediately
