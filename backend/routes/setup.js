@@ -327,14 +327,24 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
-        // 1e. Auto-enable compliance features from country pack
-        for (const flag of countryPack.compliance_features) {
-          await client.query(
-            `INSERT INTO feature_flags (key, enabled)
-             VALUES ($1, true)
-             ON CONFLICT (key) DO UPDATE SET enabled = true`,
-            [flag]
-          );
+        // 1e. Auto-enable compliance features from the country pack — but only
+        // when the merchant opted into tax registration. Availability
+        // (compliance_features on the country pack) is distinct from activation
+        // (this merchant turning it on). PK's only compliance feature is
+        // fbr_integration (FBR digital invoicing), which requires GST
+        // registration; a non-GST PK merchant is promised "FBR off" in the
+        // wizard, and seeding it here would silently enqueue every sale to FBR.
+        // Such a merchant can still activate later via Settings -> FBR. Non-PK
+        // packs have empty compliance_features, so this gate is a no-op for them.
+        if (is_gst_registered === true) {
+          for (const flag of countryPack.compliance_features) {
+            await client.query(
+              `INSERT INTO feature_flags (key, enabled)
+               VALUES ($1, true)
+               ON CONFLICT (key) DO UPDATE SET enabled = true`,
+              [flag]
+            );
+          }
         }
 
         // 1f. Per-industry flag bundles. See services/retail-flag-preset.js

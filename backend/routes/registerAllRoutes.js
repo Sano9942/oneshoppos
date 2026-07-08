@@ -403,6 +403,15 @@ module.exports = function registerAllRoutes(app, deps) {
           updated_at: null,
         };
       });
+      // Union in DB-only flags not present in DEFAULT_FEATURE_FLAGS. Some flags
+      // are deliberately kept out of the defaults so they stay opt-in per
+      // country pack / migration (e.g. fbr_integration is seeded ON only for PK
+      // tenants). Iterating defaults alone dropped them from the response and
+      // hid their nav surfaces (FBR Invoices) for every tenant that had them ON.
+      const defaultKeys = new Set(Object.keys(DEFAULT_FEATURE_FLAGS));
+      for (const r of rows) {
+        if (!defaultKeys.has(r.key)) mergedDefaults.push(r);
+      }
       return res.json({ flags: mergedDefaults });
     } catch (err) {
       if (String(err.message || "").includes("does not exist")) {

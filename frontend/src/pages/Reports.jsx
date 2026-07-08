@@ -534,7 +534,7 @@ const GROUPS = [
       { id: "finance-payment-mix", label: "Finance Payment Mix", icon: Calculator },
       { id: "gst-output", label: "GST Output", icon: BadgePercent },
       { id: "gst-type-summary", label: "GST Type", icon: FileSpreadsheet },
-      { id: "fbr-export", label: "FBR Export", icon: FileSpreadsheet },
+      { id: "fbr-export", label: "FBR Export", icon: FileSpreadsheet, flag: "fbr_integration" },
     ],
   },
   {
