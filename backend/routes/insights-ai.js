@@ -14,9 +14,10 @@ function checkRateLimit(key) {
 
 module.exports = function mountInsightAIRoutes(app, deps) {
   const db = deps.db;
+  const { requirePerm } = deps;
 
   // POST /api/insights/ask — AI-powered question answering
-  app.post("/api/insights/ask", async (req, res) => {
+  app.post("/api/insights/ask", requirePerm("view_reports"), async (req, res) => {
     try {
       // 1. Check API key
       if (!process.env.ANTHROPIC_API_KEY) {
