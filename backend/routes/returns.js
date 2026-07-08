@@ -220,8 +220,8 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
     // B16 fix + F1 (Apr 28 2026) + M2 (WS1c): the per-line remaining-qty check
     // against the original sale now runs INSIDE the return transaction under a
-    // `FOR UPDATE` lock on the sale row (see the `validateAgainstSale` block at
-    // the top of the tx below). Doing it outside the tx let two concurrent
+    // `FOR UPDATE` lock on the sale row (see the top of the tx below). Doing it
+    // outside the tx let two concurrent
     // returns with different/absent idempotency keys both pass the check and
     // both insert, so cumulative refunds could exceed the sold qty. The lock
     // serializes concurrent returns for the same sale.
