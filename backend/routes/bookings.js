@@ -75,7 +75,23 @@ module.exports = function registerBookingRoutes(app, deps) {
           );
         }
       }
-      res.status(201).json(service);
+
+      // V6: a booking service linked to a non-service product rings up at POS
+      // as a stock item and 400s on the missing inventory row. Surface a
+      // non-blocking warning at creation so the operator can flip the product's
+      // type to 'service' (we don't auto-mutate the product here).
+      let warning = null;
+      if (data.product_id) {
+        const { rows: [prod] } = await deps.db.query(
+          "SELECT product_type FROM products WHERE id = $1 AND deleted_at IS NULL",
+          [data.product_id]
+        );
+        if (prod && prod.product_type !== "service") {
+          warning = `Linked product is type '${prod.product_type || "default"}', not 'service'. It may fail to ring up at POS until you set its product type to Service.`;
+        }
+      }
+
+      res.status(201).json(warning ? { ...service, warning } : service);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
