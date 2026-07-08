@@ -9556,6 +9556,39 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 127,
+    description:
+      "Courier + WooCommerce credential encryption (WS3 C2) — encrypt any plaintext api_key/api_secret still stored in tenant courier_integrations rows and the woocommerce integration_settings row (Shopify/marketplace creds were already AES-256-GCM; courier + WooCommerce were the plaintext holdouts). Runs per tenant schema. encryptSecret is a no-op for values already carrying the enc:v1 prefix and for values when no encryption key is configured, so this is idempotent and safe to re-run. Route layer now encrypts on write + decrypts on read, so this only back-fills legacy rows.",
+    up: async (client) => {
+      const { encryptSecret } = require("./services/crypto");
+
+      // Both tables are tenant-scoped, so the public-schema pass is a no-op —
+      // guard on to_regclass rather than assuming the table exists.
+      async function encryptCreds(table, whereClause) {
+        const reg = await client.query(`SELECT to_regclass($1) AS t`, [table]);
+        if (!reg.rows[0]?.t) return;
+        const { rows } = await client.query(
+          `SELECT id, api_key, api_secret FROM ${table} ${whereClause}`
+        );
+        for (const r of rows) {
+          const encKey = r.api_key ? encryptSecret(r.api_key) : r.api_key;
+          const encSecret = r.api_secret ? encryptSecret(r.api_secret) : r.api_secret;
+          // encryptSecret returns the same value when already encrypted or when
+          // no key is configured — only write when something actually changed.
+          if (encKey !== r.api_key || encSecret !== r.api_secret) {
+            await client.query(
+              `UPDATE ${table} SET api_key = $1, api_secret = $2 WHERE id = $3`,
+              [encKey, encSecret, r.id]
+            );
+          }
+        }
+      }
+
+      await encryptCreds("courier_integrations", "WHERE api_key IS NOT NULL OR api_secret IS NOT NULL");
+      await encryptCreds("integration_settings", "WHERE provider = 'woocommerce' AND (api_key IS NOT NULL OR api_secret IS NOT NULL)");
+    },
+  },
 ];
 
 /**

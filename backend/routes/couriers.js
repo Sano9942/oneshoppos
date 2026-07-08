@@ -1,5 +1,33 @@
 const { getAdapter } = require("../services/couriers");
+const { encryptSecret, decryptSecret } = require("../services/crypto");
 const logger = require("../services/logger").child({ component: "couriers" });
+
+// courier_integrations.config_json is a TEXT column holding a JSON string.
+// Adapters read nested fields (`this.config.config_json?.cost_center`, PostEx
+// address codes, DHL/FedEx account_number). If we hand them the raw string
+// those reads are `undefined`, so parse it to an object on the way in.
+function parseCourierConfigJson(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+// Build the config object passed to a courier adapter: decrypt the credentials
+// (they are stored AES-256-GCM encrypted; decryptSecret passes plaintext
+// through untouched for legacy rows / when no key is configured) and parse the
+// jsonb config so nested adapter fields resolve instead of reading undefined.
+function buildCourierAdapterConfig(row) {
+  return {
+    api_key: decryptSecret(row.api_key),
+    api_secret: decryptSecret(row.api_secret),
+    api_base_url: row.api_base_url,
+    config_json: parseCourierConfigJson(row.config_json),
+  };
+}
 
 /**
  * Send an order-status SMS to the customer if they have sms_consent.
@@ -103,6 +131,10 @@ function mountCourierRoutes(app, deps) {
     try {
       const { id } = req.params;
       const { enabled, api_key, api_secret, api_base_url, flat_shipping_rate } = req.body || {};
+      // Encrypt credentials at rest (AES-256-GCM, enc:v1 format — same path
+      // Shopify/marketplace use). encryptSecret returns null for null input so
+      // COALESCE keeps the existing value when a field is omitted, and is a
+      // no-op for a value already carrying the enc:v1 prefix.
       await db.query(
         `UPDATE courier_integrations SET
           enabled = COALESCE($1, enabled),
@@ -111,7 +143,7 @@ function mountCourierRoutes(app, deps) {
           api_base_url = COALESCE($4, api_base_url),
           flat_shipping_rate = COALESCE($5, flat_shipping_rate)
          WHERE id = $6`,
-        [enabled, api_key, api_secret, api_base_url, flat_shipping_rate, id]
+        [enabled, encryptSecret(api_key), encryptSecret(api_secret), api_base_url, flat_shipping_rate, id]
       );
       res.json({ ok: true });
     } catch (err) {
@@ -155,12 +187,7 @@ function mountCourierRoutes(app, deps) {
           });
         }
 
-        const adapter = getAdapter(courier.adapter_key, {
-          api_key: courier.api_key,
-          api_secret: courier.api_secret,
-          api_base_url: courier.api_base_url,
-          config_json: courier.config_json,
-        });
+        const adapter = getAdapter(courier.adapter_key, buildCourierAdapterConfig(courier));
 
         // Attempt a test booking with dummy data
         try {
@@ -286,12 +313,7 @@ function mountCourierRoutes(app, deps) {
 
           if (courier.supports_booking) {
             // Use adapter to book
-            const adapter = getAdapter(courier.adapter_key, {
-              api_key: courier.api_key,
-              api_secret: courier.api_secret,
-              api_base_url: courier.api_base_url,
-              config_json: courier.config_json,
-            });
+            const adapter = getAdapter(courier.adapter_key, buildCourierAdapterConfig(courier));
 
             const bookingResult = await adapter.bookShipment(order, sender, receiver, {
               weight: req.body.weight || 0.5,
@@ -407,12 +429,7 @@ function mountCourierRoutes(app, deps) {
         let cancelResult = { success: false, message: "Courier does not support API cancellation" };
 
         if (shipment.supports_cancellation && shipment.tracking_number) {
-          const adapter = getAdapter(shipment.adapter_key, {
-            api_key: shipment.api_key,
-            api_secret: shipment.api_secret,
-            api_base_url: shipment.api_base_url,
-            config_json: shipment.config_json,
-          });
+          const adapter = getAdapter(shipment.adapter_key, buildCourierAdapterConfig(shipment));
           try {
             cancelResult = await adapter.cancelShipment(shipment.tracking_number);
           } catch (err) {
@@ -460,12 +477,7 @@ function mountCourierRoutes(app, deps) {
           return res.json({ message: "Courier does not support tracking API", events: [] });
         }
 
-        const adapter = getAdapter(shipment.adapter_key, {
-          api_key: shipment.api_key,
-          api_secret: shipment.api_secret,
-          api_base_url: shipment.api_base_url,
-          config_json: shipment.config_json,
-        });
+        const adapter = getAdapter(shipment.adapter_key, buildCourierAdapterConfig(shipment));
 
         const trackingResult = await adapter.getTracking(shipment.tracking_number);
 

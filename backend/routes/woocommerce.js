@@ -1,6 +1,20 @@
+const { encryptSecret, decryptSecret } = require("../services/crypto");
+
 module.exports = function mountWooCommerceRoutes(app, deps) {
   const db = deps.db;
   const { requirePerm } = deps;
+
+  // Credentials are stored AES-256-GCM encrypted (enc:v1 format, same path
+  // Shopify/marketplace use). Decrypt in place after loading a config row so
+  // every downstream config.api_key / config.api_secret read is plaintext.
+  // decryptSecret passes legacy plaintext / unkeyed values through untouched.
+  function decryptWooConfig(config) {
+    if (config) {
+      config.api_key = decryptSecret(config.api_key);
+      config.api_secret = decryptSecret(config.api_secret);
+    }
+    return config;
+  }
 
   // Helper to make WooCommerce API calls
   async function wooFetch(storeUrl, consumerKey, consumerSecret, endpoint) {
@@ -27,6 +41,7 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
           "SELECT * FROM integration_settings WHERE provider = 'woocommerce' LIMIT 1",
         );
         if (!config) return res.json({ connected: false });
+        decryptWooConfig(config);
 
         // Test connection
         try {
@@ -75,7 +90,7 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
         `INSERT INTO integration_settings (provider, store_url, api_key, api_secret)
        VALUES ('woocommerce', $1, $2, $3)
        ON CONFLICT (provider) DO UPDATE SET store_url = $1, api_key = $2, api_secret = $3, updated_at = NOW()`,
-        [store_url.replace(/\/$/, ""), consumer_key, consumer_secret],
+        [store_url.replace(/\/$/, ""), encryptSecret(consumer_key), encryptSecret(consumer_secret)],
       );
       res.json({ ok: true });
     },
@@ -106,6 +121,7 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
         );
         if (!config)
           return res.status(400).json({ error: "WooCommerce not connected" });
+        decryptWooConfig(config);
 
         let page = 1;
         let imported = 0;
@@ -183,6 +199,7 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
         );
         if (!config)
           return res.status(400).json({ error: "WooCommerce not connected" });
+        decryptWooConfig(config);
 
         // Get products with SKU (which maps to WooCommerce)
         const { rows: products } = await db.query(
