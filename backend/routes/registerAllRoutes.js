@@ -660,6 +660,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./insights")(app, deps);
   require("./insights-ai")(app, deps);
 
+  // --- CATALOG AI (product content + invoice-image extraction) ---
+  require("./ai")(app, deps);
+
   // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
 
