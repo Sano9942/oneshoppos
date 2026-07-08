@@ -2412,6 +2412,10 @@ module.exports = function registerSalesRoutes(app, deps) {
               { statusCode: 400, code: "insufficient_wallet" },
             );
           }
+          // V3: `customers.balance` is the WALLET / store-credit balance, not
+          // AR exposure. Wholesale AR truth lives in customer_invoices.balance_due
+          // (see the Credit-tender pre-flight above); this column stays 0 for
+          // on-account customers — never read it as credit exposure.
           await client.query(
             "UPDATE customers SET balance = COALESCE(balance, 0) - $1 WHERE id = $2",
             [walletTotal, customer_id]

@@ -466,6 +466,12 @@ CREATE TABLE IF NOT EXISTS customers (
   loyalty_points INTEGER DEFAULT 0,
   cnic TEXT,
   occupation TEXT,
+  -- V3: `balance` is the customer's WALLET / store-credit balance (topped up
+  -- and debited by wallet tenders + returns), NOT accounts-receivable exposure.
+  -- Wholesale AR truth lives in customer_invoices.balance_due; this column stays
+  -- 0 even for a customer at 160% credit utilisation. Never read `balance` as
+  -- credit exposure — sum unpaid customer_invoices.balance_due instead (see the
+  -- Credit-tender pre-flight in routes/sales.js).
   balance NUMERIC(12,2) DEFAULT 0,
   deleted_at TIMESTAMPTZ DEFAULT NULL,
   ntn_cnic TEXT,
