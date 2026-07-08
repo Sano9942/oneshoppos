@@ -7,17 +7,10 @@ const stockLedger = require("../services/stock-ledger");
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
 
-  // Safe column addition — Postgres: use DO block to check if column exists
-  (async () => {
-    try {
-      await db.query(`
-        DO $$ BEGIN
-          ALTER TABLE inventory_transfers ADD COLUMN reversed BOOLEAN DEFAULT false;
-        EXCEPTION WHEN duplicate_column THEN NULL;
-        END $$;
-      `);
-    } catch { /* ignore */ }
-  })();
+  // NOTE: `inventory_transfers.reversed` is declared in schema-pg.sql (the DDL
+  // source of truth). A previous inline `ALTER TABLE … ADD COLUMN` IIFE lived
+  // here but ran against the ALS proxy at module-load time with no tenant
+  // context, so it always threw and was silently discarded — a no-op. Removed.
 
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
