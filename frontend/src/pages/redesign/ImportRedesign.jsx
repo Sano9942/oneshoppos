@@ -346,6 +346,11 @@ export default function ImportRedesign() {
                           <td className="px-3 py-2">
                             {hasError ? (
                               <span className="text-xs text-(--ui-danger-fg)">{row._errors.join("; ")}</span>
+                            ) : row._suggestion ? (
+                              <span className="text-xs text-(--ui-warning-fg)" title="A similar product already exists — review before importing to avoid a duplicate">
+                                Looks like existing “{row._suggestion.name}”
+                                {row._suggestion.sku ? ` (${row._suggestion.sku})` : ""} — merge?
+                              </span>
                             ) : (
                               <span className="text-xs text-(--ui-success-fg)">OK</span>
                             )}

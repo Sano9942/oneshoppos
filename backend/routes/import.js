@@ -220,6 +220,42 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
+          // WS4 fuzzy name-match — flag valid rows whose name closely matches an
+          // existing product ("row looks like SKU X — merge?"). Advisory only;
+          // we never auto-merge (false-match risk). Requires pg_trgm; wrapped in
+          // try/catch so a tenant without the extension degrades to no hints.
+          const namesForMatch = valid.map((v) => v.name);
+          if (namesForMatch.length) {
+            try {
+              const { rows: matches } = await db.query(
+                `SELECT q.idx::int AS idx, m.id, m.name, m.sku,
+                        round(m.sim::numeric, 2) AS sim
+                   FROM unnest($1::text[]) WITH ORDINALITY AS q(name, idx)
+                   JOIN LATERAL (
+                     SELECT p.id, p.name, p.sku, similarity(p.name, q.name) AS sim
+                       FROM products p
+                      WHERE p.deleted_at IS NULL
+                        AND similarity(p.name, q.name) > 0.45
+                      ORDER BY similarity(p.name, q.name) DESC
+                      LIMIT 1
+                   ) m ON true`,
+                [namesForMatch],
+              );
+              for (const mrow of matches) {
+                const v = valid[mrow.idx - 1];
+                if (v) {
+                  v._suggestion = {
+                    product_id: mrow.id,
+                    name: mrow.name,
+                    sku: mrow.sku,
+                    similarity: Number(mrow.sim),
+                  };
+                }
+              }
+            } catch (e) {
+              console.warn("Import name-match skipped:", e.message);
+            }
+          }
           return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
