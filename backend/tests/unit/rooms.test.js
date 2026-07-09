@@ -26,11 +26,12 @@ describe("room_management presets", () => {
     expect(p.business_model).toBe("room_management");
   });
 
-  it.each(ROOM_PRESETS)("%s hides inventory_alerts + floor_plan + top_products", (key) => {
+  it.each(ROOM_PRESETS)("%s hides inventory_alerts + top_products; decorative keys dropped (WS2e)", (key) => {
     const p = getPreset(key);
     expect(p.dashboard_widgets.inventory_alerts).toBe(false);
     expect(p.dashboard_widgets.top_products).toBe(false);
-    expect(p.dashboard_widgets.floor_plan).toBe(false);
+    // floor_plan had no dashboard consumer — WS2e removed the key entirely.
+    expect(p.dashboard_widgets.floor_plan).toBeUndefined();
   });
 
   it.each(ROOM_PRESETS)("%s onboarding steps include room + rate + booking + checkin", (key) => {

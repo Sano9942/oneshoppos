@@ -36,11 +36,14 @@ describe("M10 clinical presets", () => {
     expect(p.visible_report_groups).toContain("Clinical");
   });
 
-  it.each(CLINICAL_PRESETS)("%s surfaces active_treatment_plans + overdue_sessions widgets", (key) => {
+  it.each(CLINICAL_PRESETS)("%s no longer advertises unrendered clinical widgets (WS2e)", (key) => {
     const p = getPreset(key);
-    expect(p.dashboard_widgets.active_treatment_plans).toBe(true);
-    expect(p.dashboard_widgets.overdue_sessions).toBe(true);
-    expect(p.dashboard_widgets.appointments_today).toBe(true);
+    // active_treatment_plans / overdue_sessions / appointments_today promised
+    // dashboard cards that were never rendered — WS2e dropped the keys from
+    // every preset so the config stops advertising them.
+    expect(p.dashboard_widgets.active_treatment_plans).toBeUndefined();
+    expect(p.dashboard_widgets.overdue_sessions).toBeUndefined();
+    expect(p.dashboard_widgets.appointments_today).toBeUndefined();
   });
 
   it.each(CLINICAL_PRESETS)("%s exposes clinical_config with chart_preset + subject_type_default", (key) => {

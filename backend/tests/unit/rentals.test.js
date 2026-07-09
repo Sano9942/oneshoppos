@@ -20,11 +20,13 @@ describe("rental presets", () => {
     expect(p.business_model).toBe("asset_rental");
   });
 
-  it.each(RENTAL_PRESETS)("%s hides inventory_alerts + floor_plan widgets", (key) => {
+  it.each(RENTAL_PRESETS)("%s hides inventory_alerts; decorative widget keys dropped (WS2e)", (key) => {
     const p = getPreset(key);
     expect(p.dashboard_widgets.inventory_alerts).toBe(false);
-    expect(p.dashboard_widgets.floor_plan).toBe(false);
-    expect(p.dashboard_widgets.appointments_today).toBe(false);
+    // floor_plan / appointments_today had no dashboard consumer — WS2e removed
+    // the keys from every preset rather than carrying dead config.
+    expect(p.dashboard_widgets.floor_plan).toBeUndefined();
+    expect(p.dashboard_widgets.appointments_today).toBeUndefined();
   });
 
   it.each(RENTAL_PRESETS)("%s onboarding steps include contract + checkout", (key) => {

@@ -309,8 +309,11 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     expect(drift.find((d) => d.product_id === pid)).toBeUndefined(); // untracked excluded
   });
 
-  // ── quotation-convert exclusion ───────────────────────────────────────
-  it("quotation-convert hard-rejects a batch-tracked product (unsafe unlocked decrement)", async () => {
+  // ── quotation-convert batch consumption ───────────────────────────────
+  // WS1a routed convert through stockLedger.decrementStock (FOR UPDATE +
+  // FEFO batch consumption), so batch-tracked products are supported here
+  // now — the old batch_tracked_not_supported hard-reject is gone.
+  it("quotation-convert consumes a batch-tracked product via FEFO; invariant holds", async () => {
     const pid = await makeTrackedProduct("Quote Widget");
     await seedBatch(pid, 1, { batchNumber: "QB1", expiry: "2026-07-25", qty: 5 });
     const { rows: [q] } = await db.query(
@@ -324,10 +327,14 @@ describe("F07 — Batch / expiry / lot engine (Postgres)", () => {
     );
     const res = await request(app).post(`/api/quotations/${q.id}/convert`).set("x-employee-id", "1")
       .send({ payment_method: "cash" });
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("batch_tracked_not_supported");
-    // stock + batches untouched (transaction rolled back)
-    expect(await stockOf(pid, 1)).toBe(5);
+    expect(res.status).toBe(200);
+    // stock decremented and the batch ledger consumed in lockstep
+    expect(await stockOf(pid, 1)).toBe(4);
+    const { rows: [b] } = await db.query(
+      "SELECT remaining_qty FROM stock_batches WHERE product_id = $1 AND batch_number = 'QB1'",
+      [pid]
+    );
+    expect(Number(b.remaining_qty)).toBe(4);
     await assertInvariant(pid, 1);
   });
 
