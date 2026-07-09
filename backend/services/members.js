@@ -311,7 +311,10 @@ async function deriveMemberStatus(db, customer, opts = {}) {
 
   // Human line for the door.
   const effectiveLabel = pack_entitled && STATE_RANK[state] <= 1 ? STATE_LABEL.pack : STATE_LABEL[state];
-  const dateStr = expiry_date ? new Date(expiry_date).toISOString().slice(0, 10) : null;
+  // pg returns DATE columns as local-midnight JS Dates — toISOString() would
+  // show the PREVIOUS day whenever the process TZ is east of UTC.
+  const { pgDateToStr } = require("../utils/tz");
+  const dateStr = expiry_date ? pgDateToStr(expiry_date) : null;
   if (verdict === "allow" && !payment_failed) {
     message = pack_entitled && STATE_RANK[state] <= 1
       ? `Welcome — ${packages.credits_remaining} class pass credit${packages.credits_remaining === 1 ? "" : "s"} left`

@@ -6,7 +6,7 @@ Small, dependency-light helper modules. Each file exports pure functions or thin
 
 ## `tz.js` — timezone boundary conversion
 
-Exports: `toUtcStart(dateStr, tz)`, `toUtcEnd(dateStr, tz)`, `toLocalDateStr(utcStr, tz)`, `getUtcOffsetMinutes(dateStr, tz)`, `isValidTz(tz)`
+Exports: `toUtcStart(dateStr, tz)`, `toUtcEnd(dateStr, tz)`, `toLocalDateStr(utcStr, tz)`, `getUtcOffsetMinutes(dateStr, tz)`, `isValidTz(tz)`, `tenantToday(tz, at?)`, `todayBounds(tz, at?)`, `addDaysStr(dateStr, days)`, `pgDateToStr(value)`
 
 - Converts a local `YYYY-MM-DD` date string (in the tenant's IANA timezone) into UTC boundary strings for direct timestamp comparison in queries. Avoids relying on the server OS timezone.
 - `toUtcStart` → inclusive lower bound. `toUtcEnd` → exclusive upper bound (next local midnight) — always filter with `timestamp < toUtcEnd(...)`, never `<=`.
@@ -14,7 +14,11 @@ Exports: `toUtcStart(dateStr, tz)`, `toUtcEnd(dateStr, tz)`, `toLocalDateStr(utc
 - `getUtcOffsetMinutes` — offset in minutes for strftime-based SQL grouping.
 - Uses only `Intl.DateTimeFormat` + binary search over ms — no external tz library, no network lookups.
 - Invalid/missing tz strings silently fall back to `"UTC"` (via `isValidTz`, which caches validation results in an in-memory `Map`).
-- **Use this for all date-range filter queries** against `sales`, `sale_items`, and similar UTC-stamped tables. Do NOT use it for `attendance_sessions`/`employee_attendance` columns — those are stored in local time already (see `backend/CLAUDE.md` timezone section).
+- `tenantToday(tz, at?)` — the canonical "what day is it for this tenant" helper: tenant-local `YYYY-MM-DD`, optionally of an arbitrary instant. Replaces every `new Date().toISOString().slice(0,10)` (that's the UTC date) and SQL `CURRENT_DATE` (that's the DB *session*'s date).
+- `todayBounds(tz)` → `{ from, to, today }` — UTC bounds of the tenant-local current day.
+- `addDaysStr(dateStr, days)` — pure calendar arithmetic for due/expiry dates.
+- `pgDateToStr(value)` — read a Postgres `DATE` column back to `YYYY-MM-DD`; node-postgres parses DATE as a **local-midnight JS Date**, so `toISOString().slice(0,10)` returns the previous day east of UTC (fires in prod — Railway sets `TZ=Asia/Karachi`).
+- **Use these for ALL business "day" logic** — `attendance_sessions.session_start` and `employee_attendance.check_in` are TIMESTAMPTZ like everything else (the old claim that they were "stored in local time" was wrong and caused the 2026-07 date-boundary bug class). SQL same-day checks use `(col AT TIME ZONE $tz)::date` on both sides. A regression guard (`tests/unit/tz-date-boundary-guard.test.js`) fails the build on new violations.
 
 ## `r2.js` — Cloudflare R2 upload/delete
 

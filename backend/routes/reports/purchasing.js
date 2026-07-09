@@ -333,7 +333,9 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
       `;
 
       const { rows } = await db.query(sql, params);
-      const today = new Date().toISOString().slice(0, 10);
+      // "Overdue" is judged against the tenant-local day, not the UTC day.
+      const { tenantToday } = require("../../utils/tz");
+      const today = tenantToday(req.company?.timezone);
       const summary = (rows || []).reduce(
         (acc, row) => {
           acc.po_count += 1;
@@ -438,17 +440,20 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
       const adjustmentWhere = [];
       const adjustmentParams = [];
 
+      // grn.received_at is TIMESTAMPTZ like it.timestamp / sa.timestamp —
+      // all three use the same tenant-tz UTC bounds (the old bare ::date on
+      // received_at evaluated in the DB session timezone).
       if (date_from) {
-        receiptWhere.push("grn.received_at::date >= ?");
-        receiptParams.push(date_from);
+        receiptWhere.push("grn.received_at >= ?");
+        receiptParams.push(toUtcStart(date_from, tz));
         transferWhere.push("it.timestamp >= ?");
         transferParams.push(toUtcStart(date_from, tz));
         adjustmentWhere.push("sa.timestamp >= ?");
         adjustmentParams.push(toUtcStart(date_from, tz));
       }
       if (date_to) {
-        receiptWhere.push("grn.received_at::date <= ?");
-        receiptParams.push(date_to);
+        receiptWhere.push("grn.received_at < ?");
+        receiptParams.push(toUtcEnd(date_to, tz));
         transferWhere.push("it.timestamp < ?");
         transferParams.push(toUtcEnd(date_to, tz));
         adjustmentWhere.push("sa.timestamp < ?");

@@ -36,20 +36,32 @@ async function runExpiryScanForDb({ db, windowDays = NEAR_EXPIRY_DAYS } = {}) {
   );
   if (!flagRows[0]?.enabled) return 0;
 
+  // Expiry is judged against the TENANT-local day (CURRENT_DATE is the DB
+  // session's day — UTC on prod — which lags PK tenants by 5 hours).
+  const { tenantToday } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  const todayLocal = tenantToday(tz);
+
   // 2. Count active batches expiring within the window, grouped by outlet.
   //    Includes already-expired (still sitting in stock, not yet written off).
   const { rows: byOutlet } = await db.query(
     `SELECT sb.outlet_id, o.name AS outlet_name,
             COUNT(*) AS batch_count,
-            SUM(CASE WHEN sb.expiry_date < CURRENT_DATE THEN 1 ELSE 0 END) AS expired_count
+            SUM(CASE WHEN sb.expiry_date < $2::date THEN 1 ELSE 0 END) AS expired_count
        FROM stock_batches sb
        LEFT JOIN outlets o ON o.id = sb.outlet_id
       WHERE sb.status = 'active'
         AND sb.remaining_qty > 0
         AND sb.expiry_date IS NOT NULL
-        AND sb.expiry_date <= CURRENT_DATE + ($1::int)
+        AND sb.expiry_date <= $2::date + ($1::int)
       GROUP BY sb.outlet_id, o.name`,
-    [windowDays]
+    [windowDays, todayLocal]
   );
 
   let total = 0;

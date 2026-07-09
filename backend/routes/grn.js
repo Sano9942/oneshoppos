@@ -11,13 +11,16 @@ module.exports = function registerGRNRoutes(app, deps) {
       const where = [];
       const params = [];
       let idx = 1;
+      // received_at is TIMESTAMPTZ — date(...) evaluates in the DB session
+      // timezone; filter with tenant-tz UTC bounds instead (same as the
+      // supplier-ledger route below).
       if (date_from) {
-        where.push(`date(g.received_at) >= $${idx++}`);
-        params.push(date_from);
+        where.push(`g.received_at >= $${idx++}`);
+        params.push(toUtcStart(String(date_from), req.company?.timezone));
       }
       if (date_to) {
-        where.push(`date(g.received_at) <= $${idx++}`);
-        params.push(date_to);
+        where.push(`g.received_at < $${idx++}`);
+        params.push(toUtcEnd(String(date_to), req.company?.timezone));
       }
       const sql = `
     SELECT g.id, g.grn_number, g.received_at, g.notes,

@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../../utils/tz");
 
 module.exports = function registerFinanceReports(app, deps, helpers) {
   const { db } = deps;
@@ -173,7 +173,8 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
         searchParams: [1, 1, 1],
-        columnType: "local",
+        // paid_at is TIMESTAMPTZ — must go through the UTC-bounds path, not a
+        // bare ::date cast (which evaluates in the DB session timezone).
       }, tz);
 
       const invoiceWhere = ["1 = 1"];
@@ -185,7 +186,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ?)",
         searchParams: [1, 1],
-        columnType: "local",
+        // created_at is TIMESTAMPTZ — UTC-bounds path (see paid_at note).
       }, tz);
 
       const customerWhere = ["COALESCE(c.balance, 0) <> 0"];
@@ -551,13 +552,12 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       }
       const [b1, b2, b3] = buckets;
 
+      // Default as_of = tenant-local today. (The old toLocaleString →
+      // new Date → toISOString round-trip re-interpreted the wall time in the
+      // PROCESS timezone and came out a day early for hours around midnight.)
       const asOf = req.query.as_of && /^\d{4}-\d{2}-\d{2}$/.test(req.query.as_of)
         ? req.query.as_of
-        : new Date(
-            new Date().toLocaleString("en-US", { timeZone: isValidTz(tz) ? tz : "UTC" }),
-          )
-            .toISOString()
-            .slice(0, 10);
+        : tenantToday(tz);
 
       const outletIds =
         req.query.outlet_id !== undefined && req.query.outlet_id !== ""
@@ -642,7 +642,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ?)",
         searchParams: [1, 1],
-        columnType: "local",
+        // created_at is TIMESTAMPTZ — UTC-bounds path (see paid_at note).
       }, tz);
 
       const paymentWhere = ["1 = 1"];
@@ -1080,7 +1080,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         dateColumn: "grn.received_at",
         timeColumn: "grn.received_at",
         outletColumn: "grn.outlet_id",
-        columnType: "local",
+        // received_at is TIMESTAMPTZ — UTC-bounds path (see paid_at note).
       }, tz);
       await applyProductFilters(receivedWhere, receivedParams, req.query, {
         product: "p",

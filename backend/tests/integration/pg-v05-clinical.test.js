@@ -139,9 +139,16 @@ describe("V05 — recall arm/advance", () => {
     expect(open[0].recall_type).toBe("checkup");
     expect(open[0].interval_months).toBe(6);
     expect(open[0].source_plan_id).toBe(plan.id);
+    // due_date = CLINIC-local today + interval (tz-date-boundary fix) — the
+    // expectation must use the tenant timezone too, not session CURRENT_DATE
+    // (UTC under vitest, so the old formula was a day behind before 5 AM PKT).
+    const { tenantToday } = require("../../utils/tz");
+    const { rows: [{ ctz }] } = await db.query(
+      "SELECT timezone AS ctz FROM company_profile WHERE id = 1"
+    );
     const { rows: [d] } = await db.query(
-      "SELECT ((CURRENT_DATE + make_interval(months => 6))::date = due_date) AS ok FROM patient_recalls WHERE id = $1",
-      [open[0].id]
+      "SELECT (($2::date + make_interval(months => 6))::date = due_date) AS ok FROM patient_recalls WHERE id = $1",
+      [open[0].id, tenantToday(ctz)]
     );
     expect(d.ok).toBe(true);
   });

@@ -32,10 +32,15 @@ const DATASETS = {
   },
 };
 
-// Build SQL from dataset + dimensions + measures + filters
-function buildQuery(dataset, dimensions, measures, filters, sortBy, sortOrder) {
+// Build SQL from dataset + dimensions + measures + filters.
+// tz: tenant IANA timezone for the "date" dimension — s.timestamp is
+// TIMESTAMPTZ, so a bare ::date would bucket days in the DB session timezone.
+function buildQuery(dataset, dimensions, measures, filters, sortBy, sortOrder, tz) {
   const ds = DATASETS[dataset];
   if (!ds) throw new Error("Unknown dataset");
+  const { isValidTz } = require("../utils/tz");
+  const safeTz = isValidTz(tz) ? tz : "UTC";
+  const dateExpr = `(s.timestamp AT TIME ZONE '${safeTz}')::date`;
 
   for (const d of dimensions) {
     if (!ds.dimensions.includes(d)) throw new Error(`Invalid dimension: ${d}`);
@@ -51,7 +56,7 @@ function buildQuery(dataset, dimensions, measures, filters, sortBy, sortOrder) {
   let idx = 1;
 
   const dimMap = {
-    date: { col: "s.timestamp::date", alias: "date", group: "s.timestamp::date" },
+    date: { col: dateExpr, alias: "date", group: dateExpr },
     outlet: { col: "o.name", alias: "outlet", join: "JOIN outlets o ON o.id = s.outlet_id", group: "o.name" },
     employee: { col: "e.name", alias: "employee", join: "JOIN employees e ON e.id = s.employee_id", group: "e.name" },
     payment_method: { col: "s.payment_method", alias: "payment_method", group: "s.payment_method" },
@@ -168,7 +173,7 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
       return res.status(400).json({ error: "dataset, dimensions, and measures are required" });
     }
     try {
-      const { sql, params } = buildQuery(dataset, dimensions, measures, filters, sort_by, sort_order);
+      const { sql, params } = buildQuery(dataset, dimensions, measures, filters, sort_by, sort_order, req.company?.timezone);
       const { rows } = await db.query(sql, params);
       res.json({ rows, count: rows.length });
     } catch (err) {

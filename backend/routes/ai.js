@@ -21,6 +21,8 @@ const DAILY_CAP = { content: 300, invoice: 150 };
 const usage = new Map(); // `${tenantId}:${kind}:${YYYY-MM-DD}` -> count
 
 function withinDailyCap(tenantId, kind) {
+  // Deliberately the UTC day: this is a platform cost-cap bucket, not a
+  // tenant-facing business day — any consistent 24h bucketing works.
   const day = new Date().toISOString().slice(0, 10);
   const key = `${tenantId || "default"}:${kind}:${day}`;
   const n = usage.get(key) || 0;

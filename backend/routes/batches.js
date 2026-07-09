@@ -20,7 +20,11 @@ module.exports = function registerBatchRoutes(app, deps) {
   app.get("/api/batches/expiring", VIEW, FLAG, async (req, res) => {
     try {
       const days = Math.max(0, parseInt(req.query.days, 10) || 30);
-      const params = [days];
+      // Expiry is judged against the tenant-local day (CURRENT_DATE is the DB
+      // session's day — UTC on prod — so batches flipped "expired" 5 hours
+      // late for PK tenants).
+      const { tenantToday } = require("../utils/tz");
+      const params = [days, tenantToday(req.company?.timezone)];
       let outletFilter = "";
       if (req.query.outlet_id) {
         params.push(Number(req.query.outlet_id));
@@ -31,14 +35,14 @@ module.exports = function registerBatchRoutes(app, deps) {
                 sb.outlet_id, o.name AS outlet_name,
                 sb.batch_number, sb.lot_type, sb.expiry_date,
                 sb.remaining_qty, sb.unit_cost,
-                (sb.expiry_date - CURRENT_DATE) AS days_to_expiry
+                (sb.expiry_date - $2::date) AS days_to_expiry
            FROM stock_batches sb
            JOIN products p ON p.id = sb.product_id
            LEFT JOIN outlets o ON o.id = sb.outlet_id
           WHERE sb.status = 'active'
             AND sb.remaining_qty > 0
             AND sb.expiry_date IS NOT NULL
-            AND sb.expiry_date <= CURRENT_DATE + ($1::int)${outletFilter}
+            AND sb.expiry_date <= $2::date + ($1::int)${outletFilter}
           ORDER BY sb.expiry_date ASC, sb.id ASC`,
         params
       );
@@ -62,7 +66,8 @@ module.exports = function registerBatchRoutes(app, deps) {
     try {
       const productId = Number(req.params.id);
       const includeInactive = req.query.include_inactive === "1";
-      const params = [productId];
+      const { tenantToday } = require("../utils/tz");
+      const params = [productId, tenantToday(req.company?.timezone)];
       let statusFilter = " AND sb.status = 'active'";
       if (includeInactive) statusFilter = "";
       if (req.query.outlet_id) {
@@ -73,7 +78,7 @@ module.exports = function registerBatchRoutes(app, deps) {
         `SELECT sb.id, sb.outlet_id, o.name AS outlet_name, sb.lot_type,
                 sb.batch_number, sb.expiry_date, sb.received_qty, sb.remaining_qty,
                 sb.unit_cost, sb.status, sb.grn_id, sb.created_at,
-                (sb.expiry_date - CURRENT_DATE) AS days_to_expiry
+                (sb.expiry_date - $2::date) AS days_to_expiry
            FROM stock_batches sb
            LEFT JOIN outlets o ON o.id = sb.outlet_id
           WHERE sb.product_id = $1${statusFilter}
@@ -117,13 +122,16 @@ module.exports = function registerBatchRoutes(app, deps) {
         "bm.movement_type = 'sale'",
         "sb.unit_cost IS NOT NULL",
       ];
+      // from/to are tenant-local days; created_at is TIMESTAMPTZ — use UTC
+      // bounds (a bare ::date comparison evaluates in the DB session TZ).
+      const { toUtcStart, toUtcEnd } = require("../utils/tz");
       if (req.query.from) {
-        params.push(req.query.from);
-        where.push(`bm.created_at >= $${params.length}::date`);
+        params.push(toUtcStart(String(req.query.from), req.company?.timezone));
+        where.push(`bm.created_at >= $${params.length}`);
       }
       if (req.query.to) {
-        params.push(req.query.to);
-        where.push(`bm.created_at < ($${params.length}::date + 1)`);
+        params.push(toUtcEnd(String(req.query.to), req.company?.timezone));
+        where.push(`bm.created_at < $${params.length}`);
       }
       const { rows } = await db.query(
         `SELECT sb.product_id, p.name AS product_name, p.cost_price AS product_cost,

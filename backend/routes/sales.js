@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../utils/tz");
 const logger = require("../services/logger");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { recordApprovalEvent } = require("../services/approval-policy");
@@ -71,15 +71,20 @@ module.exports = function registerSalesRoutes(app, deps) {
     return row || null;
   }
 
-  async function getEmployeeCheckoutStatus(employeeId, outletId) {
-    const today = new Date().toISOString().slice(0, 10);
+  // session_start is TIMESTAMPTZ — "same day" must be evaluated in the
+  // tenant's timezone on BOTH sides (a bare `::date` casts in the DB SESSION
+  // timezone; a JS toISOString() date is UTC — either one flips near local
+  // midnight and blocks POS checkout with "not clocked in"). Mirrors
+  // routes/attendance.js.
+  async function getEmployeeCheckoutStatus(employeeId, outletId, tz) {
+    const zone = isValidTz(tz) ? tz : "UTC";
     const { rows: [openSession] } = await db.query(
       `SELECT * FROM attendance_sessions
        WHERE employee_id = $1 AND outlet_id = $2 AND session_end IS NULL
-         AND session_start::date = $3::date
+         AND (session_start AT TIME ZONE $3)::date = (NOW() AT TIME ZONE $3)::date
        ORDER BY session_start DESC
        LIMIT 1`,
-      [Number(employeeId), Number(outletId), today]
+      [Number(employeeId), Number(outletId), zone]
     );
     if (openSession) {
       return openSession.session_type === "work" ? "clocked_in" : "on_break";
@@ -88,8 +93,8 @@ module.exports = function registerSalesRoutes(app, deps) {
       `SELECT COUNT(*) AS cnt
        FROM attendance_sessions
        WHERE employee_id = $1 AND outlet_id = $2
-         AND session_start::date = $3::date`,
-      [Number(employeeId), Number(outletId), today]
+         AND (session_start AT TIME ZONE $3)::date = (NOW() AT TIME ZONE $3)::date`,
+      [Number(employeeId), Number(outletId), zone]
     );
     return Number(countRow?.cnt || 0) > 0 ? "clocked_out" : "not_clocked_in";
   }
@@ -1102,6 +1107,7 @@ module.exports = function registerSalesRoutes(app, deps) {
         const attendanceStatus = await getEmployeeCheckoutStatus(
           authenticatedEmployeeId,
           outlet_id,
+          req.company?.timezone,
         );
         if (attendanceStatus !== "clocked_in") {
           const message =
@@ -1894,17 +1900,19 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [saleItemId, sr.id],
               );
               const months = sr.warranty_months;
+              // Warranty starts on the tenant-local sale day, not the DB
+              // session's CURRENT_DATE (UTC on prod — a day off near midnight).
               await client.query(
                 `UPDATE product_serial_numbers
                     SET status = 'sold',
                         sale_id = $1,
-                        warranty_start_date = CURRENT_DATE,
+                        warranty_start_date = $4::date,
                         warranty_end_date = CASE
                           WHEN $2::int IS NULL THEN NULL
-                          ELSE CURRENT_DATE + ($2::int * INTERVAL '1 month')
+                          ELSE $4::date + ($2::int * INTERVAL '1 month')
                         END
                   WHERE id = $3`,
-                [newSaleId, months, sr.id],
+                [newSaleId, months, sr.id, tenantToday(req.company?.timezone)],
               );
             }
           }
@@ -2105,8 +2113,9 @@ module.exports = function registerSalesRoutes(app, deps) {
             overrideAuthorized: creditTender.overrideAuthorized === true,
           });
 
-          // Compute due_date from payment_terms_days. Use CURRENT_DATE so the
-          // date is in tenant timezone-naive form (DATE column).
+          // Compute due_date from payment_terms_days, anchored to the
+          // tenant-LOCAL day (CURRENT_DATE is the DB session's day — UTC on
+          // prod — so terms computed near local midnight came out a day off).
           const termsDays = Number(creditTender.payment_terms_days || 0);
           const invoiceNumber = `INV-AR-${newSaleId}`;
           const { rows: [arInvoice] } = await client.query(
@@ -2116,7 +2125,7 @@ module.exports = function registerSalesRoutes(app, deps) {
                 due_date, notes)
              VALUES ($1, $2, $3, $4, 'sent',
                      $5, $6, 0, $7, $7,
-                     CURRENT_DATE + ($8::int) * INTERVAL '1 day',
+                     $10::date + ($8::int) * INTERVAL '1 day',
                      $9)
              RETURNING id, invoice_number, due_date, total_amount`,
             [
@@ -2129,6 +2138,7 @@ module.exports = function registerSalesRoutes(app, deps) {
               Number(creditTender.amount),  // and put tax_total at 0; the real
               termsDays,                    // tax split lives on sale_items.
               `Auto-generated from POS sale #${newSaleId} (Credit tender)`,
+              tenantToday(req.company?.timezone),
             ]
           );
           await client.query(

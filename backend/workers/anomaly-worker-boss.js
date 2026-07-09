@@ -74,10 +74,13 @@ async function runAnomalyWorkerForDb({ db, windowDays = WINDOW_DAYS } = {}) {
             COALESCE(SUM(s.total_amount), 0)::numeric AS gross_total,
             COALESCE(SUM(s.discount_amount), 0)::numeric AS discount_total
        FROM sales s
-      WHERE s.timestamp >= $1::timestamp
+      WHERE s.timestamp >= $1::timestamptz
         AND s.employee_id IS NOT NULL
         AND s.outlet_id IS NOT NULL
       GROUP BY s.employee_id, s.outlet_id`,
+    // ::timestamptz (not ::timestamp) — casting an ISO-Z string to bare
+    // timestamp DROPS the Z, then the comparison re-reads it in the DB
+    // session TZ (UTC prod / local dev diverge by the session offset).
     [periodStart.toISOString()],
   );
   if (!saleAgg.length) return 0;
@@ -88,7 +91,7 @@ async function runAnomalyWorkerForDb({ db, windowDays = WINDOW_DAYS } = {}) {
             r.outlet_id,
             COUNT(*)::int AS refund_count
        FROM returns r
-      WHERE r.timestamp >= $1::timestamp
+      WHERE r.timestamp >= $1::timestamptz
         AND r.employee_id IS NOT NULL
         AND r.outlet_id IS NOT NULL
       GROUP BY r.employee_id, r.outlet_id`,

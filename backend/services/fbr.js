@@ -11,10 +11,15 @@ const BACKOFF_DELAYS = [60, 300, 900, 3600, 14400]; // seconds: 1m, 5m, 15m, 1h,
 
 function buildInvoicePayload(sale, items, company, customer, categoryTree) {
   const byId = categoryTree?.byId;
+  // FBR wants the LOCAL invoice date. sale.timestamp is a UTC instant;
+  // toISOString() gave the UTC date, which is the previous day for any PKT
+  // sale before 5 AM — a compliance mismatch with the printed receipt.
+  const { tenantToday } = require("../utils/tz");
+  const fbrTz = company?.timezone || "Asia/Karachi";
 
   return {
     invoiceType: "Sale Invoice",
-    invoiceDate: new Date(sale.timestamp).toISOString().split("T")[0],
+    invoiceDate: tenantToday(fbrTz, new Date(sale.timestamp)),
     sellerBusinessName: company.company_name,
     sellerNTNCNIC: company.ntn || "",
     sellerProvince: company.fbr_province || "",
@@ -84,9 +89,10 @@ function buildCreditNotePayload(
 }
 
 function buildDebitNotePayload(sale, company) {
+  const { tenantToday } = require("../utils/tz");
   return {
     invoiceType: "Debit Note",
-    invoiceDate: new Date().toISOString().split("T")[0],
+    invoiceDate: tenantToday(company?.timezone || "Asia/Karachi"),
     sellerBusinessName: company.company_name,
     sellerNTNCNIC: company.ntn || "",
     sellerProvince: company.fbr_province || "",

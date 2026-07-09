@@ -216,6 +216,9 @@ module.exports = function createHRRouter({
         const period = periodRows[0];
         if (!period) return res.status(404).json({ error: "Payroll period not found" });
 
+        const { isValidTz } = require("../../utils/tz");
+        const payrollTz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
+
         await db.transaction(async (client) => {
           await client.query("DELETE FROM payroll_lines WHERE period_id = $1", [id]);
 
@@ -236,8 +239,11 @@ module.exports = function createHRRouter({
 
           for (const emp of employees) {
             // Get attendance days and hours
+            // check_in is TIMESTAMPTZ — bucket work days in the TENANT's
+            // timezone (a bare ::date casts in the DB session TZ, pushing
+            // overnight shifts into the wrong payroll day/period).
             const { rows: attDays } = await client.query(
-              `SELECT check_in::date AS work_date,
+              `SELECT (check_in AT TIME ZONE $4)::date AS work_date,
                      COALESCE(SUM(
                        CASE WHEN check_out IS NOT NULL
                          THEN EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0
@@ -245,9 +251,9 @@ module.exports = function createHRRouter({
                      ), 0) AS day_hours
                FROM employee_attendance
                WHERE employee_id = $1
-                 AND check_in::date BETWEEN $2::date AND $3::date
-               GROUP BY check_in::date`,
-              [emp.id, period.start_date, period.end_date]
+                 AND (check_in AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date
+               GROUP BY (check_in AT TIME ZONE $4)::date`,
+              [emp.id, period.start_date, period.end_date, payrollTz]
             );
 
             // Get leave days
@@ -509,8 +515,12 @@ module.exports = function createHRRouter({
     async (req, res) => {
       try {
         const { outlet_id, week } = req.query;
-        // week format: YYYY-MM-DD (Monday of the week)
-        const weekStart = week || new Date().toISOString().slice(0, 10);
+        // week format: YYYY-MM-DD (Monday of the week) — default to the
+        // tenant-local today, and bucket session_start (TIMESTAMPTZ) in the
+        // tenant TZ rather than the DB session TZ.
+        const { tenantToday, isValidTz } = require("../../utils/tz");
+        const otTz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
+        const weekStart = week || tenantToday(otTz);
         const WEEKLY_THRESHOLD_HOURS = 40;
 
         let sql = `
@@ -522,12 +532,12 @@ module.exports = function createHRRouter({
                  ), 0)::numeric(8,2) AS hours_worked
           FROM employees e
           LEFT JOIN attendance_sessions a ON a.employee_id = e.id
-            AND a.session_start::date >= $1::date
-            AND a.session_start::date < ($1::date + INTERVAL '7 days')
+            AND (a.session_start AT TIME ZONE $2)::date >= $1::date
+            AND (a.session_start AT TIME ZONE $2)::date < ($1::date + INTERVAL '7 days')
             AND a.session_type = 'work'
         `;
-        const params = [weekStart];
-        let idx = 2;
+        const params = [weekStart, otTz];
+        let idx = 3;
         if (outlet_id) {
           sql += ` AND a.outlet_id = $${idx++}`;
           params.push(outlet_id);

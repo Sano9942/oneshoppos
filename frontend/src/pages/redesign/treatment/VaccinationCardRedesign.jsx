@@ -6,6 +6,7 @@ import { useToast } from "../../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input, EmptyState, Modal, ModalFooter } from "../../../ui/primitives";
 import { Syringe, Printer, Plus, ArrowLeft } from "lucide-react";
 import { api } from "../../../api";
+import { todayLocalStr } from "../../../utils/dates";
 
 /**
  * V05 — per-pet vaccination card (vet). Records newest-first, upcoming
@@ -172,7 +173,7 @@ function AdministerModal({ subjectId, onClose, onDone }) {
   const toast = useToast();
   const [form, setForm] = useState({
     vaccine_name: "",
-    administered_at: new Date().toISOString().slice(0, 10),
+    administered_at: todayLocalStr(),
     next_due: "",
     batch_number: "",
     notes: "",

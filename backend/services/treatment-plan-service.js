@@ -11,6 +11,23 @@
 const { generateInvoiceNumber } = require("./customer-invoicing");
 const { resolveTaxForExplicitRate } = require("./tax-snapshot");
 
+/**
+ * "Today" as the CLINIC-local date (plan dates are DATE columns holding
+ * clinic-local days; UTC toISOString() / DB-session CURRENT_DATE are both a
+ * day off near local midnight).
+ */
+async function clinicToday(db) {
+  const { tenantToday } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  return tenantToday(tz);
+}
+
 // ── Status transition table ──────────────────────────────────────────
 
 const VALID_PLAN_TRANSITIONS = {
@@ -385,7 +402,7 @@ async function transitionPlanStatus(db, planId, toStatus, actorId, reason) {
     throw err;
   }
   const actualEndDate = toStatus === "completed" || toStatus === "discontinued"
-    ? new Date().toISOString().slice(0, 10)
+    ? await clinicToday(db)
     : current.actual_end_date;
   const { rows: [updated] } = await db.query(
     `UPDATE treatment_plans
@@ -1392,8 +1409,9 @@ async function getOverduePlans(db) {
      LEFT JOIN employees e ON e.id = p.provider_id
      WHERE p.status = 'active'
        AND p.expected_end_date IS NOT NULL
-       AND p.expected_end_date < CURRENT_DATE - INTERVAL '7 days'
-       AND p.sessions_completed < p.total_sessions_planned`
+       AND p.expected_end_date < $1::date - INTERVAL '7 days'
+       AND p.sessions_completed < p.total_sessions_planned`,
+    [await clinicToday(db)]
   );
   return rows;
 }

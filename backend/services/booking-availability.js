@@ -32,14 +32,26 @@ async function getAvailableSlots(db, { serviceId, employeeId, date, outletId }) 
   // F06 resources: when the flag is on and the service maps to resources, a
   // slot additionally needs at least one free resource instance (salon chair,
   // physio bed, studio bay). Occupancy is loaded once for the day.
+  // Day window as explicit instants. The slot engine interprets naive
+  // "<date>THH:MM" strings in the Node process TZ (new Date(...) below), so
+  // the busy-window queries must use the SAME zone — never a bare
+  // `start_at::date = $day` cast, which evaluates in the DB SESSION timezone
+  // (UTC on prod, local TZ on dev) and silently drops boundary appointments
+  // from the busy list → double-booking near midnight.
+  const dayStart = new Date(`${date}T00:00:00`);
+  const dayEnd = new Date(`${date}T00:00:00`);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const dayStartIso = dayStart.toISOString();
+  const dayEndIso = dayEnd.toISOString();
+
   const candidateResources = await getCandidateResources(db, serviceId);
   let resourceBusy = [];
   if (candidateResources.length) {
     const { rows } = await db.query(
       `SELECT resource_id, start_at, end_at FROM appointments
-       WHERE resource_id = ANY($1::int[]) AND start_at::date = $2
+       WHERE resource_id = ANY($1::int[]) AND start_at >= $2 AND start_at < $3
        AND status NOT IN ('cancelled','no_show')`,
-      [candidateResources, date]
+      [candidateResources, dayStartIso, dayEndIso]
     );
     resourceBusy = rows;
   }
@@ -65,24 +77,23 @@ async function getAvailableSlots(db, { serviceId, employeeId, date, outletId }) 
     );
     if (!rules.length) continue;
 
-    // Get blocks for this date
-    const dateStart = `${date}T00:00:00`;
-    const dateEnd = `${date}T23:59:59`;
+    // Get blocks for this date (explicit instants — a naive string param is
+    // interpreted by Postgres in the SESSION timezone, same trap as ::date)
     const { rows: blocks } = await db.query(
       `SELECT start_at, end_at FROM appointment_blocks
        WHERE employee_id = $1 AND start_at < $3 AND end_at > $2`,
-      [sid, dateStart, dateEnd]
+      [sid, dayStartIso, dayEndIso]
     );
 
     // Get existing appointments for this date (F06: segments occupy staff too)
     const { rows: existing } = await db.query(
       `SELECT start_at, end_at FROM appointments
-       WHERE employee_id = $1 AND start_at::date = $2 AND status NOT IN ('cancelled','no_show')
+       WHERE employee_id = $1 AND start_at >= $2 AND start_at < $3 AND status NOT IN ('cancelled','no_show')
        UNION ALL
        SELECT s.start_at, s.end_at FROM appointment_segments s
        JOIN appointments pa ON pa.id = s.appointment_id
-       WHERE s.employee_id = $1 AND s.start_at::date = $2 AND pa.status NOT IN ('cancelled','no_show')`,
-      [sid, date]
+       WHERE s.employee_id = $1 AND s.start_at >= $2 AND s.start_at < $3 AND pa.status NOT IN ('cancelled','no_show')`,
+      [sid, dayStartIso, dayEndIso]
     );
 
     // Build slots from each rule window

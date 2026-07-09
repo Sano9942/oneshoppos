@@ -536,12 +536,11 @@ describe("F06 — scheduling engine (Postgres)", () => {
       await request(app)
         .post("/api/attendance/pin-checkin")
         .send({ pin_code: "2580", outlet_id: 1 });
-      // PRE-EXISTING BUG WORKAROUND (not F06): sales.js getEmployeeCheckoutStatus
-      // compares the UTC date (toISOString().slice(0,10)) against LOCAL-time
-      // attendance_sessions.session_start — between local midnight and UTC+N
-      // o'clock the dates differ and checkout 400s despite a valid clock-in.
-      // Pin the session onto the UTC date so this suite is deterministic at
-      // any hour. Remove once the sales.js date derivation is tz-aware.
+      // sales.js getEmployeeCheckoutStatus is now tz-aware ((session_start AT
+      // TIME ZONE tz)::date on both sides; test harness tenant tz = UTC), so
+      // the old "pin the session onto the UTC date" workaround is no longer
+      // needed. Keep the session pinned to UTC noon anyway so the suite stays
+      // deterministic even if the harness timezone changes.
       const utcToday = new Date().toISOString().slice(0, 10);
       await db.query(
         "UPDATE attendance_sessions SET session_start = ($1 || ' 12:00:00')::timestamp WHERE employee_id = 1 AND session_end IS NULL",

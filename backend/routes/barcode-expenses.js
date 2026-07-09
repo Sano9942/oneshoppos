@@ -282,7 +282,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
           parseFloat(amount),
           description || null,
           reference || null,
-          expense_date || new Date().toISOString().slice(0, 10),
+          // Default expense day = tenant-local today (UTC date is a day
+          // behind for evening entries east of UTC).
+          expense_date || require("../utils/tz").tenantToday(req.company?.timezone),
         ]
       );
       res.json({ id: rows[0].id });
@@ -316,7 +318,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
           parseFloat(amount),
           description || null,
           reference || null,
-          expense_date || new Date().toISOString().slice(0, 10),
+          // Default expense day = tenant-local today (UTC date is a day
+          // behind for evening entries east of UTC).
+          expense_date || require("../utils/tz").tenantToday(req.company?.timezone),
           req.params.id,
         ]
       );

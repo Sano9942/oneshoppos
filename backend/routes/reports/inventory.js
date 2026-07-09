@@ -981,19 +981,25 @@ module.exports = function (app, deps, helpers) {
       let where = [];
       const params = [];
 
+      // received_at is TIMESTAMPTZ — tenant-tz UTC bounds and tz-aware day
+      // bucketing, not bare ::date casts (which use the DB session timezone).
+      // tz inline-literal'd after isValidTz validation (same pattern as the
+      // dashboard trend queries).
+      const { isValidTz } = require("../../utils/tz");
+      const grnTz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       if (date_from) {
-        where.push("grn.received_at::date >= ?::date");
-        params.push(date_from);
+        where.push("grn.received_at >= ?");
+        params.push(toUtcStart(String(date_from), grnTz));
       }
       if (date_to) {
-        where.push("grn.received_at::date <= ?::date");
-        params.push(date_to);
+        where.push("grn.received_at < ?");
+        params.push(toUtcEnd(String(date_to), grnTz));
       }
       applyOutletFilter(where, params, outlet_id, "grn.outlet_id");
       const { text: whereText, values } = helpers.pgWhere(where, params);
 
       const sql = `
-        SELECT grn.received_at::date as date, p.name as product_name,
+        SELECT (grn.received_at AT TIME ZONE '${grnTz}')::date as date, p.name as product_name,
                s.name as supplier_name, gi.qty_received AS quantity, gi.cost_price
         FROM goods_received_notes grn
         JOIN purchase_orders po ON grn.po_id = po.id
@@ -1017,13 +1023,15 @@ module.exports = function (app, deps, helpers) {
       const params = [];
       await applyInventoryProductFilters(where, params, req.query);
 
+      // received_at is TIMESTAMPTZ — tenant-tz UTC bounds, not bare ::date.
+      const hcTz = req.company?.timezone || "UTC";
       if (req.query.date_from) {
-        where.push("grn.received_at::date >= ?::date");
-        params.push(req.query.date_from);
+        where.push("grn.received_at >= ?");
+        params.push(toUtcStart(String(req.query.date_from), hcTz));
       }
       if (req.query.date_to) {
-        where.push("grn.received_at::date <= ?::date");
-        params.push(req.query.date_to);
+        where.push("grn.received_at < ?");
+        params.push(toUtcEnd(String(req.query.date_to), hcTz));
       }
       if (req.query.time_from) {
         where.push("grn.received_at::time >= ?::time");
@@ -1332,7 +1340,7 @@ module.exports = function (app, deps, helpers) {
       const dateParams = [
         utcStart, utcEnd,   // sales
         utcStart, utcEnd,   // returns
-        date_from, date_to, // grn (local date column)
+        utcStart, utcEnd,   // grn (received_at is TIMESTAMPTZ like the rest)
         utcStart, utcEnd,   // adjustments
         utcStart, utcEnd,   // transfers in
         utcStart, utcEnd,   // transfers out
@@ -1384,7 +1392,7 @@ module.exports = function (app, deps, helpers) {
         LEFT JOIN (
           SELECT gi.product_id, g.outlet_id, SUM(gi.qty_received) AS qty
           FROM grn_items gi JOIN goods_received_notes g ON g.id = gi.grn_id
-          WHERE g.received_at::date >= $5::date AND g.received_at::date <= $6::date
+          WHERE g.received_at >= $5 AND g.received_at < $6
           GROUP BY gi.product_id, g.outlet_id
         ) grn_sub ON grn_sub.product_id = p.id AND grn_sub.outlet_id = os.outlet_id
         LEFT JOIN (

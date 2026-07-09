@@ -270,13 +270,16 @@ module.exports = function createCRMRouter({
           where.push(`q.customer_id = $${idx++}`);
           params.push(customer_id);
         }
+        // created_at is TIMESTAMPTZ — tenant-tz UTC bounds, not a bare ::date
+        // cast (which evaluates in the DB session timezone).
+        const { toUtcStart, toUtcEnd } = require("../../utils/tz");
         if (from) {
-          where.push(`q.created_at::date >= $${idx++}`);
-          params.push(from);
+          where.push(`q.created_at >= $${idx++}`);
+          params.push(toUtcStart(String(from), req.company?.timezone));
         }
         if (to) {
-          where.push(`q.created_at::date <= $${idx++}`);
-          params.push(to);
+          where.push(`q.created_at < $${idx++}`);
+          params.push(toUtcEnd(String(to), req.company?.timezone));
         }
         const { rows } = await db.query(
           `SELECT q.*, c.name AS customer_name, l.name AS lead_name, e.name AS employee_name, o.name AS outlet_name
@@ -554,8 +557,11 @@ module.exports = function createCRMRouter({
           return res.status(400).json({ error: "Email not configured. Set up SMTP in Printer Settings." });
         }
 
+        // Show the quote date in the TENANT's local day (created_at is a
+        // TIMESTAMPTZ instant; its UTC date is the previous day before ~5 AM PKT).
+        const { tenantToday } = require("../../utils/tz");
         const createdAtStr = quote.created_at
-          ? (typeof quote.created_at === "string" ? quote.created_at.split(" ")[0] : new Date(quote.created_at).toISOString().slice(0, 10))
+          ? tenantToday(req.company?.timezone, new Date(quote.created_at))
           : "—";
 
         const rowsHtml = (items || []).map((it) =>

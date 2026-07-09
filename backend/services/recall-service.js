@@ -19,6 +19,23 @@
  * to the same subject, so one pet's visit never silences another pet's recall.
  */
 
+/**
+ * "Today" as the CLINIC-local date. due_date/administered_at are DATE columns
+ * holding clinic-local days; SQL CURRENT_DATE is the DB session's day (UTC on
+ * prod), so recalls flipped due / got stamped on the wrong day near midnight.
+ */
+async function clinicToday(db) {
+  const { tenantToday } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  return tenantToday(tz);
+}
+
 function vaccinationTypeKey(vaccineName) {
   return (
     "vaccination:" +
@@ -106,7 +123,7 @@ async function armRecall(db, {
        (customer_id, patient_subject_id, recall_type, interval_months, due_date,
         status, source_plan_id, appointment_id, vaccination_record_id, notes)
      VALUES ($1, $2, $3, $4,
-             COALESCE($5::date, (CURRENT_DATE + make_interval(months => $4))::date),
+             COALESCE($5::date, ($11::date + make_interval(months => $4))::date),
              $6, $7, $8, $9, $10)
      RETURNING *, due_date::text AS due_date`,
     [
@@ -117,6 +134,7 @@ async function armRecall(db, {
       future ? future.id : null,
       vaccinationRecordId || null,
       notes || null,
+      await clinicToday(db),
     ]
   );
   return row;
@@ -173,8 +191,9 @@ async function onVisitCompleted(db, { plan, sessionAppointmentId = null }) {
 
 async function listRecalls(db, filters = {}) {
   const where = [];
-  const params = [];
-  let i = 0;
+  // $1 is always the clinic-local today (used for overdue filter + days_overdue).
+  const params = [await clinicToday(db)];
+  let i = 1;
   if (filters.status) {
     i++; where.push(`r.status = $${i}`); params.push(filters.status);
   } else if (filters.open === true) {
@@ -184,7 +203,7 @@ async function listRecalls(db, filters = {}) {
     i++; where.push(`r.recall_type = $${i}`); params.push(filters.recall_type);
   }
   if (filters.overdue === true) {
-    where.push(`r.due_date <= CURRENT_DATE AND r.status IN ('due','contacted')`);
+    where.push(`r.due_date <= $1::date AND r.status IN ('due','contacted')`);
   }
   if (filters.q) {
     i++; where.push(`(c.name ILIKE $${i} OR ps.name ILIKE $${i} OR c.mobile ILIKE $${i})`);
@@ -195,7 +214,7 @@ async function listRecalls(db, filters = {}) {
             r.due_date::text AS due_date,
             c.name AS customer_name, c.mobile AS customer_mobile, c.email AS customer_email,
             ps.name AS subject_name, ps.subject_type,
-            (CURRENT_DATE - r.due_date) AS days_overdue,
+            ($1::date - r.due_date) AS days_overdue,
             a.start_at AS appointment_start_at
        FROM patient_recalls r
        JOIN customers c ON c.id = r.customer_id
@@ -358,12 +377,12 @@ async function getDueRecallsForOutreach(db, { cadenceDays = 30 } = {}) {
        JOIN customers c ON c.id = r.customer_id
        LEFT JOIN patient_subjects ps ON ps.id = r.patient_subject_id
       WHERE r.status IN ('due','contacted')
-        AND r.due_date <= CURRENT_DATE
+        AND r.due_date <= $3::date
         AND r.contact_attempts < $1
         AND (r.last_contacted_at IS NULL OR r.last_contacted_at < NOW() - make_interval(days => $2))
       ORDER BY r.due_date ASC
       LIMIT 200`,
-    [MAX_CONTACT_ATTEMPTS, cadence]
+    [MAX_CONTACT_ATTEMPTS, cadence, await clinicToday(db)]
   );
   return rows;
 }
@@ -404,12 +423,13 @@ async function administerVaccination(db, {
     `INSERT INTO vaccination_records
        (patient_subject_id, vaccine_name, administered_at, treatment_session_id,
         administered_by, next_due, batch_number, notes)
-     VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE), $4, $5, $6, $7, $8)
+     VALUES ($1, $2, COALESCE($3::date, $9::date), $4, $5, $6, $7, $8)
      RETURNING *, administered_at::text AS administered_at, next_due::text AS next_due`,
     [
       subjectId, String(vaccineName).trim(), administeredAt || null,
       sessionId || null, administeredBy || null, nextDue || null,
       batchNumber || null, notes || null,
+      await clinicToday(db),
     ]
   );
 

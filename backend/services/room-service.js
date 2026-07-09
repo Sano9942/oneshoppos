@@ -35,6 +35,23 @@ async function generateBookingNumber(db) {
   return `BK-${String(next_id).padStart(6, "0")}`;
 }
 
+/**
+ * "Today" as the HOTEL-local date (check_in_date/check_out_date are DATE
+ * columns holding hotel-local days; SQL CURRENT_DATE is the DB session's day
+ * — UTC on prod — which flips occupancy/overdue at the wrong hour).
+ */
+async function hotelToday(db) {
+  const { tenantToday } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  return tenantToday(tz);
+}
+
 // ── Rate resolution (pure + unit-testable) ────────────────────────
 
 function addDaysISO(dateStr, n) {
@@ -1384,6 +1401,7 @@ async function getDormMap(db, dormRoomId) {
     [dormRoomId]
   );
   if (!dorm) return null;
+  const today = await hotelToday(db);
   const { rows: beds } = await db.query(
     `SELECT r.*,
             b.id AS current_booking_id, b.booking_number, b.status AS booking_status,
@@ -1392,12 +1410,12 @@ async function getDormMap(db, dormRoomId) {
        LEFT JOIN room_bookings b
          ON b.room_id = r.id
         AND b.status IN ('reserved','confirmed','checked_in')
-        AND b.check_in_date <= CURRENT_DATE AND b.check_out_date > CURRENT_DATE
+        AND b.check_in_date <= $2::date AND b.check_out_date > $2::date
         AND NOT ${STALE_RESERVATION_PREDICATE}
        LEFT JOIN customers c ON c.id = b.customer_id
       WHERE r.parent_room_id = $1 AND r.is_active = TRUE
       ORDER BY r.room_number ASC`,
-    [dormRoomId]
+    [dormRoomId, today]
   );
   const occupied = beds.filter((b) => b.current_booking_id).length;
   return { dorm, beds, beds_total: beds.length, beds_occupied: occupied };
@@ -1406,6 +1424,7 @@ async function getDormMap(db, dormRoomId) {
 // ── Overdue checkout (worker + dashboard) ─────────────────────────
 
 async function getOverdueCheckouts(db) {
+  const today = await hotelToday(db);
   const { rows } = await db.query(
     `SELECT b.*, c.name AS customer_name, c.email AS customer_email,
        r.room_number
@@ -1413,8 +1432,9 @@ async function getOverdueCheckouts(db) {
      LEFT JOIN customers c ON c.id = b.customer_id
      LEFT JOIN rooms r ON r.id = b.room_id
      WHERE b.status = 'checked_in'
-       AND b.check_out_date < CURRENT_DATE
-       AND (b.overdue_email_sent_at IS NULL OR b.overdue_email_sent_at < NOW() - INTERVAL '24 hours')`
+       AND b.check_out_date < $1::date
+       AND (b.overdue_email_sent_at IS NULL OR b.overdue_email_sent_at < NOW() - INTERVAL '24 hours')`,
+    [today]
   );
   return rows;
 }

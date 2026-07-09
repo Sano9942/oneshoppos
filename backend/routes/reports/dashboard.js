@@ -179,7 +179,7 @@ module.exports = function (app, deps) {
         mp AS (
           SELECT ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0)::numeric, 2) AS month_purchases
           FROM goods_received_notes grn JOIN grn_items gi ON gi.grn_id = grn.id
-          WHERE grn.received_at::date >= $${mpIdx}::date AND grn.received_at::date <= $${mpIdx + 1}::date ${mpOutlet.clause}
+          WHERE grn.received_at >= $${mpIdx} AND grn.received_at < $${mpIdx + 1} ${mpOutlet.clause}
         ),
         rt AS (
           SELECT COUNT(DISTINCT r.id) AS refund_count,
@@ -189,7 +189,7 @@ module.exports = function (app, deps) {
         )
         SELECT * FROM ms, mp, rt`,
         [monthStart, todayEnd, ...msOutlet.values,
-         monthStartStr, todayStr, ...mpOutlet.values,
+         monthStart, todayEnd, ...mpOutlet.values,
          todayStart, todayEnd, ...rtOutlet.values])).rows[0] || {};
       const monthSales = Number(monthAndRefunds.month_sales || 0);
       const monthPurchases = Number(monthAndRefunds.month_purchases || 0);
@@ -310,8 +310,9 @@ module.exports = function (app, deps) {
 
       // ─── Query 13: Sale/purchase comparison (7-day series) ───
       // P22 fix: tz-aware bucketing for sales (tz inline-literal'd, validated).
-      // grn.received_at is a LOCAL timestamp column (already in tenant-local time per
-      // the column-type convention) so no TZ shift needed for grn buckets.
+      // grn.received_at is TIMESTAMPTZ (DEFAULT NOW()) — the old claim that it
+      // was "already local" was wrong; a bare ::date casts in the DB session
+      // TZ, so it gets the same AT TIME ZONE treatment as sales.timestamp.
       const spcSalesOutlet = buildOutletClause("s.outlet_id", outletIds, 4);
       const spcGrnStartIdx = 4 + spcSalesOutlet.values.length;
       const spcGrnOutlet = buildOutletClause("grn.outlet_id", outletIds, spcGrnStartIdx + 1);
@@ -322,17 +323,17 @@ module.exports = function (app, deps) {
           ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS sales_total
           FROM sales s WHERE s.voided = false AND s.timestamp >= $3 ${spcSalesOutlet.clause}
           GROUP BY (s.timestamp AT TIME ZONE '${tz}')::date),
-        purchase_daily AS (SELECT to_char(grn.received_at::date, 'YYYY-MM-DD') AS day,
+        purchase_daily AS (SELECT to_char((grn.received_at AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
           ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0)::numeric, 2) AS purchase_total
           FROM goods_received_notes grn JOIN grn_items gi ON gi.grn_id = grn.id
-          WHERE grn.received_at::date >= $${spcGrnStartIdx}::date ${spcGrnOutlet.clause}
-          GROUP BY grn.received_at::date)
+          WHERE grn.received_at >= $${spcGrnStartIdx} ${spcGrnOutlet.clause}
+          GROUP BY (grn.received_at AT TIME ZONE '${tz}')::date)
         SELECT date_series.day, COALESCE(sales_daily.sales_total, 0) AS sales_total,
           COALESCE(purchase_daily.purchase_total, 0) AS purchase_total
         FROM date_series LEFT JOIN sales_daily ON sales_daily.day = date_series.day
         LEFT JOIN purchase_daily ON purchase_daily.day = date_series.day
         ORDER BY date_series.day ASC`,
-        [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...spcSalesOutlet.values, sixDaysAgoStr, ...spcGrnOutlet.values])).rows;
+        [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...spcSalesOutlet.values, sixDaysAgoStart, ...spcGrnOutlet.values])).rows;
 
       // ─── Query 14: Attendance today ───
       const attOutlet1 = buildOutletClause("outlet_id", outletIds, 2);
@@ -344,10 +345,10 @@ module.exports = function (app, deps) {
           COALESCE(work_hours.net_work_hours, 0) AS net_work_hours
         FROM employees e
         LEFT JOIN (SELECT employee_id, session_type, break_reason FROM attendance_sessions
-          WHERE session_end IS NULL AND session_start::date = $1::date ${attOutlet1.clause}
+          WHERE session_end IS NULL AND (session_start AT TIME ZONE '${tz}')::date = $1::date ${attOutlet1.clause}
         ) active ON active.employee_id = e.id
         LEFT JOIN (SELECT employee_id, COALESCE(SUM(duration_hours), 0) AS net_work_hours FROM attendance_sessions
-          WHERE session_type = 'work' AND session_end IS NOT NULL AND session_start::date = $${secondTodayIdx}::date ${attOutlet2.clause}
+          WHERE session_type = 'work' AND session_end IS NOT NULL AND (session_start AT TIME ZONE '${tz}')::date = $${secondTodayIdx}::date ${attOutlet2.clause}
           GROUP BY employee_id
         ) work_hours ON work_hours.employee_id = e.id
         WHERE e.deleted_at IS NULL ORDER BY e.name ASC`, attParams)).rows;
@@ -393,7 +394,7 @@ module.exports = function (app, deps) {
             SUM(CASE WHEN session_type = 'work' AND session_end IS NULL THEN 1 ELSE 0 END) AS clocked_in,
             SUM(CASE WHEN session_type = 'break' AND session_end IS NULL THEN 1 ELSE 0 END) AS on_break
            FROM attendance_sessions
-           WHERE outlet_id = $1 AND session_start::date = $2::date`, [outlet.id, todayStr])).rows[0];
+           WHERE outlet_id = $1 AND (session_start AT TIME ZONE '${tz}')::date = $2::date`, [outlet.id, todayStr])).rows[0];
         const lastSaleRow = (await db.query(
           `SELECT MAX(timestamp) AS last_sale_at FROM sales WHERE outlet_id = $1 AND voided = false`,
           [outlet.id])).rows[0];
@@ -694,23 +695,27 @@ module.exports = function (app, deps) {
   app.get("/api/reports/dashboard/wholesale", async (req, res) => {
     try {
       const overdueDays = Math.max(0, Math.min(365, parseInt(req.query.overdue_days, 10) || 30));
+      // Days-overdue counts from the TENANT-local day, not the DB session's
+      // CURRENT_DATE (UTC on prod — invoices flipped overdue at the wrong hour).
+      const { tenantToday } = require("../../utils/tz");
+      const todayLocal = tenantToday(req.company?.timezone);
 
       const { rows: [agg] } = await db.query(
         `SELECT
            COALESCE(SUM(balance_due), 0)::numeric AS total_outstanding,
            COALESCE(SUM(
              CASE WHEN due_date IS NOT NULL
-                   AND (CURRENT_DATE - due_date) > $1
+                   AND ($2::date - due_date) > $1
                   THEN balance_due ELSE 0 END
            ), 0)::numeric AS overdue_amount,
            COUNT(*) FILTER (
-             WHERE due_date IS NOT NULL AND (CURRENT_DATE - due_date) > $1
+             WHERE due_date IS NOT NULL AND ($2::date - due_date) > $1
            )::int AS overdue_invoice_count,
            COUNT(*)::int AS open_invoice_count
          FROM customer_invoices
          WHERE balance_due > 0
            AND status NOT IN ('paid','cancelled','void')`,
-        [overdueDays]
+        [overdueDays, todayLocal]
       );
 
       const { rows: topBuyers } = await db.query(
@@ -721,7 +726,7 @@ module.exports = function (app, deps) {
            COUNT(ci.id)::int AS open_invoice_count,
            ROUND(SUM(
              CASE WHEN ci.due_date IS NOT NULL
-                   AND (CURRENT_DATE - ci.due_date) > $1
+                   AND ($2::date - ci.due_date) > $1
                   THEN ci.balance_due ELSE 0 END
            ), 2) AS overdue_amount
          FROM customer_invoices ci
@@ -731,7 +736,7 @@ module.exports = function (app, deps) {
          GROUP BY c.id, c.name
          ORDER BY SUM(ci.balance_due) DESC
          LIMIT 5`,
-        [overdueDays]
+        [overdueDays, todayLocal]
       );
 
       res.json({

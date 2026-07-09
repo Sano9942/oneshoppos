@@ -123,7 +123,17 @@ async function updateTicket(db, id, data, employeeId) {
       }
       if (warrantyDays != null) {
         if (data.warranty_days === undefined) { idx++; sets.push(`warranty_days = $${idx}`); params.push(warrantyDays); }
-        idx++; sets.push(`warranty_until = CURRENT_DATE + $${idx}::int`); params.push(warrantyDays);
+        // Warranty runs from the tenant-local completion day (CURRENT_DATE is
+        // the DB session's day — UTC on prod — a day off near local midnight).
+        const { tenantToday, addDaysStr } = require("../utils/tz");
+        let tz = "UTC";
+        try {
+          const { rows: [prof] } = await client.query(
+            "SELECT timezone FROM company_profile WHERE id = 1"
+          );
+          if (prof?.timezone) tz = prof.timezone;
+        } catch { /* fall back to UTC */ }
+        idx++; sets.push(`warranty_until = $${idx}::date`); params.push(addDaysStr(tenantToday(tz), warrantyDays));
       }
     }
 
@@ -447,10 +457,22 @@ async function getDeviceHistory(db, { imei, serial_number, excludeTicketId } = {
   let where = `(${conds.join(" OR ")})`;
   if (excludeTicketId) { idx++; where += ` AND st.id <> $${idx}`; params.push(Number(excludeTicketId)); }
 
+  // in_warranty is judged against the tenant-local day, not the DB session's.
+  const { tenantToday } = require("../utils/tz");
+  let hxTz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) hxTz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  idx++; params.push(tenantToday(hxTz));
+  const todayIdx = idx;
+
   const { rows } = await db.query(
     `SELECT st.id AS ticket_id, st.ticket_number, st.status, st.title,
             st.created_at, st.actual_completion, st.warranty_until,
-            (st.warranty_until IS NOT NULL AND st.warranty_until >= CURRENT_DATE) AS in_warranty,
+            (st.warranty_until IS NOT NULL AND st.warranty_until >= $${todayIdx}::date) AS in_warranty,
             td.brand, td.model, td.imei, td.serial_number
      FROM ticket_devices td
      JOIN service_tickets st ON st.id = td.service_ticket_id

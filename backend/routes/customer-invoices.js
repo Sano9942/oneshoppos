@@ -37,7 +37,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
   // (COD — caller intent matches). Pre-condition: customer_id exists on the
   // tenant's customers table; bad ids return null without throwing so the
   // upstream INSERT can still report its own foreign-key error.
-  async function resolveDueDate(db, customerId, providedDueDate) {
+  async function resolveDueDate(db, customerId, providedDueDate, tz) {
     if (providedDueDate) return providedDueDate;
     if (!customerId) return null;
     try {
@@ -47,9 +47,10 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
       );
       const days = Number(cust?.payment_terms_days || 0);
       if (days <= 0) return null;
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() + days);
-      return d.toISOString().slice(0, 10);
+      // Net-X terms count from the tenant-LOCAL day the invoice was raised,
+      // not the UTC day (which lags/leads by the tenant's offset).
+      const { tenantToday, addDaysStr } = require("../utils/tz");
+      return addDaysStr(tenantToday(tz), days);
     } catch {
       return null;
     }
@@ -90,15 +91,18 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
+      // Overdue is judged against the tenant-local day (CURRENT_DATE is the
+      // DB session's day — UTC on prod — flipping invoices at the wrong hour).
+      const { tenantToday } = require("../utils/tz");
       const { rows } = await deps.db.query(
         `SELECT ci.*, c.name AS customer_name, c.email AS customer_email,
-           CASE WHEN ci.due_date < CURRENT_DATE AND ci.balance_due > 0 AND ci.status NOT IN ('paid','void','draft') THEN true ELSE false END AS is_overdue
+           CASE WHEN ci.due_date < $${idx + 2}::date AND ci.balance_due > 0 AND ci.status NOT IN ('paid','void','draft') THEN true ELSE false END AS is_overdue
          FROM customer_invoices ci
          LEFT JOIN customers c ON c.id = ci.customer_id
          ${where}
          ORDER BY ci.created_at DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
-        [...params, limit, offset]
+        [...params, limit, offset, tenantToday(req.company?.timezone)]
       );
 
       const { rows: [{ cnt }] } = await deps.db.query(
@@ -121,7 +125,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
       const invoiceNumber = await generateInvoiceNumber(deps.db);
       // Tier 0.2 — default due_date from customer.payment_terms_days when
       // the caller omits it. Explicit dates win; 0/missing terms keep null.
-      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date);
+      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date, req.company?.timezone);
 
       const { rows: [invoice] } = await deps.db.query(
         `INSERT INTO customer_invoices
@@ -167,7 +171,7 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
       const { customer_id, items, due_date, notes, outlet_id, discount_amount } = req.body;
       const totals = computeInvoiceTotals(items, discount_amount);
       // Tier 0.2 — same default-from-payment_terms_days rule as POST.
-      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date);
+      const effectiveDueDate = await resolveDueDate(deps.db, customer_id, due_date, req.company?.timezone);
 
       const { rows: [invoice] } = await deps.db.query(
         `UPDATE customer_invoices SET
