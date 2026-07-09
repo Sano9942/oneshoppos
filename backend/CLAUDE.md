@@ -291,6 +291,7 @@ Integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. 
   - Day bucketing in reports: `(col AT TIME ZONE '<validated tz>')::date` (see `routes/reports/dashboard.js`)
   - Reading a plain `DATE` column back to a string: `pgDateToStr(row.col)` — node-postgres returns local-midnight JS Dates, so `toISOString()` shifts a day east of UTC
   - Plain `DATE` columns (`expense_date`, `due_date`, `expiry_date`, room booking dates…) are timezone-free — compare them against a `tenantToday(tz)` parameter, not `CURRENT_DATE`
+- **Local-DB parity**: the local `sanopos_dev` and `sanopos_test` databases have `ALTER DATABASE … SET timezone = 'UTC'` applied so local sessions match Supabase prod. If you recreate a local DB, re-apply it — otherwise timezone bugs behave differently in dev than in prod and hide. A GitHub Actions check (`.github/workflows/tz-guard.yml`) also runs the guard on every push/PR.
 
 ### Test runner
 **Vitest** — not Jest. Check `backend/package.json` to confirm. Exception: `reports_accuracy.test.js` uses Jest syntax.
