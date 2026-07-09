@@ -45,10 +45,13 @@ const DEFAULT_FEATURE_FLAGS = {
   // consumers (repair tickets, booking reminders) only dispatch when flipped on.
   customer_notifications: false,
   payment_links: false,
-  // AI insights chat (routes/insights-ai.js). Default OFF — surfaces the flag
-  // in the admin flags editor so it can be toggled on per tenant. Also requires
-  // ANTHROPIC_API_KEY on the server; the route soft-checks both.
-  ai_insights: false,
+  // AI insights chat (routes/insights-ai.js). Default ON for every tenant —
+  // seeded as a real feature_flags row by schema-pg.sql (new tenants) and
+  // migration v130 (existing tenants), because the route reads the DB row
+  // directly rather than this default map. This default keeps the admin flags
+  // editor showing it enabled. Still requires ANTHROPIC_API_KEY on the server;
+  // admins can toggle it off per tenant.
+  ai_insights: true,
   // Mode-gated (subscriptions mode): flag default flipped false so retail
   // tenants without the subscriptions mode don't see the Subscriptions nav.
   // Tenants on the subscriptions mode get the flag enabled via v44 backfill.

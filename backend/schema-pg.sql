@@ -2508,6 +2508,14 @@ INSERT INTO feature_flags (key, enabled, description)
 VALUES ('fbr_integration', false, 'FBR Digital Invoicing - real-time invoice posting to FBR API')
 ON CONFLICT (key) DO NOTHING;
 
+-- AI insights chat (routes/insights-ai.js). Seeded ON for every tenant — the
+-- route reads this DB row directly (not the DEFAULT_FEATURE_FLAGS merge) and
+-- still requires ANTHROPIC_API_KEY on the server. Admins can toggle it off per
+-- tenant in the flags editor. Existing tenants get it via migration v130.
+INSERT INTO feature_flags (key, enabled, description)
+VALUES ('ai_insights', true, 'AI insights chat — natural-language questions over your sales/stock data (requires ANTHROPIC_API_KEY)')
+ON CONFLICT (key) DO NOTHING;
+
 -- V03 food-service depth: delivery-aggregator order injection (foodpanda/Careem).
 -- Default off; restaurant + cafe presets flip it on at wizard completion.
 INSERT INTO feature_flags (key, enabled, description)

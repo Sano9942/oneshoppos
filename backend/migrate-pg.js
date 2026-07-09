@@ -9614,6 +9614,23 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 130,
+    description:
+      "Enable AI insights chat for all existing tenants — seed feature_flags('ai_insights', true). The insights-ai.js route reads this DB row directly (not DEFAULT_FEATURE_FLAGS), so a row must exist. ON CONFLICT DO NOTHING preserves any tenant where an admin already set it. New tenants get it from schema-pg.sql. feature_flags is tenant-scoped, so the public pass is a to_regclass-guarded no-op.",
+    up: async (client) => {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF to_regclass('feature_flags') IS NOT NULL THEN
+            INSERT INTO feature_flags (key, enabled, description)
+            VALUES ('ai_insights', true, 'AI insights chat — natural-language questions over your sales/stock data (requires ANTHROPIC_API_KEY)')
+            ON CONFLICT (key) DO NOTHING;
+          END IF;
+        END $$;
+      `);
+    },
+  },
 ];
 
 /**

@@ -1,8 +1,9 @@
 /**
  * completion-00 P0 regression guards.
  *
- * P0-1: `ai_insights` must be present in DEFAULT_FEATURE_FLAGS (default false)
- *        so the flag is reachable/toggleable in the admin flags editor.
+ * P0-1: `ai_insights` must be present in DEFAULT_FEATURE_FLAGS. As of the
+ *        AI-for-everyone rollout it defaults TRUE (seeded as a real row by
+ *        schema-pg.sql + migration v130); the route reads the DB row directly.
  * P0-2: `/api/reports/stock-aging` must serve UNGATED (the shadowing gated
  *        duplicate in reports/inventory.js was removed), while the genuinely
  *        premium `/api/reports/stockout-risk` stays gated on
@@ -28,9 +29,9 @@ describe("completion-00 — reports gating + ai_insights flag (Postgres)", () =>
     if (cleanup) await cleanup();
   });
 
-  it("P0-1: ai_insights is in DEFAULT_FEATURE_FLAGS and defaults false", () => {
+  it("P0-1: ai_insights is in DEFAULT_FEATURE_FLAGS and defaults true (AI-for-everyone)", () => {
     expect(Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, "ai_insights")).toBe(true);
-    expect(DEFAULT_FEATURE_FLAGS.ai_insights).toBe(false);
+    expect(DEFAULT_FEATURE_FLAGS.ai_insights).toBe(true);
   });
 
   it("P0-2: /api/reports/stock-aging serves ungated (200) with no flag set", async () => {
