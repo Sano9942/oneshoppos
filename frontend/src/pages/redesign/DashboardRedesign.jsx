@@ -27,16 +27,14 @@ import PlanUsageBanner from "../dashboard/PlanUsageBanner";
 import MultiOutletEnabledBanner from "../../ui/MultiOutletEnabledBanner";
 import FBRPromptBanner from "../../ui/FBRPromptBanner";
 import { InsightCards } from "../dashboard/InsightCards";
-import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
 import { FieldSummaryCards } from "../dashboard/FieldSummaryCards";
 import DashboardWholesale from "../dashboard/DashboardWholesale";
-import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { usePreset } from "../../contexts/PresetContext";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
-  const { authHeaders, hasPerm } = useAuth();
+  const { hasPerm } = useAuth();
   const [data, setData] = useState(null);
   const [recentSales, setRecentSales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,8 +55,6 @@ export default function DashboardRedesign() {
   // Current employee id (for cashier attendance filtering)
   const currentEmployeeId = readSession()?.employee?.id;
 
-  // Feature flags (for AI chat panel)
-  const { flags } = useFeatureFlags(authHeaders);
   const { dashboard_widgets, presetLoaded, hasMode, business_model } = usePreset();
   // 2-G.16 Merchant home cards (staff-of-day + cash-position) — only for the
   // buy/sell retail family. No preset ever declared a "retail" mode, so the old
@@ -286,9 +282,6 @@ export default function DashboardRedesign() {
           onNavigate={onNavigate}
         />
       </div>
-
-      {/* AI Chat Panel — floating widget, feature-flag gated */}
-      <AIChatPanel flagEnabled={!!flags.ai_insights} />
     </PageShell>
   );
 }

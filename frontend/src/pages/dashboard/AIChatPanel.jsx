@@ -92,7 +92,7 @@ export function AIChatPanel({ flagEnabled }) {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-3 text-white shadow-lg hover:opacity-90 transition"
+          className="fixed bottom-4 right-20 z-50 flex items-center gap-2 rounded-full bg-(--ui-primary) px-4 py-3 text-white shadow-lg hover:opacity-90 transition"
           title="Ask AI"
         >
           <Sparkles size={18} />

@@ -19,6 +19,7 @@ import { Drawer } from "../ui/primitives";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
 import SupportWidget from "../ui/SupportWidget";
+import { AIChatPanel } from "../pages/dashboard/AIChatPanel";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
 import AnnouncementBanner from "../ui/AnnouncementBanner";
@@ -339,6 +340,7 @@ export default function AppLayoutRedesign() {
         navigate={navigate}
       />
       <SupportWidget />
+      <AIChatPanel flagEnabled={!!flags.ai_insights} />
       <PlanLimitModalInterceptor />
     </div>
   );
