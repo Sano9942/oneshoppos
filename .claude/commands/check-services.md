@@ -2,6 +2,7 @@
 name: check-services
 description: Check health of all production services (Sentry, Vercel, Railway, Supabase, UptimeRobot, Cloudflare) and report issues
 user_invocable: true
+model: haiku
 ---
 
 # Service Health Check

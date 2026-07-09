@@ -2,6 +2,7 @@
 name: audit-docs
 description: Full deep-scan docs audit — reads every source file, rebuilds all CLAUDE.md files from scratch. Run monthly or when docs feel stale. (~$5/run on Sonnet)
 user_invocable: true
+model: sonnet
 ---
 
 # Audit Documentation (Full Deep Scan)
