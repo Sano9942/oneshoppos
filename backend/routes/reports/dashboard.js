@@ -52,11 +52,14 @@ module.exports = function (app, deps) {
       const twentyNineDaysAgoStart = toUtcStart(twentyNineDaysAgoStr, tz);
       const sixDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 6 * 24 * 3600 * 1000));
       const sixDaysAgoStart = toUtcStart(sixDaysAgoStr, tz);
-      const elapsedMs = Date.now() - new Date(todayStart.replace(" ", "T") + "Z").getTime();
+      // toUtcStart now returns explicit-UTC ISO ("...T...Z") — parse directly.
+      // The old `.replace(" ", "T") + "Z"` surgery would double the Z and
+      // produce Invalid Date.
+      const elapsedMs = Date.now() - new Date(todayStart).getTime();
       const yesterdayDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 24 * 3600 * 1000));
       const yesterdayStart = toUtcStart(yesterdayDateStr, tz);
-      const yesterdayEndMs = new Date(yesterdayStart.replace(" ", "T") + "Z").getTime() + elapsedMs;
-      const yesterdayEnd = new Date(yesterdayEndMs).toISOString().replace("T", " ").slice(0, 19);
+      const yesterdayEndMs = new Date(yesterdayStart).getTime() + elapsedMs;
+      const yesterdayEnd = new Date(yesterdayEndMs).toISOString().slice(0, 19) + "Z";
 
       // ─── Query 1: zReport (payment breakdown) ───
       const zOutlet = buildOutletClause("s.outlet_id", outletIds, 3);
