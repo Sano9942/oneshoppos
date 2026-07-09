@@ -7,7 +7,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
 import { Plus, X, Calendar as CalendarIcon, Package, FileSignature, ChevronLeft, ChevronRight, Truck, ClipboardCheck, PenLine, Wrench } from "lucide-react";
 import { api } from "../../api";
-import { fmtUtcDateTime } from "../../utils/dates";
+import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 
 // ── Shared constants ──────────────────────────────────────────────
 
@@ -1367,7 +1367,7 @@ function DeliveryEditor({ contract, onChanged }) {
 function DeliveriesTab() {
   const toast = useToast();
   const { fmt } = useCurrency();
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayLocalStr());
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 

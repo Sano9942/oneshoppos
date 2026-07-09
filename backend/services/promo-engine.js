@@ -32,7 +32,21 @@
  *          applied: [{ promotion_id, name, type, discount, qty_qualifying, tier }]
  */
 async function evaluatePromotions(db, items, orderTotal) {
-  const now = new Date().toISOString().slice(0, 10);
+  // promotions.starts_at/ends_at are TEXT 'YYYY-MM-DD' strings entered as
+  // tenant-LOCAL dates, so "today" must be the tenant's local date — not the
+  // UTC date (a promo ending "today" died at 5 PM PKT; one starting "today"
+  // went live 5 hours early... or late, depending on the zone). The tenant tz
+  // is resolved here rather than threaded through because the storefront
+  // caller (services/quote.js) runs before company-profile middleware.
+  const { tenantToday } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  const now = tenantToday(tz);
 
   const { rows: promos } = await db.query(
     `SELECT * FROM promotions WHERE active = true

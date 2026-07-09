@@ -21,6 +21,7 @@ const { validate } = require("../middleware/validate");
 const { CheckInSchema, SetRouteDaySchema } = require("../schemas/field");
 const { distanceMeters } = require("../services/geo");
 const { uploadToR2 } = require("../utils/r2");
+const { isValidTz } = require("../utils/tz");
 const crypto = require("crypto");
 
 module.exports = function registerFieldRoutes(app, deps) {
@@ -117,7 +118,7 @@ module.exports = function registerFieldRoutes(app, deps) {
             SELECT customer_id, status, gps_flagged, checked_in_at
             FROM field_visits
             WHERE employee_id = $1
-              AND checked_in_at::date = CURRENT_DATE
+              AND (checked_in_at AT TIME ZONE $3)::date = (NOW() AT TIME ZONE $3)::date
           )
           SELECT
             r.id            AS route_id,
@@ -138,7 +139,10 @@ module.exports = function registerFieldRoutes(app, deps) {
           WHERE r.employee_id = $1 AND r.day_of_week = $2
           ORDER BY r.visit_order ASC
           `,
-          [employeeId, dow]
+          // checked_in_at is TIMESTAMPTZ — "today" must be the tenant-local
+          // day on both sides (bare ::date casts in the DB session TZ, which
+          // is UTC on prod), matching tenantDayOfWeek above.
+          [employeeId, dow, isValidTz(req.company?.timezone) ? req.company.timezone : "UTC"]
         );
 
         res.json({
@@ -287,13 +291,16 @@ module.exports = function registerFieldRoutes(app, deps) {
         const { from, to, employee_id, flagged_only } = req.query;
         const where = [];
         const params = [];
+        // from/to are tenant-local YYYY-MM-DD — convert to UTC bounds instead
+        // of a bare ::date cast (which uses the DB session TZ, not the tenant's).
+        const { toUtcStart, toUtcEnd } = require("../utils/tz");
         if (from) {
-          params.push(from);
-          where.push(`v.checked_in_at::date >= $${params.length}`);
+          params.push(toUtcStart(String(from), req.company?.timezone));
+          where.push(`v.checked_in_at >= $${params.length}`);
         }
         if (to) {
-          params.push(to);
-          where.push(`v.checked_in_at::date <= $${params.length}`);
+          params.push(toUtcEnd(String(to), req.company?.timezone));
+          where.push(`v.checked_in_at < $${params.length}`);
         }
         if (employee_id) {
           params.push(Number(employee_id));
@@ -368,7 +375,7 @@ module.exports = function registerFieldRoutes(app, deps) {
               COUNT(*) FILTER (WHERE gps_flagged = true)::int          AS flagged_count,
               MAX(checked_in_at)                                       AS last_seen_at
             FROM field_visits
-            WHERE checked_in_at::date = CURRENT_DATE
+            WHERE (checked_in_at AT TIME ZONE $2)::date = (NOW() AT TIME ZONE $2)::date
             GROUP BY employee_id
           )
           SELECT
@@ -387,7 +394,8 @@ module.exports = function registerFieldRoutes(app, deps) {
           LEFT JOIN today t   ON t.employee_id = r.id
           ORDER BY r.name ASC
           `,
-          [dow]
+          // Same tenant-local-day rule as /api/field/route/today above.
+          [dow, isValidTz(req.company?.timezone) ? req.company.timezone : "UTC"]
         );
 
         res.json({ day_of_week: dow, reps: rows });

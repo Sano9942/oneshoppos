@@ -160,13 +160,16 @@ module.exports = function registerRiskControlsRoutes(app, deps) {
         params.push(Number(outlet_id));
         conditions.push(`n.outlet_id = $${params.length}`);
       }
+      // created_at is TIMESTAMPTZ — a bare ::date param promotes to midnight
+      // in the DB session timezone; use tenant-tz UTC bounds instead.
+      const { toUtcStart, toUtcEnd } = require("../utils/tz");
       if (date_from) {
-        params.push(date_from);
-        conditions.push(`n.created_at >= $${params.length}::date`);
+        params.push(toUtcStart(String(date_from), req.company?.timezone));
+        conditions.push(`n.created_at >= $${params.length}`);
       }
       if (date_to) {
-        params.push(date_to);
-        conditions.push(`n.created_at < ($${params.length}::date + INTERVAL '1 day')`);
+        params.push(toUtcEnd(String(date_to), req.company?.timezone));
+        conditions.push(`n.created_at < $${params.length}`);
       }
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 

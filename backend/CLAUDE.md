@@ -280,11 +280,18 @@ Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GET
 Integration credentials stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64}`. Always call `decryptSecret()` before passing config to adapters. Courier adapters receive pre-decrypted config — decryption happens in the route layer.
 
 ### Timezone
-- Business-critical timestamps (`sales`, `returns`, `cash_shifts`, `stock_adjustments`, `inventory_transfers`) stored as UTC via `CURRENT_TIMESTAMP`
-- `attendance_sessions` and `employee_attendance` store local time — do NOT change their write paths
+- ALL business timestamps are `TIMESTAMPTZ` (absolute instants): `sales.timestamp`, `returns`, `cash_shifts`, `attendance_sessions.session_start`, `employee_attendance.check_in`, `grn.received_at`, `supplier_payments.paid_at`, appointments `start_at`, etc. There are NO "already local" timestamp columns — the old claim that `session_start`/`check_in` were local was wrong and caused the 2026-07 date-boundary bug class.
 - `sales.timestamp` is the column name — NOT `created_at`
-- `req.company.timezone` (IANA string) set by `loadCompanyProfile` — use in all date filter queries
-- `session_start` and `check_in` are already local — use `date(col)` with no modifier; `date(col,'localtime')` double-converts and breaks UTC+ timezones
+- `req.company.timezone` (IANA string) set by `loadCompanyProfile` — the tenant's business timezone
+- **There are TWO independent timezones neither of which is the tenant's**: the Node process TZ (Railway `TZ=Asia/Karachi` — affects `Date#toString`/`getHours`, NOT `toISOString()`) and the Postgres SESSION TZ (UTC on Supabase prod, often Asia/Karachi on local dev — what a bare `::date`, `date(col)`, or `CURRENT_DATE` evaluates in). Code relying on either gives different answers per environment.
+- **Rules** (enforced by `tests/unit/tz-date-boundary-guard.test.js`):
+  - JS "today": `tenantToday(req.company?.timezone)` from `utils/tz.js` — NEVER `new Date().toISOString().slice(0,10)` (always UTC)
+  - Date-range filters on TIMESTAMPTZ: `col >= toUtcStart(from, tz) AND col < toUtcEnd(to, tz)` — never `col::date >= $from`
+  - SQL same-day compare: `(col AT TIME ZONE $tz)::date = (NOW() AT TIME ZONE $tz)::date` (tenant tz on BOTH sides) — never `col::date = CURRENT_DATE`
+  - Day bucketing in reports: `(col AT TIME ZONE '<validated tz>')::date` (see `routes/reports/dashboard.js`)
+  - Reading a plain `DATE` column back to a string: `pgDateToStr(row.col)` — node-postgres returns local-midnight JS Dates, so `toISOString()` shifts a day east of UTC
+  - Plain `DATE` columns (`expense_date`, `due_date`, `expiry_date`, room booking dates…) are timezone-free — compare them against a `tenantToday(tz)` parameter, not `CURRENT_DATE`
+- **Local-DB parity**: the local `sanopos_dev` and `sanopos_test` databases have `ALTER DATABASE … SET timezone = 'UTC'` applied so local sessions match Supabase prod. If you recreate a local DB, re-apply it — otherwise timezone bugs behave differently in dev than in prod and hide. A GitHub Actions check (`.github/workflows/tz-guard.yml`) also runs the guard on every push/PR.
 
 ### Test runner
 **Vitest** — not Jest. Check `backend/package.json` to confirm. Exception: `reports_accuracy.test.js` uses Jest syntax.

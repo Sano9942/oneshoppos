@@ -120,6 +120,68 @@ function getUtcOffsetMinutes(dateStr, tz) {
   return Math.round((utcMidnight - midnightUtc) / 60000);
 }
 
+/**
+ * Current date string (YYYY-MM-DD) in the given IANA timezone.
+ *
+ * THE canonical "what day is it for this tenant" helper. Never compute
+ * "today" via `new Date().toISOString().slice(0, 10)` (always UTC) or via
+ * SQL `CURRENT_DATE` / bare `col::date` on a timestamptz (casts in the DB
+ * SESSION timezone — UTC on prod/Supabase, Asia/Karachi on local dev, so the
+ * result differs by environment). This helper is explicit about the zone and
+ * therefore produces the same answer everywhere.
+ *
+ * Optional second arg converts an arbitrary instant (JS Date or parseable
+ * value) to its local date in tz — e.g. `tenantToday(tz, sale.timestamp)`.
+ */
+function tenantToday(tz, at = new Date()) {
+  const safeTz = isValidTz(tz) ? tz : "UTC";
+  const d = at instanceof Date ? at : new Date(at);
+  if (isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: safeTz }).format(d);
+}
+
+/**
+ * UTC boundaries of the current tenant-local day.
+ * Returns { from, to, today } — `from`/`to` are explicit-UTC ISO strings for
+ * `timestamp >= $from AND timestamp < $to` filters, `today` is the local
+ * YYYY-MM-DD date string.
+ */
+function todayBounds(tz, at = new Date()) {
+  const today = tenantToday(tz, at);
+  return { from: toUtcStart(today, tz), to: toUtcEnd(today, tz), today };
+}
+
+/**
+ * Pure calendar arithmetic on a YYYY-MM-DD string (no timezone involved).
+ * addDaysStr('2026-07-10', 30) → '2026-08-09'. Use for due dates / expiry
+ * dates derived from a tenant-local day.
+ */
+function addDaysStr(dateStr, days) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + Number(days || 0)));
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+/**
+ * Convert a value read from a Postgres DATE column back to 'YYYY-MM-DD'.
+ *
+ * node-postgres parses DATE columns into a JS Date at LOCAL-process midnight,
+ * so `row.date.toISOString().slice(0, 10)` yields the PREVIOUS day whenever
+ * the process TZ is east of UTC (Railway runs TZ=Asia/Karachi — this fires in
+ * prod). Local getters read the same zone pg used to construct the Date, so
+ * this round-trips correctly regardless of process TZ.
+ */
+function pgDateToStr(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") return value.slice(0, 10);
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // Cache of validated timezone strings to avoid repeated try/catch
 const _validTzCache = new Map();
 
@@ -136,4 +198,14 @@ function isValidTz(tz) {
   }
 }
 
-module.exports = { toUtcStart, toUtcEnd, toLocalDateStr, getUtcOffsetMinutes, isValidTz };
+module.exports = {
+  toUtcStart,
+  toUtcEnd,
+  toLocalDateStr,
+  getUtcOffsetMinutes,
+  isValidTz,
+  tenantToday,
+  todayBounds,
+  addDaysStr,
+  pgDateToStr,
+};

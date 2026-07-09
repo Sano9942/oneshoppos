@@ -98,6 +98,18 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
   const { generateInvoiceNumber } = require("./customer-invoicing");
   const invoiceNumber = await generateInvoiceNumber(db);
 
+  // due_date is a DATE — take the tenant-LOCAL date of the period-start
+  // instant, not its UTC date (a day off for evening/overnight period starts).
+  const { tenantToday } = require("../utils/tz");
+  let subTz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) subTz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  const renewalDueDate = tenantToday(subTz, nextStart);
+
   // All 4 writes run in one transaction so a crash or error between any
   // two of them rolls back everything. Without this wrapper, a failure
   // between the invoice insert and the subscription period update would
@@ -115,7 +127,7 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
       `INSERT INTO customer_invoices
          (invoice_number, customer_id, status, subtotal, tax_total, total_amount, balance_due, due_date, notes)
        VALUES ($1, $2, 'sent', $3, 0, $3, $3, $4, $5) RETURNING *`,
-      [invoiceNumber, sub.customer_id, Number(sub.price), nextStart.toISOString().slice(0, 10), `Subscription renewal: ${sub.plan_name}`]
+      [invoiceNumber, sub.customer_id, Number(sub.price), renewalDueDate, `Subscription renewal: ${sub.plan_name}`]
     );
 
     await client.query(

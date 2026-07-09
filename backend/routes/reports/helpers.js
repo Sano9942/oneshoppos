@@ -172,7 +172,10 @@ module.exports = function (db) {
     if (date_to)   { where.push(`${column} < ?`);  params.push(toUtcEnd(date_to, tz)); }
   }
 
-  /** For LOCAL-stored columns (expenses.expense_date, grn.received_at, etc.) */
+  /** For plain DATE columns only (expenses.expense_date, journal entry_date).
+   *  NOT for TIMESTAMPTZ columns like grn.received_at — a bare ::date on a
+   *  timestamptz casts in the DB session timezone; use applyUtcDateFilter
+   *  with the tenant tz for those. */
   function applyLocalDateFilter(where, params, { date_from, date_to, column }) {
     if (date_from) { where.push(`${column}::date >= ?::date`); params.push(date_from); }
     if (date_to)   { where.push(`${column}::date <= ?::date`); params.push(date_to); }

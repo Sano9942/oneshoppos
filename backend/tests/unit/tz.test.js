@@ -158,3 +158,99 @@ describe("tz utility — getUtcOffsetMinutes", () => {
     expect(getUtcOffsetMinutes(null, "UTC")).toBe(0);
   });
 });
+
+// ── New helpers (tz-date-boundary class fix, 2026-07) ──────────────────────
+
+import { tenantToday, todayBounds, addDaysStr, pgDateToStr } from "../../utils/tz.js";
+
+describe("tz utility — tenantToday", () => {
+  // 2026-07-09T20:30:00Z is a boundary instant: already July 10 in Karachi
+  // (01:30 PKT), still July 9 in UTC and Los Angeles (13:30 PDT).
+  const boundary = new Date("2026-07-09T20:30:00Z");
+
+  it("Karachi is already on the next day at the boundary instant", () => {
+    expect(tenantToday("Asia/Karachi", boundary)).toBe("2026-07-10");
+  });
+
+  it("Los Angeles is still on the previous day at the boundary instant", () => {
+    expect(tenantToday("America/Los_Angeles", boundary)).toBe("2026-07-09");
+  });
+
+  it("UTC date of the boundary instant", () => {
+    expect(tenantToday("UTC", boundary)).toBe("2026-07-09");
+  });
+
+  it("accepts a non-Date instant (ISO string)", () => {
+    expect(tenantToday("Asia/Karachi", "2026-07-09T20:30:00Z")).toBe("2026-07-10");
+  });
+
+  it("invalid tz falls back to UTC", () => {
+    expect(tenantToday("Bogus/Zone", boundary)).toBe("2026-07-09");
+  });
+
+  it("invalid instant returns null", () => {
+    expect(tenantToday("UTC", "not-a-date")).toBe(null);
+  });
+});
+
+describe("tz utility — todayBounds", () => {
+  const boundary = new Date("2026-07-09T20:30:00Z");
+
+  it("Karachi: bounds cover the local July 10 day", () => {
+    const b = todayBounds("Asia/Karachi", boundary);
+    expect(b.today).toBe("2026-07-10");
+    expect(b.from).toBe("2026-07-09T19:00:00Z");
+    expect(b.to).toBe("2026-07-10T19:00:00Z");
+  });
+
+  it("Los Angeles: bounds cover the local July 9 day (DST, UTC-7)", () => {
+    const b = todayBounds("America/Los_Angeles", boundary);
+    expect(b.today).toBe("2026-07-09");
+    expect(b.from).toBe("2026-07-09T07:00:00Z");
+    expect(b.to).toBe("2026-07-10T07:00:00Z");
+  });
+
+  it("the boundary instant falls inside its own bounds in both zones", () => {
+    for (const tz of ["Asia/Karachi", "America/Los_Angeles"]) {
+      const b = todayBounds(tz, boundary);
+      expect(new Date(b.from) <= boundary).toBe(true);
+      expect(boundary < new Date(b.to)).toBe(true);
+    }
+  });
+});
+
+describe("tz utility — addDaysStr", () => {
+  it("adds days across a month boundary", () => {
+    expect(addDaysStr("2026-07-10", 30)).toBe("2026-08-09");
+  });
+
+  it("adds days across a year boundary", () => {
+    expect(addDaysStr("2026-12-25", 10)).toBe("2027-01-04");
+  });
+
+  it("zero days is identity", () => {
+    expect(addDaysStr("2026-07-10", 0)).toBe("2026-07-10");
+  });
+
+  it("null input returns null", () => {
+    expect(addDaysStr(null, 5)).toBe(null);
+  });
+});
+
+describe("tz utility — pgDateToStr (pg DATE round-trip)", () => {
+  it("string passthrough", () => {
+    expect(pgDateToStr("2026-07-10")).toBe("2026-07-10");
+  });
+
+  it("local-midnight Date round-trips to the same calendar day", () => {
+    // node-postgres parses DATE columns as new Date(y, m, d) — LOCAL midnight.
+    // toISOString() on this value shifts a day east of UTC; pgDateToStr must not.
+    const d = new Date(2026, 6, 10); // July 10 local midnight
+    expect(pgDateToStr(d)).toBe("2026-07-10");
+  });
+
+  it("null/empty returns null", () => {
+    expect(pgDateToStr(null)).toBe(null);
+    expect(pgDateToStr("")).toBe(null);
+  });
+});

@@ -1,0 +1,33 @@
+# Timezone date-boundary regression guard (fix/tz-date-boundary-class, 2026-07).
+#
+# Scans backend source for the forbidden patterns that caused the
+# UTC-vs-tenant-local date-boundary bug class:
+#   - `new Date().toISOString().slice(0,10)` as "today"  (always the UTC date)
+#   - SQL CURRENT_DATE / now()::date                     (DB SESSION day)
+#   - bare ::date / date(col) on TIMESTAMPTZ columns     (session-TZ cast)
+# plus the pure tz.js helper unit tests. No database needed — runs on every
+# push/PR so a violation can never reach main silently, even on hotfixes
+# that skip the full local suite.
+name: tz-date-boundary-guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Run tz guard + tz helper tests
+        run: npx vitest run tests/unit/tz-date-boundary-guard.test.js tests/unit/tz.test.js

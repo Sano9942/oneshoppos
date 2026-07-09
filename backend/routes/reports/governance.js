@@ -283,7 +283,13 @@ module.exports = function (app, deps, helpers) {
       const def = defRows[0];
       const { buildQuery } = require("../report-builder");
       const parsedFilters = typeof def.filters_json === "string" ? JSON.parse(def.filters_json || "{}") : (def.filters_json || {});
-      const { sql: builderSql, params: builderParams } = buildQuery(def.dataset, def.dimensions, def.measures, parsedFilters, def.sort_by, def.sort_order);
+      // Tenant tz for the "date" dimension bucketing (worker context — no req).
+      let builderTz = "UTC";
+      try {
+        const { rows: [prof] } = await db.query("SELECT timezone FROM company_profile WHERE id = 1");
+        if (prof?.timezone) builderTz = prof.timezone;
+      } catch { /* fall back to UTC */ }
+      const { sql: builderSql, params: builderParams } = buildQuery(def.dataset, def.dimensions, def.measures, parsedFilters, def.sort_by, def.sort_order, builderTz);
       const { rows: builderRows } = await db.query(builderSql, builderParams);
       return builderRows;
     }

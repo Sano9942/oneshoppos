@@ -123,7 +123,10 @@ async function runRetailDigestForDb({ db, tenantId = null, tenant = null, force 
   // 5. Enqueue via the shared email service. enqueueEmail ignores the db
   //    arg (it always writes to public pg-boss), which is fine here —
   //    idempotency already ran above.
-  const dateStr = new Date().toISOString().slice(0, 10);
+  // Digest header shows the tenant-local date (toISOString() is UTC — the
+  // Monday-morning digest could be headed with Sunday's date).
+  const { tenantToday } = require("../utils/tz");
+  const dateStr = tenantToday(cpRows[0]?.timezone || "UTC");
   const digestData = {
     currency: { symbol: cpRows[0]?.currency_symbol || "Rs", code: cpRows[0]?.currency_code || "PKR" },
     totalRevenueToday: revenue,

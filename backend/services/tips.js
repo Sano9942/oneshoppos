@@ -167,9 +167,18 @@ async function closeTipPool(db, poolId, employeeId) {
     }
 
     // Stamp pool_id on every capture for this outlet+business_date that
-    // hasn't been assigned to any pool. Filter by sale.timestamp::date so
-    // we capture sales that happened on the business day, not whenever the
-    // capture row was inserted (clock skew is rare but possible).
+    // hasn't been assigned to any pool. business_date is a tenant-LOCAL day,
+    // and sale.timestamp is TIMESTAMPTZ — so the day filter must use UTC
+    // bounds derived from the tenant timezone (a bare `timestamp::date` casts
+    // in the DB session TZ and drops/steals sales near local midnight).
+    const { toUtcStart, toUtcEnd } = require("../utils/tz");
+    let poolTz = "UTC";
+    try {
+      const { rows: [prof] } = await client.query(
+        "SELECT timezone FROM company_profile WHERE id = 1"
+      );
+      if (prof?.timezone) poolTz = prof.timezone;
+    } catch { /* fall back to UTC */ }
     await client.query(
       `UPDATE tip_captures tc
           SET pool_id = $1
@@ -177,8 +186,13 @@ async function closeTipPool(db, poolId, employeeId) {
         WHERE tc.sale_id = s.id
           AND tc.pool_id IS NULL
           AND tc.outlet_id = $2
-          AND s.timestamp::date = $3::date`,
-      [poolId, pool.outlet_id, pool.business_date_str]
+          AND s.timestamp >= $3 AND s.timestamp < $4`,
+      [
+        poolId,
+        pool.outlet_id,
+        toUtcStart(pool.business_date_str, poolTz),
+        toUtcEnd(pool.business_date_str, poolTz),
+      ]
     );
 
     const { rows: totalRows } = await client.query(

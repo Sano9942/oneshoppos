@@ -1207,7 +1207,20 @@ async function getDeliveries(db, filters = {}) {
   const params = [];
   let idx = 0;
   let where = "rc.delivery_required = TRUE AND rc.delivery_at IS NOT NULL";
-  if (filters.date) { idx++; where += ` AND rc.delivery_at::date = $${idx}::date`; params.push(filters.date); }
+  if (filters.date) {
+    // delivery_at is TIMESTAMPTZ and the date is a tenant-local day — use
+    // UTC bounds (a bare ::date cast evaluates in the DB session timezone).
+    const { toUtcStart, toUtcEnd } = require("../utils/tz");
+    let tz = "UTC";
+    try {
+      const { rows: [prof] } = await db.query(
+        "SELECT timezone FROM company_profile WHERE id = 1"
+      );
+      if (prof?.timezone) tz = prof.timezone;
+    } catch { /* fall back to UTC */ }
+    idx++; where += ` AND rc.delivery_at >= $${idx}`; params.push(toUtcStart(String(filters.date), tz));
+    idx++; where += ` AND rc.delivery_at < $${idx}`; params.push(toUtcEnd(String(filters.date), tz));
+  }
   if (filters.from) { idx++; where += ` AND rc.delivery_at >= $${idx}`; params.push(filters.from); }
   if (filters.to) { idx++; where += ` AND rc.delivery_at <= $${idx}`; params.push(filters.to); }
   const { rows } = await db.query(

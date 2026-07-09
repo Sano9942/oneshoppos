@@ -13,24 +13,27 @@ module.exports = function (app, deps, helpers) {
       const saleParams = [];
       const attendParams = [];
 
+      // session_start is TIMESTAMPTZ like s.timestamp — both filters use the
+      // same tenant-tz UTC bounds (a bare ::date cast evaluates in the DB
+      // session timezone and drifts from the sales window near midnight).
       if (date_from) {
         saleWhere.push("s.timestamp >= ?");
         saleParams.push(toUtcStart(date_from, tz));
-        attendWhere.push("session_start::date >= ?::date");
-        attendParams.push(date_from);
+        attendWhere.push("session_start >= ?");
+        attendParams.push(toUtcStart(date_from, tz));
       } else {
         const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
         saleWhere.push("s.timestamp >= ?");
         saleParams.push(toUtcStart(thirtyDaysAgoStr, tz));
-        attendWhere.push("session_start::date >= ?::date");
-        attendParams.push(thirtyDaysAgoStr);
+        attendWhere.push("session_start >= ?");
+        attendParams.push(toUtcStart(thirtyDaysAgoStr, tz));
       }
 
       if (date_to) {
         saleWhere.push("s.timestamp < ?");
         saleParams.push(toUtcEnd(date_to, tz));
-        attendWhere.push("session_start::date <= ?::date");
-        attendParams.push(date_to);
+        attendWhere.push("session_start < ?");
+        attendParams.push(toUtcEnd(date_to, tz));
       }
 
       if (outlet_id) {
@@ -225,11 +228,13 @@ module.exports = function (app, deps, helpers) {
       const dateToUtc = date_to ? toUtcEnd(date_to, tz) : toUtcEnd(
         new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()), tz
       );
-      params.push(dateFromUtc, dateToUtc, date_from || new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 86400000)), date_to || new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()));
+      // session_start is TIMESTAMPTZ — reuse the same UTC bounds as the sales
+      // window (the old $3/$4 ::date casts evaluated in the DB session TZ).
+      params.push(dateFromUtc, dateToUtc);
 
       let outletFilter = "";
       if (outlet_id) {
-        outletFilter = `AND s.outlet_id = $5 AND a.outlet_id = $5`;
+        outletFilter = `AND s.outlet_id = $3 AND a.outlet_id = $3`;
         params.push(outlet_id);
       }
 
@@ -241,7 +246,7 @@ module.exports = function (app, deps, helpers) {
           FROM sales s
           WHERE s.voided = false AND s.employee_id IS NOT NULL
             AND s.timestamp >= $1 AND s.timestamp < $2
-            ${outlet_id ? "AND s.outlet_id = $5" : ""}
+            ${outlet_id ? "AND s.outlet_id = $3" : ""}
           GROUP BY s.employee_id
         ),
         emp_hours AS (
@@ -251,9 +256,9 @@ module.exports = function (app, deps, helpers) {
                  ), 0)::numeric(10,2) AS hours_worked
           FROM attendance_sessions a
           WHERE a.session_type = 'work'
-            AND a.session_start::date >= $3::date
-            AND a.session_start::date <= $4::date
-            ${outlet_id ? "AND a.outlet_id = $5" : ""}
+            AND a.session_start >= $1
+            AND a.session_start < $2
+            ${outlet_id ? "AND a.outlet_id = $3" : ""}
           GROUP BY a.employee_id
         )
         SELECT

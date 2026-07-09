@@ -397,6 +397,17 @@ module.exports = function registerTenantRoutes(app, deps) {
       }
 
       const s = `tenant_${tenant.slug}`;
+      // "Today" for the today-revenue stat is the TENANT's local day —
+      // timestamp is TIMESTAMPTZ and a bare ::date casts in the DB session TZ
+      // (UTC on prod), splitting the day at the wrong hour for every tenant.
+      const { isValidTz } = require("../../utils/tz");
+      let tenantTz = "UTC";
+      try {
+        const { rows: [tzRow] } = await db.query(
+          `SELECT timezone FROM ${s}.company_profile WHERE id = 1`
+        );
+        if (isValidTz(tzRow?.timezone)) tenantTz = tzRow.timezone;
+      } catch { /* fall back to UTC */ }
       const [
         employees, products, outlets, sales, customers,
         salesToday, salesWeek, salesMonth,
@@ -409,7 +420,7 @@ module.exports = function registerTenantRoutes(app, deps) {
         db.query(`SELECT COUNT(*) AS cnt FROM ${s}.outlets`),
         db.query(`SELECT COUNT(*) AS cnt FROM ${s}.sales`),
         db.query(`SELECT COUNT(*) AS cnt FROM ${s}.customers WHERE deleted_at IS NULL`),
-        db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp::date = CURRENT_DATE`),
+        db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE (timestamp AT TIME ZONE $1)::date = (NOW() AT TIME ZONE $1)::date`, [tenantTz]),
         db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('week', NOW())`),
         db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('month', NOW())`),
         db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),

@@ -74,10 +74,10 @@ beforeAll(async () => {
      VALUES (8100, 1, 1, NOW(), 0, 'open')
      ON CONFLICT (id) DO NOTHING`,
   );
-  // Anchor session_start to today's UTC noon. The attendance gate computes
-  // today via JS `new Date().toISOString().slice(0,10)` (UTC) and casts the
-  // session start to ::date — using a UTC midday timestamp avoids a
-  // mismatch when the local PG server tz is ahead of UTC.
+  // Anchor session_start to today's UTC noon. The attendance gate is now
+  // tz-aware ((session_start AT TIME ZONE tz)::date, tenant tz = UTC in the
+  // test harness), so UTC noon matches the tenant-local day at any hour and
+  // under any PG session timezone.
   const todayUtc = new Date().toISOString().slice(0, 10);
   await db.query(
     `INSERT INTO attendance_sessions (employee_id, outlet_id, session_type, session_start)

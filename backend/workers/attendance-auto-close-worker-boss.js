@@ -74,6 +74,18 @@ async function registerAttendanceAutoCloseWorker(boss, pool) {
 }
 
 async function closeStaleAttendanceForTenant(db, logger, tenantSlug) {
+  // "Day" boundaries must be TENANT-local: check_in is TIMESTAMPTZ, and a
+  // bare ::date / CURRENT_DATE evaluates in the DB session TZ (UTC on prod),
+  // shifting the "before yesterday" cutoff by the tenant's UTC offset.
+  const { isValidTz } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (isValidTz(prof?.timezone)) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+
   // Forward-looking queue depth: how many stale rows exist right now.
   let queueDepth = 0;
   try {
@@ -81,7 +93,8 @@ async function closeStaleAttendanceForTenant(db, logger, tenantSlug) {
       `SELECT COUNT(*)::int AS n
          FROM employee_attendance
         WHERE check_out IS NULL
-          AND check_in::date < CURRENT_DATE - INTERVAL '1 day'`
+          AND (check_in AT TIME ZONE $1)::date < (NOW() AT TIME ZONE $1)::date - 1`,
+      [tz]
     );
     queueDepth = row?.n || 0;
   } catch {
@@ -93,9 +106,10 @@ async function closeStaleAttendanceForTenant(db, logger, tenantSlug) {
     `SELECT id, employee_id, outlet_id, check_in, comment
        FROM employee_attendance
       WHERE check_out IS NULL
-        AND check_in::date < CURRENT_DATE - INTERVAL '1 day'
+        AND (check_in AT TIME ZONE $1)::date < (NOW() AT TIME ZONE $1)::date - 1
       ORDER BY check_in ASC
-      LIMIT 500`
+      LIMIT 500`,
+    [tz]
   );
 
   let closed = 0;

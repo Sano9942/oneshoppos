@@ -139,11 +139,16 @@ module.exports = function registerFbrRoutes(app, deps) {
         rows.forEach((r) => (counts[r.status] = r.count));
         counts.total = Object.values(counts).reduce((a, b) => a + b, 0);
 
+        // posted_at is TIMESTAMPTZ — "today" is the tenant-local day, not the
+        // DB session's (UTC on prod, which splits the FBR day at 5 AM PKT).
+        const { isValidTz } = require("../utils/tz");
+        const fbrTz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
         const {
           rows: [today],
         } = await db.query(
           `SELECT COUNT(*)::int AS count FROM fbr_invoices
-           WHERE status = 'posted' AND posted_at::date = CURRENT_DATE`
+           WHERE status = 'posted' AND (posted_at AT TIME ZONE $1)::date = (NOW() AT TIME ZONE $1)::date`,
+          [fbrTz]
         );
         counts.posted_today = today?.count || 0;
 

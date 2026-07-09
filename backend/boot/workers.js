@@ -133,11 +133,25 @@ async function cleanupReportScheduleArtifacts(deps) {
 }
 
 async function closeStaleAttendanceSessions(deps) {
+  const { isValidTz } = require("../utils/tz");
   await forEachActiveTenant("StaleSessionCleanup", async (tenantDb) => {
+    // "Before today" must be the TENANT-local day: session_start is
+    // TIMESTAMPTZ, and a bare ::date / CURRENT_DATE uses the DB session TZ
+    // (UTC on prod) — that force-closed overnight staff who clocked in after
+    // local midnight, and missed genuinely stale sessions in west-of-UTC zones.
+    let tz = "UTC";
+    try {
+      const { rows: [prof] } = await tenantDb.query(
+        "SELECT timezone FROM company_profile WHERE id = 1"
+      );
+      if (isValidTz(prof?.timezone)) tz = prof.timezone;
+    } catch { /* fall back to UTC */ }
     await tenantDb.query(
       `UPDATE attendance_sessions
        SET session_end = session_start, session_type = 'auto_closed'
-       WHERE session_end IS NULL AND session_start::date < CURRENT_DATE`
+       WHERE session_end IS NULL
+         AND (session_start AT TIME ZONE $1)::date < (NOW() AT TIME ZONE $1)::date`,
+      [tz]
     );
   }, deps);
 }

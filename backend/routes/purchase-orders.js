@@ -450,9 +450,10 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
               let expiry = info.expiry_date || null;
               // Auto-suggest expiry from shelf_life_days when not supplied.
               if (!expiry && item.shelf_life_days != null && Number(item.shelf_life_days) > 0) {
-                const d = new Date();
-                d.setDate(d.getDate() + Number(item.shelf_life_days));
-                expiry = d.toISOString().slice(0, 10);
+                // Shelf life counts from the tenant-local receiving day (the
+                // old local-now + toISOString() mix was a day off before ~5 AM).
+                const { tenantToday, addDaysStr } = require("../utils/tz");
+                expiry = addDaysStr(tenantToday(req.company?.timezone), Number(item.shelf_life_days));
               }
               await batchStock.receiveBatch(client, {
                 productId: item.product_id,
@@ -503,9 +504,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
             );
             let dueDate = po.due_date || null;
             if (supplier && supplier.payment_terms === "credit" && Number(supplier.credit_days || 0) > 0) {
-              const d = new Date();
-              d.setDate(d.getDate() + Number(supplier.credit_days));
-              dueDate = d.toISOString().slice(0, 10);
+              // Credit terms count from the tenant-local receiving day.
+              const { tenantToday, addDaysStr } = require("../utils/tz");
+              dueDate = addDaysStr(tenantToday(req.company?.timezone), Number(supplier.credit_days));
             }
             await client.query(
               `INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date)

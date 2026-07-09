@@ -163,10 +163,12 @@ module.exports = function createAccountingRouter({
           expParams
         );
 
-        // supplier_payments has no outlet_id column — never per-outlet
+        // supplier_payments has no outlet_id column — never per-outlet.
+        // paid_at is TIMESTAMPTZ — filter with tenant-tz UTC bounds, not a
+        // bare ::date cast (which evaluates in the DB session timezone).
         const { rows: [supplierRow] } = await db.query(
-          "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE paid_at::date >= $1::date AND paid_at::date <= $2::date",
-          [from, to]
+          "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE paid_at >= $1 AND paid_at < $2",
+          [toUtcStart(from, tz), toUtcEnd(to, tz)]
         );
 
         const inflows = inflowsRows || [];
@@ -236,14 +238,17 @@ module.exports = function createAccountingRouter({
           expParams
         );
 
-        // Merge by date
+        // Merge by date. pg returns DATE columns as local-midnight JS Dates —
+        // toISOString() would shift them to the PREVIOUS day east of UTC, so
+        // use pgDateToStr (local getters) for the round-trip.
+        const { pgDateToStr } = require("../../utils/tz");
         const map = {};
         for (const r of inflowRows || []) {
-          const d = typeof r.date === "string" ? r.date : new Date(r.date).toISOString().slice(0, 10);
+          const d = pgDateToStr(r.date);
           map[d] = { date: d, inflow: Number(r.inflow || 0), outflow: 0 };
         }
         for (const r of outflowRows || []) {
-          const d = typeof r.date === "string" ? r.date : new Date(r.date).toISOString().slice(0, 10);
+          const d = pgDateToStr(r.date);
           if (!map[d]) map[d] = { date: d, inflow: 0, outflow: 0 };
           map[d].outflow = Number(r.outflow || 0);
         }
@@ -614,8 +619,10 @@ module.exports = function createAccountingRouter({
         const where = ["1=1"];
         const params = [];
         let idx = 1;
-        if (from) { where.push(`sp.paid_at::date >= $${idx++}::date`); params.push(from); }
-        if (to) { where.push(`sp.paid_at::date <= $${idx++}::date`); params.push(to); }
+        // paid_at is TIMESTAMPTZ — tenant-tz UTC bounds, not bare ::date.
+        const spTz = req.company?.timezone || "UTC";
+        if (from) { where.push(`sp.paid_at >= $${idx++}`); params.push(toUtcStart(String(from), spTz)); }
+        if (to) { where.push(`sp.paid_at < $${idx++}`); params.push(toUtcEnd(String(to), spTz)); }
         const { rows } = await db.query(
           `SELECT sp.id, sp.amount, sp.payment_method, sp.paid_at, sp.notes,
                   si.invoice_number, s.name AS supplier_name
@@ -623,7 +630,7 @@ module.exports = function createAccountingRouter({
            LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
            LEFT JOIN suppliers s ON s.id = si.supplier_id
            WHERE ${where.join(" AND ")}
-           ORDER BY sp.paid_at::date DESC, sp.id DESC`,
+           ORDER BY sp.paid_at DESC, sp.id DESC`,
           params
         );
         const total = (rows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -651,8 +658,10 @@ module.exports = function createAccountingRouter({
         let idx = 1;
         if (status) { where.push(`n.status = $${idx++}`); params.push(status); }
         if (type) { where.push(`n.type = $${idx++}`); params.push(type); }
-        if (from) { where.push(`n.created_at::date >= $${idx++}::date`); params.push(from); }
-        if (to) { where.push(`n.created_at::date <= $${idx++}::date`); params.push(to); }
+        // created_at is TIMESTAMPTZ — tenant-tz UTC bounds, not bare ::date.
+        const noteTz = req.company?.timezone || "UTC";
+        if (from) { where.push(`n.created_at >= $${idx++}`); params.push(toUtcStart(String(from), noteTz)); }
+        if (to) { where.push(`n.created_at < $${idx++}`); params.push(toUtcEnd(String(to), noteTz)); }
         const { rows } = await db.query(
           `SELECT n.*, c.name AS customer_name, s.name AS supplier_name,
                   e.name AS created_by_name, a.name AS approved_by_name
@@ -831,11 +840,14 @@ module.exports = function createAccountingRouter({
               );
               const seq = String(Number(jeCount.cnt) + 1).padStart(3, "0");
               const entryNumber = `JE-${today}-${seq}`;
+              // entry_date is the tenant-local posting day (CURRENT_DATE is
+              // the DB session's day — UTC on prod — a day off near midnight).
+              const { tenantToday } = require("../../utils/tz");
               const { rows: [je] } = await client.query(
                 `INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by, posted_by, posted_at)
-                 VALUES ($1, CURRENT_DATE, $2, 'posted', $3, $3, NOW())
+                 VALUES ($1, $4::date, $2, 'posted', $3, $3, NOW())
                  RETURNING id`,
-                [entryNumber, `${tag}-${note.note_number}: ${note.reason}`, employeeId]
+                [entryNumber, `${tag}-${note.note_number}: ${note.reason}`, employeeId, tenantToday(req.company?.timezone)]
               );
               await client.query(
                 `INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit, description)
@@ -1209,9 +1221,12 @@ module.exports = function createAccountingRouter({
          LEFT JOIN customers cu ON c.party_type = 'customer' AND cu.id = c.party_id
          LEFT JOIN suppliers su ON c.party_type = 'supplier' AND su.id = c.party_id
          WHERE c.status = 'pending'
-           AND c.maturity_date >= CURRENT_DATE
-           AND c.maturity_date <= CURRENT_DATE + INTERVAL '7 days'
-         ORDER BY c.maturity_date ASC`
+           AND c.maturity_date >= $1::date
+           AND c.maturity_date <= $1::date + INTERVAL '7 days'
+         ORDER BY c.maturity_date ASC`,
+        // Maturity window anchored to the tenant-local day, not the DB
+        // session's CURRENT_DATE (UTC on prod).
+        [require("../../utils/tz").tenantToday(req.company?.timezone)]
       );
       res.json({ cheques: rows || [] });
     } catch (err) {
@@ -1384,11 +1399,13 @@ module.exports = function createAccountingRouter({
             );
             const seq = String(Number(jeCount.cnt) + 1).padStart(3, "0");
             const entryNumber = `JE-${today}-${seq}`;
+            // Tenant-local posting day (see credit/debit-note posting above).
+            const { tenantToday } = require("../../utils/tz");
             const { rows: [je] } = await client.query(
               `INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by, posted_by, posted_at)
-               VALUES ($1, CURRENT_DATE, $2, 'posted', $3, $3, NOW())
+               VALUES ($1, $4::date, $2, 'posted', $3, $3, NOW())
                RETURNING id`,
-              [entryNumber, `PDC cleared: ${cheque.cheque_number}`, cheque.created_by]
+              [entryNumber, `PDC cleared: ${cheque.cheque_number}`, cheque.created_by, tenantToday(req.company?.timezone)]
             );
             await client.query(
               `INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit, description)
@@ -1692,9 +1709,10 @@ module.exports = function createAccountingRouter({
       if (entry.status === "voided") return res.status(400).json({ error: "Cannot post a voided entry" });
 
       // Block posting into a closed accounting period (draft existed before close)
-      const entryDateStr = entry.entry_date instanceof Date
-        ? entry.entry_date.toISOString().slice(0, 10)
-        : String(entry.entry_date).slice(0, 10);
+      // pg returns DATE columns as local-midnight JS Dates — toISOString()
+      // would give the PREVIOUS day east of UTC; pgDateToStr round-trips it.
+      const { pgDateToStr } = require("../../utils/tz");
+      const entryDateStr = pgDateToStr(entry.entry_date);
       const closedPeriod = await findClosedPeriodFor(entryDateStr);
       if (closedPeriod) {
         return res.status(409).json({

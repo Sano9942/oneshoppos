@@ -203,6 +203,20 @@ async function offerForFreedAppointmentSlot(db, appt, notifyCtx) {
     );
     if (seg) return null;
   }
+  // preferred_date is a tenant-local DATE, so the slot instant's day must be
+  // computed in the tenant tz here in JS. (The previous ($2::timestamptz)::date
+  // cast fixed the param-typing trap but still cast in the DB SESSION timezone
+  // — UTC on prod — so near-midnight slots matched the wrong preferred day.)
+  const { tenantToday } = require("../utils/tz");
+  let wlTz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) wlTz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  const slotLocalDate = tenantToday(wlTz, new Date(appt.start_at));
+
   const result = await db.transaction(async (client) => {
     const { rows: [entry] } = await client.query(
       `UPDATE appointment_waitlist_entries SET
@@ -213,13 +227,10 @@ async function offerForFreedAppointmentSlot(db, appt, notifyCtx) {
          SELECT id FROM appointment_waitlist_entries
          WHERE class_session_id IS NULL AND status = 'waiting' AND service_id = $1
            AND (employee_id IS NULL OR employee_id IS NOT DISTINCT FROM $3)
-           -- $2 must be cast timestamptz FIRST: a bare ($2)::date makes PG
-           -- type the parameter itself as date, truncating offered_start_at
-           -- to local midnight (claim would then book the wrong slot).
-           AND (preferred_date IS NULL OR preferred_date = ($2::timestamptz)::date)
+           AND (preferred_date IS NULL OR preferred_date = $6::date)
          ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        ) RETURNING *`,
-      [appt.service_id, appt.start_at, appt.employee_id || null, OFFER_WINDOW_MINUTES, newClaimToken()]
+      [appt.service_id, appt.start_at, appt.employee_id || null, OFFER_WINDOW_MINUTES, newClaimToken(), slotLocalDate]
     );
     if (!entry) return null;
     const { rows: [svc] } = await client.query(

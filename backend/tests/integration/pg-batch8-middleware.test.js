@@ -433,10 +433,15 @@ describe("Batch 8 — Middleware & startup hooks (Postgres)", () => {
         [1, 1, "regular"]
       );
 
+      // Mirrors boot/workers.js closeStaleAttendanceSessions — tenant-tz-aware
+      // "before today" (a bare ::date / CURRENT_DATE would use the DB session
+      // timezone; see the tz-date-boundary class fix).
       const { rowCount } = await db.query(
         `UPDATE attendance_sessions
          SET session_end = session_start, session_type = 'auto_closed'
-         WHERE session_end IS NULL AND session_start::date < CURRENT_DATE`
+         WHERE session_end IS NULL
+           AND (session_start AT TIME ZONE $1)::date < (NOW() AT TIME ZONE $1)::date`,
+        ["Asia/Karachi"]
       );
       expect(rowCount).toBeGreaterThanOrEqual(1);
     });

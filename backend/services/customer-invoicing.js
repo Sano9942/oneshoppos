@@ -5,6 +5,24 @@
 const logger = require("./logger").child({ component: "customer-invoicing" });
 
 /**
+ * Due date = tenant-local today + Net-X days. The old version added days to
+ * the UTC date (toISOString()), which is a day off for part of every local
+ * day. tz is resolved from company_profile because these service entry points
+ * run without request context (e.g. quotation conversion, batch invoicing).
+ */
+async function dueDateFromTerms(db, days) {
+  const { tenantToday, addDaysStr } = require("../utils/tz");
+  let tz = "UTC";
+  try {
+    const { rows: [prof] } = await db.query(
+      "SELECT timezone FROM company_profile WHERE id = 1"
+    );
+    if (prof?.timezone) tz = prof.timezone;
+  } catch { /* fall back to UTC */ }
+  return addDaysStr(tenantToday(tz), days);
+}
+
+/**
  * Generate next invoice number: INV-000001, INV-000002, ...
  */
 async function generateInvoiceNumber(db) {
@@ -133,9 +151,7 @@ async function convertQuotationToInvoice(db, quotationId, employeeId, { creditOv
     );
     const days = Number(cust?.payment_terms_days || 0);
     if (days > 0) {
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() + days);
-      dueDate = d.toISOString().slice(0, 10);
+      dueDate = await dueDateFromTerms(db, days);
     }
   } catch { /* keep null on lookup error */ }
 
@@ -203,9 +219,7 @@ async function createBatchInvoices(db, { customerIds, items, dueDate, discountAm
         );
         const days = Number(cust?.payment_terms_days || 0);
         if (days > 0) {
-          const d = new Date();
-          d.setUTCDate(d.getUTCDate() + days);
-          effectiveDueDate = d.toISOString().slice(0, 10);
+          effectiveDueDate = await dueDateFromTerms(db, days);
         }
       } catch { /* keep null on lookup error — batch should continue */ }
     }

@@ -150,13 +150,16 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       const where = [];
       const params = [];
       let idx = 0;
+      // check_in is TIMESTAMPTZ — filter with tenant-tz UTC bounds, not a
+      // bare ::date cast (which evaluates in the DB session timezone).
+      const { toUtcStart, toUtcEnd } = require("../utils/tz");
       if (date_from) {
-        where.push(`ea.check_in::date >= $${++idx}`);
-        params.push(date_from);
+        where.push(`ea.check_in >= $${++idx}`);
+        params.push(toUtcStart(String(date_from), req.company?.timezone));
       }
       if (date_to) {
-        where.push(`ea.check_in::date <= $${++idx}`);
-        params.push(date_to);
+        where.push(`ea.check_in < $${++idx}`);
+        params.push(toUtcEnd(String(date_to), req.company?.timezone));
       }
       if (employee_id) {
         where.push(`ea.employee_id = $${++idx}`);
@@ -192,13 +195,15 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       const where = [];
       const params = [];
       let idx = 0;
+      // session_start is TIMESTAMPTZ — same tenant-tz UTC bounds as above.
+      const { toUtcStart, toUtcEnd } = require("../utils/tz");
       if (date_from) {
-        where.push(`s.session_start::date >= $${++idx}`);
-        params.push(date_from);
+        where.push(`s.session_start >= $${++idx}`);
+        params.push(toUtcStart(String(date_from), req.company?.timezone));
       }
       if (date_to) {
-        where.push(`s.session_start::date <= $${++idx}`);
-        params.push(date_to);
+        where.push(`s.session_start < $${++idx}`);
+        params.push(toUtcEnd(String(date_to), req.company?.timezone));
       }
       if (employee_id) {
         where.push(`s.employee_id = $${++idx}`);

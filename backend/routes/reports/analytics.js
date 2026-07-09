@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
@@ -146,8 +146,9 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(date_from, tz));
       } else {
-        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        // "30 days ago" as a tenant-LOCAL date (toISOString() is UTC — the
+        // default window started a day off for part of every local day).
+        const defaultFromStr = tenantToday(tz, new Date(Date.now() - 30 * 24 * 3600 * 1000));
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(defaultFromStr, tz));
       }
@@ -238,8 +239,9 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(date_from, tz));
       } else {
-        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        // "30 days ago" as a tenant-LOCAL date (toISOString() is UTC — the
+        // default window started a day off for part of every local day).
+        const defaultFromStr = tenantToday(tz, new Date(Date.now() - 30 * 24 * 3600 * 1000));
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(defaultFromStr, tz));
       }
@@ -296,8 +298,9 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(date_from, tz));
       } else {
-        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        // "30 days ago" as a tenant-LOCAL date (toISOString() is UTC — the
+        // default window started a day off for part of every local day).
+        const defaultFromStr = tenantToday(tz, new Date(Date.now() - 30 * 24 * 3600 * 1000));
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(defaultFromStr, tz));
       }
@@ -444,8 +447,9 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(date_from, tz));
       } else {
-        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        // "30 days ago" as a tenant-LOCAL date (toISOString() is UTC — the
+        // default window started a day off for part of every local day).
+        const defaultFromStr = tenantToday(tz, new Date(Date.now() - 30 * 24 * 3600 * 1000));
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(defaultFromStr, tz));
       }
@@ -525,8 +529,9 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(date_from, tz));
       } else {
-        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        // "30 days ago" as a tenant-LOCAL date (toISOString() is UTC — the
+        // default window started a day off for part of every local day).
+        const defaultFromStr = tenantToday(tz, new Date(Date.now() - 30 * 24 * 3600 * 1000));
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(defaultFromStr, tz));
       }

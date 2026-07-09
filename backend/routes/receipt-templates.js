@@ -220,14 +220,17 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       paramIdx += 3;
     }
+    // timestamp is TIMESTAMPTZ — date(...) evaluates in the DB session
+    // timezone; filter with tenant-tz UTC bounds instead.
+    const { toUtcStart, toUtcEnd } = require("../utils/tz");
     if (date_from) {
-      conditions.push(`date(timestamp) >= $${paramIdx}`);
-      params.push(date_from);
+      conditions.push(`timestamp >= $${paramIdx}`);
+      params.push(toUtcStart(String(date_from), req.company?.timezone));
       paramIdx++;
     }
     if (date_to) {
-      conditions.push(`date(timestamp) <= $${paramIdx}`);
-      params.push(date_to);
+      conditions.push(`timestamp < $${paramIdx}`);
+      params.push(toUtcEnd(String(date_to), req.company?.timezone));
       paramIdx++;
     }
     if (action_type) {
