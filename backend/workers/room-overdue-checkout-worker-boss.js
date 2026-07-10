@@ -73,6 +73,13 @@ async function registerRoomOverdueCheckoutWorker(boss, pool) {
 async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueueEmail, roomService) {
   let count = 0;
 
+  // Feature-flag gate — no-op for tenants with the Rooms & Lodging module
+  // off (Business Modules rule). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_room_management'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   let storeName = tenantName || tenantSlug;
   let staffEmail = null;
   try {

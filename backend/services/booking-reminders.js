@@ -14,6 +14,15 @@
 const customerNotify = require("./customer-notify");
 
 async function processPendingReminders(db, boss, tenantSlug, deps = { notify: customerNotify.notify }) {
+  // Feature-flag gate — no-op for tenants with the Appointments module off
+  // (Business Modules rule: disabling a module stops its background
+  // processing; pending reminders stay pending and resume on re-enable).
+  // Pattern: workers/abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_appointments'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   const { rows: reminders } = await db.query(
     `SELECT ar.*, a.customer_id, a.customer_email, a.customer_phone, a.customer_name,
        a.start_at AS appt_start, bs.name AS service_name

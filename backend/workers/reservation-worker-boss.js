@@ -4,6 +4,14 @@
  * Expires stale inventory reservations across all active tenants.
  *
  * Cron: "expire-reservations" — runs every 5 minutes
+ *
+ * Deliberately NOT feature-flag gated (Business Modules Step 3 decision):
+ * inventory_reservations are created by multiple surfaces (storefront carts,
+ * order allocation, holds) that don't map to a single module card, and
+ * expiring a stale reservation RELEASES stock back to the shelf — stopping
+ * this sweep when a module is off would strand reserved stock forever.
+ * This is cross-module stock hygiene, same category as the deposit-hold
+ * expiry sweep, not merchant-visible module activity.
  */
 
 const { expireStaleReservations } = require("../services/reservation");

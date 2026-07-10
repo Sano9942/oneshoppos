@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download, Lock, Plus, Search, Trash2, Edit2 } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { downloadCsv } from "../../utils/csvExport";
 import {
@@ -42,6 +45,8 @@ const EMPTY_FORM = {
 };
 
 export default function ChartOfAccountsRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const { fmt } = useCurrency();
   const [accounts, setAccounts] = useState([]);
   const [tree, setTree] = useState([]);
@@ -246,6 +251,11 @@ export default function ChartOfAccountsRedesign() {
       </div>
     );
   };
+
+  // Inline self-guard (Business Modules): backend already 403s without
+  // accounting_core; this stops the page rendering via deep link too.
+  if (flagsLoading) return null;
+  if (!flags.accounting_core) return <Navigate to="/" replace />;
 
   return (
     <PageShell

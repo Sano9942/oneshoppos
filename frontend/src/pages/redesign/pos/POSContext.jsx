@@ -58,7 +58,7 @@ import { useCheckout } from "./hooks/useCheckout";
  * setRecentSalesOpen, recentSales, recentSalesLoading, recentSalesSearch,
  * setRecentSalesSearch, loadRecentSales, returnModalOpen, setReturnModalOpen,
  * returnSourceSale, setReturnSourceSale, openReturnFromSale,
- * checkoutWalletBalance, checkoutWalletLoading, redeemPointsOn, setRedeemPointsOn,
+ * loyaltyEnabled, checkoutWalletBalance, checkoutWalletLoading, redeemPointsOn, setRedeemPointsOn,
  * payWithWalletOn, setPayWithWalletOn, checkoutCustomerPoints, checkoutCustomerTier,
  * pointsEarned, pointsDiscount, pointsRedeemed, LOYALTY_EARN_RATE,
  * LOYALTY_REDEEM_RATE, sessionExpired, setSessionExpired, retryPendingSale,
@@ -516,11 +516,16 @@ export const POSProvider = ({ children }) => {
     activeShift: shift.activeShift,
   });
 
+  // Loyalty/wallet checkout surface is gated on phase2g_loyalty (Business
+  // Modules): with the flag off the hook zeroes all derived values and never
+  // fetches the wallet balance.
+  const loyaltyEnabled = !!posFlags.phase2g_loyalty;
   const loyalty = useLoyaltyWallet({
     customers,
     checkoutCustomerId,
     total: cartHook.total,
     loyaltyConfig,
+    enabled: loyaltyEnabled,
   });
 
   const folio = useFolioCharging({
@@ -1168,6 +1173,7 @@ export const POSProvider = ({ children }) => {
     holdPickupOpen,
     setHoldPickupOpen,
     // Loyalty & wallet
+    loyaltyEnabled,
     checkoutWalletBalance: loyalty.checkoutWalletBalance,
     checkoutWalletLoading: loyalty.checkoutWalletLoading,
     redeemPointsOn: loyalty.redeemPointsOn,

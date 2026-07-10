@@ -67,6 +67,13 @@ async function registerKdsSnapshotWorker(boss, pool) {
 async function snapshotForTenant(db, logger, tenantSlug) {
   let inserts = 0;
 
+  // Feature-flag gate — no-op for tenants with the Restaurant module's KDS
+  // flag off (Business Modules rule). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant_kds'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   const { rows: stations } = await db.query(
     "SELECT id FROM kds_stations WHERE is_active = true"
   );

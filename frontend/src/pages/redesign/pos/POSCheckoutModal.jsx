@@ -55,6 +55,7 @@ export default function POSCheckoutModal() {
     completeSale,
     submitting,
     // Loyalty & wallet
+    loyaltyEnabled,
     checkoutWalletBalance,
     checkoutWalletLoading,
     redeemPointsOn,
@@ -398,7 +399,7 @@ export default function POSCheckoutModal() {
                     <span className="text-sm font-bold text-(--ui-text)">
                       {checkoutCustSearch}
                     </span>
-                    {checkoutCustomerTier?.name && (
+                    {loyaltyEnabled && checkoutCustomerTier?.name && (
                       <span className="inline-flex items-center gap-0.5 ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: (checkoutCustomerTier.color || "#101010") + "33", color: checkoutCustomerTier.color || "#101010" }}>
                         <Award size={9} />{checkoutCustomerTier.name}
                         {checkoutCustomerTier.multiplier > 1 && <span className="opacity-70">{checkoutCustomerTier.multiplier}x</span>}
@@ -551,8 +552,9 @@ export default function POSCheckoutModal() {
             )}
           </div>
 
-          {/* Loyalty & Wallet panel — shown only when a customer is selected */}
-          {checkoutCustomerId && (
+          {/* Loyalty & Wallet panel — shown only when a customer is selected
+              AND the tenant has the Loyalty module on (phase2g_loyalty). */}
+          {loyaltyEnabled && checkoutCustomerId && (
             <div className="rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3 space-y-3">
               {/* Balance summary */}
               <div className="flex items-center justify-between">

@@ -10,6 +10,14 @@
 const { withTenantContext } = require("./tenant-job-context");
 
 async function sweepTenant(db, logger, tenantSlug) {
+  // Feature-flag gate — no-op for tenants with the Holds & Layaway module
+  // off (Business Modules rule: module off freezes holds in place instead of
+  // forfeiting them; re-enable resumes expiry). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase2g_holds'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   const { rows: due } = await db.query(
     `SELECT id FROM holds
        WHERE status = 'active' AND hold_until IS NOT NULL AND hold_until < NOW()

@@ -41,6 +41,12 @@ async function registerCourseReleaseWorker(boss, pool) {
         for (const tenant of tenants) {
           try {
             const tenantDb = await tenantDbMgr.getDb(tenant.id);
+            // Feature-flag gate — no-op for tenants with the Restaurant
+            // module off (Business Modules rule). Pattern: abc-worker-boss.js.
+            const { rows: flagRows } = await tenantDb.query(
+              `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant'`
+            );
+            if (!flagRows[0]?.enabled) continue;
             const n = await checksSvc.releaseHeldCourses(tenantDb, null);
             totalReleased += n;
           } catch (err) {
@@ -53,7 +59,12 @@ async function registerCourseReleaseWorker(boss, pool) {
       } else {
         const db = { query: (text, params) => pool.query(text, params) };
         try {
-          totalReleased = await checksSvc.releaseHeldCourses(db, null);
+          const { rows: flagRows } = await db.query(
+            `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant'`
+          );
+          if (flagRows[0]?.enabled) {
+            totalReleased = await checksSvc.releaseHeldCourses(db, null);
+          }
         } catch (err) {
           if (!/does not exist/i.test(err.message)) throw err;
         }
