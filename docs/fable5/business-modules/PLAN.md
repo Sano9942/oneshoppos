@@ -20,11 +20,11 @@
 | Step | Title | Status | Pause? |
 |---|---|---|---|
 | 1 of 11 | Create working branch | ☑ done (verified) | — |
-| 2 of 11 | Re-verify catalog → `backend/config/business-modules.js` (+ scope, state, bidirectional test) | ◐ code + test done (20 green, 2026-07-10) — **awaiting owner ratification of the v1 card list** | **PAUSE after** (owner ratifies v1 module list) |
-| 3 of 11 | Surface-cleanliness fixes (workers + POS loyalty + page guards) | ☐ not started | — |
-| 4 of 11 | Backend read path: `GET /api/business-modules` (state enum) | ☐ not started | — |
-| 5 of 11 | Migration: platform lock table + `tenant_business_modules` + admin backstop | ☐ not started | **PAUSE before** (schema/migration) |
-| 6 of 11 | Backend toggle path (atomic flag+mode, saved_flags restore, deps preview, lock, legacy-endpoint lockdown) | ☐ not started | **PAUSE before** (tenant write-path design sign-off) |
+| 2 of 11 | Re-verify catalog → `backend/config/business-modules.js` (+ scope, state, bidirectional test) | ☑ done (verified) — owner RATIFIED v1 card list 2026-07-10 (commit c124583b) | **PAUSE after** (owner ratifies v1 module list) — CLEARED |
+| 3 of 11 | Surface-cleanliness fixes (workers + POS loyalty + page guards) | ☑ done (verified, zero new test failures; commit 9609136d) | — |
+| 4 of 11 | Backend read path: `GET /api/business-modules` (state enum) | ◐ in progress | — |
+| 5 of 11 | Migration: platform lock table + `tenant_business_modules` + admin backstop | ☐ not started — **owner PRE-APPROVED 2026-07-10** (both table shapes + lock semantics) | **PAUSE before** (schema/migration) — CLEARED |
+| 6 of 11 | Backend toggle path (atomic flag+mode, saved_flags restore, deps preview, lock, legacy-endpoint lockdown) | ☐ not started — owner chose **PAUSE when reached** (2026-07-10): re-present design before writing toggle code | **PAUSE before** (tenant write-path design sign-off) |
 | 7 of 11 | Roles & permissions contract (permission catalog, role-editor fix, guards, `manage_business_modules`) | ☐ not started | **PAUSE before** (permission-guard changes to existing endpoints) |
 | 8 of 11 | Frontend read-only page | ☐ not started | — |
 | 9 of 11 | Frontend interactive (toggles, enable-preview + disable-impact confirms, setup cards, refresh) | ☐ not started | — |

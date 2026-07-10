@@ -637,6 +637,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: RISK CONTROLS (2-G.17) ---
   require("./risk-controls")(app, deps);
 
+  // --- ROUTES: BUSINESS MODULES (self-service module toggles) ---
+  require("./business-modules")(app, deps);
+
   // --- ROUTES: ORDERS ---
   const {
     processPendingShopifyInventoryEvents,
