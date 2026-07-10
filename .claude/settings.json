@@ -246,18 +246,5 @@
       "D:\\newprojects\\oneshoppos\\.claude",
       "d:\\newprojects\\oneshoppos\\.claude\\commands"
     ]
-  },
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash d:/newprojects/oneshoppos/.claude/hooks/check-services-reminder.sh"
-          }
-        ]
-      }
-    ]
   }
 }

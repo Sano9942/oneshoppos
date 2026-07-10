@@ -1,8 +1,0 @@
-# Credentials — never commit
-shops.local.json
-
-# Per-run transcripts — local only
-logs/
-
-# Keep reports/ tracked so history builds up and "changes since last run" works.
-# (reports themselves are safe to commit — no secrets.)
