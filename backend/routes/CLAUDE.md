@@ -29,6 +29,9 @@ Routes at `/api/portal/*`. Mounted **before** tenant middleware. Uses `loadCusto
 ### restaurant/
 Sub-router under `routes/restaurant/`. Gated by `requireFeature("phase4_restaurant")`. Sub-modules: `availability.js`, `menu-schedules.js`, `void-comp.js`, `pay-at-table.js`, `reservations.js`, `waitlist.js`. No sub-guide.
 
+### manufacturer-portal/
+Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant middleware, parallel in structure to `customer-portal/` — uses `loadManufacturerAuth` (scope `"manufacturer"`, `MANUFACTURER_PORTAL_JWT_SECRET`) instead of the standard employee chain; `req.employee`/`req.company` never set. Backs the brand-scoped manufacturer-partner directory (`routes/manufacturer-partners.js` is the admin-side CRUD; this directory is the partner-facing read surface). Only `customers.city` is ever exposed to a manufacturer partner — a deliberate PII invariant, don't widen the query without checking that constraint first. No sub-guide.
+
 ---
 
 ## Top-Level Route Files

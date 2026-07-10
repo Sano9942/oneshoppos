@@ -50,6 +50,42 @@ Long-poll helper shared by real-time surfaces (KDS, floor plan, booking calendar
 
 ---
 
+## Shared Money/Stock Writers
+
+These are the load-bearing "one true implementation" services — every sale/return/transfer/conversion writer in `routes/` is expected to funnel through them rather than hand-rolling stock or tax math. If you're adding a new place that moves stock or resolves tax, start here.
+
+### `stock-ledger.js`
+Exports `decrementStock`/`incrementStock` — the single home for "move on-hand stock" semantics, extracted verbatim from the POS sale path (`routes/sales.js`) so every other writer (quotation-convert, inventory transfer, supplier return, PO receive, stock count) shares identical behavior instead of drifting. **Must be called inside the caller's `deps.db.transaction(...)`** — takes a `SELECT ... FOR UPDATE` lock on the authoritative stock row, gates on `available >= qty`, and writes all three stock tables when a variant is present (`variant_outlet_stock`, `product_variants.stock` rollup, `outlet_stock`). Table-selection rule: `variant_outlet_stock` is authoritative when a row exists for that outlet; otherwise falls back to the `product_variants.stock` rollup (pre-v65 tenants not yet backfilled per-outlet). Batch handling defaults on (`manageBatch: true`) — decrement uses FEFO via `batch-stock.js:consumeBatches`, increment prefers the batch the sale drew from via `returnToBatch`. Pass `manageBatch: false` for callers with different batch semantics (transfers must preserve batch identity via `batchStock.transferBatches`, GRN creates a fresh lot via `batchStock.receiveBatch`, stock-count correction is bidirectional via `batchStock.adjustBatches`) and drive the ledger yourself in the same transaction. Throws a typed `insufficient_stock` error (`statusCode: 400`) with `product_id`/`variant_id`/`available`/`requested` on the gate failure.
+
+### `tax-snapshot.js`
+Exports `resolveTaxSnapshot(db, { items, taxMode, taxInclusive, outletId, tenantId })` — the single source of truth for the v83 per-line tax cascade every sale writer applies (POS, storefront, layaway settle, pay-at-table, quotation convert, manual orders). Cascade order: outlet_tax_profiles match (when `phase2_outlet_tax` flag on and outlet known) → `products.tax_id` → `taxes.rate` → `products.gst` (legacy direct rate) → category-tree inherited tax_id → 0. `tax_mode='none'` overrides everything to 0. Read-only — safe to call outside a transaction. Returns per-line `{ rate, amount, hsCode }` plus `taxTotal`/`gross`/`subtotal`/`taxInclusive`.
+
+### `batch-stock.js`
+FEFO (first-expired-first-out) batch/expiry ledger underneath `stock-ledger.js`. Exports `consumeBatches`, `returnToBatch`, `transferBatches`, `receiveBatch`, `adjustBatches`, `roundQty`. Backs `product_batches`/`stock_batches` for the F07 batch/expiry feature — most callers should go through `stock-ledger.js` rather than calling this directly, except the three explicit `manageBatch:false` cases noted above.
+
+### `kit-engine.js`
+BOM/recipe engine for kit (assembled-at-sale) and assembled (assembled-at-production, via `stock_conversion_lines`) products. Exports `getBomType(db, productId)` — returns `'kit' | 'assembled' | null`, consumed by `routes/tier4/crm.js` (quotation-convert hard-rejects kits) and the reports layer (`recipe-costing.js` treats kit vs assembled consumption differently).
+
+### `preset-apply.js`
+Exports `applyPreset(db, industryType)` / `expectedFlagsForPreset(...)` — the shared tenant industry-preset seeding logic. Clears `tenant_modes`, re-derives feature flags for the new preset. This is the **one code path** used both by the tenant-side `PUT /api/company-profile` (industry_type change) and the super-admin "reapply preset"/flag-drift repair tooling in `routes/admin/tenants.js` — fix mode-seeding bugs here, not inline in either caller.
+
+### `lifecycle-events.js`
+Exports `recordLifecycleEvent(...)` — append-only tenant lifecycle audit trail (signup, suspend/activate/delete, payment recorded, upgrade approved, bulk-lifecycle actions). Called by `routes/admin/tenants.js` and `routes/admin/billing.js` in addition to (not instead of) `logAdminAction`/`tenant_audit_log` — check this table when tracing a tenant's full history.
+
+### `embedded-barcode.js`
+Exports `normalizeScheme(...)` — decode-scheme normalizer for V01 grocery/deli price/weight-embedded barcodes (e.g. `2{5-digit PLU}{5-digit weight/price}`). Scheme is stored on `company_profile.barcode_scheme` (JSON) via `routes/tier4/company-profile.js`; consumed by the POS scan route to interpret embedded-price barcodes at checkout.
+
+### `admin-login-alert.js` / `admin-totp.js`
+Super-admin panel security helpers, used only by `routes/admin/auth.js`. `admin-login-alert.js` exports `isNewLoginIp`/`alertNewLoginIp` — fires a non-blocking email on a login from an unrecognized IP. `admin-totp.js` wraps 2FA secret/QR generation and recovery-code issuance for the super-admin TOTP enrollment flow.
+
+### `aggregator-orders.js`
+Delivery-aggregator (foodpanda/Careem) order-ingestion pipeline: `resolveTenantForStore()` → `normalizeOrder()` (delegates to the platform client's static method — see `marketplace/CLAUDE.md`) → `ingestOrder()` (idempotent on source+external id) → auto-accept → `online-inbox.acceptOnlineOrder()` → `settleAggregatorSale()`. This webhook path is **signature-verified and fail-closed**, unlike the four Integrations-Hub webhooks (Daraz/Meta/WhatsApp) which are not signature-verified. `settleAggregatorSale` is a dedicated sales writer (distinct from the pay-at-table settle path) so stock decrements + kit-engine recipe consumption stay consistent with POS; decrements here are unconditional (can go negative) since the order is already paid on the platform and can't be rolled back.
+
+### `credit.js` / `backorder.js`
+Wholesale AR/credit-limit gate (`credit.js`) and split-shipment/backorder logic (`backorder.js`) for the B2B wedge — checked by the sales/order-capture path when a wholesale customer exceeds their credit limit or an order can only be partially fulfilled from on-hand stock.
+
+---
+
 ## Subdirectory Modules
 
 ### `couriers/`
@@ -144,6 +180,23 @@ Import mappers for bulk data ingestion. `index.js` is the entry point; `shopify.
 
 ### Customer Portal
 - **`online-inbox.js`** — customer-facing message inbox for the self-service portal.
+
+### Other domain services (quick reference)
+- **`commission-calc.js`** — sales commission computation, feeds `hr.js` payroll generation and `tip-pool` payout distribution.
+- **`class-bookings.js`** — gym/fitness class scheduling (V07), sits alongside `booking-services.js` for the fixed-schedule (vs. appointment) booking shape.
+- **`client-service-records.js`** — per-customer service history (salon V04 "walk-in performed-by" history writer).
+- **`deposit-engine.js`** — shared deposit/pre-auth math underneath `room-deposits.js` and `treatment-plan-deposits.js`.
+- **`forms.js`** — reusable form builder/renderer (F03); snapshots submitted field definitions (`fields_snapshot`) so a later form-template edit doesn't retroactively change historical submissions.
+- **`members.js`** — gym/membership status derivation (V07) — `deriveMemberStatus` is the single source of truth for active/expired/frozen.
+- **`packages.js`** — service package/bundle billing (F02) plus dunning.
+- **`promo-engine.js`** — promotions/discount evaluation, including wholesale `slab_percent` tier rules; writes the `sale_promotion_applications` audit snapshot.
+- **`recall-service.js`** — clinical recall engine (V05) — due/overdue patient recall computation.
+- **`room-channel-sync.js`** — OTA/iCal channel sync for lodging (V10); writes `channel_sync_dead_letters` on conflict.
+- **`room-night-audit.js`** — nightly room/folio audit job logic for lodging.
+- **`waitlist.js`** — restaurant/booking waitlist management.
+- **`sms-templates.js`** — template registry for `sms.js` sends (parallel to `email-templates.js`).
+- **`customer-notify.js`** — shared customer notification dispatch point (F05) — single call site other services should use instead of hand-rolling a notification insert.
+- **`ai.js`** — Claude API wrapper backing `/api/insights/ask` (chat) and the auto-SKU/description-generation fast-entry features. Requires `ANTHROPIC_API_KEY`.
 
 ---
 

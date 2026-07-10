@@ -70,6 +70,18 @@ Small, targeted regression tests for specific production bugs: `pg-p22-report-tz
 ### Inventory intelligence / offline sync
 `pg-phase2g8-abc`, `pg-phase2g8-cycle-counts`, `pg-phase2g8-hub`, `pg-phase2g8-reorder`, `pg-offline-sale-sync`, `pg-import-preview-shape`, `pg-migration-v82-products-sku-unique`.
 
+### Admin panel (`pg-admin-*`)
+Super-admin routes coverage, one concern per file: `pg-admin-2fa`, `pg-admin-adoption`, `pg-admin-announcement-targeting`, `pg-admin-audit-coverage`, `pg-admin-billing-lifecycle`, `pg-admin-dead-letters-coverage`, `pg-admin-flag-parity`, `pg-admin-impersonation-list`, `pg-admin-lifecycle-events`, `pg-admin-login-alert`, `pg-admin-payment-observability`, `pg-admin-session`, `pg-admin-vertical-usage`, `pg-admin-worker-status`.
+
+### F0x foundations (kit/BOM, packages, forms, notifications, scheduling, batch/expiry)
+`pg-f01-kit-bom`, `pg-f02-dunning`, `pg-f02-packages`, `pg-f02-packages-sales`, `pg-f02-portal-packages`, `pg-f05-notifications`, `pg-f06-scheduling`, `pg-f07-batch`, `pg-forms`.
+
+### Vertical-depth (V01–V10, one file per vertical, several with a companion `-depth`/second-pass file)
+`pg-v01-grocery-lane`, `pg-v02-backorders`, `pg-v02-van-pod`, `pg-v03-food-depth`, `pg-v04-salon`, `pg-v05-clinical`, `pg-v06-device-intake`, `pg-v06-estimate`, `pg-v06-parts-invoice`, `pg-v06-ticket-spine-baseline`, `pg-v06-warranty`, `pg-v07-gym`, `pg-v08-photography`, `pg-v09-rental-availability`, `pg-v09-rentals-depth`, `pg-v10-lodging-depth`, `pg-v10-lodging-race`.
+
+### Money/stock-writer hardening (`pg-ws1*`) and full-audit domain tests
+`pg-ws1a-stock-helper`, `pg-ws1b-sales-money`, `pg-ws1c-returns-money`, `pg-ws1d-adjacent-writers` (the shared `stock-ledger.js`/`tax-snapshot.js` extraction work — see `services/CLAUDE.md`), `pg-completion00-reports-gating`, `pg-completion04-void-ar-reversal`, `pg-wholesale-credit-limit`, `pg-ai-routes`, `feature-flags.test.js`, `pricing-unification.test.js`.
+
 ### Misc
 `pg-public-receipts` (public receipt page), `pg-connection`, `pg-schema`, `smoke-gate.test.js` — **legacy, has pre-existing failures. Do NOT run or investigate unless explicitly asked.**
 

@@ -7,14 +7,25 @@ React 19 + Vite 7 + Tailwind CSS v4 frontend source root.
 ## Core Files
 
 ### `main.jsx`
-App bootstrap. Provider hierarchy (outermost → innermost):
+App bootstrap. Provider hierarchy (outermost → innermost), verified directly from source:
 ```
-ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App (BrowserRouter)
+ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App (BrowserRouter, inside App.jsx)
 ```
-Initializes Sentry from `SENTRY_DSN` (no-op if unset). Registers service worker in prod only. Installs stale-chunk recovery handlers (`vite:preloadError`, `unhandledrejection`) via `utils/chunkReload.js`.
+Also: initializes Sentry from `SENTRY_DSN` (no-op if unset; filters out Cloudflare Turnstile Trusted-Types noise via `denyUrls`/`ignoreErrors`), installs stale-chunk recovery (`vite:preloadError` + `unhandledrejection` listeners via `utils/chunkReload.js`), and registers the service worker (`/sw.js`) only when `IS_PROD`.
 
 ### `App.jsx`
-Not purely composition-only — also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. Spreads `publicRoutes`, `appRoutes`, `adminRoutes` into a single `<Routes>`. Renders `ImpersonationBanner` outside the router. `SubscriptionBanner` and `PwaInstallPrompt` render inside the router but outside `<Routes>` (global, every page). Catch-all `path="*"` redirects to `/`. Do not add route logic here.
+Not purely composition. Renders:
+```
+{isImpersonating && <ImpersonationBanner />}
+<Router>
+  <SubscriptionBanner />
+  <PwaInstallPrompt />
+  <Routes>{publicRoutes}{appRoutes}{adminRoutes}<Route path="*" element={<Navigate to="/" replace />} /></Routes>
+</Router>
+```
+Calls `useAuth()` for `isImpersonating` only — no other side effects at module load. Imports `{ ErrorBoundary }` but does not render it here (the app-wide `ErrorBoundary` boundary is the one in `main.jsx`, wrapping everything including `App`). `SubscriptionBanner`/`PwaInstallPrompt` render globally (every page, inside the router but outside `<Routes>`). Do not add route logic here — route arrays live in `routes/`.
+
+**Dark mode does not exist in this codebase.** There is no `utils/theme.js` file (confirmed: does not exist on disk) and `App.jsx` does not call any `initTheme()`/`toggleTheme()`. The app is light-only (Square design system, `--ui-*` tokens in `ui/tokens.css`, no `[data-theme]` attribute anywhere). If you see a stray mention of `theme.js`/`initTheme`/`sanopos_theme` in an older doc or comment, it is stale — dark mode was removed during the Square reskin.
 
 ### `api.js`
 Centralized API client. Named export `api` object with 6 methods:
@@ -25,109 +36,88 @@ Centralized API client. Named export `api` object with 6 methods:
 | `api.post` | `(path, data)` | JSON body |
 | `api.put` | `(path, data)` | JSON body |
 | `api.del` | `(path)` | No body |
-| `api.upload` | `(path, formData)` | Multipart — NO `Content-Type` header (browser sets boundary) |
-| `api.raw` | `(path, options?)` | Returns raw `Response` — caller checks `res.ok`. Does NOT throw |
+| `api.upload` | `(path, formData)` | Multipart — no `Content-Type` header (browser sets the boundary) |
+| `api.raw` | `(path, options?)` | Returns the raw `Response` — caller checks `res.ok`. Does NOT throw |
 
 **Gotchas:**
-- `api.js` does NOT inject auth headers itself. `AuthProvider` patches `window.fetch` globally — all calls through `api.js` get headers automatically.
-- Paths must include `/api/` prefix (e.g. `api.get("/api/products")`) — the interceptor matches on `/api/`.
-- On non-ok responses, `get/post/put/del` throw `Error` with `.message = body.error || "HTTP N"`, `.status`, and `.body`.
-- On 403 with `code: "PLAN_LIMIT_REACHED"`, dispatches `CustomEvent("sanopos:plan-limit-reached")` before throwing — `PlanLimitModalInterceptor` in `AppLayoutRedesign` catches this.
-- `api.raw` does NOT throw on non-ok — caller must check `res.ok`.
-- Admin pages use `adminFetch` from `AdminLogin.jsx`, NOT `api.js`. Do not replace.
-- Portal pages use `portalApi` from `api/portalApi.js`, NOT `api.js`.
-- `CurrencyContext`, `useFeatureFlags`, admin pages (use `adminFetch`), `NotificationBell`, `ContextSwitcher`, `AuthProvider` (the interceptor itself), portal appointment public booking flows, `utils/receipt.js` (`printToHardware`), and at least one restaurant admin redesign file use raw `fetch()` or non-`api.js` paths intentionally — they run before the interceptor may be wired, bypass it by design, or live outside tenant auth scope. Do not replace these with `api.js`.
+- `api.js` does not inject auth headers itself. `AuthProvider` patches `window.fetch` globally — every call through `api.js` picks up headers automatically as a side effect of that patch.
+- Paths must include the `/api/` prefix (e.g. `api.get("/api/products")`) — the interceptor matches on `/api/`.
+- On non-ok responses, `get/post/put/del` throw `Error` with `.message = body.error || "HTTP <status>"`, plus `.status` and `.body`.
+- On `403` with `body.code === "PLAN_LIMIT_REACHED"`, dispatches `window` `CustomEvent(PLAN_LIMIT_EVENT)` (`"sanopos:plan-limit-reached"`) — with `{ error, limit, current }` detail — before throwing. A global listener (mounted inside `AppLayoutRedesign`) opens the upgrade modal; per-call `catch` handlers still run for inline feedback.
+- `api.raw` does not throw on non-ok — caller must check `res.ok`.
+- Admin pages use `adminFetch` from `pages/admin/AdminLogin.jsx`, not `api.js`. Portal pages use `portalApi` from `api/portalApi.js`, not `api.js`. Do not replace either.
+- Other intentional non-`api.js` callers: `CurrencyContext`, `useFeatureFlags`, `NotificationBell`, `ContextSwitcher`, `AuthProvider` itself (the interceptor), portal public booking-config probes, `utils/receipt.js` (`printToHardware`), and at least one restaurant admin redesign file — these run before the interceptor is wired, bypass it by design, or live outside tenant auth scope entirely.
 
 ### `config.js`
-Single source for all `import.meta.env` reads. Never read `import.meta.env` directly anywhere else.
+Single source for every `import.meta.env` read. Never read `import.meta.env` directly anywhere else in the codebase.
 
 | Export | Source | Notes |
 |--------|--------|-------|
 | `API_BASE` | `VITE_API_BASE` or `http://localhost:5000` | No trailing slash, no `/api` suffix |
-| `IS_MULTI_TENANT` | `VITE_MULTI_TENANT === "1"` | Controls store-code field on login |
+| `IS_MULTI_TENANT` | `VITE_MULTI_TENANT === "1"` | Controls store-code field on login, JWT auth flow |
 | `SENTRY_DSN` | `VITE_SENTRY_DSN` or `""` | Empty string = Sentry disabled |
-| `TURNSTILE_SITE_KEY` | `VITE_TURNSTILE_SITE_KEY` or `""` | Empty string = CAPTCHA disabled |
+| `TURNSTILE_SITE_KEY` | `VITE_TURNSTILE_SITE_KEY` or `""` | Empty string = CAPTCHA disabled on `SignupPage` |
 | `ENV_MODE` | `import.meta.env.MODE` | `"production"` / `"development"` |
 | `IS_PROD` | `import.meta.env.PROD` | Boolean |
 | `IS_DEV` | `import.meta.env.DEV` | Boolean |
 
-There is no `API` export. `AuthProvider` aliases `API_BASE as API` internally — that alias is not in `config.js`.
+There is no `API` export — `AuthProvider` locally aliases `API_BASE as API` inside its own module; that alias does not exist in `config.js` itself.
 
 ---
 
 ## Subdirectory Modules
 
 ### `auth/` — see `auth/CLAUDE.md`
-
-Four independent auth scopes, four independent localStorage-backed stores: tenant (`AuthProvider.jsx` + `authStore.js`), super-admin (`adminAuthStore.js`), customer portal (`customerPortalStore.js`), manufacturer portal (`manufacturerPortalStore.js`). None of their tokens or storage keys overlap.
+Four independent auth scopes, four independent localStorage-backed stores, never mixed: tenant (`AuthProvider.jsx` + `authStore.js`), super-admin (`adminAuthStore.js`), customer portal (`customerPortalStore.js`, slug-scoped), manufacturer portal (`manufacturerPortalStore.js`, slug-scoped).
 
 `useAuth()` key fields: `employee`, `session`, `permissions`, `isAuthenticated`, `isBootstrapping`, `login()`, `logout()`, `hasPerm(perm)`, `authHeaders(extra?)`, `token`, `isImpersonating`, `impersonationTenantName`, `subscriptionStatus` (`null|'trial'|'grace'|'expired'|'active'`), `subscriptionDaysLeft`, `tenantPlan`, `company` (includes `tax_mode`).
 
-Only the tenant scope patches `window.fetch` (the global interceptor). Admin and portal pages call their own fetch wrappers instead.
-
-**Interceptor gotcha:** only re-registered when `employee?.id` changes, NOT when `token` changes. Do NOT add `token` to any `useEffect` dep array wrapping the interceptor — causes a re-registration loop. Token reads live via `readToken()`.
-
----
+Only the tenant scope patches `window.fetch`. **Interceptor gotcha**: never add `token` to a `useEffect` dep array wrapping the interceptor — it's keyed only on `employee?.id`, adding `token` causes a re-registration loop. Token is always read live via `readToken()`.
 
 ### `contexts/` — see `contexts/CLAUDE.md`
+Provider nesting (outermost → innermost): `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`. `CurrencyProvider`/`ToastProvider` sit outside `AuthProvider` and must never depend on the fetch interceptor or `useAuth()`.
 
-Provider nesting (outermost → innermost): `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`. `CurrencyProvider`/`ToastProvider` sit outside `AuthProvider` and must not depend on the fetch interceptor.
-
-- **`CurrencyContext.jsx`** → `useCurrency()` → `{ symbol, code, denominations, fmt(n), refresh() }`. Uses raw `fetch()` (intentional — outside `AuthProvider`). Appends `?tenant=slug` in MT mode.
-- **`ToastContext.jsx`** → `useToast()` → `{ toast(msg, type?), success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside the provider.
-- **`PresetContext.jsx`** → `usePreset()` → `{ industry_type, labels, hasMode(mode), label(key), enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset() }`. Fetches `GET /api/context/bootstrap` only after `employee?.id` set AND `isBootstrapping` false. `hasMode()` fail-opens to `true` before load.
-
----
+- `CurrencyContext.jsx` → `useCurrency()` → `{ symbol, code, denominations, fmt(n), refresh() }`. Uses raw `fetch()` intentionally (renders before the interceptor is wired). Appends `?tenant=slug` in MT mode.
+- `ToastContext.jsx` → `useToast()` → `{ toast(msg, type?), success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside the provider.
+- `PresetContext.jsx` → `usePreset()` → `{ industry_type, labels, hasMode(mode), label(key), enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset() }`. Fetches `GET /api/context/bootstrap` only once `employee?.id` is set and `isBootstrapping` is false. `hasMode()` fail-opens to `true` before load so feature flags remain the sole pre-load gate.
 
 ### `utils/` — see `utils/CLAUDE.md`
+Pure/no-React helpers except `errorLog.js` (uses `api.js`). **No `theme.js`** — confirmed absent from disk.
 
-No React dependencies except `errorLog.js`.
-
-- **`dates.js`** — dual timestamp system. UTC columns (sales, returns, shifts) → `fmtUtcDateTime/Date/Time`. LOCAL columns (attendance, expenses, GRN, parked_sales) → `fmtLocalDateTime/Date/Time`. Never use `toISOString().slice(0,10)` for "today" — use `todayLocalStr()` instead. Never pass a raw DB value straight to `new Date()`.
-- **`csvExport.js`** — single export `downloadCsv(headers, rows, filename)`. Standard for all new CSV exports — do not hand-roll Blob code.
-- **`offlineQueue.js`** — POS offline queue, IndexedDB-backed (`idb` library, not localStorage). Types: `sale`, `return`, `check_in`, `field_order`. `MAX_QUEUED = 50` shared cap across all types.
-- **`receipt.js`** — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. Single source of truth for receipt rendering — never duplicate receipt-line logic elsewhere. `slip.timestamp` must be pre-formatted before passing.
-- **`paperSizes.js`** — `PAPER_SIZES`, `pxForChars(chars)` — shared between printer settings and receipt templates.
-- **`publicReceipt.js`** — `buildPublicReceiptUrl`, `buildReceiptShareMessage`, `buildWhatsAppShareUrl`.
-- **`categoryTree.js`** — `sortCategories`, `leafCategories`, `parentOptions` (circular-safe), `indentLabel`.
-- **`theme.js`** — dark mode: `getTheme()`, `setTheme()`, `toggleTheme()`, `initTheme()`. Stored in `localStorage["sanopos_theme"]`, applied via `document.documentElement.dataset.theme`. Called at module load in `App.jsx`, not `main.jsx`.
-- **`chunkReload.js`** — stale-chunk recovery after deploys. Reloads at most once per 30s window.
-- **`errorLog.js`** — `logErrorState()` — best-effort POST to `/api/action-history`, swallows all errors.
-- **`imageCompress.js`** — `compressImage()` — client-side image downsizing before upload (field-rep selfies, etc).
-
----
+- `dates.js` — dual timestamp system. UTC columns (sales, returns, shifts) → `fmtUtcDateTime/Date/Time`. LOCAL columns (attendance, expenses, GRN, parked_sales) → `fmtLocalDateTime/Date/Time`. Never `toISOString().slice(0,10)` for "today" — use `todayLocalStr()`. Never pass a raw DB value straight to `new Date()`.
+- `csvExport.js` — single export `downloadCsv(headers, rows, filename)`. Standard for all new CSV exports — do not hand-roll Blob code.
+- `offlineQueue.js` — POS offline queue, IndexedDB-backed (`idb` library). Types: `sale`, `return`, `check_in`, `field_order`. `MAX_QUEUED = 50` shared cap across all types.
+- `receipt.js` — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. Single source of truth for receipt rendering — never duplicate receipt-line logic elsewhere. `slip.timestamp` must be pre-formatted before passing in.
+- `paperSizes.js` — `PAPER_SIZES`, `pxForChars(chars)` — shared between printer settings and receipt templates.
+- `publicReceipt.js` — `buildPublicReceiptUrl`, `buildReceiptShareMessage`, `buildWhatsAppShareUrl`.
+- `categoryTree.js` — `sortCategories`, `leafCategories`, `parentOptions` (circular-safe), `indentLabel`.
+- `chunkReload.js` — stale-chunk recovery after deploys, wired from `main.jsx`. Reloads at most once per 30s window.
+- `errorLog.js` — `logErrorState()` — best-effort POST to `/api/action-history`, swallows all errors.
+- `imageCompress.js` — `compressImage()` — client-side image downsizing before upload (field-rep selfies, etc).
+- `embeddedBarcode.js` — pure scale-label EAN-13 decode, mirrors a backend twin; zero imports by design.
+- `scale.js` — Web Serial API lane-scale integration (POS "Weigh" button); adapter registry pattern.
 
 ### `ui/` — see `ui/CLAUDE.md`
+Design system, shared banners, nav config. **Square design system: light-only** — near-monochrome, black primary, hairline borders, flat (no shadow), pill buttons. `primitives.jsx` is fully token-based (`--ui-*` from `tokens.css`, including `Badge`/`BulkActionBar`). Remaining hardcoded-color exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx` (partially), `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`.
 
-Design system, shared banners, nav config. Most components use CSS custom property classes (`text-(--ui-text)`, `bg-(--ui-surface)`) for dark mode. Several files still use hardcoded Tailwind colors: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, plus `Badge`/`BulkActionBar`/modal backdrop in `primitives.jsx`.
+Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })` (no `actions` prop), `SectionCard({ children, className? })` (no `title` prop, flat), `Button({ tone?, size?, iconOnly? })` (tones: `default`/`primary`/`danger`/`plain`/`link` — no `variant` prop, only `tone`), `Input`, `Select`, `Badge`, `Modal`/`Drawer`/`ModalBody`/`ModalFooter`/`ConfirmDialog`, `TabBar`, `Toggle`, `Tooltip`, `FilterPill`, `EmptyState`.
 
-Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })` (no `actions` prop), `SectionCard({ children, className? })` (no `title` prop), `Button({ tone?, size?, iconOnly? })` (tones: `default`/`primary`/`danger`/`plain`/`link` — no `variant` prop), `Input`, `Select`, `Badge`, `Modal`/`ModalBody`/`ModalFooter`/`ConfirmDialog`, `TabBar`.
-
-`ErrorBoundary` is a **named export**: `import { ErrorBoundary } from "../ui/ErrorBoundary"`. Uses a different CSS token namespace (`--border-primary` etc.) than the rest of `ui/` (`--ui-*`).
+`ErrorBoundary` is a **named export**: `import { ErrorBoundary } from "../ui/ErrorBoundary"`. Uses a different CSS token namespace (`--border-primary`/`--bg-primary`/`--text-primary`/`--text-secondary`) than the rest of `ui/` (`--ui-*`) — the two are not interchangeable.
 
 `nav-config.js` exports `SHOPIFY_NAV_GROUPS` — sidebar nav gated by `requiredPerm`/`requiredFlag`/`requiredMode`.
 
----
-
 ### `routes/` — see `routes/CLAUDE.md`
+Route definitions split by access level. `App.jsx` only spreads these three arrays — never add route logic there.
 
-Route definitions split by access level. `App.jsx` only spreads these arrays — never add route logic there.
-
-- **`publicRoutes.jsx`** — unauthenticated + self-contained-auth routes: landing, `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug` (storefront), `/portal/:tenantSlug` (customer portal), `/manufacturer-portal/:tenantSlug`, public booking/menu/pay/reserve pages. Also hosts `/pos`, `/kiosk`, `/context-select` (full-screen, no app shell — each wraps itself in `<RequireAuth>`).
-- **`appRoutes.jsx`** — single parent `RequireAuth > RequireContext > AppLayoutRedesign` wraps every child route. `wrap(Component)` adds Suspense; `perm(permStr, el)` gates on a permission string.
-- **`adminRoutes.jsx`** — `/admin/*`. Auth checked inside `AdminLayout` via `getAdminToken()` — no `RequireAuth` wrapper.
-- **`RouteLoading.jsx`** — shared Suspense fallback, pure presentational, no logic.
-
----
+- `publicRoutes.jsx` — unauthenticated + self-contained-auth routes: landing, `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug` (storefront), `/portal/:tenantSlug`, `/manufacturer-portal/:tenantSlug`, public booking/menu/pay/reserve pages. Also hosts `/pos`, `/kiosk`, `/context-select` (full-screen, no app shell — each self-wraps in `<RequireAuth>`).
+- `appRoutes.jsx` — single parent `RequireAuth > RequireContext > AppLayoutRedesign` wraps every child route. `wrap(Component)` adds Suspense; `perm(permStr, el)` gates on a permission string.
+- `adminRoutes.jsx` — `/admin/*`. Auth checked inside `AdminLayout`, not via a route-level `RequireAuth`.
+- `RouteLoading.jsx` — shared Suspense fallback, pure presentational.
 
 ### `types/` — see `types/CLAUDE.md`
-
-TypeScript declaration files (`allowJs + noEmit` — editor hints only, no runtime enforcement, nothing imports from here today). `auth.ts` (`AuthEmployee`, `JwtPayload` — reference shapes, may drift from real `AuthProvider`). `api.ts` (`ApiOk`/`ApiError`/`ApiResponse`, `isApiError()` — the one runtime-callable export, but `api.js` doesn't actually return this union shape).
-
----
+TypeScript declaration files (`allowJs + noEmit` — editor hints only, no runtime enforcement, nothing in `frontend/src` imports from here today). `auth.ts` (`AuthEmployee`, `JwtPayload` — reference shapes that may drift from the real `AuthProvider`). `api.ts` (`ApiOk`/`ApiError`/`ApiResponse`, `isApiError()` — the one runtime-callable export, but `api.js` doesn't actually return this union shape on success/failure — it throws a plain `Error`).
 
 ### `pages/` — see `pages/CLAUDE.md` and `pages/redesign/CLAUDE.md`
-
 Most active tenant UI lives in `pages/redesign/` as `*Redesign.jsx` files. Route wrappers (`pages/*Route.jsx`) are thin lazy-load pass-throughs — never edit them (exceptions: `POSRoute.jsx`, `ReportsRoute.jsx` carry real logic). Other active subdirectories: `admin/`, `portal/`, `dashboard/`, `reports/`, `shopify/`, `storefront/`, `public/`.
 
 ---
@@ -155,7 +145,7 @@ CSS-first config — no `tailwind.config.js`. Rules:
 `const { fmt } = useCurrency()` in components — never hardcode currency symbols.
 
 ### Dark Mode
-Automatic via CSS variables on `[data-theme="dark"]`. POS is the exception — uses hardcoded colors.
+There is no dark mode. The app is light-only (Square design system). Do not add `[data-theme]` logic or reintroduce `theme.js` without an explicit request — this was deliberately removed.
 
 ### Toast Notifications
 `const { success, error, warning } = useToast()`. Page-level pattern: `catch(err) { toast.error(err.message || "Something went wrong") }`.

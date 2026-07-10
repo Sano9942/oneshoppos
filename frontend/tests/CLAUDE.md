@@ -18,6 +18,9 @@ cd frontend && npx playwright test tests/auth.spec.js
 # Headed browser
 cd frontend && npx playwright test tests/auth.spec.js --headed
 
+# Sweep (must be requested explicitly — never picked up by default)
+cd frontend && npx playwright test --project=sweep
+
 # Unit tests (Vitest, safe/local)
 cd frontend && npx vitest run tests/unit/
 
@@ -27,12 +30,12 @@ cd frontend && npx playwright show-report
 
 ## Architecture
 
-- **Config**: `playwright.config.js` — single config, no separate live/staging variants. `baseURL: https://sanopos.com`, `storageState: ./tests/auth.json`, `fullyParallel: false`, `workers: 1`, `retries: 0`. Two projects:
+- **Config**: `frontend/playwright.config.js` — single config, no separate live/staging variants. `baseURL: https://sanopos.com`, `storageState: ./tests/auth.json`, `fullyParallel: false`, `workers: 1`, `retries: 0`, `testMatch: "*.spec.js"`. Two projects:
   - `chromium` — the default project; `testIgnore: /sweep\//` so it never picks up the sweep spec.
-  - `sweep` — matches only `sweep/*.spec.js`; headed-only, no shared `storageState` (provisions its own tenant), 4-hour timeout, `slowMo: 200`. Must be run explicitly with `--project=sweep`.
+  - `sweep` — matches only `sweep/*.spec.js`; headed-only, `storageState: undefined` (provisions its own tenant instead of reusing the shared session), 4-hour per-spec timeout, `slowMo: 200`, `trace: "on"`, video retained on failure. Must be run explicitly with `--project=sweep`.
 - **Global setup** (`global-setup.js`): runs once before the `chromium` project, logs into `packagesmall` via `helpers/auth.js:loginMT`, and writes `auth.json` (browser storage state) + `token.json` (Bearer token) — both gitignored. If login fails (e.g. tenant deleted), it warns and continues rather than aborting the whole run, so the `sweep` project is never blocked by a dead shared tenant. Skips entirely if the only project requested is `sweep` (detected via `--project=sweep` in argv).
 - **Self-contained specs**: each spec sets up its own data via `helpers/api.js` calls — no shared fixtures beyond the login session.
-- **Unit tests**: colocated under `tests/unit/`, run by Vitest, fully mocked — no server, no network.
+- **Unit tests**: colocated under `tests/unit/`, run by Vitest, fully mocked — no server, no network. Setup file is `frontend/tests/setup.js` (imports `@testing-library/jest-dom` and `fake-indexeddb/auto`), wired via `vite.config.js`'s `test.setupFiles`.
 
 ## Test Tenant (production)
 
@@ -66,18 +69,15 @@ Direct REST helper used from spec `beforeAll`/setup blocks (not routed through t
 - `waitForPageShell(page, titleText)` — waits for a heading role match, 15s timeout
 - `clickSidebarLink(page, linkText)` — clicks a nav link by visible text, then waits for `networkidle`
 
-### `setup.js` (Vitest)
-Imports `@testing-library/jest-dom` and `fake-indexeddb/auto` (IndexedDB polyfill for offline-queue tests).
-
 ## Spec Categories
 
 ### Top-level E2E specs (`tests/*.spec.js`)
-Cover core POS/back-office domains end to end against production: auth, products, customers, inventory, purchasing, orders, order-kiosk, POS core + advanced, employees/HR, CRM, reports, accounting, settings, billing, FBR, integrations, import/export, permissions, navigation/UX, admin panel, public pages, treatment plans, plus six `onboard-*` specs (free/starter/pro tiers and three vertical presets: dental clinic, physiotherapy, veterinary).
+Cover core POS/back-office domains end to end against production, one `test.describe` block (or several) per domain: `auth` (Authentication), `products` (Products & Inventory Page, Categories, Brands, Taxes, Attribute Sets, Promotions), `customers` (Customers), `inventory` (Stock Adjustments, Stock Transfers, Stock Counts, Reorder Alerts, Price Lists, Barcode Templates, Inventory API Validation), `purchasing` (Suppliers, Purchase Orders, Supplier Payables, Returned Stock), `orders` (Orders), `order-kiosk` (Customer order kiosk), `pos-core` / `pos-advanced` (POS Core, POS Advanced Features), `employees-hr` (Employees & HR), `crm` (CRM), `reports` (Dashboard, Reports), `accounting` (Accounting), `settings` (Settings), `billing` (Billing), `fbr` (FBR Integration), `integrations` (Integrations Hub, Shopify Integration, WooCommerce Integration), `import-export` (Import & Export), `permissions` (Permissions — Admin user, Permissions — Cashier user), `navigation-ux` (Sidebar Navigation, UX Features), `admin-panel` (Admin Panel, Authenticated Admin Pages), `public-pages` (Public Pages), `treatment-plans` (M10 Treatment Plans — retail tenant nav-hidden check, M10 seed data integrity), plus six `onboard-*` specs (free/starter/pro tiers and three vertical presets: dental clinic, physiotherapy, veterinary).
 
 **Onboarding specs create real tenants on production.** Each provisions a brand-new tenant via the signup flow. These are not auto-cleaned — delete the created tenant from `/admin` after every run, or they accumulate as dead tenants.
 
 ### Smoke specs (`tests/smoke/*.smoke.spec.js`)
-Competitive/vertical feature coverage, one file per feature area (bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, service-workspace, storefront-public, workforce, m2-tickets-subscriptions, and a cluster of restaurant-specific specs: shell, 86/void-comp, KDS analytics, menu engineering, menu schedules, pay-at-table, printer routing, reservations, plus a general `restaurant.smoke.spec.js`).
+Competitive/vertical feature coverage, one file per feature area: `bookings`, `catalog-advanced`, `commissions-reports`, `draft-orders-returns`, `insights-dashboard`, `invoicing-subscriptions`, `m2-tickets-subscriptions` (service tickets + subscription polish), `marketing-messaging`, `omnichannel-admin`, `phase5-pakistan`, `pricing-promotions`, `service-workspace`, `storefront-public`, `workforce`, and a cluster of restaurant-specific specs each tagged with its build phase: `restaurant-shell` (Phase 2-R.0), `restaurant-void-comp` (2-R.2), `restaurant-pay-at-table` (2-R.3), `restaurant-reservations` (2-R.4), `restaurant-kds-analytics` (2-R.5), `restaurant-menu-schedules` (2-R.6), `restaurant-printer-routing` (2-R.7), `restaurant-menu-engineering` (2-R.10), `restaurant-86` (2-R.1), plus a general `restaurant.smoke.spec.js`.
 
 Shared helpers live in `tests/smoke/helpers/`:
 - `smokeRunId.js` — `SMOKE_RUN_ID` (unique per run) + `prefix(name)` for naming created resources so parallel/repeat runs don't collide
@@ -88,10 +88,10 @@ Shared helpers live in `tests/smoke/helpers/`:
 Most smoke specs don't call `skipIfFlagOff` — check each spec individually before assuming a flag-gated feature is actually being exercised.
 
 ### Sweep (`tests/sweep/`)
-A single very long-running spec (`functional-sweep.spec.js`, `--project=sweep`) that signs up a fresh production tenant and walks the full merchant journey — signup → onboarding → upgrade → POS → inventory → reports — over ~50 ordered steps, ~3-4 hours, headed-only, manually triggered (no CI). Requires operator interaction twice: clicking an email verification link (real inbox) and approving a sandbox payment popup. Writes step-by-step findings to `frontend/test-results/sweep-findings.json` and a human triage list to `docs/sweep-findings-YYYY-MM-DD.md`; failure screenshots/traces land under `frontend/test-results/sweep/<step>/`. See `tests/sweep/README.md` for the full run procedure and `SWEEP_RESUME.md` if a prior run needs resuming. Has its own `helpers/` (findings recorder, manager-PIN handling, nav, email-verify pause) and `fixtures/` (a test product image) — separate from the top-level `tests/helpers/`.
+A single very long-running spec (`functional-sweep.spec.js`, `test.describe("Full real-user functional sweep")`, `--project=sweep`) that signs up a fresh production tenant and walks the full merchant journey — signup → onboarding → upgrade → POS → inventory → reports — over many ordered steps, ~3-4 hours, headed-only, manually triggered (no CI). Requires operator interaction twice: clicking an email verification link (real inbox) and approving a sandbox payment popup. Writes step-by-step findings to `frontend/test-results/sweep-findings.json` and a human triage list to `docs/sweep-findings-YYYY-MM-DD.md`; failure screenshots/traces land under `frontend/test-results/sweep/<step>/`. See `tests/sweep/README.md` for the full run procedure and `SWEEP_RESUME.md` if a prior run needs resuming. Has its own `helpers/` (`findings.js`, `manager-pin.js`, `nav.js`, `pause-for-email-verify.js`) and `fixtures/` (`test-product.jpg`) — separate from the top-level `tests/helpers/`.
 
 ### Unit tests (`tests/unit/*.test.jsx` / `.test.js`)
-Vitest + `@testing-library/react`, fully mocked, no server. Cover: route guards (`RequireAuth`/`RequirePerm`), `cartMath.js` pure functions (including a tax-mode regression suite), `CurrencyContext`, layout primitives (`PageShell`, `NotificationBell`), design-system primitives (`Button`/`Input`/`Badge`/`Modal`/`ConfirmDialog`/`TabBar`), the dental chart component, offline queue (IndexedDB) + its hook, the omni-input classifier (barcode/PLU/customer-code routing), a standalone CSV parser extracted from the customer group price-book page, the loyalty wallet rate hook, chunk-reload-failure detection/recovery, POS restaurant open/close-check context logic, restaurant cart seat/course grouping, and a clinical-subjects panel used by veterinary/dental presets.
+Vitest + `@testing-library/react`, fully mocked, no server. Covers: route guards (`auth_guards`), layout primitives (`layout` — `PageShell`, `NotificationBell`), design-system primitives (`primitives`, `primitives-modal` — `Button`/`Input`/`Badge`/`Modal`/`ConfirmDialog`/`TabBar`), the dental chart component (`dental-chart`), a clinical-subjects panel used by veterinary/dental presets (`customers-clinical-subjects`), offline queue IndexedDB store + its hook (`offline-queue`, `use-offline-queue`, `offline-decoded-snapshot`), chunk-reload-failure detection/recovery (`chunk-reload`), POS restaurant open/close-check context logic (`pos-context-open-check`), restaurant cart seat/course grouping (`restaurant-cart-grouping`), the omni-input classifier for barcode/PLU/customer-code routing (`omniInputRouter`), a scale-barcode weight parser (`scale-parse`, `embeddedBarcode`), a standalone CSV parser extracted from the customer group price-book page (`parsePriceBookCsv`), the loyalty wallet rate hook (`useLoyaltyWallet-config`), and `cartMath.js` pure functions across three files (`cartMath`, `cartMath-tax-mode` — tax-mode regression suite, `cartMath-weighted`).
 
 Naming gotcha: `contexts.test.jsx` is misleadingly named — most of its assertions actually cover `cartMath.js`, not React context providers in general.
 

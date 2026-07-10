@@ -1,6 +1,6 @@
 # Middleware — Claude Guide
 
-Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — all other middleware files export plain functions or factories. Middleware chain order (employee/tenant path) is documented in `backend/CLAUDE.md`.
+Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — every other middleware file exports plain functions or factories that need no boot-time wiring. Middleware chain order (employee/tenant path) is documented in `backend/CLAUDE.md`.
 
 ---
 
@@ -8,19 +8,20 @@ Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — all other m
 
 **Exports:** default function `requestId`, named `requestId.enrichReqLog`
 
-- Wraps `pino-http`. Generates a UUID per request or honours the incoming `X-Request-Id` header.
-- Sets `X-Request-Id` response header.
+- Wraps `pino-http` (backed by the shared `services/logger.js` instance — never construct a second Pino logger).
+- Generates a UUID per request via `crypto.randomUUID()`, or honours an incoming `X-Request-Id` header.
+- Sets `X-Request-Id` on the response.
 - Attaches `req.log` (Pino child logger), `req.id`, `req._startTime = Date.now()`.
-- Log level: `error` for 5xx or thrown error, `warn` for 4xx or duration >2000ms, `info` otherwise.
-- Serializers are minimal — no full request/response bodies.
+- Log level: `error` for 5xx or a thrown error, `warn` for 4xx or duration > 2000ms (`SLOW_REQUEST_MS`), `info` otherwise.
+- Serializers are deliberately minimal (method/url/remoteAddress, statusCode) — no request/response bodies logged.
 
-**`enrichReqLog(req, res, next)`** — wire AFTER `loadTenantAndPerms`. Re-binds `req.log` as a child with `{ tenantSlug, employeeId }` once those are available. Safe no-op if `req.log` is absent.
+**`enrichReqLog(req, res, next)`** — wire AFTER `loadTenantAndPerms`. Re-binds `req.log` as a child logger with `{ tenantSlug, employeeId }` once those fields exist on `req`. No-op if `req.log` is absent or neither field is set yet.
 
 **`req.*` set:** `req.log`, `req.id`, `req._startTime`
 
-**Env vars:** none directly (reads defaults from the shared `services/logger.js` Pino instance).
+**Env vars:** none directly.
 
-**Mount point:** near the top of the chain, before tenant/auth middleware, so every request (including admin/webhook routes) gets a request ID and logger.
+**Mount point:** first in the chain, before tenant/auth middleware — every request (including admin/webhook routes) gets a request ID and logger regardless of auth outcome.
 
 ---
 
@@ -28,56 +29,61 @@ Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — all other m
 
 **Exports:** `init(deps)`, `loadEmployeePerms`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`, `invalidateCompanyProfileCache`
 
-**Requires `init(deps)`** at boot with `{ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore }`. `init()` also calls `_warmCaches()` internally for single-tenant mode (pre-loads company profile + context flag, prints a setup URL to console if setup is incomplete).
+`init(deps)` requires `{ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore }`. It also calls an internal `_warmCaches()` for single-tenant mode — eagerly loads the company profile and the `context_header_enforced` flag at boot, and prints a `SETUP URL` console banner if setup isn't complete yet.
+
+Two per-tenant in-memory caches, both keyed by `req.tenantId` (or `"_default"` in ST mode):
+- Company profile cache — `COMPANY_CACHE_MS = 5 * 60 * 1000` (5 min)
+- Context-enforcement flag cache — `CONTEXT_FLAG_CACHE_MS = 30000` (30s) — separate from `feature-flags.js`'s own 60s cache
 
 ### `loadEmployeePerms(req, res, next)`
-Header-based only (no JWT) — legacy/secondary path. Reads `x-employee-id` header, validates range (1–999999) → 400 if malformed. Queries `employees` + `role_permissions` directly against `db` (not tenant-proxied). Sets `req.employeePerms = []` on missing employee or any error. Does **not** set `req.employee` or `req.tenantId`.
+Header-based fallback path, no JWT involved. Reads `x-employee-id` header, validates it's an integer in `(0, 999999]` → 400 `{ error: "Invalid employee ID header" }` if malformed. Queries `employees` + `role_permissions` directly against the plain `db` handle (not tenant-proxied — single-tenant assumption). Sets `req.employeePerms = []` on missing employee or any thrown error. Does **not** set `req.employee` or `req.tenantId`.
 
 ### `loadTenantAndPerms(req, res, next)`
-Primary JWT auth middleware. Reads `Authorization: Bearer <token>`, verifies via `jwt-auth.js:verifyAccessToken`.
+Primary JWT auth middleware. Reads `Authorization: Bearer <token>`, verifies via `jwt-auth.js:verifyAccessToken(token, process.env.JWT_SECRET)`.
 
 **Sets on `req`:**
 - `req.tenantId` — from `decoded.tid`
-- `req.employee` — `{ id, role_id, name, email }`
+- `req.employee` — `{ id, role_id, name, email }` (name/email backfilled after the permission lookup)
 - `req.employeePerms` — array of permission strings
 - `req.tokenScope` — `"full"` (default) or `"kiosk"`
-- `req.isImpersonating` — boolean; `req.impersonatedBy` set only when true
-- `req.context.outletId` — from `decoded.oid` JWT claim (if present); also backfills `x-outlet-id` header if absent
-- `req.headers["x-employee-id"]` — backfilled as a bridge for downstream code still reading the header
+- `req.isImpersonating` — boolean; `req.impersonatedBy` only set when true
+- `req.context.outletId` — from the JWT's `oid` claim, if present; also backfills `req.headers["x-outlet-id"]` if the header is absent
+- `req.headers["x-employee-id"]` — backfilled from `decoded.eid` as a compatibility bridge for code still reading the header directly
 
-**Behaviors:**
-- No `Authorization` header → `req.employeePerms = []`, calls `next()` (does not reject — many public/optional-auth routes rely on this).
-- Kiosk scope (`decoded.scope === "kiosk"`) → restricted to paths matching `/^\/api\/attendance\/pin-/` or `/^\/api\/auth\//`. Anything else → 403 `KIOSK_RESTRICTED`.
-- Token revocation: checks `revoked_tokens` table by `jti`, then `employees.tokens_revoked_before` vs `decoded.iat`. Missing table/column errors are swallowed (pre-migration tolerance).
-- Permission lookup (`role_id`/`role_permissions`) uses the **tenant-scoped** DB (`tenantDbManager.getDb(decoded.tid)` in MT) — retries once after a 100ms delay on transient failure. Both attempts failing → 503 `PERM_LOAD_FAILED` (deliberately not silent-empty-perms, which used to masquerade as a misleading 403 for Admins).
+**Behavior:**
+- No `Authorization` header at all → `req.employeePerms = []`, calls `next()` without rejecting. Many routes rely on this to allow unauthenticated fall-through (their own `requirePerm` guard is what actually blocks them).
+- Kiosk scope (`decoded.scope === "kiosk"`) is restricted to `KIOSK_ALLOWED_PATHS` — `/^\/api\/attendance\/pin-/` and `/^\/api\/auth\//`. Anything else → 403 `{ code: "KIOSK_RESTRICTED" }`.
+- Token revocation: checks `revoked_tokens` by `token_jti`, then (for impersonation tokens specifically) cross-checks `public.impersonation_sessions.revoked_at` — belt-and-suspenders because the revoked_tokens insert on impersonation-end is best-effort and can silently fail. Also checks `employees.tokens_revoked_before` against `decoded.iat`. Missing table/column errors here are swallowed (pre-migration tolerance), not surfaced as failures.
+- The permission lookup (`role_id` → `role_permissions`) runs against the **tenant-scoped** DB (`tenantDbManager.getDb(decoded.tid)` in MT mode) and retries once after a 100ms delay on a transient failure. If both attempts fail → 503 `{ code: "PERM_LOAD_FAILED" }` — deliberately not a silent empty-perms fallback, which used to masquerade as a misleading 403 for Admin users under pool pressure.
 - Impersonation appends `" (impersonated by Super-Admin)"` to `req.employee.name`.
-- JWT errors: `TokenExpiredError` → 401 `TOKEN_EXPIRED`; `JsonWebTokenError`/`NotBeforeError` → 401 `INVALID_TOKEN`; anything else unexpected → 401 `AUTH_FAILED` (logged, not silently passed through).
+- JWT decode errors: `TokenExpiredError` → 401 `{ code: "TOKEN_EXPIRED" }`; `JsonWebTokenError` / `NotBeforeError` → 401 `{ code: "INVALID_TOKEN" }`; any other unexpected error → 401 `{ code: "AUTH_FAILED" }` (logged via `req.log`/console, not silently passed through — a silent fall-through here used to surface downstream as a 500 from the tenant DB proxy having no async context).
 
 ### `resolveTenant(req, res, next)`
 No-op in single-tenant mode. In MT mode:
-- Resolves tenant ID from `req.tenantId` (set by `loadTenantAndPerms`), OR from `?tenant=<slug>` query param **only if** the path matches `PUBLIC_TENANT_PARAM_PATHS` (auth, kiosk pin-checkin, feature-flags, setup, health, `company-profile/currency`). This allowlist exists specifically to prevent any unauthenticated route lacking its own `requirePerm` guard from attaching a tenant DB scope via `?tenant=foo`.
-- No tenant resolved on an `/api/*` path not in the allowlist → 401 `AUTH_REQUIRED` (clean failure instead of the proxy throwing "no tenant DB in async context" downstream).
-- Calls `tenantDbManager.getDb(tenantId)`, then runs `asyncStore.run({ db: tenantDb }, () => next())` — this wires the AsyncLocalStorage context so the `deps.db` proxy (`tenant-db-proxy-pg.js`) routes queries to the correct schema for the rest of the request.
-- Sets `req.tenantSlug` and `req.tenantDir` (local path used by `tenant-multer.js`).
-- Error codes: `TENANT_NOT_FOUND` (403), `TENANT_SUSPENDED` (403, message contains "is suspended"), `TENANT_DELETED` (403, message contains "is deleted"), otherwise 500.
+- Resolves a tenant ID from `req.tenantId` (set by `loadTenantAndPerts`), OR from `?tenant=<slug>` — but ONLY if the request path matches `PUBLIC_TENANT_PARAM_PATHS`: `/api/auth/*`, `/api/attendance/pin-*`, `/api/feature-flags*`, `/api/setup/*`, `/api/health*`, `/api/company-profile/currency` (exact), `/api/billing/pricing` (exact). This allowlist exists specifically so an unauthenticated caller can't attach a tenant DB scope to any route lacking its own permission guard just by appending `?tenant=foo`.
+- If no tenant ID resolves and the path starts with `/api/` and isn't on the allowlist → 401 `{ code: "AUTH_REQUIRED" }` (a clean, intentional failure instead of letting the request crash later at the tenant DB proxy with "no tenant DB in async context").
+- Otherwise calls `tenantDbManager.getDb(tenantId)`, looks up the tenant row via `master-db-pg.js:getTenantById`, and runs `asyncStore.run({ db: tenantDb }, () => next())` — this is what wires the AsyncLocalStorage context so `deps.db` (the proxy in `tenant-db-proxy-pg.js`) routes queries to the right tenant schema for the rest of the request.
+- Sets `req.tenantSlug` and `req.tenantDir` (a local path under `backend/tenants/t_<slug>`, used by `tenant-multer.js`).
+- Error codes: `TENANT_NOT_FOUND` (403, tenant row missing), `TENANT_SUSPENDED` (403, error message contains "is suspended"), `TENANT_DELETED` (403, message contains "is deleted"), otherwise 500 on any other lookup failure.
 
 ### `loadCompanyProfile(req, res, next)`
-- Reads `company_profile WHERE id = 1` from the tenant-scoped DB (via `_getCompanyDb(req)`, which picks `dbProxy` in MT or `db` in ST).
-- Cache: 5-minute TTL per tenant key (`req.tenantId` or `"_default"`). Cold start (`entry` absent) sets a `_placeholder` entry synchronously and **awaits** the first DB load — this avoids a race where the post-signup-wizard auto-login hits a stale placeholder and gets bounced with `SETUP_REQUIRED`. Warm entries refresh fire-and-forget (stale-while-revalidate).
-- Sets `req.company` = full `company_profile` row (timezone, currency, FBR config, `setup_complete`, etc.).
-- If `setup_complete` is falsy (and not a placeholder) and path isn't `/api/setup*` or `/api/health*` (and tenant is resolved in MT) → 503 `SETUP_REQUIRED`.
-- `invalidateCompanyProfileCache(tenantIdOrSlug)` — call after setup-complete or profile edits to force a fresh read on the next request. Pass nothing/`null` to clear the whole cache.
+- Reads `SELECT * FROM company_profile WHERE id = 1` via `_getCompanyDb(req)` — picks the ALS-proxied `dbProxy` in MT mode (only when `req.tenantId` is set) or the plain `db` in ST mode.
+- Cold start (no cache entry yet): sets a `_placeholder` entry synchronously (`{ timezone: "UTC" }`) and **awaits** the very first DB load inline. This avoids a race where the post-signup-wizard auto-login (or the first request after a restart) hits the placeholder before the real row loads and gets wrongly bounced with `SETUP_REQUIRED`.
+- Warm entries refresh stale-while-revalidate: once the 5-minute TTL expires, the cache is refreshed fire-and-forget while the stale value is served immediately.
+- Sets `req.company` to the full row (timezone, currency, FBR config, `setup_complete`, etc.).
+- If the loaded (non-placeholder) profile has a falsy `setup_complete`, and the path isn't `/api/setup*` or `/api/health*`, and (in MT mode) `req.tenantId` is set → 503 `{ code: "SETUP_REQUIRED" }`.
+- `invalidateCompanyProfileCache(tenantIdOrSlug)` — call after setup-complete or profile edits so the next request re-reads instead of serving a stale cached row. Pass nothing/`null` to clear the entire cache.
 
 ### `resolveContext(req, res, next)`
-- Reads `x-company-id`, `x-outlet-id`, `x-scope-mode` headers → `req.context = { companyId, outletId, scopeMode }` (all `null` if absent — this **overwrites** any `req.context` set earlier by `loadTenantAndPerms`, except it re-derives `outletId` from the header which was itself backfilled from the JWT `oid` claim, so the effective value survives).
-- Checks `context_header_enforced` feature flag with its own tiny cache (`CONTEXT_FLAG_CACHE_MS` = 30s, separate from the feature-flags module's own cache).
-- When enforced and path is under `/api/`: exempt paths (`CONTEXT_EXEMPT_PATHS` — auth, context, feature-flags, attendance pin-, roles/:id/permissions, outlets) skip the check. Non-exempt requests with no `x-employee-id` header pass through silently (`next()` — relies on later auth middleware to reject). Non-admin employees (no `all_access`) without `x-outlet-id` → 428 `CONTEXT_REQUIRED`.
+- Reads `x-company-id`, `x-outlet-id`, `x-scope-mode` headers into `req.context = { companyId, outletId, scopeMode }` (each `null` if the header is absent). Note this **overwrites** `req.context` set earlier in `loadTenantAndPerms` — but since that earlier step also backfills the `x-outlet-id` header itself from the JWT's `oid` claim, the effective outlet value survives.
+- Checks the `context_header_enforced` feature flag using its own small cache (`CONTEXT_FLAG_CACHE_MS`, 30s — independent of `feature-flags.js`'s cache).
+- When enforced and the path is under `/api/`: paths matching `CONTEXT_EXEMPT_PATHS` (`/api/auth/*`, `/api/context/*`, `/api/feature-flags*`, `/api/attendance/pin-*`, `/api/roles/:id/permissions`, `/api/outlets` exact) skip the check entirely. A request with no `x-employee-id` header passes through silently (relies on downstream auth to reject it). A non-admin employee (no `all_access` permission) without `x-outlet-id` set → 428 `{ code: "CONTEXT_REQUIRED" }`.
 
-**`req.*` set by the full chain:** `req.tenantId`, `req.tenantSlug`, `req.tenantDir`, `req.employee`, `req.employeePerms`, `req.tokenScope`, `req.isImpersonating`, `req.impersonatedBy`, `req.company`, `req.context`
+**`req.*` set across the full chain:** `req.tenantId`, `req.tenantSlug`, `req.tenantDir`, `req.employee`, `req.employeePerms`, `req.tokenScope`, `req.isImpersonating`, `req.impersonatedBy`, `req.company`, `req.context`
 
-**Env vars:** `JWT_SECRET`, `MULTI_TENANT`
+**Env vars:** `JWT_SECRET`, `MULTI_TENANT` (via `IS_MULTI_TENANT` passed into `init`)
 
-**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveContext`. All tenant-scoped routes mount after this chain completes.
+**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveContext`. Every tenant-scoped route mounts after this chain completes.
 
 ---
 
@@ -86,25 +92,25 @@ No-op in single-tenant mode. In MT mode:
 **Exports:** `requirePerm`, `requireAnyPerm`, `requireContextOutlet`, `DEFAULT_ROLE_PERMISSIONS`, `ensureDefaultRolePermissions`, `PERMISSION_RULES`
 
 ### `requirePerm(permission)`
-Returns middleware. Checks `req.employeePerms` (array). `"all_access"` bypasses everything. Returns 403 `{ error: "Forbidden: insufficient permissions" }` on failure.
+Returns middleware. Checks `req.employeePerms` (array, defaults to `[]`). `"all_access"` bypasses everything. 403 `{ error: "Forbidden: insufficient permissions" }` on failure.
 
 ### `requireAnyPerm(permissions[])`
-Same shape but accepts an array — passes if employee has `all_access` OR any one of the listed permissions.
+Same shape but takes an array — passes if the employee has `all_access` OR any one of the listed permissions.
 
 ### `requireContextOutlet(req, res, next)`
 If `req.context?.outletId` is set and `req.query.outlet_id` is absent, backfills `req.query.outlet_id` from context. Always calls `next()` — never blocks.
 
 ### `DEFAULT_ROLE_PERMISSIONS`
 - `Administrator`: `["all_access"]`
-- `Manager`: `manage_inventory`, `manage_orders`, `view_reports`, `manage_employees`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`, `override_credit_limit`, `manage_field_sales`
+- `Manager`: a broad set — `manage_inventory`, `manage_orders`, `view_reports`, `manage_employees`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`, `override_credit_limit`, `manage_field_sales`, `manage_forms`
 - `Cashier`: `["view_reports", "pos_discount", "pos_park"]`
-- `"Field Rep"`: `["manage_field_sales"]` — minimal role for wholesale mobile order-booker/DSR app; only sees own route/check-ins/visit history (enforced in route handlers, not here)
+- `"Field Rep"`: `["manage_field_sales"]` only — the minimal role for the wholesale mobile order-booker/DSR app; scoping to "only their own route/check-ins" is enforced in the route handlers, not here.
 
 ### `ensureDefaultRolePermissions(db)`
-Async. Looks up `roles` table, and for each role name in `DEFAULT_ROLE_PERMISSIONS` inserts each permission via `INSERT ... ON CONFLICT DO NOTHING`. Idempotent — safe to call repeatedly (e.g. during tenant provisioning or role backfills). Swallows/logs errors rather than throwing.
+Async. Looks up the `roles` table, and for each role name present in `DEFAULT_ROLE_PERMISSIONS`, inserts each permission via `INSERT ... ON CONFLICT DO NOTHING`. Idempotent — safe to call repeatedly (tenant provisioning, role backfills). Logs and swallows errors rather than throwing.
 
 ### `PERMISSION_RULES`
-Declarative array of `{ methods: [...], path: /regex/, anyPerms: [...] }` covering route-level guards for reports, attendance, categories/brands/products/attribute-sets/barcode templates/expenses, outlets, receipt templates, suppliers/supplier-returns/supplier-invoices, returns, approvals, PO/transfer submit+approve, parked sales, restaurant, KDS, bookings/appointments, projects, contracts, service tickets, rentals, rooms, treatment plans (+ clinical sub-resources), tips. Consumed by tests and/or route registration as a reference table — **not** auto-applied; individual routes still call `requirePerm`/`requireAnyPerm` directly.
+A declarative array of `{ methods: [...], path: /regex/, anyPerms: [...] }` entries covering common route-level guards — reports, attendance, categories/brands/products/attribute-sets/barcode templates/expenses, outlets, receipt templates, suppliers/supplier-returns/supplier-invoices, returns, approvals, PO/transfer submit+approve, parked sales, and each Phase-4 vertical (restaurant, KDS, bookings/appointments, projects, contracts, service tickets, rentals, room management, treatment plans + clinical sub-resources, tips). This is a reference table consumed by tests / documentation — it is **not** auto-applied to routes; each route still calls `requirePerm`/`requireAnyPerm` directly in its handler chain.
 
 **`req.*` read:** `req.employeePerms`, `req.context`
 
@@ -114,38 +120,40 @@ Declarative array of `{ methods: [...], path: /regex/, anyPerms: [...] }` coveri
 
 **Exports:** `init(deps)`, `DEFAULT_FEATURE_FLAGS`, `getFeatureFlagsMap`, `getModesMap`, `invalidateFeatureFlagCache`, `invalidateModeCache`, `requireFeature`, `requireMode`, `createNotification`, `notifyLowStockForSale`
 
-**Requires `init(deps)`** at boot with `{ db, IS_MULTI_TENANT, tenantDbManager, dbProxy }`. `init()` also picks `_notifDb = IS_MULTI_TENANT ? dbProxy : db` for the notification helpers below.
+`init(deps)` requires `{ db, IS_MULTI_TENANT, tenantDbManager, dbProxy }`; also derives `_notifDb = IS_MULTI_TENANT ? dbProxy : db` for the notification helpers.
 
-### `requireFeature(flagKey)`
-Returns async middleware. Fetches the flag map for `req.tenantId`, returns 403 `{ error: "Feature disabled: <key>", flag: "<key>" }` if off (intentionally 403 not 503 — "feature off" is a permission-style refusal, not a service outage, so it won't trip alerting on routine POS capability probes). Returns 500 on unexpected DB error.
+### `DEFAULT_FEATURE_FLAGS`
+A large static map of `flagKey: boolean` covering the core spine (accounting, approvals, notifications, CRM/quotations, HR, multi-company — mostly `true` by default) and every vertical/tier addition since (reports enhancements, Phase-2 outlet/pricing/collections features, marketing/messaging/invoicing, AI insights, subscriptions, restaurant, appointments, packages/passes, gym check-in, service projects/contracts, workflow tickets, rentals, room management, treatment plans/clinical, form builder, Phase-5 Pakistan shipping/COD/payment/SMS integrations, Phase-2-G general-retail parity features, wholesale credit/field-sales/schemes/secondary-sales/backorders/van-sales, kit/BOM engine, batch/expiry tracking). Most vertical-specific flags default `false` and are flipped on per-tenant by the setup wizard or a migration backfill matching the tenant's chosen preset/mode — they are deliberately **not** globally true. A handful of additive, backward-safe UI flags (e.g. `receipt_designer_v2`) default `true`.
 
-### `requireMode(modeName)`
-Returns async middleware. Fetches the mode map (`tenant_modes` table) for `req.tenantId`. If the map is **empty** (table not yet migrated, or tenant has no mode rows), falls through — treats feature flags as the sole gate (back-compat). Otherwise 403 `{ error: "Mode not enabled: <name>", mode: "<name>" }` if the named mode is off/missing. Table-missing errors also fall through via `next()`.
+**Known drift points** (check the live map before assuming a flag's default):
+- `fbr_integration` is **not** in this map at all — it's DB-seeded by a dedicated migration, so a brand-new tenant row is what determines its state, not this file.
+- `ai_insights` defaults `true` here but the `routes/insights-ai.js` route reads the DB row directly as a soft gate rather than calling `requireFeature()` — this file's default only affects what the admin flags editor shows before the DB row exists.
+- Shopify routes gate on an active-connection check, not a feature flag at all.
 
 ### `getFeatureFlagsMap(tenantId)`
-Async. Merges `DEFAULT_FEATURE_FLAGS` with rows from the `feature_flags` table (DB row `enabled` overrides default). 60s in-memory cache keyed by `tenantId` (or `"_default"`). Falls back to `DEFAULT_FEATURE_FLAGS` if the table doesn't exist yet. In MT mode, queries the tenant-scoped DB via `tenantDbManager.getDb()`; falls back to `db` if that lookup fails.
+Async. 60s in-memory cache per tenant (`FEATURE_FLAG_CACHE_MS`), keyed by `tenantId` or `"_default"`. Merges `DEFAULT_FEATURE_FLAGS` with rows from the tenant's `feature_flags` table — a DB row's `enabled` value always overrides the default. In MT mode, queries via `tenantDbManager.getDb(tenantId)`; falls back to plain `db` if that lookup throws. If the `feature_flags` table itself doesn't exist yet, returns the default map unmodified rather than throwing.
+
+### `requireFeature(flagKey)`
+Returns async middleware. 403 `{ error: "Feature disabled: <key>", flag: <key> }` if the flag resolves false — intentionally 403, not 503: "feature off" is a permission-style refusal, not a service outage, and 503 was triggering alerting noise on routine POS capability probes. 500 on any unexpected DB error.
 
 ### `getModesMap(tenantId)`
-Async. Queries `tenant_modes` table, 60s cache. Returns `{}` if `init()` was never called (e.g. some test harnesses) or the table doesn't exist.
+Async. Same 60s-cache pattern (`MODE_CACHE_MS`) against the `tenant_modes` table. Returns `{}` (not an error) if `init()` was never called — some test harnesses build an app without wiring feature-flags deps — or if the table doesn't exist yet, so `requireMode` can fall through to its back-compat branch below instead of 500ing.
+
+### `requireMode(modeName)`
+Returns async middleware. If the resolved mode map is **empty** (pre-migration, or a tenant with no `tenant_modes` rows at all), falls through via `next()` — feature flags alone are the gate in that case (back-compat). Otherwise 403 `{ error: "Mode not enabled: <name>", mode: <name> }` if the named mode is off or missing from the map.
 
 ### `invalidateFeatureFlagCache(tenantId)` / `invalidateModeCache(tenantId)`
-Bust the respective cache for one tenant, or the whole cache if `tenantId` is falsy. Call after admin flag/mode mutations.
+Bust the respective cache for one tenant, or the whole cache if `tenantId` is falsy. Call after any admin flag/mode mutation.
 
 ### `createNotification(type, title, message, link)`
-Fire-and-forget `INSERT INTO notifications`. Errors silently swallowed.
+Fire-and-forget `INSERT INTO notifications`. Errors silently swallowed (`.catch(() => {})`).
 
 ### `notifyLowStockForSale(cartItems, outletId)`
-Dedupes product IDs from cart items, queries `outlet_stock` joined to `products` for quantity ≤ 10, calls `createNotification("low_stock", ...)` per row. Fire-and-forget; no-ops if `outletId` or product list is empty.
+Dedupes product IDs out of cart line items (checks `original_product_id`, `product_id`, `id` in that order), queries `outlet_stock` joined to `products` for rows with quantity ≤ 10, and calls `createNotification("low_stock", ...)` per match. No-ops if `outletId` or the product list is empty. Fire-and-forget.
 
 **`req.*` read:** `req.tenantId`
 
-**Env vars:** none directly — `IS_MULTI_TENANT` is injected via `init(deps)`, not read from `process.env` in this file.
-
-**Gotchas:**
-- `fbr_integration` is **not** in `DEFAULT_FEATURE_FLAGS` — DB-seeded by migration v9. A brand-new tenant DB row overrides the (absent) default.
-- Most `DEFAULT_FEATURE_FLAGS` entries are mode-gated (restaurant, appointments, rentals, rooms, treatment plans, wholesale, etc.) and default `false` — they're flipped on by the setup wizard or a migration backfill for the matching preset, never globally.
-- `ai_insights` is a soft DB check inside `routes/insights-ai.js`, not enforced via `requireFeature()` here.
-- Shopify routes gate on an active-connection check, not a feature flag.
+**Env vars:** none directly — `IS_MULTI_TENANT` and the DB handles are injected via `init(deps)`, not read from `process.env` in this file.
 
 ---
 
@@ -154,21 +162,21 @@ Dedupes product IDs from cart items, queries `outlet_stock` joined to `products`
 **Exports:** `requirePlanLimit`, `requireActiveSubscription`, `PLAN_DEFAULTS`
 
 ### `requirePlanLimit(resource)`
-`resource` must be `"employees"`, `"outlets"`, or `"products"` — throws synchronously (at middleware-construction time, not request time) for anything else.
+`resource` must be `"employees"`, `"outlets"`, or `"products"` — an unrecognized value throws synchronously at middleware-construction time (i.e. at route-registration time, not per-request).
 
 Returns async middleware:
 - No-op when `MULTI_TENANT !== "1"`.
-- No-op if `req.tenantId` is absent (lets downstream auth handle the rejection).
-- Reads `max_<resource>` from `public.tenants` via `master-db-pg.js`. `null`/`<= 0` = unlimited → passes through.
-- Counts current rows via the tenant-scoped DB (`tenant-db-manager-pg.js:getDb`) — soft-deleted rows (`deleted_at IS NULL`) excluded for employees/products; outlets has no soft-delete column.
-- At/over limit → 403 `{ error, code: "PLAN_LIMIT_REACHED", limit, current }`.
-- Any lookup failure → best-effort `next()` (never blocks a request on infra failure).
+- No-op if `req.tenantId` is absent — lets downstream auth handle the real rejection.
+- Reads `max_<resource>` off the `public.tenants` row via `master-db-pg.js`. `null` or `<= 0` means unlimited → passes through.
+- Counts current rows through the tenant-scoped DB (`tenant-db-manager-pg.js:getDb`). Employees and products exclude `deleted_at IS NOT NULL` rows; outlets excludes rows where `outlet_type = 'van'` (vans are wholesale rep-stock buckets gated behind `wholesale_van_sales`, not sellable locations, so they're exempt from the plan cap by design — `COALESCE(outlet_type, 'store')` keeps legacy NULL rows counting as stores).
+- At or over the limit → 403 `{ error, code: "PLAN_LIMIT_REACHED", limit, current }`.
+- Any lookup failure (DB error, missing tenant row) → best-effort `next()` — never blocks a request purely because the limit check itself failed.
 
 ### `requireActiveSubscription(req, res, next)`
-Synchronous function body, async check via `.then()`/`.catch()` (not `await` — the outer function returns before the DB round-trip resolves; Express still handles the eventual response correctly, but you cannot wrap a call site in try/catch expecting a thrown error).
-- No-op for: `GET`/`OPTIONS`/`HEAD`, `MULTI_TENANT !== "1"`, and paths under `/api/auth/`, `/api/billing/`, `/api/support/`, `/api/setup/`, `/api/health`, `/api/receipts/` (these must always work regardless of subscription state).
+Synchronous function body; the actual DB check runs via `.then()`/`.catch()`, not `await` — the outer function returns before that promise resolves. Express still handles the eventual response fine, but don't wrap a call site in try/catch expecting a thrown error from this function.
+- No-op for `GET`/`OPTIONS`/`HEAD` requests, ST mode, and paths under `/api/auth/`, `/api/billing/`, `/api/support/`, `/api/setup/`, `/api/health`, `/api/receipts/` — these must keep working regardless of subscription state.
 - No-op if `req.tenantId` is absent.
-- Free-plan tenants (`plan === "free"`) are **never** blocked, regardless of `payment_status` drift.
+- Free-plan tenants (`plan === "free"`) are **never** blocked, even if `payment_status` has drifted to something unexpected.
 - `payment_status === "expired"` → 403 `{ error, code: "SUBSCRIPTION_EXPIRED", billing_url: "/billing" }`.
 - Lookup failure → best-effort `next()`.
 
@@ -179,7 +187,7 @@ Synchronous function body, async check via `.then()`/`.catch()` (not `await` —
   pro:  { max_outlets: 1, max_employees: 0, max_products: 0 },
 }
 ```
-`0` = unlimited. Applied at tenant provisioning / plan change — not read live by the middleware itself (which reads the tenant row's own columns).
+`0` means unlimited. These are the values applied at tenant provisioning / plan change — the middleware itself always reads the tenant row's own columns live, not this constant.
 
 **`req.*` read:** `req.tenantId`, `req.method`, `req.path`
 
@@ -189,30 +197,36 @@ Synchronous function body, async check via `.then()`/`.catch()` (not `await` —
 
 ## rate-limit.js
 
-All limiters are `express-rate-limit` instances; all use the shared `limitExceededHandler` → 429 with `Retry-After` header (seconds) and body `{ error: "Too many requests", retry_after_seconds }`.
+All limiters are `express-rate-limit` instances sharing one `limitExceededHandler` → 429 with a `Retry-After` header (seconds) and body `{ error: "Too many requests", retry_after_seconds }`.
 
-**Exports:** `globalLimiter`, `authLimiter`, `webhookLimiter`, `reviewLimiter`, `publicBookingLimiter`, `publicRestaurantLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`, `manufacturerPortalAuthLimiter`, `manufacturerPortalDataLimiter`, `pinValidateLimiter`
+**Exports:** `globalLimiter`, `authLimiter`, `webhookLimiter`, `reviewLimiter`, `publicBookingLimiter`, `publicRestaurantLimiter`, `memberKioskLimiter`, `customerPortalAuthLimiter`, `customerPortalOtpLimiter`, `customerPortalDataLimiter`, `manufacturerPortalAuthLimiter`, `manufacturerPortalDataLimiter`, `pinValidateLimiter`, `adminTotpLimiter`
 
 | Limiter | Window | Max | Key | Test skip |
 |---|---|---|---|---|
-| `globalLimiter` | `RATE_LIMIT_WINDOW_MS` (default 60s) | `RATE_LIMIT_GLOBAL_MAX` (default 600) | `{tenantSlugOrSt}:{ip}` | n/a — uses `skip` for POS burst paths instead |
-| `authLimiter` | 15 min | `RATE_LIMIT_AUTH_MAX` (default 20) | `{store_code or tenant slug}:{ip}` (ST: `req.ip` only) | yes |
-| `webhookLimiter` | 60s | `RATE_LIMIT_WEBHOOK_MAX` (default 120) | ip (default keyGenerator) | no |
+| `globalLimiter` | `RATE_LIMIT_WINDOW_MS` (default 60s) | `RATE_LIMIT_GLOBAL_MAX` (default 600) | `{tenantSlugOrSt}:{ip}` | n/a — `skip` exempts POS burst paths instead |
+| `authLimiter` | 15 min | `RATE_LIMIT_AUTH_MAX` (default 20) | `{store_code or tenant slug}:{ip}` (ST mode: `req.ip` only) | yes |
+| `webhookLimiter` | 60s | `RATE_LIMIT_WEBHOOK_MAX` (default 120) | default keyGenerator (IP) | no |
 | `reviewLimiter` | 15 min | 5 | `review:{tenant}:{ip}` | yes |
 | `publicBookingLimiter` | 15 min | 10 | `pubbook:{tenant}:{ip}` | yes |
 | `publicRestaurantLimiter` | 60s | 60 | `pubrest:{tenant}:{ip}` | yes |
+| `memberKioskLimiter` | 60s | `RATE_LIMIT_MEMBER_KIOSK_MAX` (default 30) | `memberkiosk:{tenant}:{ip}` | yes |
 | `customerPortalAuthLimiter` | 15 min | 10 | `portal-auth:{slug}:{ip}` | yes |
 | `customerPortalOtpLimiter` | 15 min | 5 | `portal-otp:{email}:{ip}` | yes |
 | `customerPortalDataLimiter` | 60s | 120 | `portal-data:{customerId}` else `portal-data:{slug}:{ip}` | yes |
 | `manufacturerPortalAuthLimiter` | 15 min | 5 | `mfg-portal-auth:{slug}:{ip}` | yes |
 | `manufacturerPortalDataLimiter` | 60s | 60 | `mfg-portal-data:{manufacturerId}` else `mfg-portal-data:{slug}:{ip}` | yes |
 | `pinValidateLimiter` | 15 min | 20 | `pin-validate:{tenant}:{ip}` | yes |
+| `adminTotpLimiter` | 15 min | 5 | `admin-totp:{ip}` | yes |
 
-**`globalLimiter` skips** (`isPosBurstPath`): `/api/sales`, `/api/products/search`, `/api/products/scan/`, `/api/orders` — these are POS hot paths that would otherwise blow through the global cap under normal cashier usage.
+**`globalLimiter` skips** (`isPosBurstPath`): `/api/sales`, `/api/products/search`, `/api/products/scan/`, `/api/orders` — POS hot paths that would otherwise blow through the global cap during normal cashier usage.
 
-**Env vars:** `MULTI_TENANT`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_GLOBAL_MAX`, `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_WEBHOOK_MAX`, `NODE_ENV` (test-mode skip)
+**`pinValidateLimiter`** exists because the PIN-validate endpoint reveals "is this PIN any employee's PIN" — a 4-digit space is brute-forceable inside the global 600/min limit in roughly 17 minutes; 20/15m forces the search out to years.
 
-**Gotcha:** Portal limiters (customer + manufacturer) and the review/booking/restaurant limiters all key on `?tenant=` query param or `x-tenant-slug` header rather than `req.tenantSlug`, because they sit on routes mounted **before** `loadTenantAndPerms`/`resolveTenant` run.
+**`adminTotpLimiter`** guards the super-admin second-factor step specifically (each attempt is a 6-digit code or recovery-code guess) — deliberately the tightest limiter in the file since it's the last gate before a super-admin session token is issued.
+
+**Env vars:** `MULTI_TENANT`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_GLOBAL_MAX`, `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_WEBHOOK_MAX`, `RATE_LIMIT_MEMBER_KIOSK_MAX`, `NODE_ENV` (most non-global/auth limiters skip enforcement entirely when `NODE_ENV === 'test'`)
+
+**Gotcha:** the portal limiters (customer + manufacturer), plus review/booking/restaurant/kiosk limiters, all key on the `?tenant=` query param or `x-tenant-slug` header rather than `req.tenantSlug` — because they sit on routes mounted **before** `loadTenantAndPerms`/`resolveTenant` run, so `req.tenantSlug` isn't set at that point in the chain.
 
 ---
 
@@ -221,12 +235,12 @@ All limiters are `express-rate-limit` instances; all use the shared `limitExceed
 **Exports:** `{ validate }`
 
 ### `validate(schema)`
-Factory. Returns Express middleware: `schema.parse(req.body || {})`.
-- On success, **replaces** `req.body` with the parsed (coerced/stripped) result — downstream handlers must not assume the original raw body shape.
-- On `ZodError` → 400 `{ error: "<first issue message>", details: [{ field, message }] }`. `field` is the dot-joined path (e.g. `"items.0.price"`). Handles both `err.issues` (newer Zod) and `err.errors` (older) via `??` fallback.
-- Non-Zod errors forwarded to `next(err)`.
+Factory. Returns Express middleware that calls `schema.parse(req.body || {})`.
+- On success, **replaces** `req.body` with the parsed (coerced/stripped) result — downstream handlers must never assume the raw request body shape survives.
+- On `ZodError` → 400 `{ error: "<first issue message>", details: [{ field, message }] }`. `field` is the dot-joined issue path (e.g. `"items.0.price"`). Reads `err.issues` (current Zod) with a fallback to `err.errors` (older Zod) via `??`.
+- Any non-Zod error is forwarded to `next(err)` rather than swallowed.
 
-Schemas live in `backend/schemas/` — no inline Zod schemas in route files.
+Schemas live in `backend/schemas/` — route files should never define Zod schemas inline.
 
 ---
 
@@ -234,25 +248,25 @@ Schemas live in `backend/schemas/` — no inline Zod schemas in route files.
 
 **Exports:** `imageFileFilter`, `rasterImageFileFilter`, `clinicalDocFileFilter`, `safeExtension`, `detectImageType`, `verifyImageMagicBytes`, `ALLOWED_IMAGE_MIMES`, `ALLOWED_IMAGE_EXTS`, `ALLOWED_RASTER_IMAGE_MIMES`, `ALLOWED_RASTER_IMAGE_EXTS`, `ALLOWED_CLINICAL_DOC_MIMES`, `ALLOWED_CLINICAL_DOC_EXTS`
 
-Built on a shared factory `makeImageFileFilter(allowedMimes, allowedExts)` that checks both `file.mimetype` and `path.extname(file.originalname)` against allowlists.
+Built on a shared factory, `makeImageFileFilter(allowedMimes, allowedExts)`, which checks both `file.mimetype` and `path.extname(file.originalname)` against allowlists — used as a multer `fileFilter`.
 
 ### `imageFileFilter`
-Full image allowlist including SVG: JPEG, PNG, GIF, WebP, SVG, BMP, TIFF. Use only for uploads that get rasterized (e.g. `sharp`) before being served back — product images.
+Full allowlist including SVG: JPEG, PNG, GIF, WebP, SVG, BMP, TIFF. Use **only** for uploads that get rasterized (e.g. via `sharp`) before being served back out — product images are the canonical case.
 
 ### `rasterImageFileFilter`
-Same set minus SVG. **Use for anything stored as-is and served from a same-origin URL** — SVG can carry `<script>`/`onload` payloads that execute when fetched as a top-level document with the API's auth cookies attached (see P31: support-upload XSS → session takeover via `/api/auth/refresh`). Support ticket screenshots use this filter.
+Same set minus SVG. Use for anything stored as-is and served from a same-origin URL — an SVG can carry `<script>`/`onload` payloads that execute when fetched as a top-level document with the API's auth cookies attached. Support-ticket screenshot uploads use this filter.
 
 ### `clinicalDocFileFilter`
-Raster images + `application/pdf` + `text/plain`, no SVG. For treatment-plan clinical document uploads (lab reports, referrals, imaging) — needs to accept non-image formats but still exclude anything that could execute same-origin.
+Raster images + `application/pdf` + `text/plain`, no SVG. For treatment-plan clinical document uploads (lab reports, referrals, imaging) that need non-image formats but must still exclude anything that could execute same-origin.
 
 ### `detectImageType(buffer)`
-Magic-byte sniffer — JPEG, PNG, GIF, WebP, BMP, TIFF (both endiannesses), PDF. Returns `null` if unrecognized. No SVG/text detection (no magic bytes).
+Magic-byte sniffer for JPEG, PNG, GIF, WebP, BMP, TIFF (both endiannesses), and PDF. Returns `null` if the bytes don't match any known signature. No SVG/plain-text detection possible (no magic bytes to sniff).
 
 ### `verifyImageMagicBytes(buffer, claimedMime)`
-Returns `true`/`false` by comparing `detectImageType(buffer)` to `claimedMime`. `text/plain` always passes (no magic bytes to check — relies on the fileFilter allowlist + extension). Use this **after** multer accepts a file to catch a faked `Content-Type` (P32 — e.g. an `.exe` renamed to `.jpg` with a spoofed `image/jpeg` header).
+Returns `true`/`false` comparing `detectImageType(buffer)` against the claimed MIME. `text/plain` always passes (nothing to sniff — relies entirely on the fileFilter allowlist + extension check). Call this **after** multer accepts a file, to catch a faked `Content-Type` — e.g. an executable renamed to `.jpg` with a spoofed `image/jpeg` header.
 
 ### `safeExtension(originalname, mimetype)`
-Returns the original extension if it's in `ALLOWED_IMAGE_EXTS`, else derives one from the MIME type, else defaults to `.png`.
+Returns the original extension if it's in `ALLOWED_IMAGE_EXTS`; otherwise derives one from the MIME type; otherwise defaults to `.png`.
 
 **No env vars.**
 
@@ -260,51 +274,51 @@ Returns the original extension if it's in `ALLOWED_IMAGE_EXTS`, else derives one
 
 ## customer-auth.js
 
-Customer portal JWT auth (M8) — entirely separate secret/scope from employee auth. Mounted **before** the employee tenant middleware chain, so `req.employee`/`req.company` are never set on portal requests; tenant DB routing goes through `resolvePublicTenantDb()` (`services/public-tenant-context`) instead of `resolveTenant`.
+Customer portal JWT auth. Mounted **before** the employee tenant middleware chain, so `req.employee`/`req.company` are never set on portal requests; tenant DB routing goes through `services/public-tenant-context.js:resolvePublicTenantDb()` instead of `resolveTenant`.
 
 **Exports:** `loadCustomerAuth(deps)`, `signCustomerTokens(customer, tenant)`, `verifyCustomerToken(token)`, `hashRefreshToken(token)`, `getSecret()`
 
 ### `loadCustomerAuth(deps)`
 Factory — returns async `customerAuth(req, res, next)`.
 - Reads `Authorization: Bearer <token>` → 401 `"Missing bearer token"` if absent/malformed.
-- Verifies with `getSecret()` → 401 `"Invalid or expired token"` on failure.
-- Rejects if `payload.scope !== "customer"` (blocks staff/manufacturer tokens) or `payload.type === "refresh"` (refresh tokens can't be used as access tokens).
-- Calls `resolvePublicTenantDb(req, deps)` — reads tenant from `?tenant=` / `x-tenant-slug`. Cross-checks `payload.tid` against the resolved tenant ID (blocks replay against a different tenant).
-- Looks up `customers.portal_tokens_revoked_before` — rejects with 401 `"Session revoked"` if the token's `iat` predates the cursor (set on password reset / logout-all). Also 401s if the customer row is missing or soft-deleted.
+- Verifies with `getSecret()` → 401 `"Invalid or expired token"` on any verify failure.
+- Rejects (401) if `payload.scope !== "customer"` (blocks staff/manufacturer tokens from cross-authing) or `payload.type === "refresh"` (a refresh token can never be used as an access token).
+- Calls `resolvePublicTenantDb(req, deps)` — that resolver reads the tenant from `?tenant=` or `x-tenant-slug`. This handler then cross-checks `payload.tid` against the resolved tenant's ID, so a valid token for tenant A can't be replayed against tenant B's slug.
+- Looks up `customers.portal_tokens_revoked_before` — 401 `"Session revoked"` if the token's `iat` predates that cursor (set on password reset / logout-all). Also 401s if the customer row is missing or soft-deleted (`deleted_at IS NOT NULL`).
 
-**Sets on `req`:** `req.customerId`, `req.tenantId`, `req.tenant` (`{ id, slug }`), `req.db` (tenant-scoped, from the resolver — **not** the standard `deps.db` ALS proxy).
+**Sets on `req`:** `req.customerId`, `req.tenantId`, `req.tenant` (`{ id, slug }`), `req.db` (tenant-scoped, returned directly by the resolver — **not** the standard ALS-proxied `deps.db`).
 
 ### `signCustomerTokens(customer, tenant)`
-Returns `{ accessToken, refreshToken, refreshHash, refreshExpiresAt }`. Both tokens carry `{ cid, tid, tslug, scope: "customer", jti }` (refresh also has `type: "refresh"`). `refreshHash` (SHA-256 of raw token) is what gets persisted — never store the raw refresh token.
+Returns `{ accessToken, refreshToken, refreshHash, refreshExpiresAt }`. Both tokens carry `{ cid, tid, tslug, scope: "customer", jti }` (refresh additionally has `type: "refresh"`). `refreshHash` (SHA-256 of the raw token) is what gets persisted to the DB — the raw refresh token is never stored.
 
 ### `getSecret()` / `verifyCustomerToken(token)` / `hashRefreshToken(token)`
-`getSecret()` returns `CUSTOMER_PORTAL_JWT_SECRET`, falling back to `JWT_SECRET` (one-time console warning), falling back to `"dev-insecure-secret"`.
+`getSecret()` returns `CUSTOMER_PORTAL_JWT_SECRET`, falling back to `JWT_SECRET` (logs a one-time `[SECURITY]` console warning on first fallback), falling back to the hardcoded `"dev-insecure-secret"` if neither is set.
 
-**Env vars:** `CUSTOMER_PORTAL_JWT_SECRET`, `JWT_SECRET`, `CUSTOMER_PORTAL_ACCESS_TTL` (default `"30m"`), `CUSTOMER_PORTAL_REFRESH_TTL` (default `"30d"`)
+**Env vars:** `CUSTOMER_PORTAL_JWT_SECRET`, `JWT_SECRET` (fallback), `CUSTOMER_PORTAL_ACCESS_TTL` (default `"30m"`), `CUSTOMER_PORTAL_REFRESH_TTL` (default `"30d"`)
 
 ---
 
 ## manufacturer-auth.js
 
-Manufacturer partner portal JWT auth (Tier 1.4) — same shape as `customer-auth.js`, separate secret/scope, separate table. Mounted before the employee tenant middleware chain; uses `resolvePublicTenantDb()` too.
+Manufacturer partner portal JWT auth. Structurally near-identical to `customer-auth.js` — separate secret, separate scope, separate table — and mounted before the employee tenant middleware chain, also via `resolvePublicTenantDb()`.
 
 **Exports:** `loadManufacturerAuth(deps)`, `signManufacturerTokens(partner, tenant)`, `verifyManufacturerToken(token)`, `hashRefreshToken(token)`, `getSecret()`
 
 ### `loadManufacturerAuth(deps)`
-Factory — returns async `manufacturerAuth(req, res, next)`. Mirrors `loadCustomerAuth` structure:
-- Bearer token required; scope must be `"manufacturer"`; refresh tokens rejected as access tokens.
-- `resolvePublicTenantDb()` + cross-tenant `tid` check, same as customer portal.
-- Looks up `manufacturer_partners` by `payload.mid` — additionally checks `status`: `"suspended"` → 403 `"Partner access suspended"`; anything other than `"active"` → 401 `"Partner not active"`; missing row → 401 `"Manufacturer partner not found"`.
-- Honors `portal_tokens_revoked_before` cursor the same way as the customer portal.
+Factory — returns async `manufacturerAuth(req, res, next)`. Mirrors `loadCustomerAuth`'s structure:
+- Bearer token required; `payload.scope` must be `"manufacturer"`; refresh tokens rejected as access tokens.
+- `resolvePublicTenantDb()` + the same cross-tenant `tid` check as the customer portal.
+- Looks up `manufacturer_partners` by `payload.mid` — additionally gates on partner `status`: `"suspended"` → 403 `"Partner access suspended"`; anything other than `"active"` → 401 `"Partner not active"`; missing row → 401 `"Manufacturer partner not found"`.
+- Honors `portal_tokens_revoked_before` the same way as the customer portal.
 
 **Sets on `req`:** `req.manufacturerId`, `req.tenantId`, `req.tenant`, `req.db`.
 
 ### `signManufacturerTokens(partner, tenant)`
-Same structure as `signCustomerTokens` but payload key is `mid` (not `cid`) and `scope: "manufacturer"`.
+Same structure as `signCustomerTokens`, but the payload key is `mid` (not `cid`) and `scope: "manufacturer"`.
 
-**Env vars:** `MANUFACTURER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), `MANUFACTURER_PORTAL_ACCESS_TTL` (default `"15m"` — intentionally shorter than the customer portal's 30m; manufacturer reports expose aggregate revenue/scheme data, considered more sensitive), `MANUFACTURER_PORTAL_REFRESH_TTL` (default `"30d"`)
+**Env vars:** `MANUFACTURER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), `MANUFACTURER_PORTAL_ACCESS_TTL` (default `"15m"` — deliberately shorter than the customer portal's 30m, since manufacturer reports expose aggregate revenue/scheme data, considered more sensitive), `MANUFACTURER_PORTAL_REFRESH_TTL` (default `"30d"`)
 
-**Gotcha:** `customer-auth.js` and `manufacturer-auth.js` are near-identical in structure (both delegate to `resolvePublicTenantDb`, both use the cid/mid + tid + tslug + scope + jti token shape, both support a per-principal revocation cursor). If you change one, check whether the same fix applies to the other — they've drifted apart in TTL and status-check details but share the same auth bypass surface (e.g. the P8/security-audit `?tenant=` lockdown pattern applies to both).
+**Gotcha:** `customer-auth.js` and `manufacturer-auth.js` share the same token shape (principal id + `tid` + `tslug` + `scope` + `jti`), the same `resolvePublicTenantDb()` cross-tenant check, and the same revocation-cursor pattern — but they've drifted apart on TTL defaults and status-check details (only the manufacturer variant checks a `status` column). If you fix a bug in one — especially anything touching the `?tenant=` cross-tenant lockdown or revocation logic — check whether the same bug exists in the other.
 
 ---
 

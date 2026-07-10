@@ -100,7 +100,7 @@ oneshoppos/
 │   │   ├── integrations/         # /api/integrations/* (hub, credentials, daraz, facebook, whatsapp, google-merchant)
 │   │   ├── shopify/              # /api/integrations/shopify* (modular)
 │   │   ├── tier4/                # Tier 4 features (accounting, approvals, notifications, crm, hr, commissions, report-builder)
-│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, projects, contracts, bookings, gift-cards(+public), loyalty, holds, tips, modifiers, price-books/lists, pos-devices, pos-layouts, scheduled-changes, smart-collections, subscriptions, customer-invoices, draft-orders, item-suggestions, inventory-intelligence, risk-controls, approval-policies, override-reasons, return-policies, outlet-tax-profiles, outlet-visibility, storefront.js, marketing.js, messaging.js, printer.js, kds.js, product-serials.js, schedules.js, etc.
+│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, projects, contracts, bookings, gift-cards(+public), loyalty, holds, tips, modifiers, price-books/price-lists/price-list-assignments, pos-devices, pos-layouts, scheduled-changes, smart-collections, subscriptions, customer-invoices, draft-orders, item-suggestions, inventory-intelligence, risk-controls, approval-policies, override-reasons, return-policies, outlet-tax-profiles, outlet-visibility, storefront.js, marketing.js, messaging.js, printer.js, kds.js, product-serials.js, schedules.js, van.js (wholesale van sales), backorders.js, batches.js (expiry/FEFO), classes.js (gym/studio), client-service-records.js, forms.js, handouts.js, member-kiosk.js, members.js, notification-settings.js, packages.js (prepaid credits), recalls.js, report-builder.js, stock-conversions.js, ai.js (content/invoice generation), commissions.js, etc.
 │   ├── middleware/
 │   │   ├── plan-limits.js        # requireActiveSubscription + requirePlanLimit (tenant plan cap + subscription enforcement)
 │   │   ├── rate-limit.js         # Rate limiter config (global, auth, webhook, portal, booking)
@@ -112,7 +112,7 @@ oneshoppos/
 │   │   ├── request-id.js         # UUID per request (X-Request-Id header) + Pino logging
 │   │   ├── customer-auth.js      # Customer portal JWT auth — scope "customer", delegates tenant routing to services/public-tenant-context.js
 │   │   └── manufacturer-auth.js  # Manufacturer portal JWT auth — scope "manufacturer", same pattern as customer-auth.js, plus partner status check
-│   ├── schemas/                  # Zod schemas, one file per domain, consumed by validate(schema) middleware. Some files (e.g. pos-devices.js) may be unused by any route — verify with grep before assuming a schema is wired up; admin.js has a few placeholder schemas not yet consumed by a route.
+│   ├── schemas/                  # Zod schemas, one file per domain, consumed by validate(schema) middleware. admin.js has a few placeholder Update* schemas not consumed by any route — verify with grep before assuming a schema is wired up (pos-devices.js IS consumed by routes/pos-devices.js, unlike a stale prior note claimed).
 │   ├── boot/workers.js           # Worker startup — mixes pg-boss jobs with `setInterval` pollers; not all workers are pg-boss
 │   ├── shopify/                  # client.js, crypto.js (secret encrypt/decrypt + event logging), order-service.js, utils.js
 │   ├── services/
@@ -133,7 +133,9 @@ oneshoppos/
 │   │   ├── product-visibility.js # Customer-group catalog visibility resolution (wholesale Option C/C2)
 │   │   ├── phase4-polling.js     # Shared polling helpers for phase4 vertical workers
 │   │   ├── public-tenant-context.js # resolvePublicTenantDb() — tenant routing for portal auth modules (customer + manufacturer), bypasses resolveTenant
-│   │   └── [restaurant/clinic/rental/room/booking services] # restaurant-checks, restaurant-floor, restaurant-kds, modifiers, tips, booking-availability, booking-services, booking-reminders, rental-service, room-service, room-deposits, treatment-plan-service, treatment-plan-deposits, service-tickets, contracts, projects, project-billing, customer-invoicing, quote.js, pricing.js, allocation.js, approval-policy.js, inventory-intelligence.js, catalog-scheduler.js, online-inbox.js, menu-schedule-resolver.js, marketing.js, messaging.js, sms.js, subscriptions.js, storefront-cart.js, reservation.js, retail-flag-preset.js, import/
+│   │   ├── stock-ledger.js       # decrementStock/incrementStock — the ONE shared "move on-hand stock" implementation (POS sale, quotation-convert, transfers, supplier returns, PO receive, stock count all funnel through it). Must run inside caller's deps.db.transaction(...); takes FOR UPDATE.
+│   │   ├── tax-snapshot.js       # resolveTaxSnapshot() — the ONE shared per-line tax cascade (outlet tax profile → product tax_id → legacy gst → category-inherited → 0) every sale writer applies
+│   │   └── [restaurant/clinic/rental/room/booking services] # restaurant-checks, restaurant-floor, restaurant-kds, modifiers, tips, booking-availability, booking-services, booking-reminders, rental-service, room-service, room-deposits, room-channel-sync, room-night-audit, treatment-plan-service, treatment-plan-deposits, service-tickets, contracts, projects, project-billing, customer-invoicing, quote.js, pricing.js, allocation.js, approval-policy.js, inventory-intelligence.js, catalog-scheduler.js, online-inbox.js, menu-schedule-resolver.js, marketing.js, messaging.js, sms.js, subscriptions.js, storefront-cart.js, reservation.js, retail-flag-preset.js, batch-stock.js, kit-engine.js, preset-apply.js, lifecycle-events.js, embedded-barcode.js, aggregator-orders.js, credit.js, backorder.js, commission-calc.js, promo-engine.js, recall-service.js, deposit-engine.js, waitlist.js, members.js, class-bookings.js, packages.js, forms.js, client-service-records.js, sms-templates.js, customer-notify.js, admin-login-alert.js, admin-totp.js, ai.js, import/
 │   ├── workers/                  # pg-boss workers, one file per background job, each `<name>-worker-boss.js`. Covers email, FBR, cleanup, marketplace sync, rental/room overdue checks, subscription grace transitions, treatment plan reminders, ABC classification, anomaly detection, attendance auto-close, course release, hold expiry, KDS load snapshot, orphan schema scan, reservation + reservation-reminder, retail digest, shift auto-close. `tenant-job-context.js` exports withTenantContext() — prefer this over raw schema-string interpolation for new tenant-scoped workers.
 │   ├── tenant-db-proxy-pg.js     # Primary MT proxy — AsyncLocalStorage + Proxy. exports: asyncStore, createDbProxy, getCurrentDb. Proxies query/transaction/getClient.
 │   ├── tenant-db-manager-pg.js   # Per-tenant DB manager with short-lived cache, per-query search_path reset. exports: init, getDb, healthCheck, clearCache, closeDb, closeAll
@@ -162,23 +164,27 @@ oneshoppos/
     ├── hooks/
     │   ├── useFeatureFlags.js    # { flags, loading } — uses raw fetch() intentionally (runs before interceptor wired). DO NOT pass inline {} as authHeaders each render.
     │   └── useReportFilters.js   # Shared filter state hook for report tab components
-    ├── ui/
-    │   ├── primitives.jsx        # Design system: PageShell (title/subtitle/right props), SectionCard (children/className only), Button, Input, etc.
+    ├── ui/                      # Square design system — light-only, tokens in ui/tokens.css (--ui-* vars)
+    │   ├── primitives.jsx        # PageShell (title/subtitle/right props), SectionCard (children/className only), Button (tone not variant), Input, Select, Badge, Modal, Drawer, ConfirmDialog, TabBar, Toggle, Tooltip, FilterPill, EmptyState
+    │   ├── tokens.css            # --ui-* CSS variables: black primary, hairline borders, flat/no shadow, pill buttons, Inter
     │   ├── Breadcrumbs.jsx       # Route-based breadcrumb nav (auto-derived from pathname). Skipped on dashboard, POS, kiosk, customer-display.
     │   ├── ErrorBoundary.jsx     # Named export { ErrorBoundary } — global + page-level. Reports to Sentry.
     │   ├── SupportWidget.jsx     # Floating support ticket widget
     │   ├── ImpersonationBanner.jsx # Amber banner during tenant impersonation
     │   ├── AnnouncementBanner.jsx  # Platform announcement banners (fetches /api/announcements/active)
     │   ├── SubscriptionBanner.jsx  # Global trial countdown / grace warning / expired state banner
+    │   ├── PwaInstallPrompt.jsx  # Install-app prompt banner
+    │   ├── FBRPromptBanner.jsx   # Nudges GST-registered tenants to enable FBR integration
+    │   ├── MultiOutletEnabledBanner.jsx # Nudge banner when a 2nd outlet is added
     │   ├── StarRating.jsx        # Named exports: StarDisplay (read-only) + StarPicker (interactive)
-    │   └── nav-config.js         # Sidebar nav entries
+    │   └── nav-config.js         # Sidebar nav entries, guarded by requiredPerm/requiredFlag/requiredMode
     ├── utils/
     │   ├── dates.js              # UTC + LOCAL timestamp formatters. fmtUtcDateTime/fmtUtcDate/fmtUtcTime + fmtLocalDateTime/fmtLocalDate/fmtLocalTime
     │   ├── receipt.js            # Receipt rendering — buildReceiptSections, buildReceiptHtml, printToHardware
     │   ├── categoryTree.js       # Category tree UI helpers
     │   ├── offlineQueue.js       # IndexedDB-backed offline queue (sale/return/check_in/field_order types)
-    │   ├── csvExport.js          # downloadCsv(headers, rows, filename) — use for all new pages, not inline Blob
-    │   └── theme.js              # Dark mode: getTheme, setTheme, toggleTheme, initTheme. Persists in localStorage("sanopos_theme").
+    │   ├── chunkReload.js        # Stale-chunk recovery — reloads on vite:preloadError / unhandledrejection
+    │   └── csvExport.js          # downloadCsv(headers, rows, filename) — use for all new pages, not inline Blob
     └── pages/
         ├── redesign/             # Most active tenant UI pages (*Redesign.jsx)
         │   ├── POSRedesign.jsx
@@ -264,9 +270,9 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 
 ## UX Features
 
-- **Dark mode**: CSS variable theming via `[data-theme="dark"]` on `<html>`. Toggle in profile dropdown. `utils/theme.js` for get/set/toggle/init. Persisted in `localStorage("sanopos_theme")`.
-- **Toast notifications**: `useToast()` from `contexts/ToastContext.jsx` → `{ success, error, warning, toast }`. Max 3 visible, 4s auto-dismiss. Provider wraps inside `CurrencyProvider`, outside `AuthProvider`.
-- **Profile dropdown**: Shows role, links to `/profile`, dark mode toggle, logout.
+- **No dark mode** — removed in the Square reskin. `utils/theme.js` does not exist; there is no `[data-theme]` toggle. The app is light-only, styled entirely off `--ui-*` tokens in `ui/tokens.css`. Don't reintroduce dark-mode logic without an explicit request.
+- **Toast notifications**: `useToast()` from `contexts/ToastContext.jsx` → `{ success, error, warning, toast }`. Max 3 visible, 4s auto-dismiss. Provider order: `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`.
+- **Profile dropdown**: Shows role, links to `/profile`, logout.
 - **Employee profile page**: `/profile` route — account info, change PIN (`PUT /api/employees/:id/change-pin`), change password. Self-service, no admin perm required.
 - **POS keyboard shortcuts**: F1=help, F2=discount, F3=park, F4=customer search, F5=parked sales, F8=remove last, F9=checkout, F10=clear cart, Esc=close modal. Work even when focus is in an input.
 - **Breadcrumbs**: Auto-derived from `useLocation().pathname` via label map in `ui/Breadcrumbs.jsx`. Skipped on dashboard, POS, kiosk, customer-display.
@@ -380,7 +386,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 
 ## Migrations
 
-- **Current version**: check `backend/migrate-pg.js` (`MIGRATIONS` array) for the authoritative latest version and description — this section summarizes the shape of the history, not an exact head number, because it drifts
+- **Current version**: check `backend/migrate-pg.js` (`MIGRATIONS` array) for the authoritative latest version and description — this section summarizes the shape of the history, not an exact head number, because it drifts (v130 at last check)
 - Early waves (roughly v1-v30): Core features (auth, billing, FBR, email, KDS, products, feature flags, etc.)
 - Next waves (roughly v31-v49): Tenant preset engine (service tickets, clinic extension, decimal quantities, payment sandbox, rentals, portal auth, rooms, treatment plans), walk-in staff assignment, mode-gate backfill, NUMERIC widening, treatment plan templates, appointment deposits, tax-inclusive room rates
 - Restaurant expansion wave: infra_cache, split-bill, modifiers, course timing, KDS routing rules, online ordering inbox, tip capture/pooling, several restaurant waves

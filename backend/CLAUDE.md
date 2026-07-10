@@ -215,6 +215,10 @@ Key services:
 - `email.js` — `sendEmail()` (immediate) and `enqueueEmail()` (pg-boss, 3 retries)
 - `payment-gateway.js` — adapter pattern; `isEnabled()` checks `XPAY_API_KEY`, not just `PAYMENT_GATEWAY`
 - `fbr.js` — FBR API client + payload builders + exponential backoff (60s → 5m → 15m → 1h → 4h)
+- `stock-ledger.js` — `decrementStock`/`incrementStock`, the one shared "move on-hand stock" implementation (POS sale, quotation-convert, transfers, supplier returns, PO receive, stock count all funnel through it). Must run inside the caller's `deps.db.transaction(...)` — takes `FOR UPDATE`, gates on availability, writes all three stock tables when a variant is present. Batch/FEFO handling delegates to `batch-stock.js` unless the caller passes `manageBatch:false`.
+- `tax-snapshot.js` — `resolveTaxSnapshot()`, the one shared v83 per-line tax cascade (outlet tax profile → product tax_id → legacy gst → category-inherited → 0) every sale writer applies so the frozen per-line snapshot on `sale_items` is consistent regardless of entry point.
+
+See `services/CLAUDE.md` for the full service inventory (couriers/marketplace adapter subdirectories, domain services, gotchas).
 
 ### `tests/`
 See `tests/CLAUDE.md` for the full test suite breakdown.

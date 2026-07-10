@@ -6,13 +6,38 @@ React 19 + Vite 7 + Tailwind CSS v4. Dev server runs on port 5173.
 
 ## App Composition
 
-`src/main.jsx` boots the provider hierarchy (outermost → innermost):
+`src/main.jsx` boots the provider hierarchy (outermost → innermost), verified directly from source:
 
 ```
-ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App (BrowserRouter)
+ErrorBoundary → CurrencyProvider → ToastProvider → AuthProvider → PresetProvider → App
 ```
 
-`src/App.jsx` is not purely composition-only — it also calls `initTheme()` at module load (imported from `utils/theme.js`, runs before the component renders) and calls `useAuth()` to read `isImpersonating`. It spreads three route arrays (`publicRoutes`, `appRoutes`, `adminRoutes`) into a single `<Routes>`, renders `ImpersonationBanner` outside the router, and `SubscriptionBanner` + `PwaInstallPrompt` inside the router but outside `<Routes>` (global on every page). Catch-all `path="*"` redirects to `/`. Do not add route logic here. Route definitions live in `src/routes/`.
+`main.jsx` also initializes Sentry from `SENTRY_DSN` (no-op if unset; filters Cloudflare Turnstile Trusted-Types noise), installs stale-chunk recovery (`vite:preloadError` + `unhandledrejection` → `utils/chunkReload.js`), and registers the service worker (`/sw.js`) only when `IS_PROD`.
+
+`src/App.jsx`, read in full — it is not pure composition:
+
+```jsx
+function App() {
+  const { isImpersonating } = useAuth();
+  return (
+    <>
+      {isImpersonating && <ImpersonationBanner />}
+      <Router>
+        <SubscriptionBanner />
+        <PwaInstallPrompt />
+        <Routes>
+          {publicRoutes}{appRoutes}{adminRoutes}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </>
+  );
+}
+```
+
+It calls `useAuth()` for `isImpersonating` and conditionally renders `ImpersonationBanner`. `SubscriptionBanner` and `PwaInstallPrompt` render globally, inside the router but outside `<Routes>` (every page). It spreads three route arrays (`publicRoutes`, `appRoutes`, `adminRoutes`) into one `<Routes>`, and the catch-all `path="*"` redirects to `/`. It imports `{ ErrorBoundary }` but does not render it — the single app-wide `ErrorBoundary` boundary lives in `main.jsx`, wrapping the whole tree including `App`. Do not add route logic here — route definitions live in `src/routes/`.
+
+**There is no dark mode.** `utils/theme.js` does not exist on disk, and `App.jsx` does not call `initTheme()`/`toggleTheme()`/anything theme-related. The app is light-only (Square design system). Any surviving mention of `theme.js`/`initTheme`/`sanopos_theme` elsewhere is stale documentation from before the Square reskin — don't reintroduce dark-mode logic without an explicit request.
 
 ---
 
@@ -49,7 +74,7 @@ Provider nesting: `CurrencyProvider → ToastProvider → AuthProvider → Prese
 - `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded }`.
 
 ### `src/ui/` — see `src/ui/CLAUDE.md`
-Design system primitives, banners, and shared components — the **Square design system** (light-only; dark mode removed in the 2026-07-06 reskin). Components style via `--ui-*` tokens (`ui/tokens.css`): black primary, hairline borders, flat/no shadow, pill buttons, Inter. `primitives.jsx` is fully token-based (incl. `Badge`/`BulkActionBar`). Still-hardcoded exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, and the `Modal`/`Drawer` `bg-black/45` scrim. POS uses hardcoded colors by exception.
+Design system primitives, banners, and shared components — the **Square design system** (light-only; dark mode was removed in the reskin, no `theme.js`, no `[data-theme]`). Components style via `--ui-*` tokens (`ui/tokens.css`): black primary, hairline borders, flat/no shadow, pill buttons, Inter. `primitives.jsx` is fully token-based (incl. `Badge`/`BulkActionBar`). Still-hardcoded exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, and the `Modal`/`Drawer` `bg-black/45` scrim. POS uses hardcoded colors by exception.
 
 Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `SectionCard({ children, className? })`, `Button`, `Input`, `Select`, `Badge`, `Modal`, `Drawer`, `ConfirmDialog`, `TabBar`, `Toggle`, `Tooltip`, `FilterPill`, `EmptyState`. `PageShell` has no `actions` prop; `SectionCard` has no `title` prop and is flat (no shadow). `Button` primary tone is black; use `tone` not `variant`.
 
@@ -58,9 +83,9 @@ Key primitives (`primitives.jsx`): `PageShell({ title, subtitle?, right? })`, `S
 ### `src/utils/` — see `src/utils/CLAUDE.md`
 - `dates.js` — UTC formatters (`fmtUtcDateTime/Date/Time`) for sales/returns/shifts; LOCAL formatters (`fmtLocalDateTime/Date/Time`) for attendance/expenses/GRN/parked_sales. Never use raw `new Date(timestamp)` on DB values.
 - `csvExport.js` — `downloadCsv(headers, rows, filename)`. Use this for all new pages; do not write inline Blob code.
-- `receipt.js` — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. `slip.timestamp` must be a pre-formatted string — call `fmtDateTime()` before passing.
+- `receipt.js` — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`. `slip.timestamp` must be a pre-formatted string — call `fmtUtcDateTime()`/`fmtLocalDateTime()` before passing.
 - `offlineQueue.js` — IndexedDB-backed POS offline queue (sale/return/check_in/field_order types).
-- `theme.js` — **removed** in the Square reskin (app is light-only; no dark mode). `App.jsx` no longer calls `initTheme()`. Any `initTheme`/`toggleTheme`/`sanopos_theme` mentions still lingering in nested `src/*/CLAUDE.md` sub-guides are stale.
+- No `theme.js` — it does not exist. Dark mode was removed in the Square reskin; the app is light-only.
 
 ### `src/routes/` — see `src/routes/CLAUDE.md`
 - `publicRoutes.jsx` — unauthenticated routes: `/login`, `/signup`, `/reset-password`, `/receipt/:invoiceNumber`, `/store/:tenantSlug`, `/portal/:tenantSlug`, `/manufacturer-portal/:tenantSlug`, public booking/menu pages. Also hosts `/pos`, `/kiosk`, `/context-select` (full-screen, self-wrapped in `<RequireAuth>`).
@@ -98,8 +123,8 @@ CSS-first config — no `tailwind.config.js`. Rules:
 ### Currency
 `const { fmt } = useCurrency()` in components — never hardcode currency symbols.
 
-### Design System (Square) — light-only
-The app runs the **Square design system** (merged to `main` 2026-07-06, tag `v-square-redesign-merged`). **Light-only — dark mode was removed** (no `[data-theme]`, `theme.js` deleted). Build every new/edited surface from `ui/primitives.jsx` (`PageShell`, `SectionCard`, `Button`, `Input`, `Modal`, `Drawer`, `TabBar`, `Badge`, …) and `--ui-*` tokens from `ui/tokens.css` — black primary (`#101010`), hairline borders, flat (no shadow), pill buttons, Inter. **Never** hardcode Tailwind color classes (`bg-slate-800`, `text-indigo-600`) or arbitrary hex. When unsure, match an existing `*Redesign.jsx` page. Spec: `docs/fable5/redesign-spec.md`. POS is the one hardcoded-color exception.
+### Design System (Square) — light-only, no dark mode
+The app runs the **Square design system**. **Light-only — there is no dark mode** (no `[data-theme]`, `theme.js` does not exist). Build every new/edited surface from `ui/primitives.jsx` (`PageShell`, `SectionCard`, `Button`, `Input`, `Modal`, `Drawer`, `TabBar`, `Badge`, …) and `--ui-*` tokens from `ui/tokens.css` — black primary (`#101010`), hairline borders, flat (no shadow), pill buttons, Inter. **Never** hardcode Tailwind color classes (`bg-slate-800`, `text-indigo-600`) or arbitrary hex. When unsure, match an existing `*Redesign.jsx` page. POS is the one long-standing hardcoded-color exception.
 
 ### Toast Notifications
 `const { success, error, warning } = useToast()` from `contexts/ToastContext.jsx`. Page-level error pattern: `catch(err) { toast.error(err.message || "Something went wrong") }`.
@@ -110,7 +135,7 @@ const { flags, loading } = useFeatureFlags(authHeaders);
 if (loading) return null;
 if (!flags.some_flag) return <Navigate to="/" replace />;
 ```
-No `RequireFeature` wrapper exists — checks are always inline. Do NOT pass an inline `{}` as `authHeaders` each render — causes an infinite loop. Hoist or memoize first.
+No `RequireFeature` wrapper exists — checks are always inline. Do NOT pass an inline `{}` as `authHeaders` each render — causes an infinite loop.
 
 ### Permissions
 `hasPerm("perm_name")` from `useAuth()`. Returns true if `all_access` or the specific permission.
@@ -128,7 +153,7 @@ Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`. Do not wri
 
 ## POS Architecture (quick reference)
 
-Full detail lives in `src/pages/redesign/pos/CLAUDE.md`. Headline facts: `POSContext.jsx` composes 8 domain hooks (`useShiftGate`, `useCart`, `useReceipt`, `useCustomerDisplay`, `useLoyaltyWallet`, `useFolioCharging`, `useOfflineQueue`, `useCheckout`) behind `usePOS()`. `completeSale` uses `api.raw` (never `api.post`) to inspect status codes mid-checkout — session expiry, insufficient stock, wholesale credit-limit exceeded. Offline-first: IndexedDB queue, idempotency key via `crypto.randomUUID()`. POS does not use design-system tokens (hardcoded colors), except `POSShortcutsOverlay` and `EndlessAisleModal`.
+Full detail lives in `src/pages/redesign/pos/CLAUDE.md`. Headline facts: `POSContext.jsx` composes 8 domain hooks (`useShiftGate`, `useCart`, `useReceipt`, `useCustomerDisplay`, `useLoyaltyWallet`, `useFolioCharging`, `useOfflineQueue`, `useCheckout`) behind `usePOS()`. `completeSale` uses `api.raw` (never `api.post`) to inspect status codes mid-checkout — session expiry, insufficient stock, wholesale credit-limit exceeded. Offline-first: IndexedDB queue, idempotency key via `crypto.randomUUID()`. Most of POS has migrated to `--ui-*` design-system tokens; check `pos/CLAUDE.md` for the current, precise list of remaining hardcoded-color exceptions.
 
 ---
 
@@ -150,6 +175,7 @@ Key gotchas:
 - Login form (`helpers/auth.js`): store-code placeholder matches `aceshardware`, employee placeholder `/employee name/i`, password placeholder `/password/i`, submit button `"Sign In"`.
 - Clock-in: use `POST /api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`.
 - Onboarding specs create real test tenants — delete from `/admin` after each run.
+- Known reliability gap: the shared test tenant (`packagesmall`) has been deleted from production; `global-setup.js` only warns on login failure instead of failing the run, so a green E2E run does not guarantee no regressions.
 
 ### Smoke Tests
 Location: `frontend/tests/smoke/` — competitive feature coverage specs with shared helpers (`cleanup`, `featureFlags`, `mockPaymentGateway`, `smokeRunId`).
