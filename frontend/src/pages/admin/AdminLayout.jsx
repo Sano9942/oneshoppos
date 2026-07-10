@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail, Activity, Scale, CreditCard, Wallet, Grid3x3, ShieldCheck } from "lucide-react";
+import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail, Activity, Scale, CreditCard, Wallet, Grid3x3, ShieldCheck, Lock } from "lucide-react";
 import { clearAdminSession, getAdminToken, getAdminSession, adminFetch } from "./AdminLogin";
 
 const NAV_ITEMS = [
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { name: "Billing", path: "/admin/billing", icon: Wallet },
   { name: "Stuck Payments", path: "/admin/stuck-payments", icon: CreditCard },
   { name: "Security", path: "/admin/security", icon: ShieldCheck },
+  { name: "Module Locks", path: "/admin/module-locks", icon: Lock },
 ];
 
 export default function AdminLayout() {

@@ -9631,6 +9631,59 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 131,
+    description:
+      "Business Modules (Step 5) — (a) public.platform_module_locks: super-admin backstop, lock = tenant cannot self-ENABLE a module (tenant_id NULL = global lock, non-NULL = per-tenant); RLS enabled per repo rule. Schema-qualified + idempotent, so per-tenant passes are no-ops. (b) tenant_business_modules: per-tenant module state + pre-disable saved_flags snapshot (config preservation — re-enable restores the merchant's exact flag choices). Tenant-scoped: guarded on company_profile (tenant-only sentinel) so the public pass is a no-op.",
+    up: async (client) => {
+      // (a) Platform lock table — public schema (cross-tenant registry).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.platform_module_locks (
+          id         SERIAL PRIMARY KEY,
+          module_key TEXT NOT NULL,
+          tenant_id  INTEGER,            -- NULL = global lock
+          locked_by  TEXT,
+          reason     TEXT,
+          locked_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      // One global lock per module; one per-tenant lock per (module, tenant).
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS platform_module_locks_global_uniq
+          ON public.platform_module_locks (module_key) WHERE tenant_id IS NULL
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS platform_module_locks_tenant_uniq
+          ON public.platform_module_locks (module_key, tenant_id) WHERE tenant_id IS NOT NULL
+      `);
+      // Repo rule: every public table declares RLS in its own migration (the
+      // every-deploy sweep re-covers it, but don't rely on that alone).
+      await client.query(
+        `ALTER TABLE public.platform_module_locks ENABLE ROW LEVEL SECURITY`
+      );
+
+      // (b) Per-tenant module state + saved_flags snapshot. Guarded on
+      // current_schema() — NOT on a sentinel table like company_profile,
+      // because legacy/dev databases can carry a stray public.company_profile
+      // (observed on local sanopos_dev), which would leak this table into
+      // public. current_schema() is 'public' on the public pass and the
+      // tenant schema on tenant passes, deterministically.
+      await client.query(`
+        DO $$
+        BEGIN
+          IF current_schema() <> 'public' THEN
+            CREATE TABLE IF NOT EXISTS tenant_business_modules (
+              module_key  TEXT PRIMARY KEY,
+              enabled     BOOLEAN NOT NULL,
+              saved_flags JSONB,
+              updated_by  TEXT,
+              updated_at  TIMESTAMPTZ DEFAULT NOW()
+            );
+          END IF;
+        END $$;
+      `);
+    },
+  },
 ];
 
 /**

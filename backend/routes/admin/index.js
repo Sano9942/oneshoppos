@@ -13,6 +13,7 @@
  *   compliance.js  — tax rates, suggestions, FBR health
  *   messaging.js   — email queue, broadcast, activity/security logs, announcements
  *   system.js      — worker status, orphaned schemas, backup
+ *   module-locks.js — Business Modules platform locks (self-enable backstop)
  */
 const { bcrypt, BCRYPT_ROUNDS, createRequireAllowedIp, createRequireSuperAdmin, createLoggers } = require("./helpers");
 
@@ -24,6 +25,7 @@ const registerOperationsRoutes = require("./operations");
 const registerComplianceRoutes = require("./compliance");
 const registerMessagingRoutes = require("./messaging");
 const registerSystemRoutes = require("./system");
+const registerModuleLockRoutes = require("./module-locks");
 
 module.exports = function registerAdminRoutes(app, { authLimiter }) {
   const db = require("../../db-pg");
@@ -58,4 +60,5 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   registerComplianceRoutes(app, deps);
   registerMessagingRoutes(app, deps);
   registerSystemRoutes(app, deps);
+  registerModuleLockRoutes(app, deps);
 };
