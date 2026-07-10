@@ -58,6 +58,7 @@ import {
   Inbox,
   Ban,
   Gift,
+  Blocks,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -264,6 +265,7 @@ export const SHOPIFY_NAV_GROUPS = [
     label: "Setup",
     items: [
       { name: "Outlets", path: "/outlets", icon: Building2, requiredPerm: "all_access" },
+      { name: "Business Modules", path: "/settings/business-modules", icon: Blocks, requiredPerm: "all_access" },
       { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "all_access", requiredFlag: "multi_company" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
       { name: "Integrations", path: "/settings/integrations", icon: Plug, requiredPerm: "manage_inventory" },
