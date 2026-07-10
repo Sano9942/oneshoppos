@@ -13,31 +13,14 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 
-const AVAILABLE_PERMISSIONS = [
-  { id: "all_access", label: "All Access", category: "System" },
-  { id: "manage_employees", label: "Manage Employees", category: "System" },
-  { id: "manage_inventory", label: "Manage Inventory", category: "Inventory" },
-  { id: "manage_orders", label: "Manage Orders", category: "Orders" },
-  { id: "manage_customers", label: "Manage Customers", category: "Customers" },
-  { id: "manage_products", label: "Manage Products", category: "Products" },
-  { id: "manage_returns", label: "Manage Returns", category: "Products" },
-  { id: "view_reports", label: "View Reports", category: "Reporting" },
-  { id: "pos_discount", label: "Apply Custom Discounts", category: "POS" },
-  { id: "void_sales", label: "Void Sales", category: "POS" },
-  { id: "pos_void", label: "Manager Override Void", category: "POS" },
-  { id: "pos_park", label: "Park & Restore Sales", category: "POS" },
-  { id: "manage_restaurant", label: "Manage Restaurant", category: "Restaurant" },
-  { id: "manage_kds", label: "Manage KDS", category: "Restaurant" },
-  { id: "manage_bookings", label: "Manage Bookings", category: "Services" },
-  { id: "manage_projects", label: "Manage Projects", category: "Services" },
-  { id: "manage_contracts", label: "Manage Contracts", category: "Services" },
-];
-
-const PERM_GROUPS = [...new Set(AVAILABLE_PERMISSIONS.map((p) => p.category))];
 const isDefault = (id) => ["1", "2", "3"].includes(String(id));
 
 export default function AdministratorRedesign() {
   const [roles, setRoles] = useState([]);
+  // Server-driven permission catalog (GET /api/permissions-catalog) —
+  // replaces the old hardcoded list, which had drifted 11+ permissions
+  // behind the live permission surface.
+  const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -52,7 +35,10 @@ export default function AdministratorRedesign() {
     setLoading(true);
     setError("");
     try {
-      const data = await api.get("/api/roles");
+      const [data, cat] = await Promise.all([
+        api.get("/api/roles"),
+        api.get("/api/permissions-catalog"),
+      ]);
       const withPerms = await Promise.all(
         data.roles.map(async (role) => {
           const pd = await api.get(`/api/roles/${role.id}/permissions`);
@@ -60,6 +46,7 @@ export default function AdministratorRedesign() {
         }),
       );
       setRoles(withPerms);
+      setCatalog(cat.permissions || []);
     } catch (e) {
       setError(e.body?.error || e.message || "Failed to load roles");
     } finally {
@@ -68,6 +55,11 @@ export default function AdministratorRedesign() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const permGroups = useMemo(
+    () => [...new Set(catalog.map((p) => p.category))],
+    [catalog],
+  );
 
   const visible = useMemo(() => {
     if (!search.trim()) return roles;
@@ -240,12 +232,12 @@ export default function AdministratorRedesign() {
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Permissions</p>
-                {PERM_GROUPS.map((cat) => (
+                {permGroups.map((cat) => (
                   <div key={cat} className="mb-2">
                     <p className="mb-1 text-xs text-(--ui-text-muted)">{cat}</p>
                     {/* Permission checkbox-pills — custom toggle control, needs CheckboxGroup primitive. */}
                     <div className="grid grid-cols-3 gap-1">
-                      {AVAILABLE_PERMISSIONS.filter((p) => p.category === cat).map((perm) => {
+                      {catalog.filter((p) => p.category === cat).map((perm) => {
                         const checked = rolePerms.includes(perm.id);
                         return (
                           <button

@@ -36,13 +36,14 @@ describe("Batch 8 — Middleware & startup hooks (Postgres)", () => {
       expect(res.body.employee.id).toBe(1);
     });
 
-    it("returns empty perms for missing employee", async () => {
+    it("returns empty perms for missing employee (clean 403, no crash)", async () => {
       const res = await request(app)
         .get("/api/roles")
         .set("x-employee-id", "9999");
-      // 9999 does not exist — perms should be empty, route may still work
-      // Roles GET doesn't require perms so it should succeed
-      expect(res.status).toBe(200);
+      // 9999 does not exist — perms resolve empty. Since business-modules
+      // Step 7, GET /api/roles is guarded by requirePerm("all_access"), so
+      // empty perms now yield a clean 403 instead of the old open 200.
+      expect(res.status).toBe(403);
     });
 
     it("rejects invalid x-employee-id header", async () => {
@@ -89,9 +90,12 @@ describe("Batch 8 — Middleware & startup hooks (Postgres)", () => {
       expect(res.status).toBe(400);
     });
 
-    it("allows requests with no x-employee-id header (empty perms)", async () => {
+    it("no x-employee-id header → empty perms → guarded route 403s cleanly", async () => {
+      // Pre-Step-7 this was an open 200 (GET /api/roles had no guard); the
+      // point of the test — empty perms must not crash the middleware chain —
+      // still holds, the guard just answers 403 now.
       const res = await request(app).get("/api/roles");
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(403);
     });
   });
 

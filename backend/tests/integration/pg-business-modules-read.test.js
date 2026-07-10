@@ -147,4 +147,80 @@ describe("business modules read API (Postgres)", () => {
     expect(van.depends_on).toEqual(["field_sales"]);
     expect(van.enabled).toBe(false);
   });
+
+  // ── Step 7 — manage_business_modules delegation + roles_with_access ──────
+  describe("Step 7: permission contract", () => {
+    beforeAll(async () => {
+      // Match production role seeding (ensureDefaultRolePermissions runs at
+      // provisioning) — the harness fixture seeds Manager with a truncated
+      // 8-perm set; production Managers hold manage_rentals etc.
+      const { ensureDefaultRolePermissions } = require("../../middleware/permissions");
+      await ensureDefaultRolePermissions(db);
+      // A custom delegated role holding ONLY manage_business_modules.
+      await db.query(
+        `INSERT INTO roles (id, name, description) VALUES (50, 'Module Manager', 'Delegated module management')`
+      );
+      await db.query(
+        `INSERT INTO role_permissions (role_id, permission) VALUES (50, 'manage_business_modules')`
+      );
+      await db.query(
+        `INSERT INTO employees (id, name, role, pin_code, role_id, monthly_salary)
+         VALUES (50, 'Module Manager User', 'Module Manager', '5050', 50, 0)`
+      );
+    });
+
+    it("403s a Manager (broad default set, no manage_business_modules)", async () => {
+      expect((await getModules("2")).status).toBe(403);
+      const impact = await request(app)
+        .get("/api/business-modules/rentals/impact")
+        .set("x-employee-id", "2");
+      expect(impact.status).toBe(403);
+    });
+
+    it("a custom role with only manage_business_modules passes all three endpoints", async () => {
+      const res = await getModules("50");
+      expect(res.status).toBe(200);
+
+      const impact = await request(app)
+        .get("/api/business-modules/gift_cards/impact")
+        .set("x-employee-id", "50");
+      expect(impact.status).toBe(200);
+
+      const before = await db.query("SELECT COUNT(*)::int AS n FROM role_permissions");
+      const toggle = await request(app)
+        .post("/api/business-modules/gift_cards/toggle")
+        .set("x-employee-id", "50")
+        .send({ enabled: true });
+      expect(toggle.status).toBe(200);
+      // Invariant: a module toggle never grants or revokes any permission.
+      const after = await db.query("SELECT COUNT(*)::int AS n FROM role_permissions");
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it("Administrator still passes via the all_access bypass", async () => {
+      expect((await getModules("1")).status).toBe(200);
+    });
+
+    it("cards carry permissions + roles_with_access (dormant while off)", async () => {
+      const res = await getModules("1");
+
+      const rentals = findCard(res.body, "rentals");
+      expect(rentals.permissions).toEqual(["manage_rentals"]);
+      expect(rentals.roles_with_access).toContain("Administrator");
+      expect(rentals.roles_with_access).toContain("Manager");
+      expect(rentals.roles_with_access).not.toContain("Cashier");
+      expect(rentals.roles_with_access).not.toContain("Module Manager");
+
+      // No dedicated permission → only all_access roles listed.
+      const accounting = findCard(res.body, "accounting");
+      expect(accounting.permissions).toEqual([]);
+      expect(accounting.roles_with_access).toEqual(["Administrator"]);
+
+      // roles_with_access is computed from role assignments regardless of
+      // module state — rentals stayed listed above even while the card was
+      // off/on across earlier tests (hide-not-delete for permissions too).
+      const restaurant = findCard(res.body, "restaurant");
+      expect(restaurant.roles_with_access).toContain("Manager");
+    });
+  });
 });

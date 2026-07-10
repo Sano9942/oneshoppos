@@ -23,9 +23,13 @@
  * must reflect a toggle immediately — and the direct read also works in the
  * createTestApp harness, which never calls featureFlags.init().
  *
- * Perm: requirePerm("all_access") for now — Step 7 switches this to the
- * dedicated manage_business_modules permission (Administrators keep passing
- * via the all_access bypass either way).
+ * Perm (Step 7): requirePerm("manage_business_modules") — granted to NO
+ * default role; Administrators pass via the all_access bypass, and module
+ * management is delegable by granting the perm to a custom role.
+ *
+ * GET also returns roles_with_access per card (Step 7): role names whose
+ * effective permission set intersects the card's permissions list, plus
+ * all_access roles. Toggling a module never writes role_permissions.
  */
 
 const {
@@ -37,6 +41,8 @@ const {
   loadLiveFlags,
   loadLiveModes,
   getLockedKeys,
+  loadRoleAccess,
+  rolesWithAccessForCard,
   computeImpact,
   toggleModule,
 } = require("../services/business-modules");
@@ -93,14 +99,14 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
 
   app.get(
     "/api/business-modules",
-    // Step 7 switches this to requirePerm("manage_business_modules").
-    requirePerm("all_access"),
+    requirePerm("manage_business_modules"),
     async (req, res) => {
       try {
-        const [flags, modes, lockedKeys] = await Promise.all([
+        const [flags, modes, lockedKeys, roleAccess] = await Promise.all([
           loadLiveFlags(db),
           loadLiveModes(db),
           getLockedKeys(db, req.tenantId),
+          loadRoleAccess(db),
         ]);
 
         // Industry + outlet count drive the "recommended" chips. req.company
@@ -154,6 +160,8 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
               note: s.note || null,
             })),
             depends_on: card.depends_on,
+            permissions: card.permissions,
+            roles_with_access: rolesWithAccessForCard(card, roleAccess),
             preset_recommended: recommended.has(key),
             ...(card.bucket === "C"
               ? {
@@ -179,8 +187,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
   // Change preview for the enable/disable confirm dialogs (PLAN Step 6).
   app.get(
     "/api/business-modules/:key/impact",
-    // Step 7 switches this to requirePerm("manage_business_modules").
-    requirePerm("all_access"),
+    requirePerm("manage_business_modules"),
     async (req, res) => {
       try {
         const direction = req.query.direction === "enable" ? "enable" : "disable";
@@ -199,8 +206,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
   // The toggle write path — all rules enforced in services/business-modules.js.
   app.post(
     "/api/business-modules/:key/toggle",
-    // Step 7 switches this to requirePerm("manage_business_modules").
-    requirePerm("all_access"),
+    requirePerm("manage_business_modules"),
     validate(ToggleModuleSchema),
     async (req, res) => {
       try {

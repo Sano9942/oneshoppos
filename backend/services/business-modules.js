@@ -100,6 +100,55 @@ async function getLockedKeys(db, tenantId) {
   }
 }
 
+/**
+ * Effective permission set per role, for the roles_with_access line on each
+ * module card (PLAN.md Step 7). DB role_permissions rows are authoritative
+ * when a role has ANY rows (that is what requirePerm actually enforces —
+ * loadTenantAndPerms reads only the DB); a role with zero rows falls back to
+ * DEFAULT_ROLE_PERMISSIONS by name (pre-seed tenants). Merging defaults on
+ * top of DB rows would wrongly resurrect permissions an admin removed.
+ */
+async function loadRoleAccess(db) {
+  const { DEFAULT_ROLE_PERMISSIONS } = require("../middleware/permissions");
+  const { rows: roles } = await db.query(
+    "SELECT id, name FROM roles ORDER BY id ASC"
+  );
+  const { rows: rps } = await db.query(
+    "SELECT role_id, permission FROM role_permissions"
+  );
+  const byId = new Map(
+    roles.map((r) => [r.id, { id: r.id, name: r.name, perms: new Set() }])
+  );
+  for (const rp of rps) byId.get(rp.role_id)?.perms.add(rp.permission);
+  for (const role of byId.values()) {
+    if (role.perms.size === 0) {
+      for (const p of DEFAULT_ROLE_PERMISSIONS[role.name] || []) {
+        role.perms.add(p);
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Role names that can use a card's surfaces: all_access roles always
+ * (plus the Administrator role by name, defensively), otherwise any role
+ * whose effective permission set intersects the card's permissions list.
+ * Toggling a module never writes role_permissions — assignments stay
+ * dormant while the module is off.
+ */
+function rolesWithAccessForCard(card, roleAccess) {
+  const names = [];
+  for (const role of roleAccess) {
+    const hasAccess =
+      role.name === "Administrator" ||
+      role.perms.has("all_access") ||
+      (card.permissions || []).some((p) => role.perms.has(p));
+    if (hasAccess) names.push(role.name);
+  }
+  return names;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Catalog resolution + dependency graph
 // ─────────────────────────────────────────────────────────────────────────────
@@ -615,6 +664,8 @@ module.exports = {
   loadLiveFlags,
   loadLiveModes,
   getLockedKeys,
+  loadRoleAccess,
+  rolesWithAccessForCard,
   resolveToggleTarget,
   isCardEnabled,
   collectPrerequisites,

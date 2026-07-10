@@ -936,11 +936,51 @@ const BUCKET_C = {
   },
 };
 
-const BUSINESS_MODULES = Object.freeze({
-  ...BUCKET_A,
-  ...BUCKET_B,
-  ...BUCKET_C,
+// ─────────────────────────────────────────────────────────────────────────────
+// Card → permissions (PLAN.md Step 7). The permission strings that grant use
+// of a module's surfaces — strictly the perms that gate the module's routes
+// (middleware/permissions.js PERMISSION_RULES + route requirePerm call sites).
+// Cards without a dedicated permission get [] — their surfaces are governed
+// by the general spine perms, and GET /api/business-modules lists only
+// all_access roles (Administrator) under roles_with_access for them.
+// Kept in bidirectional sync with config/permissions-catalog.js module_key
+// by tests/unit/permissions-catalog.test.js.
+//
+// Invariant: a module toggle never grants or revokes any permission — role
+// assignments stay dormant while a module is off and work again on re-enable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MODULE_PERMISSIONS = Object.freeze({
+  restaurant: ["manage_restaurant", "manage_kds", "manage_tips"],
+  appointments: ["manage_bookings"],
+  rentals: ["manage_rentals"],
+  rooms_lodging: ["manage_rooms"],
+  clinical: ["manage_treatment_plans"],
+  service_tickets: ["manage_tickets"],
+  projects_contracts: ["manage_projects", "manage_contracts"],
+  field_sales: ["manage_field_sales"],
+  gift_cards: ["manage_gift_cards"],
+  custom_forms: ["manage_forms"],
 });
+
+function withPermissions(cards) {
+  const out = {};
+  for (const [key, card] of Object.entries(cards)) {
+    out[key] = Object.freeze({
+      ...card,
+      permissions: MODULE_PERMISSIONS[key] || [],
+    });
+  }
+  return out;
+}
+
+const BUSINESS_MODULES = Object.freeze(
+  withPermissions({
+    ...BUCKET_A,
+    ...BUCKET_B,
+    ...BUCKET_C,
+  })
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UNMANAGED_FLAGS — DEFAULT_FEATURE_FLAGS keys deliberately OUTSIDE the module
@@ -1031,6 +1071,7 @@ module.exports = {
   VALID_SCOPES,
   DB_ONLY_FLAGS,
   BUSINESS_MODULES,
+  MODULE_PERMISSIONS,
   UNMANAGED_FLAGS,
   cardManagedFlags,
   classifyFlag,
