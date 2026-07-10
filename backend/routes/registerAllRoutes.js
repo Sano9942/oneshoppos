@@ -431,6 +431,11 @@ module.exports = function registerAllRoutes(app, deps) {
   app.put(
     "/api/feature-flags/:key",
     requirePerm("all_access"),
+    // Business Modules lockdown (PLAN Step 6): module primary/bundle flags
+    // 409 here so this endpoint can no longer bypass bucket rules,
+    // dependencies, mode sync, locks, or audit. sub_toggles + UNMANAGED
+    // (Bucket D) keys keep working.
+    require("../services/business-modules").rejectCatalogManagedFlagWrites,
     async (req, res) => {
       const { key } = req.params;
       const { enabled, description, updated_by } = req.body || {};

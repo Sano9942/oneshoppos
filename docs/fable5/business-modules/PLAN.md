@@ -22,9 +22,9 @@
 | 1 of 11 | Create working branch | ☑ done (verified) | — |
 | 2 of 11 | Re-verify catalog → `backend/config/business-modules.js` (+ scope, state, bidirectional test) | ☑ done (verified) — owner RATIFIED v1 card list 2026-07-10 (commit c124583b) | **PAUSE after** (owner ratifies v1 module list) — CLEARED |
 | 3 of 11 | Surface-cleanliness fixes (workers + POS loyalty + page guards) | ☑ done (verified, zero new test failures; commit 9609136d) | — |
-| 4 of 11 | Backend read path: `GET /api/business-modules` (state enum) | ◐ in progress | — |
-| 5 of 11 | Migration: platform lock table + `tenant_business_modules` + admin backstop | ☐ not started — **owner PRE-APPROVED 2026-07-10** (both table shapes + lock semantics) | **PAUSE before** (schema/migration) — CLEARED |
-| 6 of 11 | Backend toggle path (atomic flag+mode, saved_flags restore, deps preview, lock, legacy-endpoint lockdown) | ☐ not started — owner chose **PAUSE when reached** (2026-07-10): re-present design before writing toggle code | **PAUSE before** (tenant write-path design sign-off) |
+| 4 of 11 | Backend read path: `GET /api/business-modules` (state enum) | ☑ done (verified, 10 integration tests green; commit 99fc5253) | — |
+| 5 of 11 | Migration: platform lock table + `tenant_business_modules` + admin backstop | ☑ done (verified — v131 idempotent on local sanopos_dev, 48 tenant schemas; admin CRUD+UI live, 6 tests green; commit 3d6ac331). Owner pre-approved 2026-07-10 | **PAUSE before** (schema/migration) — CLEARED |
+| 6 of 11 | Backend toggle path (atomic flag+mode, saved_flags restore, deps preview, lock, legacy-endpoint lockdown) | ☑ done (verified — 17-test matrix green incl. all 12 PLAN cases; fresh-context verifier ran twice: 3 should-fix findings found (double-disable snapshot clobber, stale-snapshot re-enable, Bucket C cascade dead-end) and FIXED + regression-tested. Design deviations logged in Step 6 notes below. Owner approved design 2026-07-10) | **PAUSE before** (tenant write-path design sign-off) — CLEARED |
 | 7 of 11 | Roles & permissions contract (permission catalog, role-editor fix, guards, `manage_business_modules`) | ☐ not started | **PAUSE before** (permission-guard changes to existing endpoints) |
 | 8 of 11 | Frontend read-only page | ☐ not started | — |
 | 9 of 11 | Frontend interactive (toggles, enable-preview + disable-impact confirms, setup cards, refresh) | ☐ not started | — |
@@ -194,6 +194,14 @@ Scope: exactly this. Do not modify mode-registry.js or preset-apply.js.
 Autonomy: implement + full integration test matrix from PLAN.md Step 6 verify list (twelve cases) against local PG. Then spawn a fresh-context verifier subagent with only PLAN.md Step 6 + the new files to confirm the rules hold. Commit locally when green.
 Report: outcome first, then the verifier's findings verbatim.
 ```
+
+**Step 6 as-built notes (2026-07-10)** — deviations/resolutions, all surfaced to the owner in the step report:
+1. **Toggle endpoint also accepts sub_toggle keys** (not just card keys). Required to make verify case (g) reachable: the only real dependency edges in the v1 catalog are sub_toggle→card (`wholesale_van_sales`→`field_sales`) and BucketC→card — there are no card→card edges among A/B. Bundle flags, UNMANAGED keys and unknown keys still 404.
+2. **Legacy PUT lockdown scope**: rejects module primary + bundle flags (both `classifyFlag` role "primary", incl. Bucket C primaries like `marketplace_integrations`) with 409 `MANAGED_BY_BUSINESS_MODULES`. UNMANAGED_FLAGS (= Bucket D — Step 2 merged the two sets) and sub_toggles stay writable, per the ratified Step 2 config contract + the owner-approved design summary; the goal text's "Bucket D flags rejected" wording lost to that. Grep of frontend + backend found ZERO callers of this PUT for primary flags (FBR writes its flag via `/api/fbr/config`), so the guard breaks nothing.
+3. **Lock check** uses the request's own db handle with an explicit `public.platform_module_locks` qualifier instead of masterDb — search_path-independent, equivalent in prod, and works in the test harness where master-db is not initialised.
+4. **Bucket C dependents are NOT cascaded off** on a prerequisite disable (e.g. Delivery Aggregators under Restaurant): this endpoint can't re-enable a C card (409 REQUIRES_SETUP) and the legacy PUT rejects its primary flag, so zeroing it would be un-undoable from any tenant-facing surface. They are returned as `left_connected` for the UI to warn ("still connected — disconnect via its setup page"). Found by the fresh-context verifier.
+5. **Idempotency guards** (verifier findings): a repeated disable no longer clobbers `saved_flags` with zeros (snapshot only overwritten when the module was effectively ON, or no snapshot existed); enable clears the snapshot after consuming it so a redundant enable can never re-apply stale values; a restored-true sub_toggle whose prerequisite is neither on nor being enabled in the same request is kept off and reported in `skipped_restores`.
+6. **GET state×lock interplay**: `locked:true` on every locked card; state becomes `"locked"` only when the card is otherwise off/setup_required — a locked-but-running module keeps its real state (locks block self-enable, never force-off).
 
 ---
 

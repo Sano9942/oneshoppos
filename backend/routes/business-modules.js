@@ -1,13 +1,21 @@
 "use strict";
 
 /**
- * Business Modules — read path (PLAN.md Step 4).
+ * Business Modules — read path (PLAN.md Step 4) + toggle write path
+ * (PLAN.md Step 6).
  *
  * GET /api/business-modules returns the full self-service modules page
  * payload: every catalog card (config/business-modules.js) with its computed
  * STATE (off/on/setup_required/connected/locked/attention_required — never a
- * bare boolean), scope, live flag/sub_toggle values, depends_on graph, and
- * "recommended for your industry" chips derived from the tenant's preset.
+ * bare boolean), scope, live flag/sub_toggle values, depends_on graph,
+ * platform-lock state, and "recommended for your industry" chips.
+ *
+ * GET /api/business-modules/:key/impact — change preview for the confirm
+ * dialogs (disable: live counts + enabled dependents; ?direction=enable:
+ * prerequisites that would also be enabled + lock state).
+ *
+ * POST /api/business-modules/:key/toggle {enabled, cascade?} — the write
+ * path. All rules live in services/business-modules.js; this file stays thin.
  *
  * Flag/mode reads are deliberately LIVE (direct deps.db queries merged with
  * DEFAULT_FEATURE_FLAGS) rather than via getFeatureFlagsMap/getModesMap:
@@ -25,29 +33,15 @@ const {
   MODULE_STATES,
   presetRecommendedModules,
 } = require("../config/business-modules");
-const { DEFAULT_FEATURE_FLAGS } = require("../middleware/feature-flags");
-
-async function loadLiveFlags(db) {
-  const merged = { ...DEFAULT_FEATURE_FLAGS };
-  try {
-    const { rows } = await db.query("SELECT key, enabled FROM feature_flags");
-    for (const row of rows) merged[row.key] = row.enabled === true;
-  } catch (err) {
-    if (!String(err.message || "").includes("does not exist")) throw err;
-  }
-  return merged;
-}
-
-async function loadLiveModes(db) {
-  const map = {};
-  try {
-    const { rows } = await db.query("SELECT mode, enabled FROM tenant_modes");
-    for (const row of rows) map[row.mode] = row.enabled === true;
-  } catch (err) {
-    if (!String(err.message || "").includes("does not exist")) throw err;
-  }
-  return map;
-}
+const {
+  loadLiveFlags,
+  loadLiveModes,
+  getLockedKeys,
+  computeImpact,
+  toggleModule,
+} = require("../services/business-modules");
+const { validate } = require("../middleware/validate");
+const { ToggleModuleSchema } = require("../schemas/business-modules");
 
 async function runConnectedCheck(db, check) {
   if (!check) return null;
@@ -71,22 +65,27 @@ async function runConnectedCheck(db, check) {
  *  - Bucket C: connected_check fail → setup_required; pass → connected when
  *    the card's flags (if any) are enabled, otherwise off (credentials
  *    stored but the merchant turned the feature off).
- *  - locked comes from platform_module_locks — stubbed false until Step 5/6.
+ *  - locked: a platform_module_locks row (global or this tenant) blocks
+ *    self-enable — an otherwise-off card shows state "locked"; a card that
+ *    is already on keeps its state (locks never force-off) but still
+ *    carries locked:true.
  */
-function computeState(card, flags, modes, connected) {
+function computeState(card, flags, modes, connected, isLocked) {
   const anyFlagOn = card.flags.some((f) => flags[f] === true);
+  let state;
   if (card.bucket === "C") {
-    if (!connected) return MODULE_STATES.SETUP_REQUIRED;
-    if (card.flags.length > 0 && !anyFlagOn) return MODULE_STATES.OFF;
-    return MODULE_STATES.CONNECTED;
+    if (!connected) state = MODULE_STATES.SETUP_REQUIRED;
+    else if (card.flags.length > 0 && !anyFlagOn) state = MODULE_STATES.OFF;
+    else state = MODULE_STATES.CONNECTED;
+  } else if (card.bucket === "A" && card.mode && card.mode in modes) {
+    state = modes[card.mode] ? MODULE_STATES.ON : MODULE_STATES.OFF;
+  } else {
+    state = anyFlagOn ? MODULE_STATES.ON : MODULE_STATES.OFF;
   }
-  if (card.bucket === "A" && card.mode) {
-    if (card.mode in modes) {
-      return modes[card.mode] ? MODULE_STATES.ON : MODULE_STATES.OFF;
-    }
-    return anyFlagOn ? MODULE_STATES.ON : MODULE_STATES.OFF;
+  if (isLocked && (state === MODULE_STATES.OFF || state === MODULE_STATES.SETUP_REQUIRED)) {
+    return MODULE_STATES.LOCKED;
   }
-  return anyFlagOn ? MODULE_STATES.ON : MODULE_STATES.OFF;
+  return state;
 }
 
 module.exports = function registerBusinessModulesRoutes(app, deps) {
@@ -98,9 +97,10 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
     requirePerm("all_access"),
     async (req, res) => {
       try {
-        const [flags, modes] = await Promise.all([
+        const [flags, modes, lockedKeys] = await Promise.all([
           loadLiveFlags(db),
           loadLiveModes(db),
+          getLockedKeys(db, req.tenantId),
         ]);
 
         // Industry + outlet count drive the "recommended" chips. req.company
@@ -135,6 +135,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
               ? await runConnectedCheck(db, card.connected_check)
               : null;
 
+          const isLocked = lockedKeys.has(key);
           modules.push({
             key,
             bucket: card.bucket,
@@ -142,9 +143,8 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             description: card.description,
             scope: card.scope,
             mode: card.mode ?? null,
-            state: computeState(card, flags, modes, connected),
-            // Platform lock lands with the Step 5 table + Step 6 check.
-            locked: false,
+            state: computeState(card, flags, modes, connected, isLocked),
+            locked: isLocked,
             flags: card.flags.map((f) => ({ key: f, enabled: flags[f] === true })),
             sub_toggles: card.sub_toggles.map((s) => ({
               key: s.key,
@@ -170,6 +170,53 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
           outlet_count: outletCount,
           modules,
         });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // Change preview for the enable/disable confirm dialogs (PLAN Step 6).
+  app.get(
+    "/api/business-modules/:key/impact",
+    // Step 7 switches this to requirePerm("manage_business_modules").
+    requirePerm("all_access"),
+    async (req, res) => {
+      try {
+        const direction = req.query.direction === "enable" ? "enable" : "disable";
+        const { status, body } = await computeImpact(db, {
+          key: req.params.key,
+          direction,
+          tenantId: req.tenantId,
+        });
+        return res.status(status).json(body);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // The toggle write path — all rules enforced in services/business-modules.js.
+  app.post(
+    "/api/business-modules/:key/toggle",
+    // Step 7 switches this to requirePerm("manage_business_modules").
+    requirePerm("all_access"),
+    validate(ToggleModuleSchema),
+    async (req, res) => {
+      try {
+        const actor =
+          req.employee?.name ||
+          (req.headers["x-employee-id"]
+            ? `employee:${req.headers["x-employee-id"]}`
+            : "unknown");
+        const { status, body } = await toggleModule(db, {
+          key: req.params.key,
+          enabled: req.body.enabled,
+          cascade: req.body.cascade === true,
+          actor,
+          tenantId: req.tenantId,
+        });
+        return res.status(status).json(body);
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
