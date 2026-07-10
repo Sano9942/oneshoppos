@@ -25,9 +25,9 @@
 | 4 of 11 | Backend read path: `GET /api/business-modules` (state enum) | ☑ done (verified, 10 integration tests green; commit 99fc5253) | — |
 | 5 of 11 | Migration: platform lock table + `tenant_business_modules` + admin backstop | ☑ done (verified — v131 idempotent on local sanopos_dev, 48 tenant schemas; admin CRUD+UI live, 6 tests green; commit 3d6ac331). Owner pre-approved 2026-07-10 | **PAUSE before** (schema/migration) — CLEARED |
 | 6 of 11 | Backend toggle path (atomic flag+mode, saved_flags restore, deps preview, lock, legacy-endpoint lockdown) | ☑ done (verified — 17-test matrix green incl. all 12 PLAN cases; fresh-context verifier ran twice: 3 should-fix findings found (double-disable snapshot clobber, stale-snapshot re-enable, Bucket C cascade dead-end) and FIXED + regression-tested. Design deviations logged in Step 6 notes below. Owner approved design 2026-07-10) | **PAUSE before** (tenant write-path design sign-off) — CLEARED |
-| 7 of 11 | Roles & permissions contract (permission catalog, role-editor fix, guards, `manage_business_modules`) | ☐ not started | **PAUSE before** (permission-guard changes to existing endpoints) |
-| 8 of 11 | Frontend read-only page | ☐ not started | — |
-| 9 of 11 | Frontend interactive (toggles, enable-preview + disable-impact confirms, setup cards, refresh) | ☐ not started | — |
+| 7 of 11 | Roles & permissions contract (permission catalog, role-editor fix, guards, `manage_business_modules`) | ☑ done (verified — 26 unit + 42 integration tests green; role editor browser-verified, 29-perm catalog + drift guard; commit 7c7c1d56). Consumer-grep resolved the pause: `/api/roles` all_access-only, `/:id/permissions` self-or-admin (AuthProvider boot dependency) | **PAUSE before** (permission-guard changes to existing endpoints) — CLEARED |
+| 8 of 11 | Frontend read-only page | ☑ done (verified in browser on golv_party_supplies (retail-family: Rentals recommended+On, Restaurant Off) and golv_restaurant (Restaurant recommended+On); Bucket C shows Needs setup, staff-access lines render, console clean; commit 8f0472cc) | — |
+| 9 of 11 | Frontend interactive (toggles, enable-preview + disable-impact confirms, setup cards, refresh) | ☑ done (verified — browser walkthrough on golv_restaurant: enable-preview confirm BEFORE POST (Van Sales names Field Sales), disable confirm with dependents + cascade, saved_flags round-trip visible in UI, nav gains AND loses groups in-place without logout, FBR Set up navigates; 173 frontend unit tests green; commit 59e97f16) | — |
 | 10 of 11 | End-to-end verification on test tenant | ☐ not started | **PAUSE after** (owner reviews verification report) |
 | 11 of 11 | Docs, memory, final review, commit & push | ☐ not started | **PAUSE** (push is owner-gated) |
 
@@ -290,6 +290,14 @@ Scope: these files only. No backend changes. If a toggle appears not to propagat
 Autonomy: full browser-preview verification per PLAN.md Step 9 verify list on local test tenants; commit locally when verified.
 Report: outcome first + the walkthrough evidence (screenshots/network).
 ```
+
+**Step 8+9 as-built notes (2026-07-11)** — deviations/resolutions:
+
+1. **Sub-toggles are writable, not read-only** (extension beyond the Step 9 goal text, which only named card toggles). The backend deliberately makes sub_toggles reachable via `resolveToggleTarget`, so inline switches were wired: enabled only while the parent card is on; an enable with `depends_on` (Van Sales → Field Sales) runs the same `/impact?direction=enable` preview confirm as a card. This is NOT deferred item D3 (the expandable "Customize" editor) — just inline switches on the already-rendered list.
+2. **`left_connected` surfaced as a warning toast** after a cascading disable ("X stays connected — disconnect it from its setup page"), completing the UI half of the Step 6 verifier finding on Bucket C cascade dead-ends.
+3. **Enable-preview trigger rule as implemented**: dialog shows when `depends_on` is non-empty OR `roles_with_access` has any role besides Administrator; toggle POST sends `cascade:true` only on a confirmed disable that listed dependents.
+4. **Not exercised in the Step 9 walkthrough** (deferred to the Step 10 matrix): disable-impact live counts > 0 (no local tenant had rental/appointment data — the counts rendering path filters to `count > 0` and is code-verified), and locked-card behavior (no platform locks seeded locally; the locked UI states exist from Step 8).
+5. **Dev-only artifact**: editing `useFeatureFlags`'s hook list under Vite HMR threw one-time Rules-of-Hooks console errors on already-mounted components (module swap changes hook order mid-lifecycle). Fresh loads are clean — the new hook order is unconditional; 173 frontend unit tests green.
 
 ---
 
