@@ -35,7 +35,14 @@ Branch: `fix/audit-wave0` · Date: 2026-07-12 · Spec: PLAN-V2.md Step W0a (AUDI
 
 ### Blast radius
 
-Default roles: Administrator (`all_access`), Manager (holds `pos_discount`), Cashier (holds `pos_discount`) — all unaffected. Field Rep (`manage_field_sales` only) and custom roles lacking the perm are newly blocked from manual discounts — matching what the POS UI already implies. Gate 0 pre-deploy: count prod roles missing `pos_discount` (Supabase read-only) per the Gate protocol.
+Default roles: Administrator (`all_access`), Manager (holds `pos_discount`), Cashier (holds `pos_discount`) — all unaffected. Field Rep (`manage_field_sales` only) and custom roles lacking the perm are newly blocked from manual discounts — matching what the POS UI already implies.
+
+**Gate 0 pre-deploy count (done 2026-07-12, Supabase read-only, all 29 active tenants):** the only
+roles lacking both `pos_discount` and `all_access` in prod are **6 default "Field Rep" roles**
+(`cafetestphase8`, `grocerywalktest1778451`, `livetest1`, `livetestauto`,
+`sanoposlivetest1778021564659`, `wholesalewalktest1778451` — all test tenants). **Zero bespoke
+custom roles affected; no tenant pre-warning needed.** Field-rep scheme discounts remain allowed
+(promo-engine verified); only manual discounts 403 for that role.
 
 ## S4 — Admin self-lockout guard (`PUT /api/roles/:id/permissions`)
 
