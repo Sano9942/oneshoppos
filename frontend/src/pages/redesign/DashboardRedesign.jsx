@@ -43,10 +43,26 @@ export default function DashboardRedesign() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
-  // Role detection
+  // W0b C3 (role audit): permission gating, no role inference. The old
+  // `isManager = hasPerm("view_reports")` treated the Cashier default perm
+  // view_reports as "is a manager", leaking owner banners to Cashiers and
+  // misclassifying custom roles. Each widget now gates on the permission
+  // that guards its own data/target:
+  //  - account/config banners (plan usage, multi-outlet, FBR setup,
+  //    onboarding, backup) → all_access (their pages + /api/billing are
+  //    all_access)
+  //  - report widgets (insights, KPIs, trends, exceptions, contribution,
+  //    top products, inventory alerts, retail/wholesale cards, outlet
+  //    ranking, team attendance) → view_reports (guards /api/reports/* +
+  //    /api/insights/auto). Default Cashier DOES hold view_reports and can
+  //    already open /reports — PLAN-V2 Step 4 re-sweeps these gates when
+  //    view_reports splits.
+  //  - field summary → manage_field_sales (routes/field.js guard)
   const isAdmin = hasPerm("all_access");
-  const isManager = !isAdmin && hasPerm("view_reports");
-  const isCashier = !isAdmin && !isManager;
+  const canViewReports = hasPerm("view_reports");
+  const canFieldSales = hasPerm("manage_field_sales");
+  // "Reduced view" flag consumed by KPI/attendance widgets.
+  const limitedView = !canViewReports;
 
   // Scope detection
   const ctx = readContext();
@@ -64,10 +80,10 @@ export default function DashboardRedesign() {
   // models — and wait for presetLoaded so nothing flashes. Service / food /
   // clinical / rental / subscription tenants keep the original dashboard.
   const RETAIL_BUSINESS_MODELS = ["buy_sell", "b2b_distribution"];
-  const showRetailCards = !isCashier && presetLoaded && RETAIL_BUSINESS_MODELS.includes(business_model);
+  const showRetailCards = canViewReports && presetLoaded && RETAIL_BUSINESS_MODELS.includes(business_model);
   // Tier 0.5 — wholesale dashboard cards. Render when the tenant has the
   // `wholesale` mode set. Cashiers don't see A/R surfaces.
-  const showWholesaleCards = !isCashier && typeof hasMode === "function" && hasMode("wholesale");
+  const showWholesaleCards = canViewReports && typeof hasMode === "function" && hasMode("wholesale");
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -148,13 +164,13 @@ export default function DashboardRedesign() {
       )}
 
       {/* Plan-usage banner — admin/manager only; hidden if all dimensions <80% or all unlimited */}
-      {(isAdmin || isManager) && <PlanUsageBanner />}
+      {isAdmin && <PlanUsageBanner />}
 
       {/* Multi-outlet enabled banner — fires once after 1→2 outlet transition */}
-      {(isAdmin || isManager) && <MultiOutletEnabledBanner />}
+      {isAdmin && <MultiOutletEnabledBanner />}
 
       {/* FBR prompt banner — PK tenants only, until set up or dismissed */}
-      {(isAdmin || isManager) && data && (
+      {isAdmin && data && (
         <FBRPromptBanner
           countryCode={data.countryCode}
           fbrBannerDismissed={data.fbrBannerDismissed}
@@ -163,20 +179,20 @@ export default function DashboardRedesign() {
       )}
 
       {/* Onboarding checklist — shown to admin/manager until dismissed or all steps complete */}
-      {(isAdmin || isManager) && (
+      {isAdmin && (
         <DashboardOnboarding data={data} onNavigate={onNavigate} />
       )}
 
       {/* AI Insight cards — pre-built analytics */}
-      {!isCashier && <InsightCards />}
+      {canViewReports && <InsightCards />}
 
       {/* Tier 1.1 wholesale: per-rep field sales summary. Renders nothing
           unless wholesale_field_sales flag is on AND tenant has field reps. */}
-      {!isCashier && <FieldSummaryCards />}
+      {canFieldSales && <FieldSummaryCards />}
 
       {/* Quick actions — role-aware horizontal button bar */}
       <div className="mb-4">
-        <DashboardQuickActions isAdmin={isAdmin} isManager={isManager} />
+        <DashboardQuickActions hasPerm={hasPerm} />
       </div>
 
       {/* Ops readiness — shift status, staff, last sale */}
@@ -196,7 +212,7 @@ export default function DashboardRedesign() {
 
       {/* KPI cards */}
       <div className="mb-4">
-        <DashboardKPICards data={data} isCashier={isCashier} onNavigate={onNavigate} />
+        <DashboardKPICards data={data} isCashier={limitedView} onNavigate={onNavigate} />
       </div>
 
       {/* Tier 0.5 — wholesale A/R cards (mode-gated) */}
@@ -215,14 +231,14 @@ export default function DashboardRedesign() {
       )}
 
       {/* Outlet ranking — all-branches only, admin/manager only */}
-      {!isSingleBranch && !isCashier && (
+      {!isSingleBranch && canViewReports && (
         <div className="mb-4">
           <DashboardOutletRanking data={data} onNavigate={onNavigate} />
         </div>
       )}
 
       {/* Exceptions — hidden for cashier */}
-      {!isCashier && (
+      {canViewReports && (
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <DashboardExceptions data={data} onNavigate={onNavigate} />
           <DashboardRiskSummary />
@@ -230,28 +246,28 @@ export default function DashboardRedesign() {
       )}
 
       {/* Trends — hidden for cashier */}
-      {!isCashier && (
+      {canViewReports && (
         <div className="mb-4">
           <DashboardTrends data={data} />
         </div>
       )}
 
       {/* Payment + category contribution — hidden for cashier */}
-      {!isCashier && (
+      {canViewReports && (
         <div className="mb-4">
           <DashboardContribution data={data} />
         </div>
       )}
 
       {/* Top products — hidden for cashier */}
-      {!isCashier && (
+      {canViewReports && (
         <div className="mb-4">
           <DashboardTopProducts data={data} />
         </div>
       )}
 
       {/* Inventory alerts — hidden for cashier + hidden if preset disables it */}
-      {!isCashier && (!presetLoaded || dashboard_widgets.inventory_alerts) && (
+      {canViewReports && (!presetLoaded || dashboard_widgets.inventory_alerts) && (
         <div className="mb-4">
           <DashboardInventoryAlerts data={data} />
         </div>
@@ -261,7 +277,7 @@ export default function DashboardRedesign() {
       <div className="mb-4">
         <DashboardAttendance
           data={data}
-          isCashier={isCashier}
+          isCashier={limitedView}
           currentEmployeeId={currentEmployeeId}
         />
       </div>

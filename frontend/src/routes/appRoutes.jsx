@@ -155,7 +155,8 @@ export const appRoutes = [
     <Route path="/customers" element={<CustomersRoute />} />
     <Route path="/crm" element={perm("manage_orders", <CRMRoute />)} />
     <Route path="/quotations" element={perm("manage_orders", <QuotationsRoute />)} />
-    <Route path="/attribute-sets" element={<AttributeSetsRoute />} />
+    {/* W0b C7 (role audit): route perm must agree with the nav guard */}
+    <Route path="/attribute-sets" element={perm("manage_inventory", <AttributeSetsRoute />)} />
     <Route path="/orders" element={perm("manage_orders", <OrdersRoute />)} />
     <Route path="/parked-sales" element={perm("manage_orders", <ParkedSalesRedesign />)} />
     <Route path="/holds" element={perm("manage_orders", <HoldsRoute />)} />
@@ -204,7 +205,8 @@ export const appRoutes = [
     <Route path="/hr" element={perm("all_access", <HRManagementRoute />)} />
     <Route path="/scheduling" element={perm("all_access", <SchedulingRoute />)} />
     <Route path="/company-settings" element={perm("all_access", <CompanySettingsRoute />)} />
-    <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
+    {/* W0b C7 (role audit): route perm must agree with the nav guard */}
+    <Route path="/receipt-templates" element={perm("manage_inventory", <ReceiptTemplatesRedesign />)} />
     <Route path="/printer-settings" element={perm("all_access", <PrinterSettingsRedesign />)} />
     <Route path="/courier-settings" element={perm("all_access", <CourierSettingsRedesign />)} />
     <Route path="/settings/notifications" element={perm("manage_inventory", wrap(NotificationSettingsRoute))} />
@@ -319,11 +321,14 @@ export const appRoutes = [
 
     {/* V05 — clinical depth: recalls (overdue patients), per-pet vaccination
         card, physio handout library. Flag checks (clinical_recalls /
-        vet_vaccinations / clinical_handouts) are inline in each page; front
-        desk with view_reports can read, so no perm() wrapper here. */}
-    <Route path="/recalls" element={wrap(RecallsRedesign)} />
+        vet_vaccinations / clinical_handouts) are inline in each page.
+        W0b C7 (role audit): recalls/handouts route perms now match their
+        nav guards (manage_treatment_plans) — the nav hid them while the
+        route stayed open by direct URL. Vaccination card stays open: it is
+        reached from customer detail, not nav, and is read-only. */}
+    <Route path="/recalls" element={perm("manage_treatment_plans", wrap(RecallsRedesign))} />
     <Route path="/vaccination-card/:subjectId" element={wrap(VaccinationCardRedesign)} />
-    <Route path="/handouts" element={wrap(HandoutsRedesign)} />
+    <Route path="/handouts" element={perm("manage_treatment_plans", wrap(HandoutsRedesign))} />
 
     {/* F03 — Form builder (intake/waivers/questionnaires). Flag check inline. */}
     <Route path="/settings/forms" element={perm("manage_forms", wrap(FormsRoute))} />
