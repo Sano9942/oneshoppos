@@ -234,6 +234,14 @@ export default function BusinessModulesRedesign() {
     if (m.setup_route) navigate(m.setup_route);
   };
 
+  // Bucket C dependents are NOT cascaded off on disable — the backend leaves
+  // them connected (their lifecycle belongs to their setup flow), so the
+  // confirm copy must not claim they'll turn off.
+  const disableDeps =
+    confirm?.direction === "disable" ? confirm.impact.dependents || [] : [];
+  const depsTurningOff = disableDeps.filter((d) => !(d.type === "module" && d.bucket === "C"));
+  const depsStayingConnected = disableDeps.filter((d) => d.type === "module" && d.bucket === "C");
+
   // ConfirmDialog renders `body` inside a <p>, so only inline elements here
   // (block tags would trip React's DOM-nesting dev warning).
   const confirmBody = confirm && (
@@ -263,10 +271,16 @@ export default function BusinessModulesRedesign() {
                 {c.label}: <span className="font-medium">{c.count}</span>
               </span>
             ))}
-          {confirm.impact.dependents?.length > 0 && (
+          {depsTurningOff.length > 0 && (
             <span className="block mb-2 text-(--ui-text)">
               Will also turn off:{" "}
-              <span className="font-medium">{confirm.impact.dependents.map((d) => d.title).join(", ")}</span>
+              <span className="font-medium">{depsTurningOff.map((d) => d.title).join(", ")}</span>
+            </span>
+          )}
+          {depsStayingConnected.length > 0 && (
+            <span className="block mb-2 text-(--ui-text)">
+              Will stay connected (disconnect via its setup page):{" "}
+              <span className="font-medium">{depsStayingConnected.map((d) => d.title).join(", ")}</span>
             </span>
           )}
           <span className="block">
