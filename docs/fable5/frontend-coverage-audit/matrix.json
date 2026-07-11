@@ -1,0 +1,2287 @@
+{
+  "generated": "2026-07-11T11:39:34.281Z",
+  "counts": {
+    "backendRoutes": 1347,
+    "frontendStructuredCalls": 1271,
+    "deadRouteCandidates": 144,
+    "brokenFrontendCalls": 9,
+    "pageFiles": 431,
+    "orphanPages": 1,
+    "routePaths": 223,
+    "unlinkedRoutes": 73,
+    "orphanFlags": 0
+  },
+  "deadRoutes": [
+    {
+      "method": "POST",
+      "path": "/api/admin/backup/verify",
+      "file": "backend/routes/admin/system.js",
+      "line": 401,
+      "pathOnlyMatch": false,
+      "fragment": "admin + verify",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminSecurity.jsx:73"
+      ],
+      "testHits": [
+        "frontend/tests/sweep/helpers/pause-for-email-verify.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/tenants/:id/suspend",
+      "file": "backend/routes/admin/tenants.js",
+      "line": 243,
+      "pathOnlyMatch": false,
+      "fragment": "admin + suspend",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:456"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/tenants/:id/activate",
+      "file": "backend/routes/admin/tenants.js",
+      "line": 265,
+      "pathOnlyMatch": false,
+      "fragment": "admin + activate",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:464",
+        "frontend/src/pages/redesign/pos/POSCheckoutModal.jsx:125"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/tenants/:id/migrate",
+      "file": "backend/routes/admin/tenants.js",
+      "line": 838,
+      "pathOnlyMatch": false,
+      "fragment": "admin + migrate",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminDashboard.jsx:598",
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:473"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/tenants/:id/reset-pin",
+      "file": "backend/routes/admin/tenants.js",
+      "line": 916,
+      "pathOnlyMatch": false,
+      "fragment": "admin + reset-pin",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:481"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/approval-policies/:id",
+      "file": "backend/routes/approval-policies.js",
+      "line": 54,
+      "pathOnlyMatch": false,
+      "fragment": "approval-policies",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/approval-policies/:id",
+      "file": "backend/routes/approval-policies.js",
+      "line": 79,
+      "pathOnlyMatch": false,
+      "fragment": "approval-policies",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/approvals/evaluate",
+      "file": "backend/routes/approval-policies.js",
+      "line": 161,
+      "pathOnlyMatch": false,
+      "fragment": "approvals + evaluate",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/attendance/:id/checkout",
+      "file": "backend/routes/attendance.js",
+      "line": 737,
+      "pathOnlyMatch": false,
+      "fragment": "attendance + checkout",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/kiosk-login",
+      "file": "backend/routes/auth.js",
+      "line": 616,
+      "pathOnlyMatch": false,
+      "fragment": "auth + kiosk-login",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/backorders/suggestions",
+      "file": "backend/routes/backorders.js",
+      "line": 93,
+      "pathOnlyMatch": false,
+      "fragment": "backorders + suggestions",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/batches/drift",
+      "file": "backend/routes/batches.js",
+      "line": 103,
+      "pathOnlyMatch": false,
+      "fragment": "batches + drift",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/batches/cost-flow",
+      "file": "backend/routes/batches.js",
+      "line": 118,
+      "pathOnlyMatch": false,
+      "fragment": "batches + cost-flow",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/classes/sessions/:id",
+      "file": "backend/routes/classes.js",
+      "line": 77,
+      "pathOnlyMatch": false,
+      "fragment": "classes + sessions",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/ClassTimetableRedesign.jsx:61"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/classes/waitlist",
+      "file": "backend/routes/classes.js",
+      "line": 216,
+      "pathOnlyMatch": false,
+      "fragment": "classes + waitlist",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/ClassTimetableRedesign.jsx:332",
+        "frontend/src/routes/appRoutes.jsx:279",
+        "frontend/src/ui/nav-config.js:168"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/couriers/:id/test-booking",
+      "file": "backend/routes/couriers.js",
+      "line": 171,
+      "pathOnlyMatch": false,
+      "fragment": "couriers + test-booking",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/ship",
+      "file": "backend/routes/couriers.js",
+      "line": 220,
+      "pathOnlyMatch": false,
+      "fragment": "orders + ship",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/OrdersRedesign.jsx:282",
+        "frontend/src/pages/storefront/StorefrontCheckout.jsx:52"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/shipments/:shipmentId/cancel",
+      "file": "backend/routes/couriers.js",
+      "line": 410,
+      "pathOnlyMatch": false,
+      "fragment": "orders + cancel",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/BackordersRedesign.jsx:111",
+        "frontend/src/pages/redesign/pos/hooks/useCheckout.js:421"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/tracking/refresh",
+      "file": "backend/routes/couriers.js",
+      "line": 458,
+      "pathOnlyMatch": false,
+      "fragment": "orders + refresh",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/orders/:id/tracking",
+      "file": "backend/routes/couriers.js",
+      "line": 538,
+      "pathOnlyMatch": false,
+      "fragment": "orders + tracking",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal/me/classes",
+      "file": "backend/routes/customer-portal/appointments.js",
+      "line": 247,
+      "pathOnlyMatch": false,
+      "fragment": "portal + classes",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/portal/me/classes/:sessionId/book",
+      "file": "backend/routes/customer-portal/appointments.js",
+      "line": 279,
+      "pathOnlyMatch": false,
+      "fragment": "portal + book",
+      "fragmentHits": [
+        "frontend/src/pages/portal/PortalAppointments.jsx:165",
+        "frontend/src/pages/portal/PortalStays.jsx:86",
+        "frontend/src/routes/publicRoutes.jsx:190"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/portal/me/classes/bookings/:id/cancel",
+      "file": "backend/routes/customer-portal/appointments.js",
+      "line": 299,
+      "pathOnlyMatch": false,
+      "fragment": "portal + cancel",
+      "fragmentHits": [
+        "frontend/src/pages/portal/PortalAppointments.jsx:53"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/portal/me/classes/:sessionId/waitlist",
+      "file": "backend/routes/customer-portal/appointments.js",
+      "line": 323,
+      "pathOnlyMatch": false,
+      "fragment": "portal + waitlist",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal/me/sales",
+      "file": "backend/routes/customer-portal/data.js",
+      "line": 186,
+      "pathOnlyMatch": false,
+      "fragment": "portal + sales",
+      "fragmentHits": [
+        "frontend/src/api/manufacturerPortalApi.js:76",
+        "frontend/src/pages/manufacturer-portal/ManufacturerPortalDashboard.jsx:138",
+        "frontend/src/pages/manufacturer-portal/ManufacturerPortalLayout.jsx:101"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal/me/orders",
+      "file": "backend/routes/customer-portal/data.js",
+      "line": 298,
+      "pathOnlyMatch": false,
+      "fragment": "portal + orders",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/StorefrontCart.jsx:9"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/customers/:id/wallet/topup-link",
+      "file": "backend/routes/customers.js",
+      "line": 843,
+      "pathOnlyMatch": false,
+      "fragment": "customers + topup-link",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/draft-orders/:id/claim",
+      "file": "backend/routes/draft-orders.js",
+      "line": 217,
+      "pathOnlyMatch": false,
+      "fragment": "draft-orders + claim",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/smoke/draft-orders-returns.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/draft-orders/:id/complete",
+      "file": "backend/routes/draft-orders.js",
+      "line": 245,
+      "pathOnlyMatch": false,
+      "fragment": "draft-orders + complete",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/smoke/draft-orders-returns.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/email/send-receipt",
+      "file": "backend/routes/email.js",
+      "line": 123,
+      "pathOnlyMatch": false,
+      "fragment": "email + send-receipt",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/pos/POSEmailReceiptModal.jsx:26"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/employees/:id/revoke-token",
+      "file": "backend/routes/employees.js",
+      "line": 262,
+      "pathOnlyMatch": false,
+      "fragment": "employees + revoke-token",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/inventory-intelligence/cycle-sessions/:id/complete",
+      "file": "backend/routes/inventory-intelligence.js",
+      "line": 508,
+      "pathOnlyMatch": false,
+      "fragment": "inventory-intelligence + complete",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/product-affinities/:id",
+      "file": "backend/routes/item-suggestions.js",
+      "line": 110,
+      "pathOnlyMatch": false,
+      "fragment": "product-affinities",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/product-affinities/regenerate",
+      "file": "backend/routes/item-suggestions.js",
+      "line": 121,
+      "pathOnlyMatch": false,
+      "fragment": "product-affinities + regenerate",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/loyalty/customers/:id/ledger",
+      "file": "backend/routes/loyalty.js",
+      "line": 74,
+      "pathOnlyMatch": false,
+      "fragment": "loyalty + ledger",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/CustomersRedesign.jsx:591"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/loyalty/customers/:id/adjust",
+      "file": "backend/routes/loyalty.js",
+      "line": 116,
+      "pathOnlyMatch": false,
+      "fragment": "loyalty + adjust",
+      "fragmentHits": [
+        "frontend/src/routes/appRoutes.jsx:176",
+        "frontend/src/ui/nav-config.js:118"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/member-kiosk/lookup",
+      "file": "backend/routes/member-kiosk.js",
+      "line": 53,
+      "pathOnlyMatch": false,
+      "fragment": "member-kiosk + lookup",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/members/:id/assign-code",
+      "file": "backend/routes/members.js",
+      "line": 111,
+      "pathOnlyMatch": false,
+      "fragment": "members + assign-code",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/products/:id/modifier-groups/:groupId",
+      "file": "backend/routes/modifiers.js",
+      "line": 113,
+      "pathOnlyMatch": false,
+      "fragment": "products + modifier-groups",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/modifiers/attach",
+      "file": "backend/routes/modifiers.js",
+      "line": 138,
+      "pathOnlyMatch": false,
+      "fragment": "modifiers + attach",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/products/:id/media/:mediaId",
+      "file": "backend/routes/orders.js",
+      "line": 225,
+      "pathOnlyMatch": false,
+      "fragment": "products + media",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/transactions",
+      "file": "backend/routes/orders.js",
+      "line": 563,
+      "pathOnlyMatch": false,
+      "fragment": "orders + transactions",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/fulfillments",
+      "file": "backend/routes/orders.js",
+      "line": 607,
+      "pathOnlyMatch": false,
+      "fragment": "orders + fulfillments",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/outlet-visibility/by-outlet/:outletId",
+      "file": "backend/routes/outlet-visibility.js",
+      "line": 57,
+      "pathOnlyMatch": false,
+      "fragment": "outlet-visibility + by-outlet",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/outlet-visibility/bulk",
+      "file": "backend/routes/outlet-visibility.js",
+      "line": 76,
+      "pathOnlyMatch": false,
+      "fragment": "outlet-visibility + bulk",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/override-reasons/:id",
+      "file": "backend/routes/override-reasons.js",
+      "line": 48,
+      "pathOnlyMatch": false,
+      "fragment": "override-reasons",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/pos/POSPriceOverrideModal.jsx:39"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/override-reasons/:id",
+      "file": "backend/routes/override-reasons.js",
+      "line": 75,
+      "pathOnlyMatch": false,
+      "fragment": "override-reasons",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/pos/POSPriceOverrideModal.jsx:39"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/package-templates/:id",
+      "file": "backend/routes/packages.js",
+      "line": 120,
+      "pathOnlyMatch": false,
+      "fragment": "package-templates",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/package-templates/:id",
+      "file": "backend/routes/packages.js",
+      "line": 148,
+      "pathOnlyMatch": false,
+      "fragment": "package-templates",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id/packages",
+      "file": "backend/routes/packages.js",
+      "line": 164,
+      "pathOnlyMatch": false,
+      "fragment": "customers + packages",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/customers/:id/packages",
+      "file": "backend/routes/packages.js",
+      "line": 187,
+      "pathOnlyMatch": false,
+      "fragment": "customers + packages",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/packages/:id/redeem",
+      "file": "backend/routes/packages.js",
+      "line": 207,
+      "pathOnlyMatch": false,
+      "fragment": "packages + redeem",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/packages/:id/reverse",
+      "file": "backend/routes/packages.js",
+      "line": 239,
+      "pathOnlyMatch": false,
+      "fragment": "packages + reverse",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/print/status",
+      "file": "backend/routes/printer.js",
+      "line": 38,
+      "pathOnlyMatch": false,
+      "fragment": "print + status",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/price-lists/:id/bulk-items",
+      "file": "backend/routes/products.js",
+      "line": 1768,
+      "pathOnlyMatch": false,
+      "fragment": "price-lists + bulk-items",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/quotations/:id/approve",
+      "file": "backend/routes/projects.js",
+      "line": 70,
+      "pathOnlyMatch": false,
+      "fragment": "quotations + approve",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/quotations/:id/convert-to-project",
+      "file": "backend/routes/projects.js",
+      "line": 79,
+      "pathOnlyMatch": false,
+      "fragment": "quotations + convert-to-project",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/customer-invoices/:id/attach-to-project",
+      "file": "backend/routes/projects.js",
+      "line": 94,
+      "pathOnlyMatch": false,
+      "fragment": "customer-invoices + attach-to-project",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/bookings/deposit-intent",
+      "file": "backend/routes/public-bookings.js",
+      "line": 129,
+      "pathOnlyMatch": false,
+      "fragment": "public + deposit-intent",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/bookings/classes",
+      "file": "backend/routes/public-bookings.js",
+      "line": 200,
+      "pathOnlyMatch": false,
+      "fragment": "public + classes",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/bookings/classes/book",
+      "file": "backend/routes/public-bookings.js",
+      "line": 231,
+      "pathOnlyMatch": false,
+      "fragment": "public + book",
+      "fragmentHits": [
+        "frontend/src/pages/portal/PortalAppointments.jsx:165",
+        "frontend/src/pages/portal/PortalStays.jsx:86",
+        "frontend/src/pages/public/PublicBookingPage.jsx:40"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/bookings.smoke.spec.js",
+        "frontend/tests/smoke/restaurant-reservations.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/bookings/classes/waitlist",
+      "file": "backend/routes/public-bookings.js",
+      "line": 269,
+      "pathOnlyMatch": false,
+      "fragment": "public + waitlist",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/smoke/restaurant-reservations.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/bookings/waitlist/claim",
+      "file": "backend/routes/public-bookings.js",
+      "line": 296,
+      "pathOnlyMatch": false,
+      "fragment": "public + claim",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/bookings/waitlist/claim",
+      "file": "backend/routes/public-bookings.js",
+      "line": 330,
+      "pathOnlyMatch": false,
+      "fragment": "public + claim",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/bookings/employee-feed.ics",
+      "file": "backend/routes/public-bookings.js",
+      "line": 424,
+      "pathOnlyMatch": false,
+      "fragment": "public + employee-feed.ics",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/rentals/config",
+      "file": "backend/routes/public-rentals.js",
+      "line": 35,
+      "pathOnlyMatch": false,
+      "fragment": "public + config",
+      "fragmentHits": [
+        "frontend/src/pages/CustomerDisplayPage.jsx:2",
+        "frontend/src/pages/GiftCardBalancePage.jsx:3",
+        "frontend/src/pages/manufacturer-portal/ManufacturerPortalLayout.jsx:11"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/bookings.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/rentals/items",
+      "file": "backend/routes/public-rentals.js",
+      "line": 59,
+      "pathOnlyMatch": false,
+      "fragment": "public + items",
+      "fragmentHits": [
+        "frontend/src/pages/public/PublicRestaurantMenuPage.jsx:102"
+      ],
+      "testHits": [
+        "frontend/tests/order-kiosk.spec.js",
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/rentals/items/:id/availability",
+      "file": "backend/routes/public-rentals.js",
+      "line": 78,
+      "pathOnlyMatch": false,
+      "fragment": "public + availability",
+      "fragmentHits": [
+        "frontend/src/pages/portal/PortalAppointments.jsx:153",
+        "frontend/src/pages/public/PublicBookingPage.jsx:75",
+        "frontend/src/pages/public/PublicRoomBookingPage.jsx:57"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/bookings.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/rentals/reserve",
+      "file": "backend/routes/public-rentals.js",
+      "line": 98,
+      "pathOnlyMatch": false,
+      "fragment": "public + reserve",
+      "fragmentHits": [
+        "frontend/src/pages/public/ReservationBookingPage.jsx:6",
+        "frontend/src/routes/publicRoutes.jsx:210"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/restaurant-reservations.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/restaurant/menu/:token",
+      "file": "backend/routes/public-restaurant.js",
+      "line": 94,
+      "pathOnlyMatch": false,
+      "fragment": "public + menu",
+      "fragmentHits": [
+        "frontend/src/pages/public/PublicRestaurantMenuPage.jsx:41",
+        "frontend/src/pages/redesign/OrderKiosksRedesign.jsx:27",
+        "frontend/src/routes/publicRoutes.jsx:200"
+      ],
+      "testHits": [
+        "frontend/tests/order-kiosk.spec.js",
+        "frontend/tests/smoke/restaurant.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/restaurant/checks/:token/items",
+      "file": "backend/routes/public-restaurant.js",
+      "line": 159,
+      "pathOnlyMatch": false,
+      "fragment": "public + items",
+      "fragmentHits": [
+        "frontend/src/pages/public/PublicRestaurantMenuPage.jsx:102"
+      ],
+      "testHits": [
+        "frontend/tests/order-kiosk.spec.js",
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/restaurant/checks/:token/submit",
+      "file": "backend/routes/public-restaurant.js",
+      "line": 234,
+      "pathOnlyMatch": false,
+      "fragment": "public + submit",
+      "fragmentHits": [
+        "frontend/src/pages/public/PublicRestaurantMenuPage.jsx:131"
+      ],
+      "testHits": [
+        "frontend/tests/order-kiosk.spec.js",
+        "frontend/tests/sweep/functional-sweep.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/action-history/log",
+      "file": "backend/routes/receipt-templates.js",
+      "line": 194,
+      "pathOnlyMatch": false,
+      "fragment": "action-history + log",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/receipts/:invoiceNumber/public",
+      "file": "backend/routes/receipts.js",
+      "line": 4,
+      "pathOnlyMatch": false,
+      "fragment": "receipts + public",
+      "fragmentHits": [
+        "frontend/src/pages/ReceiptPublicPage.jsx:65",
+        "frontend/src/pages/redesign/pos/POSReceiptModal.jsx:5",
+        "frontend/src/utils/publicReceipt.js:8"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/feature-flags/:key",
+      "file": "backend/routes/registerAllRoutes.js",
+      "line": 431,
+      "pathOnlyMatch": false,
+      "fragment": "feature-flags",
+      "fragmentHits": [
+        "frontend/src/hooks/useFeatureFlags.js:88",
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:39",
+        "frontend/src/pages/redesign/KioskRedesign.jsx:127"
+      ],
+      "testHits": [
+        "frontend/tests/onboard-dental-clinic.spec.js",
+        "frontend/tests/order-kiosk.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/rental-items/:id/availability",
+      "file": "backend/routes/rentals.js",
+      "line": 69,
+      "pathOnlyMatch": false,
+      "fragment": "rental-items + availability",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/rental-items/:id/assets",
+      "file": "backend/routes/rentals.js",
+      "line": 81,
+      "pathOnlyMatch": false,
+      "fragment": "rental-items + assets",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/rental-items/:id/assets",
+      "file": "backend/routes/rentals.js",
+      "line": 88,
+      "pathOnlyMatch": false,
+      "fragment": "rental-items + assets",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/rental-items/:id/assets/:assetId",
+      "file": "backend/routes/rentals.js",
+      "line": 95,
+      "pathOnlyMatch": false,
+      "fragment": "rental-items + assets",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/rental-contracts/:id/notes",
+      "file": "backend/routes/rentals.js",
+      "line": 249,
+      "pathOnlyMatch": false,
+      "fragment": "rental-contracts + notes",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/rental-assets/maintenance-due",
+      "file": "backend/routes/rentals.js",
+      "line": 325,
+      "pathOnlyMatch": false,
+      "fragment": "rental-assets + maintenance-due",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/rental-items/:id/assets/:assetId/maintenance",
+      "file": "backend/routes/rentals.js",
+      "line": 332,
+      "pathOnlyMatch": false,
+      "fragment": "rental-items + maintenance",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/builder/definitions/:id/schedule",
+      "file": "backend/routes/report-builder.js",
+      "line": 271,
+      "pathOnlyMatch": false,
+      "fragment": "reports + schedule",
+      "fragmentHits": [
+        "frontend/src/pages/reports/ReportsGovernance.jsx:214",
+        "frontend/src/routes/appRoutes.jsx:264",
+        "frontend/src/ui/nav-config.js:111"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/reports/schedules/:id",
+      "file": "backend/routes/reports/governance.js",
+      "line": 513,
+      "pathOnlyMatch": false,
+      "fragment": "reports + schedules",
+      "fragmentHits": [
+        "frontend/src/pages/reports/ReportsGovernance.jsx:214"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/reports/schedules/:id",
+      "file": "backend/routes/reports/governance.js",
+      "line": 566,
+      "pathOnlyMatch": false,
+      "fragment": "reports + schedules",
+      "fragmentHits": [
+        "frontend/src/pages/reports/ReportsGovernance.jsx:214"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/schedules/:id/runs",
+      "file": "backend/routes/reports/governance.js",
+      "line": 605,
+      "pathOnlyMatch": false,
+      "fragment": "reports + runs",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/reports/saved-views/:id",
+      "file": "backend/routes/reports/governance.js",
+      "line": 704,
+      "pathOnlyMatch": false,
+      "fragment": "reports + saved-views",
+      "fragmentHits": [
+        "frontend/src/pages/reports/ReportsGovernance.jsx:211"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/reports/saved-views/:id",
+      "file": "backend/routes/reports/governance.js",
+      "line": 732,
+      "pathOnlyMatch": false,
+      "fragment": "reports + saved-views",
+      "fragmentHits": [
+        "frontend/src/pages/reports/ReportsGovernance.jsx:211"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/restaurant/tables/:id",
+      "file": "backend/routes/restaurant.js",
+      "line": 111,
+      "pathOnlyMatch": false,
+      "fragment": "restaurant + tables",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/restaurant/WaitlistRedesign.jsx:86",
+        "frontend/src/pages/redesign/RestaurantFloorRedesign.jsx:104"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js",
+        "frontend/tests/smoke/restaurant-shell.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/restaurant/checks/:id/print-bill",
+      "file": "backend/routes/restaurant.js",
+      "line": 276,
+      "pathOnlyMatch": false,
+      "fragment": "restaurant + print-bill",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/smoke/restaurant-printer-routing.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/restaurant/tabs/:id/close",
+      "file": "backend/routes/restaurant.js",
+      "line": 417,
+      "pathOnlyMatch": false,
+      "fragment": "restaurant + close",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/pos/POSContext.jsx:385",
+        "frontend/src/pages/redesign/TipPoolsRedesign.jsx:109"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/restaurant-shell.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/room-bookings/:id/deposit/preauth",
+      "file": "backend/routes/rooms.js",
+      "line": 329,
+      "pathOnlyMatch": false,
+      "fragment": "room-bookings + preauth",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/room-bookings/:id/guests/:guestId",
+      "file": "backend/routes/rooms.js",
+      "line": 403,
+      "pathOnlyMatch": false,
+      "fragment": "room-bookings + guests",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/room-bookings/:id/guests/documents",
+      "file": "backend/routes/rooms.js",
+      "line": 421,
+      "pathOnlyMatch": false,
+      "fragment": "room-bookings + documents",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/room-booking-groups/:id",
+      "file": "backend/routes/rooms.js",
+      "line": 457,
+      "pathOnlyMatch": false,
+      "fragment": "room-booking-groups",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/room-booking-groups/:id/master-folio",
+      "file": "backend/routes/rooms.js",
+      "line": 472,
+      "pathOnlyMatch": false,
+      "fragment": "room-booking-groups + master-folio",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/sandbox/pay/:gatewayRef",
+      "file": "backend/routes/sandbox.js",
+      "line": 86,
+      "pathOnlyMatch": false,
+      "fragment": "sandbox + pay",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/sandbox/simulate-webhook",
+      "file": "backend/routes/sandbox.js",
+      "line": 177,
+      "pathOnlyMatch": false,
+      "fragment": "sandbox + simulate-webhook",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/sandbox/tokenize",
+      "file": "backend/routes/sandbox.js",
+      "line": 250,
+      "pathOnlyMatch": false,
+      "fragment": "sandbox + tokenize",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/sandbox/charge-saved",
+      "file": "backend/routes/sandbox.js",
+      "line": 271,
+      "pathOnlyMatch": false,
+      "fragment": "sandbox + charge-saved",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/setup/complete",
+      "file": "backend/routes/setup.js",
+      "line": 95,
+      "pathOnlyMatch": false,
+      "fragment": "setup + complete",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/RentalsRedesign.jsx:653",
+        "frontend/src/pages/SetupWizard.jsx:323"
+      ],
+      "testHits": [
+        "frontend/tests/onboard-dental-clinic.spec.js",
+        "frontend/tests/onboard-physiotherapy.spec.js"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/shifts/:id/variance-approve",
+      "file": "backend/routes/shifts.js",
+      "line": 246,
+      "pathOnlyMatch": false,
+      "fragment": "shifts + variance-approve",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/shopify/webhooks/setup",
+      "file": "backend/routes/shopify/health.js",
+      "line": 192,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + setup",
+      "fragmentHits": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx:128"
+      ],
+      "testHits": [
+        "frontend/tests/onboard-pro.spec.js"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/integrations/mappings/products/:id",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 30,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + products",
+      "fragmentHits": [
+        "frontend/src/pages/shopify/ShopifyContext.jsx:56",
+        "frontend/src/pages/shopify/ShopifyImport.jsx:25",
+        "frontend/src/routes/appRoutes.jsx:171"
+      ],
+      "testHits": [
+        "frontend/tests/onboard-pro.spec.js",
+        "frontend/tests/permissions.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/mappings/products/auto",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 69,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + auto",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/mappings/products/auto-live",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 87,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + auto-live",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/mappings/products/apply-suggestions",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 176,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + apply-suggestions",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/integrations/mappings/locations/:outletId",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 291,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + locations",
+      "fragmentHits": [
+        "frontend/src/pages/shopify/ShopifyContext.jsx:57",
+        "frontend/src/pages/shopify/ShopifyMappings.jsx:57"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/integrations/mappings/customers/:customerId",
+      "file": "backend/routes/shopify/mappings.js",
+      "line": 338,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + customers",
+      "fragmentHits": [
+        "frontend/src/pages/shopify/ShopifyContext.jsx:58",
+        "frontend/src/routes/appRoutes.jsx:155",
+        "frontend/src/ui/nav-config.js:89"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/helpers/cleanup.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/sync/pull-orders",
+      "file": "backend/routes/shopify/orders.js",
+      "line": 8,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + pull-orders",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/sync/retry-event/:id",
+      "file": "backend/routes/shopify/sync.js",
+      "line": 52,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + retry-event",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/sync/process-pending",
+      "file": "backend/routes/shopify/sync.js",
+      "line": 88,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + process-pending",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/sync/retry-failed",
+      "file": "backend/routes/shopify/sync.js",
+      "line": 125,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + retry-failed",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/sync/push-inventory",
+      "file": "backend/routes/shopify/sync.js",
+      "line": 152,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + push-inventory",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/shopify/webhooks/orders-create",
+      "file": "backend/routes/shopify/webhooks.js",
+      "line": 9,
+      "pathOnlyMatch": false,
+      "fragment": "integrations + orders-create",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/cart",
+      "file": "backend/routes/storefront.js",
+      "line": 418,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + cart",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/StorefrontCheckout.jsx:225",
+        "frontend/src/pages/storefront/StorefrontLayout.jsx:147",
+        "frontend/src/pages/storefront/useStorefrontCart.js:38"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/storefront/cart/:token",
+      "file": "backend/routes/storefront.js",
+      "line": 443,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + cart",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/StorefrontCheckout.jsx:225",
+        "frontend/src/pages/storefront/StorefrontLayout.jsx:147",
+        "frontend/src/pages/storefront/useStorefrontCart.js:38"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/cart/:token/items",
+      "file": "backend/routes/storefront.js",
+      "line": 466,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + items",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/useStorefrontCart.js:88"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/storefront/cart/:token/items/:itemId",
+      "file": "backend/routes/storefront.js",
+      "line": 510,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + items",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/useStorefrontCart.js:88"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/storefront/cart/:token/items/:itemId",
+      "file": "backend/routes/storefront.js",
+      "line": 548,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + items",
+      "fragmentHits": [
+        "frontend/src/pages/storefront/useStorefrontCart.js:88"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/omnichannel-admin.smoke.spec.js",
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/cart/:token/quote",
+      "file": "backend/routes/storefront.js",
+      "line": 576,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + quote",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/field/FieldOrderRedesign.jsx:134",
+        "frontend/src/pages/storefront/useStorefrontCart.js:160"
+      ],
+      "testHits": [
+        "frontend/tests/smoke/storefront-public.smoke.spec.js"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/orders/:orderToken/pay",
+      "file": "backend/routes/storefront.js",
+      "line": 1031,
+      "pathOnlyMatch": false,
+      "fragment": "storefront + pay",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/transfers/:id/submit",
+      "file": "backend/routes/tier4/approvals.js",
+      "line": 119,
+      "pathOnlyMatch": false,
+      "fragment": "transfers + submit",
+      "fragmentHits": [],
+      "testHits": [
+        "frontend/tests/sweep/functional-sweep.spec.js"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/hr/leave/schedule-conflicts",
+      "file": "backend/routes/tier4/hr.js",
+      "line": 478,
+      "pathOnlyMatch": false,
+      "fragment": "hr + schedule-conflicts",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/treatment-sessions/:id",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 186,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-sessions",
+      "fragmentHits": [
+        "frontend/src/pages/redesign/TreatmentPlansRedesign.jsx:425"
+      ],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-sessions/:id/no-show",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 209,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-sessions + no-show",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-sessions/:id/cancel",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 217,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-sessions + cancel",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/session-chart-entries/:id",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 250,
+      "pathOnlyMatch": false,
+      "fragment": "session-chart-entries",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/session-chart-entries/:id",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 258,
+      "pathOnlyMatch": false,
+      "fragment": "session-chart-entries",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/lab-orders/:id/result",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 290,
+      "pathOnlyMatch": false,
+      "fragment": "lab-orders + result",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/clinical-documents/:id",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 384,
+      "pathOnlyMatch": false,
+      "fragment": "clinical-documents",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-sessions/:id/prescriptions",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 401,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-sessions + prescriptions",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-folios/:id/lines",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 418,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-folios + lines",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-folios/:id/attach-sale",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 425,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-folios + attach-sale",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/treatment-plans/:id/deposit/preauth",
+      "file": "backend/routes/treatment-plans.js",
+      "line": 450,
+      "pathOnlyMatch": false,
+      "fragment": "treatment-plans + preauth",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/van/:outletId/reconcile-preview",
+      "file": "backend/routes/van.js",
+      "line": 128,
+      "pathOnlyMatch": false,
+      "fragment": "van + reconcile-preview",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/van-reconciliations/:id/confirm",
+      "file": "backend/routes/van.js",
+      "line": 260,
+      "pathOnlyMatch": false,
+      "fragment": "van-reconciliations + confirm",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/xpay",
+      "file": "backend/routes/webhooks.js",
+      "line": 559,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + xpay",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks/meta",
+      "file": "backend/routes/webhooks.js",
+      "line": 593,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + meta",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/meta",
+      "file": "backend/routes/webhooks.js",
+      "line": 606,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + meta",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks/whatsapp",
+      "file": "backend/routes/webhooks.js",
+      "line": 661,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + whatsapp",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/whatsapp",
+      "file": "backend/routes/webhooks.js",
+      "line": 674,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + whatsapp",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/daraz",
+      "file": "backend/routes/webhooks.js",
+      "line": 739,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + daraz",
+      "fragmentHits": [],
+      "testHits": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/${source}",
+      "file": "backend/routes/webhooks.js",
+      "line": 808,
+      "pathOnlyMatch": false,
+      "fragment": "webhooks + ${source}",
+      "fragmentHits": [],
+      "testHits": []
+    }
+  ],
+  "brokenCalls": [
+    {
+      "method": null,
+      "path": "/api/manufacturer-portal/auth/refresh\", slug)}",
+      "file": "frontend/src/api/manufacturerPortalApi.js",
+      "line": 38
+    },
+    {
+      "method": null,
+      "path": "/api/portal/auth/refresh\", slug)}",
+      "file": "frontend/src/api/portalApi.js",
+      "line": 33
+    },
+    {
+      "method": null,
+      "path": "/api/admin/adoption${force",
+      "file": "frontend/src/pages/admin/AdminAdoption.jsx",
+      "line": 18
+    },
+    {
+      "method": "GET",
+      "path": "/api/shifts${selectedOutlet",
+      "file": "frontend/src/pages/redesign/CashManagementRedesign.jsx",
+      "line": 99
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounting/trial-balance${qs",
+      "file": "frontend/src/pages/redesign/JournalEntriesRedesign.jsx",
+      "line": 255
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounting/cheques${qs",
+      "file": "frontend/src/pages/redesign/PostdatedChequesRedesign.jsx",
+      "line": 84
+    },
+    {
+      "method": "GET",
+      "path": "/api/room-bookings${qs.toString()",
+      "file": "frontend/src/pages/redesign/RoomManagementRedesign.jsx",
+      "line": 676
+    },
+    {
+      "method": null,
+      "path": "/api/setup/status${tenantSlug",
+      "file": "frontend/src/pages/SetupWizard.jsx",
+      "line": 206
+    },
+    {
+      "method": null,
+      "path": "/api/setup/complete${tenantSlug",
+      "file": "frontend/src/pages/SetupWizard.jsx",
+      "line": 323
+    }
+  ],
+  "orphanPages": [
+    "frontend/src/pages/redesign/pos/POSApprovalModal.jsx"
+  ],
+  "unlinkedRoutes": [
+    "/*",
+    "/activity",
+    "/adoption",
+    "/appointments",
+    "/book/:tenantSlug",
+    "/cart",
+    "/checkout",
+    "/custom-fields",
+    "/customer-display",
+    "/dead-letters",
+    "/emails",
+    "/field/order/:customer_id",
+    "/forgot",
+    "/forgot-password",
+    "/forms",
+    "/forms/fill/:token",
+    "/gallery",
+    "/gift-card/:code",
+    "/inquire/:tenantSlug",
+    "/integrations/shopify",
+    "/integrations/woocommerce",
+    "/invoice-paid",
+    "/invoices",
+    "/lookup",
+    "/loyalty",
+    "/member-checkin",
+    "/menu/:token",
+    "/module-locks",
+    "/packages",
+    "/partners",
+    "/pay/:token",
+    "/products",
+    "/receipt/:invoiceNumber",
+    "/rentals",
+    "/reports/category-wise",
+    "/reports/customer-details",
+    "/reports/customer-wise",
+    "/reports/inventory-dump",
+    "/reports/inventory-loss",
+    "/reports/item-wise",
+    "/reports/kds-analytics",
+    "/reports/menu-engineering",
+    "/reports/on-hand-inventory",
+    "/reports/order-wise",
+    "/reports/parent-report",
+    "/reports/product-movement",
+    "/reports/product-performance",
+    "/reports/product-specification",
+    "/reports/replenishment",
+    "/reports/sales-and-stock",
+    "/reports/sales-detail",
+    "/reports/sales-summary",
+    "/reports/supplier-wise",
+    "/reports/wastage",
+    "/reserve/:tenantSlug",
+    "/reset",
+    "/reset-password",
+    "/retail/home",
+    "/sales",
+    "/security",
+    "/shopcast",
+    "/stays",
+    "/stuck-payments",
+    "/support",
+    "/tax-rates",
+    "/tenants",
+    "/tickets",
+    "/treatment-plans",
+    "/treatment-plans/chart/:planId",
+    "/treatments",
+    "/verify-email",
+    "/verify-otp",
+    "/wallet"
+  ],
+  "flagReport": {
+    "defaults": {
+      "backup_restore": true,
+      "e_invoicing_export": true,
+      "supplier_payables": true,
+      "approvals": true,
+      "notifications": true,
+      "accounting_core": true,
+      "crm_quotations": true,
+      "advanced_hr": true,
+      "multi_company": true,
+      "reports_enhanced_filters": false,
+      "reports_profit_layer": false,
+      "reports_inventory_health_plus": false,
+      "reports_exceptions": false,
+      "reports_scheduled_exports": false,
+      "context_selection_required": false,
+      "context_header_enforced": false,
+      "kiosk_context_locked": false,
+      "marketplace_integrations": true,
+      "phase2_scheduling": true,
+      "phase2_outlet_pricing": false,
+      "phase2_draft_orders": false,
+      "phase2_pos_approvals": false,
+      "phase2_returns_policy": true,
+      "phase2_smart_collections": true,
+      "phase2_outlet_visibility": false,
+      "phase2_outlet_tax": true,
+      "phase2_scheduled_changes": true,
+      "phase2_commissions": false,
+      "phase2_report_builder": true,
+      "phase2_pos_layouts": true,
+      "phase2_item_suggestions": false,
+      "marketing_campaigns": true,
+      "customer_messaging": true,
+      "customer_invoicing": true,
+      "customer_notifications": false,
+      "payment_links": false,
+      "ai_insights": true,
+      "subscription_billing": false,
+      "sms_campaigns": false,
+      "subscription_autocharge": false,
+      "phase4_restaurant": false,
+      "phase4_restaurant_qr": false,
+      "phase4_restaurant_kds": false,
+      "phase4_restaurant_preauth": false,
+      "phase4_restaurant_86": false,
+      "phase4_restaurant_void_comp": false,
+      "phase4_restaurant_pay_at_table": false,
+      "phase4_restaurant_reservations": false,
+      "phase4_restaurant_kds_analytics": false,
+      "phase4_restaurant_day_parting": false,
+      "phase4_restaurant_fire_chits": false,
+      "phase4_restaurant_seats": false,
+      "phase4_restaurant_drive_thru": false,
+      "phase4_restaurant_menu_engineering": false,
+      "delivery_aggregators": false,
+      "phase4_appointments": false,
+      "phase4_appointments_waitlists": false,
+      "phase4_appointments_classes": false,
+      "phase4_appointments_resources": false,
+      "packages_passes": false,
+      "member_checkin": false,
+      "phase4_service_projects": false,
+      "phase4_service_contracts": false,
+      "phase4_contract_ai": false,
+      "phase4_workflow_tickets": false,
+      "phase4_rentals": false,
+      "rental_inspections": false,
+      "rental_online_booking": false,
+      "phase4_room_management": false,
+      "room_channel_sync": false,
+      "room_online_booking": false,
+      "room_guest_registration": false,
+      "phase4_treatment_plans": false,
+      "clinical_recalls": false,
+      "vet_vaccinations": false,
+      "clinical_handouts": false,
+      "custom_forms": false,
+      "phase5_shipping_automation": false,
+      "phase5_cod_reconciliation": false,
+      "phase5_payment_gateways": false,
+      "phase5_sms_providers": false,
+      "phase2g_omni_input": false,
+      "phase2g_variant_picker": false,
+      "phase2g_gift_cards": false,
+      "phase2g_loyalty": false,
+      "phase2g_price_books": false,
+      "phase2g_price_override": false,
+      "phase2g_serialized_inventory": false,
+      "phase2g_per_line_restock": false,
+      "phase2g_inventory_intelligence": false,
+      "phase2g_receipt_barcode_lookup": false,
+      "phase2g_label_designer": false,
+      "phase2g_holds": false,
+      "phase2g_risk_controls": false,
+      "retail_weekly_digest": false,
+      "receipt_designer_v2": true,
+      "shift_auto_close": false,
+      "offline_returns": false,
+      "wholesale_credit_controls": false,
+      "wholesale_field_sales": false,
+      "wholesale_schemes": false,
+      "wholesale_secondary_sales": false,
+      "wholesale_backorders": false,
+      "wholesale_van_sales": false,
+      "kit_bom_engine": false,
+      "batch_expiry_tracking": false
+    },
+    "orphanFlags": [],
+    "classification": {
+      "backup_restore": [
+        "default_on",
+        "module_card"
+      ],
+      "e_invoicing_export": [
+        "default_on",
+        "module_card"
+      ],
+      "supplier_payables": [
+        "default_on",
+        "module_card"
+      ],
+      "approvals": [
+        "default_on",
+        "module_card"
+      ],
+      "notifications": [
+        "default_on",
+        "unmanaged_bucketD"
+      ],
+      "accounting_core": [
+        "default_on",
+        "module_card"
+      ],
+      "crm_quotations": [
+        "default_on",
+        "module_card"
+      ],
+      "advanced_hr": [
+        "default_on",
+        "module_card"
+      ],
+      "multi_company": [
+        "default_on",
+        "unmanaged_bucketD"
+      ],
+      "reports_enhanced_filters": [
+        "module_card"
+      ],
+      "reports_profit_layer": [
+        "module_card"
+      ],
+      "reports_inventory_health_plus": [
+        "module_card"
+      ],
+      "reports_exceptions": [
+        "module_card"
+      ],
+      "reports_scheduled_exports": [
+        "module_card"
+      ],
+      "context_selection_required": [
+        "unmanaged_bucketD"
+      ],
+      "context_header_enforced": [
+        "unmanaged_bucketD"
+      ],
+      "kiosk_context_locked": [
+        "unmanaged_bucketD"
+      ],
+      "marketplace_integrations": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_scheduling": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_outlet_pricing": [
+        "sub_toggle"
+      ],
+      "phase2_draft_orders": [
+        "module_card"
+      ],
+      "phase2_pos_approvals": [
+        "module_card"
+      ],
+      "phase2_returns_policy": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_smart_collections": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_outlet_visibility": [
+        "sub_toggle"
+      ],
+      "phase2_outlet_tax": [
+        "default_on",
+        "sub_toggle"
+      ],
+      "phase2_scheduled_changes": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_commissions": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase2_report_builder": [
+        "default_on",
+        "module_card"
+      ],
+      "phase2_pos_layouts": [
+        "default_on",
+        "sub_toggle"
+      ],
+      "phase2_item_suggestions": [
+        "sub_toggle"
+      ],
+      "marketing_campaigns": [
+        "default_on",
+        "module_card"
+      ],
+      "customer_messaging": [
+        "default_on",
+        "module_card"
+      ],
+      "customer_invoicing": [
+        "default_on",
+        "module_card"
+      ],
+      "customer_notifications": [
+        "module_card"
+      ],
+      "payment_links": [
+        "module_card"
+      ],
+      "ai_insights": [
+        "default_on",
+        "module_card"
+      ],
+      "subscription_billing": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "sms_campaigns": [
+        "module_card"
+      ],
+      "subscription_autocharge": [
+        "module_card"
+      ],
+      "phase4_restaurant": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_qr": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_kds": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_preauth": [
+        "unmanaged_bucketD"
+      ],
+      "phase4_restaurant_86": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_void_comp": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_pay_at_table": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_reservations": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_kds_analytics": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_day_parting": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_fire_chits": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_seats": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_drive_thru": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_restaurant_menu_engineering": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "delivery_aggregators": [
+        "module_card"
+      ],
+      "phase4_appointments": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_appointments_waitlists": [
+        "sub_toggle",
+        "industry_preset"
+      ],
+      "phase4_appointments_classes": [
+        "sub_toggle",
+        "industry_preset"
+      ],
+      "phase4_appointments_resources": [
+        "sub_toggle"
+      ],
+      "packages_passes": [
+        "module_card",
+        "industry_preset"
+      ],
+      "member_checkin": [
+        "module_card",
+        "industry_preset"
+      ],
+      "phase4_service_projects": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_service_contracts": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_contract_ai": [
+        "sub_toggle"
+      ],
+      "phase4_workflow_tickets": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "phase4_rentals": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "rental_inspections": [
+        "module_card",
+        "industry_preset"
+      ],
+      "rental_online_booking": [
+        "sub_toggle"
+      ],
+      "phase4_room_management": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "room_channel_sync": [
+        "module_card",
+        "industry_preset"
+      ],
+      "room_online_booking": [
+        "sub_toggle"
+      ],
+      "room_guest_registration": [
+        "module_card",
+        "industry_preset"
+      ],
+      "phase4_treatment_plans": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "clinical_recalls": [
+        "module_card",
+        "industry_preset"
+      ],
+      "vet_vaccinations": [
+        "sub_toggle",
+        "industry_preset"
+      ],
+      "clinical_handouts": [
+        "sub_toggle",
+        "industry_preset"
+      ],
+      "custom_forms": [
+        "module_card",
+        "industry_preset"
+      ],
+      "phase5_shipping_automation": [
+        "module_card"
+      ],
+      "phase5_cod_reconciliation": [
+        "module_card"
+      ],
+      "phase5_payment_gateways": [
+        "module_card"
+      ],
+      "phase5_sms_providers": [
+        "module_card"
+      ],
+      "phase2g_omni_input": [
+        "module_card"
+      ],
+      "phase2g_variant_picker": [
+        "module_card"
+      ],
+      "phase2g_gift_cards": [
+        "module_card"
+      ],
+      "phase2g_loyalty": [
+        "module_card"
+      ],
+      "phase2g_price_books": [
+        "module_card"
+      ],
+      "phase2g_price_override": [
+        "module_card"
+      ],
+      "phase2g_serialized_inventory": [
+        "module_card"
+      ],
+      "phase2g_per_line_restock": [
+        "module_card"
+      ],
+      "phase2g_inventory_intelligence": [
+        "module_card"
+      ],
+      "phase2g_receipt_barcode_lookup": [
+        "module_card"
+      ],
+      "phase2g_label_designer": [
+        "module_card"
+      ],
+      "phase2g_holds": [
+        "module_card"
+      ],
+      "phase2g_risk_controls": [
+        "module_card"
+      ],
+      "retail_weekly_digest": [
+        "sub_toggle"
+      ],
+      "receipt_designer_v2": [
+        "default_on",
+        "module_card"
+      ],
+      "shift_auto_close": [
+        "module_card"
+      ],
+      "offline_returns": [
+        "unmanaged_bucketD"
+      ],
+      "wholesale_credit_controls": [
+        "module_card",
+        "mode_bundle"
+      ],
+      "wholesale_field_sales": [
+        "module_card"
+      ],
+      "wholesale_schemes": [
+        "sub_toggle"
+      ],
+      "wholesale_secondary_sales": [
+        "sub_toggle"
+      ],
+      "wholesale_backorders": [
+        "sub_toggle"
+      ],
+      "wholesale_van_sales": [
+        "sub_toggle"
+      ],
+      "kit_bom_engine": [
+        "module_card"
+      ],
+      "batch_expiry_tracking": [
+        "module_card"
+      ]
+    }
+  }
+}
