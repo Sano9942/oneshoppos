@@ -588,6 +588,8 @@ module.exports = function registerSalesRoutes(app, deps) {
    *         description: Insufficient stock or validation error
    *       401:
    *         description: Unauthorized
+   *       403:
+   *         description: "DISCOUNT_NOT_PERMITTED — manual discount without the pos_discount permission (promo-engine/loyalty/auto-pricing discounts are exempt)"
    */
   // Process a Sale (Cart Checkout)
   app.post("/api/sales", validate(CreateSaleSchema), async (req, res) => {
@@ -1318,6 +1320,65 @@ module.exports = function registerSalesRoutes(app, deps) {
       discount_type === "percent"
         ? (subtotal * parseFloat(discount_amount || 0)) / 100
         : parseFloat(discount_amount || 0);
+
+    // S1 (AUDIT §4A) — manual discounts require the pos_discount permission
+    // (all_access bypasses). The POS client folds promo-engine discounts INTO
+    // body discount_amount (useCheckout.js: discountInput + promoDiscount)
+    // with applied_promotions carrying the breakdown, so the promo share is
+    // re-verified here via the same evaluatePromotions engine rather than
+    // trusted from the body — otherwise an employee without the perm could
+    // launder a manual discount through a fabricated applied_promotions row.
+    // Loyalty redemption (points_redeemed, guarded under FOR UPDATE below)
+    // and server-computed auto-pricing (autoDiscountValue) ride separate
+    // fields and are never gated. Violations reject (403), never silently
+    // strip — the cashier must see why the total didn't change.
+    if (discountValue > 0.009) {
+      const canDiscount =
+        Array.isArray(req.employeePerms) &&
+        (req.employeePerms.includes("all_access") ||
+          req.employeePerms.includes("pos_discount"));
+      if (!canDiscount) {
+        let allowedPromo = 0;
+        if (Array.isArray(applied_promotions) && applied_promotions.length) {
+          try {
+            const { evaluatePromotions } = require("../services/promo-engine");
+            // Hydrate category_id server-side — cart items aren't trusted to
+            // carry it, and a missing category would under-compute category-
+            // scoped promos into a false rejection. brand_id is hydrated by
+            // the engine itself.
+            const ids = Array.from(
+              new Set(cartItems.map((it) => Number(it.id)).filter((n) => n > 0)),
+            );
+            const { rows: prodRows } = await db.query(
+              `SELECT id, category_id FROM products WHERE id = ANY($1::int[])`,
+              [ids],
+            );
+            const catMap = new Map(prodRows.map((p) => [Number(p.id), p.category_id]));
+            const { totalDiscount } = await evaluatePromotions(
+              db,
+              cartItems.map((it) => ({
+                product_id: Number(it.id),
+                category_id: catMap.get(Number(it.id)) ?? null,
+                quantity: Number(it.quantity || 0),
+                price: Number(it.price || 0),
+                price_locked: it.price_locked === true,
+              })),
+              subtotal,
+            );
+            allowedPromo = Number(totalDiscount || 0);
+          } catch {
+            /* fail closed — allowedPromo stays 0, manual gate applies */
+          }
+        }
+        // 0.05 tolerance absorbs the client's per-promo 2dp rounding.
+        if (discountValue > allowedPromo + 0.05) {
+          return res.status(403).json({
+            error: "You don't have permission to apply a manual discount",
+            code: "DISCOUNT_NOT_PERMITTED",
+          });
+        }
+      }
+    }
     // H2 — in exclusive mode the snapshot's tax sits ON TOP of the gross and
     // must be added to the total (inclusive mode already has tax baked into
     // the line prices, so it stays untouched). H3 — clamp to >= 0 so an

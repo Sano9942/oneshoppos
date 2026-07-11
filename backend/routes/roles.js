@@ -189,8 +189,38 @@ module.exports = function registerRoleRoutes(app, deps) {
       });
     }
 
+    // S4 (AUDIT §4A) — admin self-lockout guard. The built-in Administrator
+    // role (id 1, seeded by the wizard) must always retain all_access, and no
+    // update may leave the tenant with zero roles holding all_access — boot
+    // re-seeding is the only accidental recovery path otherwise.
+    if (String(id) === "1" && !permissions.includes("all_access")) {
+      return res.status(400).json({
+        error: "The Administrator role must retain all_access.",
+        code: "CANNOT_REMOVE_LAST_ADMIN",
+      });
+    }
+
     try {
       await db.transaction(async (client) => {
+        if (!permissions.includes("all_access")) {
+          const { rows: [self] } = await client.query(
+            "SELECT 1 FROM role_permissions WHERE role_id = $1 AND permission = 'all_access' LIMIT 1",
+            [id]
+          );
+          if (self) {
+            const { rows: [other] } = await client.query(
+              "SELECT 1 FROM role_permissions WHERE permission = 'all_access' AND role_id <> $1 LIMIT 1",
+              [id]
+            );
+            if (!other) {
+              const lockout = new Error(
+                "This update would leave no role with all_access."
+              );
+              lockout.code = "CANNOT_REMOVE_LAST_ADMIN";
+              throw lockout;
+            }
+          }
+        }
         await client.query("DELETE FROM role_permissions WHERE role_id = $1", [id]);
         for (const perm of permissions) {
           await client.query(
@@ -201,6 +231,9 @@ module.exports = function registerRoleRoutes(app, deps) {
       });
       res.json({ message: permissions.length ? "Permissions updated successfully" : "Permissions cleared successfully" });
     } catch (err) {
+      if (err.code === "CANNOT_REMOVE_LAST_ADMIN") {
+        return res.status(400).json({ error: err.message, code: "CANNOT_REMOVE_LAST_ADMIN" });
+      }
       res.status(500).json({ error: err.message });
     }
   });
