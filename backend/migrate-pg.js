@@ -9684,6 +9684,38 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 132,
+    description:
+      "Repair serial sequences left behind MAX(id) by explicit-id seeding — the setup wizard inserts roles (1-3), outlets (1), and receipt_templates (1) with fixed ids, which never advances nextval(), so the first POST /api/roles (etc.) after setup drew an already-used id and failed on the pkey (misreported as 'Role name already exists'). Same failure mode v91 fixed for the Field Rep insert; setup.js now setvals after seeding so new tenants don't regress. Tenant-only tables — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      for (const table of ["roles", "outlets", "receipt_templates"]) {
+        try {
+          await client.query(`SAVEPOINT v132_seq_${table}`);
+          const { rows } = await client.query(
+            `SELECT 1 FROM information_schema.tables
+             WHERE table_schema = current_schema() AND table_name = $1`,
+            [table]
+          );
+          if (rows.length) {
+            await client.query(`
+              SELECT setval(
+                pg_get_serial_sequence('${table}', 'id'),
+                COALESCE((SELECT MAX(id) FROM ${table}), 0) + 1,
+                false
+              )
+            `);
+          }
+          await client.query(`RELEASE SAVEPOINT v132_seq_${table}`);
+        } catch (err) {
+          await client.query(`ROLLBACK TO SAVEPOINT v132_seq_${table}`);
+          console.warn(
+            `[migrate-pg v132] sequence sync skipped for ${table}: ${err.message}`
+          );
+        }
+      }
+    },
+  },
 ];
 
 /**

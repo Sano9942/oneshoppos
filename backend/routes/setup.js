@@ -497,6 +497,21 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
+        // 6b. Re-sync serial sequences past the explicitly-seeded ids above
+        // (roles 1-3, outlets 1, receipt_templates 1). Explicit-id INSERTs
+        // never advance the sequence, so without this the next
+        // POST /api/roles (etc.) draws an already-used id and fails on the
+        // primary key.
+        for (const seededTable of ['roles', 'outlets', 'receipt_templates']) {
+          await client.query(`
+            SELECT setval(
+              pg_get_serial_sequence('${seededTable}', 'id'),
+              COALESCE((SELECT MAX(id) FROM ${seededTable}), 0) + 1,
+              false
+            )
+          `);
+        }
+
         // 7. Tax — only insert if the merchant explicitly typed a name+rate
         // in Step 3. The 0% "Default Tax" seeded by the provisioner is
         // already marked is_default=true, so this row stays non-default.

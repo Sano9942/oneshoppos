@@ -41,7 +41,9 @@ module.exports = function registerRoleRoutes(app, deps) {
       );
       res.json({ id: rows[0].id, name, description });
     } catch (err) {
-      if (err.constraint) {
+      // Only the name-unique violation means a duplicate name — a pkey
+      // violation here is a desynced roles_id_seq, not a name clash.
+      if (err.code === "23505" && String(err.constraint || "").includes("name")) {
         return res.status(400).json({ error: "Role name already exists" });
       }
       res.status(500).json({ error: err.message });
@@ -61,7 +63,9 @@ module.exports = function registerRoleRoutes(app, deps) {
       if (rowCount === 0) return res.status(404).json({ error: "Role not found" });
       res.json({ message: "Role updated successfully" });
     } catch (err) {
-      if (err.constraint) {
+      // Only the name-unique violation means a duplicate name — a pkey
+      // violation here is a desynced roles_id_seq, not a name clash.
+      if (err.code === "23505" && String(err.constraint || "").includes("name")) {
         return res.status(400).json({ error: "Role name already exists" });
       }
       res.status(500).json({ error: err.message });
