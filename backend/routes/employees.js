@@ -42,7 +42,10 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   };
 
   // Get all employees
-  app.get("/api/employees", requirePerm("all_access"), async (req, res) => {
+  // C1 (role audit) — manage_employees, not all_access: Managers hold
+  // manage_employees by default and ~21 pages feed their staff dropdowns
+  // from this list; the all_access guard blanked them all.
+  app.get("/api/employees", requireAnyPerm(["manage_employees", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT e.id, e.name, e.pin_code, e.email, e.password_hash IS NOT NULL as has_password,

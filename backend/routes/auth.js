@@ -104,6 +104,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           id: employee.id,
           name: employee.name,
           role_id: employee.role_id,
+          // W0b C5 — real role name for the account drawer (custom roles
+          // were being labeled "Cashier" by a hardcoded id map).
+          role_name: employee.role || null,
           outlet_id: employee.outlet_id || null,
           home_page: employee.home_page || null,
           employee_type: employee.employee_type || "in_store",
@@ -371,8 +374,9 @@ module.exports = function registerAuthRoutes(app, deps) {
         const tenantDb = await tenantDbMgr.getDb(tenant.id);
         const { rows: [employee] } = await tenantDb.query(
           `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, e.password_hash,
-                  e.home_page, e.employee_type
+                  e.home_page, e.employee_type, r.name AS role
            FROM employees e
+           LEFT JOIN roles r ON e.role_id = r.id
            WHERE LOWER(e.name) = LOWER($1) AND e.deleted_at IS NULL`,
           [String(username).trim()]
         );
@@ -454,6 +458,8 @@ module.exports = function registerAuthRoutes(app, deps) {
             id: employee.id,
             name: employee.name,
             role_id: employee.role_id,
+            // W0b C5 — real role name for the account drawer.
+            role_name: employee.role || null,
             home_page: employee.home_page || null,
             employee_type: employee.employee_type || "in_store",
           },
@@ -1169,6 +1175,8 @@ module.exports = function registerAuthRoutes(app, deps) {
           id: employee.id,
           name: employee.name,
           role_id: employee.role_id,
+          // W0b C5 — real role name for the account drawer.
+          role_name: employee.role || null,
           outlet_id: employee.outlet_id || null,
           // 2-G.16 Merchant home: landing preference, null=default (/dashboard)
           home_page: employee.home_page || null,

@@ -92,3 +92,16 @@ WITHOUT their `tenant_modes` row.
 - `public.tenants`: `golv_restaurant` and `claimauditrestaurant` back to `free/active`.
 - Prod: untouched (read-only SELECTs only).
 - Audit rows in `action_history` from the test toggles were left in place (append-only audit trail).
+
+## ERRATUM (2026-07-12, Wave 0 W0b)
+
+**Matrix item 1's "POS layout unchanged / till not reskinned" PASS was a verification miss.**
+The verifier checked the bootstrap payload (`pos_layout_mode:"grid"`, `industry:general_retail`
+unchanged — true) but never navigated to `/pos` itself. `POSRoute.jsx` keyed its redirect on
+`hasMode("restaurant") && flags.phase4_restaurant`, and `enabled_modes` comes from `tenant_modes`
+— which the module toggle writes. So a retail tenant that enabled the Restaurant module WAS
+silently redirected to `/pos/restaurant`, contradicting the gate-only decision and the shipped
+card copy ("keeps your current POS layout"). Found by the PLAN-V2 audit (§3, P1); fixed in Wave 0
+W0b by re-keying the redirect on the preset `industry_type` (`restaurant`/`cafe`) — verified
+against all local golv_*/claimaudit* tenants and prod (read-only): every `phase4_restaurant`
+tenant is industry restaurant|cafe. The card copy needed no change — the fix makes it true.

@@ -1,24 +1,22 @@
 import { useNavigate } from "react-router-dom";
 import { MonitorPlay, Receipt, Banknote, Package, Users } from "lucide-react";
 
+// W0b C3 (role audit): each shortcut is gated by the permission that gates
+// its target page/data, not by an inferred role. `perm: null` = any
+// authenticated employee (the target route has no permission guard).
 const ACTIONS = {
-  pos: { label: "Open POS", icon: MonitorPlay, path: "/pos", newTab: true },
-  reports: { label: "Reports", icon: Receipt, path: "/reports" },
-  shift: { label: "Cash Management", icon: Banknote, path: "/cash-management" },
-  products: { label: "Add Product", icon: Package, path: "/inventory" },
-  employees: { label: "Employees", icon: Users, path: "/employees" },
+  pos: { label: "Open POS", icon: MonitorPlay, path: "/pos", newTab: true, perm: null },
+  reports: { label: "Reports", icon: Receipt, path: "/reports", perm: "view_reports" },
+  shift: { label: "Cash Management", icon: Banknote, path: "/cash-management", perm: "view_reports" },
+  products: { label: "Add Product", icon: Package, path: "/inventory", perm: "manage_inventory" },
+  employees: { label: "Employees", icon: Users, path: "/employees", perm: "all_access" },
 };
 
-const ROLE_ACTIONS = {
-  admin: ["pos", "reports", "shift", "products", "employees"],
-  manager: ["pos", "reports", "shift"],
-  cashier: ["pos"],
-};
-
-export function DashboardQuickActions({ isAdmin, isManager }) {
+export function DashboardQuickActions({ hasPerm }) {
   const navigate = useNavigate();
-  const role = isAdmin ? "admin" : isManager ? "manager" : "cashier";
-  const keys = ROLE_ACTIONS[role];
+  const keys = Object.keys(ACTIONS).filter(
+    (key) => !ACTIONS[key].perm || (typeof hasPerm === "function" && hasPerm(ACTIONS[key].perm))
+  );
 
   return (
     <div className="flex flex-wrap gap-2">

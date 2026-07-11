@@ -29,8 +29,12 @@ import { usePreset } from "../contexts/PresetContext";
 // Square-style account panel: full-height slide-over from the right instead
 // of a small anchored dropdown. Same actions as the old profile dropdown.
 function AccountDrawer({ open, onClose, employee, logout, navigate }) {
+  // W0b C5 (role audit): show the backend role_name — the old hardcoded
+  // id map (1=Admin, 2=Manager, else Cashier) labeled every custom role
+  // "Cashier". Fallback covers sessions cached before role_name shipped.
   const roleLabel =
-    employee?.role_id === 1 ? "Administrator" : employee?.role_id === 2 ? "Manager" : "Cashier";
+    employee?.role_name ||
+    (employee?.role_id === 1 ? "Administrator" : employee?.role_id === 2 ? "Manager" : "Cashier");
   return (
     <Drawer open={open} onClose={onClose} title="Account">
       <div className="flex items-center gap-3 border-b border-(--ui-border) pb-4">
