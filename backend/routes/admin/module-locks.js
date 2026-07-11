@@ -35,7 +35,11 @@ module.exports = function registerModuleLockRoutes(app, deps) {
       if (!BUSINESS_MODULES[moduleKey]) {
         return res.status(404).json({ error: `Unknown module: ${moduleKey}` });
       }
-      const tenantId = req.body?.tenant_id ?? null;
+      const tenantIdRaw = req.body?.tenant_id ?? null;
+      const tenantId = tenantIdRaw === null ? null : Number(tenantIdRaw);
+      if (tenantId !== null && !Number.isInteger(tenantId)) {
+        return res.status(400).json({ error: "tenant_id must be an integer" });
+      }
       const reason = req.body?.reason || null;
       if (tenantId !== null) {
         const { rows: [tenant] } = await db.query(
@@ -87,6 +91,9 @@ module.exports = function registerModuleLockRoutes(app, deps) {
     try {
       const { moduleKey } = req.params;
       const tenantId = req.query.tenant_id ? Number(req.query.tenant_id) : null;
+      if (tenantId !== null && !Number.isInteger(tenantId)) {
+        return res.status(400).json({ error: "tenant_id must be an integer" });
+      }
       const { rows } = await db.query(
         `DELETE FROM public.platform_module_locks
           WHERE module_key = $1 AND tenant_id IS NOT DISTINCT FROM $2
