@@ -144,10 +144,13 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Field Sales",
     items: [
+      // S3 split: Routes/Visits are owner surfaces (manage_field_sales);
+      // Today's Route / My Van are rep-self (either perm — hasPerm accepts
+      // an any-of array).
       { name: "Routes", path: "/field/routes", icon: ClipboardList, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
       { name: "Visits", path: "/field/visits", icon: History, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
-      { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
-      { name: "My Van", path: "/field/van", icon: Truck, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_van_sales" },
+      { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: ["execute_field_sales", "manage_field_sales"], requiredFlag: "wholesale_field_sales" },
+      { name: "My Van", path: "/field/van", icon: Truck, requiredPerm: ["execute_field_sales", "manage_field_sales"], requiredFlag: "wholesale_van_sales" },
     ],
   },
   {

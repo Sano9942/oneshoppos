@@ -86,7 +86,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // utilization bar and by POS Credit-tender flow to surface available room.
   app.get(
     "/api/customers/:id/credit-status",
-    requireAnyPerm(["view_reports", "manage_customers", "manage_field_sales", "all_access"]),
+    requireAnyPerm(["view_reports", "manage_customers", "manage_field_sales", "execute_field_sales", "all_access"]),
     async (req, res) => {
       const { id } = req.params;
       try {

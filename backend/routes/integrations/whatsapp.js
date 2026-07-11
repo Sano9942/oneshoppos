@@ -1,5 +1,5 @@
 module.exports = function registerWhatsAppRoutes(router, deps) {
-  const { db, requirePerm, requireFeature, decryptSecret } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature, decryptSecret } = deps;
   const WhatsAppClient = require("../../services/marketplace/whatsapp-client");
 
   async function getWhatsAppClient() {
@@ -17,7 +17,8 @@ module.exports = function registerWhatsAppRoutes(router, deps) {
   // POST /api/integrations/whatsapp/test
   router.post(
     "/whatsapp/test",
-    requirePerm("manage_inventory"),
+    // PLAN-V2 Step 2: config-surface test — manage_integrations delegate included.
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

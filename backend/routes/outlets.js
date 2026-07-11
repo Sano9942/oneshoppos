@@ -10,8 +10,12 @@ module.exports = function registerOutletRoutes(app, deps) {
       const isAdmin = perms.includes("all_access");
       // Tier 1.2 wholesale: field reps don't have employee_outlets rows
       // (they're tenant-scoped, not outlet-scoped). Let them see all outlets
-      // so the rep app can pick a default outlet for /api/sales.
-      const isFieldRep = perms.includes("manage_field_sales");
+      // so the rep app can pick a default outlet for /api/sales. S3 split:
+      // execute_field_sales is the rep perm; manage_field_sales kept so
+      // owner/Manager visibility is unchanged.
+      const isFieldRep =
+        perms.includes("execute_field_sales") ||
+        perms.includes("manage_field_sales");
 
       if (employeeId && !isAdmin && !isFieldRep) {
         const { rows } = await db.query(

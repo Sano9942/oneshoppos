@@ -191,7 +191,7 @@ export default function FieldCheckInRedesign() {
     );
   }
   if (!flags.wholesale_field_sales) return <Navigate to="/" replace />;
-  if (!hasPerm("manage_field_sales")) return <Navigate to="/" replace />;
+  if (!hasPerm(["execute_field_sales", "manage_field_sales"])) return <Navigate to="/" replace />;
   if (!customer) {
     return (
       <div className="min-h-screen bg-(--ui-bg) p-4">

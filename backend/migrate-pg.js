@@ -9716,6 +9716,70 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 133,
+    description:
+      "S3 Field Rep split (PLAN-V2 Step 2) — execute_field_sales for rep-self surfaces. Pristine Field Rep roles (permission set exactly {manage_field_sales}) convert to execute_field_sales; customized Field Rep roles keep manage_field_sales and gain execute_field_sales (grandfathered — never removes capability). Other roles holding manage_field_sales (e.g. Manager) are untouched: rep-self endpoints accept either perm, and losing the outlet-assignment-enforcement bypass for Managers is the audit's intended fix. Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      // Tenant-only: the public schema has no roles/role_permissions tables.
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'role_permissions'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v133] no role_permissions table in this schema — skipped");
+        return;
+      }
+      const { rows: fieldRepRoles } = await client.query(
+        `SELECT r.id,
+                COALESCE(
+                  array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
+                  '{}'
+                ) AS perms
+         FROM roles r
+         LEFT JOIN role_permissions rp ON rp.role_id = r.id
+         WHERE r.name = 'Field Rep'
+         GROUP BY r.id`
+      );
+      for (const role of fieldRepRoles) {
+        const perms = role.perms || [];
+        const pristine =
+          perms.length === 1 && perms[0] === "manage_field_sales";
+        if (pristine) {
+          // Convert: the default rep role loses the owner/admin surfaces.
+          await client.query(
+            "DELETE FROM role_permissions WHERE role_id = $1 AND permission = 'manage_field_sales'",
+            [role.id]
+          );
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'execute_field_sales') ON CONFLICT DO NOTHING",
+            [role.id]
+          );
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: pristine — converted to execute_field_sales`
+          );
+        } else if (perms.includes("manage_field_sales")) {
+          // Grandfather: customized role keeps manage_field_sales (its extra
+          // grants signal owner intent we can't infer) and gains
+          // execute_field_sales so its reps keep the rep-self surfaces AND
+          // the outlet-assignment bypass, which is now keyed on execute.
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'execute_field_sales') ON CONFLICT DO NOTHING",
+            [role.id]
+          );
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: customized (${perms.length} perms) — grandfathered with both`
+          );
+        } else {
+          // Already converted (idempotent re-run) or fully custom without the
+          // perm — nothing to do.
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: no manage_field_sales — skipped`
+          );
+        }
+      }
+    },
+  },
 ];
 
 /**

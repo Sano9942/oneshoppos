@@ -1,10 +1,13 @@
 module.exports = function registerHubRoutes(router, deps) {
-  const { db, requirePerm, requireFeature } = deps;
+  const { db, requireAnyPerm, requireFeature } = deps;
 
   // GET /api/integrations/hub — all integration statuses
+  // PLAN-V2 Step 2: manage_integrations added so the delegated integrations
+  // manager can see the hub they configure; manage_inventory kept for the
+  // existing Manager-facing hub page.
   router.get(
     "/hub",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

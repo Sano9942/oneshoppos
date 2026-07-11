@@ -67,7 +67,7 @@ async function notifyCustomerSms(db, orderId, messageTemplate) {
 
 function mountCourierRoutes(app, deps) {
   const db = deps.db;
-  const { requirePerm, requireFeature } = deps;
+  const { requirePerm, requireAnyPerm, requireFeature } = deps;
 
   // GET /api/couriers — list couriers with capability flags
   app.get("/api/couriers", async (req, res) => {
@@ -126,8 +126,9 @@ function mountCourierRoutes(app, deps) {
     }
   );
 
-  // PUT /api/couriers/:id — admin configures courier
-  app.put("/api/couriers/:id", requirePerm("all_access"), async (req, res) => {
+  // PUT /api/couriers/:id — courier credentials/config (PLAN-V2 Step 2 / D7:
+  // delegable via manage_integrations; Administrators pass via all_access).
+  app.put("/api/couriers/:id", requireAnyPerm(["manage_integrations"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { enabled, api_key, api_secret, api_base_url, flat_shipping_rate } = req.body || {};
@@ -151,8 +152,8 @@ function mountCourierRoutes(app, deps) {
     }
   });
 
-  // POST /api/couriers — admin adds custom courier
-  app.post("/api/couriers", requirePerm("all_access"), async (req, res) => {
+  // POST /api/couriers — add custom courier (config surface, same delegation)
+  app.post("/api/couriers", requireAnyPerm(["manage_integrations"]), async (req, res) => {
     try {
       const { name, tracking_url_template } = req.body || {};
       if (!name) return res.status(400).json({ error: "Name required" });
@@ -170,7 +171,7 @@ function mountCourierRoutes(app, deps) {
   // POST /api/couriers/:id/test-booking — test courier connectivity
   app.post(
     "/api/couriers/:id/test-booking",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     requireFeature("phase5_shipping_automation"),
     async (req, res) => {
       try {

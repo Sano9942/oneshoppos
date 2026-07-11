@@ -154,9 +154,15 @@ export function AuthProvider({ children }) {
     setSession(null);
   };
 
+  // Accepts a single permission string or an array (any-of) — the array form
+  // backs surfaces gated by requireAnyPerm server-side (S3 field split:
+  // execute_field_sales OR manage_field_sales).
   const hasPerm = useCallback(
-    (perm) =>
-      permissions.includes("all_access") || permissions.includes(perm),
+    (perm) => {
+      if (permissions.includes("all_access")) return true;
+      if (Array.isArray(perm)) return perm.some((p) => permissions.includes(p));
+      return permissions.includes(perm);
+    },
     [permissions],
   );
 

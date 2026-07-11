@@ -96,7 +96,7 @@ export default function FieldVanRedesign() {
   };
 
   if (flagsLoading) return null;
-  if (!flags.wholesale_van_sales || !hasPerm("manage_field_sales")) return <Navigate to="/" replace />;
+  if (!flags.wholesale_van_sales || !hasPerm(["execute_field_sales", "manage_field_sales"])) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-(--ui-bg) pb-24">

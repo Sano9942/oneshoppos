@@ -74,7 +74,13 @@ const DEFAULT_ROLE_PERMISSIONS = {
   Cashier: ["view_reports", "pos_discount", "pos_park"],
   // Tier 1.1 wholesale — minimal role for mobile order bookers / DSRs.
   // Only sees their own route, posts check-ins, reads their own visit history.
-  "Field Rep": ["manage_field_sales"],
+  // S3 split (PLAN-V2 Step 2): execute_field_sales = rep-self surfaces only;
+  // the owner/admin surfaces (all-reps visit log, summary, route planning)
+  // require manage_field_sales, which Field Rep deliberately does NOT hold.
+  // C4 rule: this constant is the durable source — ensureDefaultRolePermissions
+  // re-seeds from it at every boot, so changing role_permissions rows alone
+  // would be undone. Migration v133 converts existing pristine Field Rep roles.
+  "Field Rep": ["execute_field_sales"],
 };
 
 async function ensureDefaultRolePermissions(db) {

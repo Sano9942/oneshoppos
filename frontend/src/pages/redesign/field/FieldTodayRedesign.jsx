@@ -21,7 +21,7 @@ const OUTCOME_LABELS = {
  * Tier 1.1 wholesale: field rep's daily home screen. Mobile-first list of
  * today's planned customers. Tapping a card opens the check-in flow.
  *
- * Auth: requires manage_field_sales permission. Field Rep role gets this by
+ * Auth: requires execute_field_sales (Field Rep role) or manage_field_sales
  * default; Manager + Administrator also see it for testing.
  */
 export default function FieldTodayRedesign() {
@@ -88,7 +88,7 @@ export default function FieldTodayRedesign() {
     );
   }
   if (!flags.wholesale_field_sales) return <Navigate to="/" replace />;
-  if (!hasPerm("manage_field_sales")) return <Navigate to="/" replace />;
+  if (!hasPerm(["execute_field_sales", "manage_field_sales"])) return <Navigate to="/" replace />;
 
   const dayName = DAY_NAMES[route.day_of_week] || "Today";
   const total = route.customers.length;

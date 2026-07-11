@@ -273,7 +273,11 @@ module.exports = function registerAllRoutes(app, deps) {
     // Tier 1.2 wholesale: field reps are tenant-scoped, not outlet-scoped.
     // They never have employee_outlets rows, so this enforcement would
     // block every API call carrying an outlet_id. Skip for them.
-    if (perms.includes("manage_field_sales")) return next();
+    // S3 split (PLAN-V2 Step 2): keyed on execute_field_sales — the rep-self
+    // perm — NOT manage_field_sales. Before the split, every default Manager
+    // (who holds manage_field_sales) incidentally bypassed outlet-assignment
+    // enforcement; they now go through it like any other outlet-scoped staff.
+    if (perms.includes("execute_field_sales")) return next();
 
     const headerOutletId = Number(req.headers["x-outlet-id"] || 0);
     const contextOutletId = Number(req.context?.outletId || 0);

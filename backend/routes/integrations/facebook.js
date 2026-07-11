@@ -1,5 +1,5 @@
 module.exports = function registerFacebookRoutes(router, deps) {
-  const { db, requirePerm, requireFeature, decryptSecret } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature, decryptSecret } = deps;
   const MetaCommerceClient = require("../../services/marketplace/meta-commerce");
 
   async function getMetaClient() {
@@ -17,7 +17,8 @@ module.exports = function registerFacebookRoutes(router, deps) {
   // POST /api/integrations/facebook/test
   router.post(
     "/facebook/test",
-    requirePerm("manage_inventory"),
+    // PLAN-V2 Step 2: config-surface test — manage_integrations delegate included.
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

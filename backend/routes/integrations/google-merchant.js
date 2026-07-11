@@ -1,5 +1,5 @@
 module.exports = function registerGoogleMerchantRoutes(router, deps) {
-  const { db, requirePerm, requireFeature, decryptSecret } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature, decryptSecret } = deps;
   const GoogleMerchantClient = require("../../services/marketplace/google-merchant");
 
   async function getGmcClient() {
@@ -17,7 +17,8 @@ module.exports = function registerGoogleMerchantRoutes(router, deps) {
   // POST /api/integrations/google-merchant/test
   router.post(
     "/google-merchant/test",
-    requirePerm("manage_inventory"),
+    // PLAN-V2 Step 2: config-surface test — manage_integrations delegate included.
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

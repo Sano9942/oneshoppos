@@ -958,9 +958,24 @@ const MODULE_PERMISSIONS = Object.freeze({
   clinical: ["manage_treatment_plans"],
   service_tickets: ["manage_tickets"],
   projects_contracts: ["manage_projects", "manage_contracts"],
-  field_sales: ["manage_field_sales"],
+  // S3 split (PLAN-V2 Step 2): manage = owner surfaces, execute = rep-self.
+  field_sales: ["manage_field_sales", "execute_field_sales"],
   gift_cards: ["manage_gift_cards"],
   custom_forms: ["manage_forms"],
+  // D7 (PLAN-V2 Step 2): manage_integrations is cross-module — it gates the
+  // credential/config surfaces behind each integration-connection card's
+  // setup_route, so roles_with_access reflects the delegation. Listed only on
+  // the cards whose setup surfaces the permission actually reaches:
+  // online_payments is excluded (platform env gate — no tenant credential
+  // surface exists) and room_channel_sync is excluded (its setup lives in the
+  // Rooms UI behind manage_rooms).
+  fbr_digital_invoicing: ["manage_integrations"],
+  marketplace_channels: ["manage_integrations"],
+  woocommerce: ["manage_integrations"],
+  shopify: ["manage_integrations"],
+  couriers_shipping: ["manage_integrations"],
+  sms_provider: ["manage_integrations"],
+  delivery_aggregators: ["manage_integrations"],
 });
 
 function withPermissions(cards) {

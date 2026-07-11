@@ -1,5 +1,5 @@
 module.exports = function registerDarazRoutes(router, deps) {
-  const { db, requirePerm, requireFeature, decryptSecret } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature, decryptSecret } = deps;
   const DarazClient = require("../../services/marketplace/daraz-client");
 
   async function getDarazClient() {
@@ -18,7 +18,8 @@ module.exports = function registerDarazRoutes(router, deps) {
   // POST /api/integrations/daraz/test
   router.post(
     "/daraz/test",
-    requirePerm("manage_inventory"),
+    // PLAN-V2 Step 2: config-surface test — manage_integrations delegate included.
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

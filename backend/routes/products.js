@@ -179,7 +179,7 @@ module.exports = function registerProductRoutes(app, deps) {
    *         description: Unauthorized
    */
   // Get all products (with aggregated stock, sort/filter/search support)
-  app.get("/api/products", requireAnyPerm(["view_reports", "manage_inventory", "manage_field_sales", "all_access"]), async (req, res) => {
+  app.get("/api/products", requireAnyPerm(["view_reports", "manage_inventory", "manage_field_sales", "execute_field_sales", "all_access"]), async (req, res) => {
     try {
       const { search, sort, order, status, category_id, outlet_id } = req.query;
 

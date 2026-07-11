@@ -334,11 +334,13 @@ export const appRoutes = [
     <Route path="/settings/forms" element={perm("manage_forms", wrap(FormsRoute))} />
 
     {/* Tier 1.1 wholesale field sales — feature flag check is inline inside each page. */}
-    <Route path="/field/today" element={perm("manage_field_sales", wrap(FieldTodayRedesign))} />
-    <Route path="/field/check-in/:customer_id" element={perm("manage_field_sales", wrap(FieldCheckInRedesign))} />
-    <Route path="/field/order/:customer_id" element={perm("manage_field_sales", wrap(FieldOrderRedesign))} />
+    {/* S3 split: rep-self pages accept execute_field_sales (Field Rep role)
+        or manage_field_sales (owners); owner pages below stay manage-only. */}
+    <Route path="/field/today" element={perm(["execute_field_sales", "manage_field_sales"], wrap(FieldTodayRedesign))} />
+    <Route path="/field/check-in/:customer_id" element={perm(["execute_field_sales", "manage_field_sales"], wrap(FieldCheckInRedesign))} />
+    <Route path="/field/order/:customer_id" element={perm(["execute_field_sales", "manage_field_sales"], wrap(FieldOrderRedesign))} />
     {/* V02 wholesale — van sales (rep van view + day-end count) */}
-    <Route path="/field/van" element={perm("manage_field_sales", wrap(FieldVanRedesign))} />
+    <Route path="/field/van" element={perm(["execute_field_sales", "manage_field_sales"], wrap(FieldVanRedesign))} />
     <Route path="/field/visits" element={perm("manage_field_sales", wrap(FieldVisitsRedesign))} />
     <Route path="/field/routes" element={perm("manage_field_sales", wrap(FieldRoutesAdminRedesign))} />
   </Route>,

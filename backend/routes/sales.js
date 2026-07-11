@@ -903,6 +903,32 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(401).json({ error: "Login is required for checkout" });
     }
 
+    // S3 (PLAN-V2 Step 2) — field-order writes are scoped to the rep's own
+    // visit: a rep cannot book an order against another rep's check-in.
+    // manage_field_sales (owner surfaces) and all_access callers may link any
+    // visit (e.g. a manager keying in a rep's phoned-in order).
+    if (field_visit_id) {
+      const callerPerms = req.employeePerms || [];
+      if (
+        !callerPerms.includes("all_access") &&
+        !callerPerms.includes("manage_field_sales")
+      ) {
+        const { rows: [ownVisit] } = await db.query(
+          "SELECT employee_id FROM field_visits WHERE id = $1",
+          [field_visit_id]
+        );
+        if (!ownVisit) {
+          return res.status(400).json({ error: "field_visit_id not found" });
+        }
+        if (Number(ownVisit.employee_id) !== Number(authenticatedEmployeeId)) {
+          return res.status(403).json({
+            error: "Forbidden: field orders must be linked to your own visit",
+            code: "FIELD_VISIT_NOT_OWN",
+          });
+        }
+      }
+    }
+
     // Phase 2-G Wave 3 (2-G.5) — validate per-line price_override metadata
     // before the transaction opens. Collects one entry per cart line (same
     // index) so the INSERT pass can stamp the audit columns without another

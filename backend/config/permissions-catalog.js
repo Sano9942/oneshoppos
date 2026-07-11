@@ -23,9 +23,12 @@
  *   - GET /api/business-modules derives roles_with_access per card from the
  *     module_key/permissions linkage
  *
- * Entry shape: { id, label, category, module_key? } — module_key links a
- * permission to the business-modules card whose surfaces it gates (absent
- * for spine permissions that aren't module-specific).
+ * Entry shape: { id, label, category, module_key?, module_keys? } —
+ * module_key links a permission to the business-modules card whose surfaces
+ * it gates (absent for spine permissions that aren't module-specific).
+ * module_keys (plural) marks a cross-module permission that gates the
+ * setup/config surfaces of SEVERAL cards (PLAN-V2 Step 2: manage_integrations
+ * spans every integration-connection card).
  *
  * Invariant (PLAN Step 7): a module toggle never grants or revokes any
  * permission — role assignments stay dormant while a module is off.
@@ -42,6 +45,43 @@ const PERMISSIONS_CATALOG = Object.freeze([
     // Deliberately granted to NO default role — Administrators pass via the
     // all_access bypass; grant this to a custom role to delegate module
     // management without full admin.
+  },
+
+  // ── Delegation (PLAN-V2 Step 2 / D7) ──────────────────────────────────────
+  // Like manage_business_modules above: granted to NO default role —
+  // Administrators pass via the all_access bypass; grant to a custom role to
+  // delegate the surface without full admin.
+  {
+    id: "manage_integrations",
+    label: "Manage Integrations & Connections",
+    category: "Delegation",
+    // Cross-module: gates the credential/config surfaces of every
+    // integration-connection card whose setup routes accept it (see
+    // MODULE_PERMISSIONS in config/business-modules.js).
+    module_keys: [
+      "fbr_digital_invoicing",
+      "marketplace_channels",
+      "woocommerce",
+      "shopify",
+      "couriers_shipping",
+      "sms_provider",
+      "delivery_aggregators",
+    ],
+  },
+  {
+    id: "manage_roles",
+    label: "Manage Roles & Permissions",
+    category: "Delegation",
+    // Delegable role editing (routes/roles.js). Guard rails stay server-side:
+    // a manage_roles holder cannot edit the Administrator role or grant
+    // all_access to anyone.
+  },
+  {
+    id: "manage_outlet_modules",
+    label: "Manage Per-Outlet Modules",
+    category: "Delegation",
+    // Reserved (PLAN-V2 Step 2) — no route consumes it yet; Step 10 wires the
+    // per-outlet module overrides to it.
   },
 
   // ── Inventory & Catalog ───────────────────────────────────────────────────
@@ -88,7 +128,12 @@ const PERMISSIONS_CATALOG = Object.freeze([
   { id: "manage_gift_cards", label: "Manage Gift Cards", category: "Retail", module_key: "gift_cards" },
 
   // ── Wholesale / B2B ───────────────────────────────────────────────────────
-  { id: "manage_field_sales", label: "Manage Field Sales", category: "Wholesale", module_key: "field_sales" },
+  // S3 split (PLAN-V2 Step 2): manage_field_sales = owner/admin surfaces
+  // (all-reps visit log, per-rep summary, route planning);
+  // execute_field_sales = rep-self surfaces (own route, check-in, own order
+  // capture, own van). The Field Rep default role holds execute only.
+  { id: "manage_field_sales", label: "Manage Field Sales (owner/admin)", category: "Wholesale", module_key: "field_sales" },
+  { id: "execute_field_sales", label: "Do Field Sales (rep-self)", category: "Wholesale", module_key: "field_sales" },
 ]);
 
 const PERMISSION_IDS = Object.freeze(
