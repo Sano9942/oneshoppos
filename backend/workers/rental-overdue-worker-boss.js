@@ -61,6 +61,14 @@ async function registerRentalOverdueWorker(boss, pool) {
 async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueueEmail, rentals) {
   let count = 0;
 
+  // Feature-flag gate — no-op for tenants with the Rentals module off
+  // (Business Modules rule: disabling a module stops its background
+  // processing; data is preserved untouched). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_rentals'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   // Resolve store/company details once per tenant
   let storeName = tenantName || tenantSlug;
   try {

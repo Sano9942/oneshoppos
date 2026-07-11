@@ -71,7 +71,7 @@ Four independent auth scopes with four independent localStorage stores — never
 Provider nesting: `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`.
 - `CurrencyContext.jsx` → `useCurrency()` → `{ symbol, code, fmt, refresh, denominations }`. `fmt` = `symbol + " " + toLocaleString(2dp)`.
 - `ToastContext.jsx` → `useToast()` → `{ toast, success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside provider.
-- `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded }`.
+- `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset, refreshPreset }`. `refreshPreset()` re-fetches the bootstrap payload in place (no logout) — called after a business-module toggle so `hasMode()`/nav mode gates update immediately.
 
 ### `src/ui/` — see `src/ui/CLAUDE.md`
 Design system primitives, banners, and shared components — the **Square design system** (light-only; dark mode was removed in the reskin, no `theme.js`, no `[data-theme]`). Components style via `--ui-*` tokens (`ui/tokens.css`): black primary, hairline borders, flat/no shadow, pill buttons, Inter. `primitives.jsx` is fully token-based (incl. `Badge`/`BulkActionBar`). Still-hardcoded exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, and the `Modal`/`Drawer` `bg-black/45` scrim. POS uses hardcoded colors by exception.
@@ -136,6 +136,8 @@ if (loading) return null;
 if (!flags.some_flag) return <Navigate to="/" replace />;
 ```
 No `RequireFeature` wrapper exists — checks are always inline. Do NOT pass an inline `{}` as `authHeaders` each render — causes an infinite loop.
+
+`useFeatureFlags` also exposes cross-component refresh: `refreshFeatureFlags()` (named export) dispatches the `sanopos:flags-refresh` window event, and every mounted `useFeatureFlags` instance refetches and rewrites the warm cache — nav/gates update in-place without a re-login. Used by `BusinessModulesRedesign` after a module toggle (together with `refreshPreset()` for mode gates).
 
 ### Permissions
 `hasPerm("perm_name")` from `useAuth()`. Returns true if `all_access` or the specific permission.

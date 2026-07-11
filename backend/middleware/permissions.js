@@ -303,6 +303,14 @@ const PERMISSION_RULES = [
     path: /^\/api\/tips(\/|$)/,
     anyPerms: ["manage_tips"],
   },
+  // Business Modules self-service page (PLAN.md Step 7) — delegable without
+  // full admin; granted to no default role (Administrators pass via
+  // all_access).
+  {
+    methods: ["GET", "POST"],
+    path: /^\/api\/business-modules(\/|$)/,
+    anyPerms: ["manage_business_modules"],
+  },
 ];
 
 module.exports = {

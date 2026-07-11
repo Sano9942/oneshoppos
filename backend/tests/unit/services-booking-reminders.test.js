@@ -21,12 +21,18 @@ const { processPendingReminders } = require("../../services/booking-reminders");
  * Build a fake tenant-scoped db whose query() returns canned rows for
  * the SELECT and records calls for the UPDATEs.
  */
-function fakeDb({ reminders = [] } = {}) {
+function fakeDb({ reminders = [], appointmentsFlag = true } = {}) {
   const queries = [];
   return {
     queries,
     query: vi.fn(async (sql, params) => {
       queries.push({ sql, params });
+      if (sql.includes("FROM feature_flags")) {
+        // Business Modules gate: worker no-ops unless phase4_appointments is on.
+        return appointmentsFlag
+          ? { rows: [{ enabled: true }], rowCount: 1 }
+          : { rows: [], rowCount: 0 };
+      }
       if (sql.includes("FROM appointment_reminders")) {
         return { rows: reminders, rowCount: reminders.length };
       }
@@ -51,9 +57,27 @@ describe("processPendingReminders", () => {
     const result = await processPendingReminders(db, boss);
     expect(result).toBe(0);
     expect(boss.send).not.toHaveBeenCalled();
-    // Only the SELECT query ran — no UPDATEs.
+    // Flag gate + SELECT ran — no UPDATEs.
+    expect(db.queries).toHaveLength(2);
+    expect(db.queries[0].sql).toContain("FROM feature_flags");
+    expect(db.queries[1].sql).toContain("FROM appointment_reminders");
+  });
+
+  it("no-ops entirely when the Appointments module flag is off (Business Modules gate)", async () => {
+    const reminders = [
+      { id: 1, channel: "email", customer_email: "a@example.com", customer_name: "A", service_name: "Svc", appt_start: "2026-05-01T10:00:00Z" },
+    ];
+    const db = fakeDb({ reminders, appointmentsFlag: false });
+    const boss = fakeBoss();
+
+    const result = await processPendingReminders(db, boss);
+
+    expect(result).toBe(0);
+    expect(boss.send).not.toHaveBeenCalled();
+    // Only the flag-gate query ran — pending rows were never even fetched,
+    // so they stay 'pending' and resume when the module is re-enabled.
     expect(db.queries).toHaveLength(1);
-    expect(db.queries[0].sql).toContain("FROM appointment_reminders");
+    expect(db.queries[0].sql).toContain("FROM feature_flags");
   });
 
   it("enqueues an email job for each pending email-channel reminder", async () => {

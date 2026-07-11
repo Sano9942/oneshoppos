@@ -66,6 +66,9 @@ FEFO (first-expired-first-out) batch/expiry ledger underneath `stock-ledger.js`.
 ### `kit-engine.js`
 BOM/recipe engine for kit (assembled-at-sale) and assembled (assembled-at-production, via `stock_conversion_lines`) products. Exports `getBomType(db, productId)` — returns `'kit' | 'assembled' | null`, consumed by `routes/tier4/crm.js` (quotation-convert hard-rejects kits) and the reports layer (`recipe-costing.js` treats kit vs assembled consumption differently).
 
+### `business-modules.js`
+The module toggle engine behind `routes/business-modules.js` — see `backend/CLAUDE.md` for the full behavioral summary. Key exports: `toggleModule` (atomic flag+mode transaction: saved_flags snapshot/restore, depends_on cascade with Bucket C dependents left connected, platform-lock check, first-mode-row backfill, action_history audit, cache invalidation), `computeImpact` (confirm-dialog preview), `loadLiveFlags`/`loadLiveModes` (deliberately uncached — settings pages must see fresh state), `rejectCatalogManagedFlagWrites` (the legacy `PUT /api/feature-flags/:key` lockdown middleware). Gotchas: repeated disable keeps the existing saved_flags snapshot (double-click guard); the snapshot is cleared once consumed by re-enable; writing the tenant's FIRST `tenant_modes` row flips `requireMode` from fall-through to enforcing for every mode, so the service backfills enabled=true rows for any drifted mode first.
+
 ### `preset-apply.js`
 Exports `applyPreset(db, industryType)` / `expectedFlagsForPreset(...)` — the shared tenant industry-preset seeding logic. Clears `tenant_modes`, re-derives feature flags for the new preset. This is the **one code path** used both by the tenant-side `PUT /api/company-profile` (industry_type change) and the super-admin "reapply preset"/flag-drift repair tooling in `routes/admin/tenants.js` — fix mode-seeding bugs here, not inline in either caller.
 

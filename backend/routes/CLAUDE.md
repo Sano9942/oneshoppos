@@ -86,7 +86,7 @@ Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant mi
 |------|-------------|--------------|
 | `employees.js` | `/api/employees` | Employee CRUD, PIN/password change, validate-pin (POS re-auth) |
 | `attendance.js` | `/api/attendance` | Attendance sessions + kiosk PIN check-in endpoint |
-| `roles.js` | `/api/roles` | Role + permission management |
+| `roles.js` | `/api/roles` | Role + permission management. `GET /api/roles` is all_access-only; `GET /:id/permissions` is self-or-admin (every employee reads their own role on boot); `PUT /:id/permissions` rejects strings not in `config/permissions-catalog.js`; `GET /api/permissions-catalog` backs the role editor |
 | `schedules.js` | `/api/schedules` | Employee scheduling |
 | `commissions.js` | `/api/commissions` | Commission plans + earnings |
 | `approval-policies.js` | `/api/approval-policies` | POS discount approval rules |
@@ -161,7 +161,8 @@ Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant mi
 ### Setup & Config
 | File | Mount prefix | What it does |
 |------|-------------|--------------|
-| `setup.js` | `/api/setup` | First-run wizard with `setupTenantDbManager` (not standard tenant middleware) |
+| `setup.js` | `/api/setup` | First-run wizard with `setupTenantDbManager` (not standard tenant middleware). Seeds roles 1-3 / outlet 1 / receipt_template 1 with explicit ids, then setvals those sequences (explicit-id inserts never advance nextval) |
+| `business-modules.js` | `/api/business-modules` | Self-service module toggles: GET page payload (cards + computed state + roles_with_access), GET `:key/impact` confirm preview, POST `:key/toggle`. All three behind `requirePerm("manage_business_modules")` (no default role has it; admins pass via all_access). Rules live in `services/business-modules.js` |
 | `receipt-templates.js` | `/api/receipt-templates` | Receipt layout templates |
 | `email.js` | `/api/email` | Send receipt email (`send-receipt-v2`) |
 | `support.js` | `/api/support` | Support ticket submit + screenshot upload |

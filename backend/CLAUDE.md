@@ -217,6 +217,7 @@ Key services:
 - `fbr.js` — FBR API client + payload builders + exponential backoff (60s → 5m → 15m → 1h → 4h)
 - `stock-ledger.js` — `decrementStock`/`incrementStock`, the one shared "move on-hand stock" implementation (POS sale, quotation-convert, transfers, supplier returns, PO receive, stock count all funnel through it). Must run inside the caller's `deps.db.transaction(...)` — takes `FOR UPDATE`, gates on availability, writes all three stock tables when a variant is present. Batch/FEFO handling delegates to `batch-stock.js` unless the caller passes `manageBatch:false`.
 - `tax-snapshot.js` — `resolveTaxSnapshot()`, the one shared v83 per-line tax cascade (outlet tax profile → product tax_id → legacy gst → category-inherited → 0) every sale writer applies so the frozen per-line snapshot on `sale_items` is consistent regardless of entry point.
+- `business-modules.js` — the module toggle engine behind `/api/business-modules`: atomic flag+mode transaction, `saved_flags` snapshot on disable / exact restore on re-enable (snapshot cleared once consumed; repeated disable keeps the existing snapshot), transitive `depends_on` cascade (Bucket C dependents are left connected, never cascaded off), platform-lock enforcement (`public.platform_module_locks` — blocks self-ENABLE only), first-mode-row drift backfill (writing the first `tenant_modes` row flips `requireMode` from fall-through to enforcing for every mode), `action_history` audit rows, both middleware caches invalidated post-toggle. Also exports `rejectCatalogManagedFlagWrites` — the lockdown middleware on the legacy `PUT /api/feature-flags/:key` (module primary/bundle flags 409 `MANAGED_BY_BUSINESS_MODULES`; sub_toggles + Bucket D keys pass through).
 
 See `services/CLAUDE.md` for the full service inventory (couriers/marketplace adapter subdirectories, domain services, gotchas).
 
@@ -233,8 +234,17 @@ See `workers/CLAUDE.md` for the full per-worker reference (queues, cron schedule
 
 Background workers are started from `boot/workers.js`, which mixes pg-boss jobs with `setInterval` pollers and some inline cron logic — not everything in `boot/workers.js` has a corresponding file in this directory (Shopify sync poll, report-schedule poll, catalog scheduler, booking reminders live inline in `boot/workers.js`). Each pg-boss worker requires its own env var to enable and exposes `global.__<name>WorkerStatus = { lastPollAt, processedToday, queueDepth }`, read by `GET /api/admin/worker-status` (`routes/admin/system.js`). pg-boss workers survive server crashes; `setInterval` pollers do not. Prefer `workers/tenant-job-context.js:withTenantContext()` over raw schema-string interpolation for new tenant-scoped workers — the FBR worker is the one deliberate legacy exception.
 
+Module-gated workers (Business Modules rule: disabling a module stops its background processing; data is preserved and processing resumes on re-enable): the rental-overdue, room-overdue-checkout, night-audit, treatment-plan, hold-expiry, KDS-snapshot, course-release, reservation-reminder, and channel-sync tenant handlers each check the relevant tenant `feature_flags` row first and no-op when it's off (pattern: `abc-worker-boss.js`; `booking-reminders.js` does the same for appointments). `reservation-worker-boss.js` (stale inventory reservations) is deliberately NOT gated — expiring a reservation releases stock, and stopping it would strand reserved stock.
+
 ### `schemas/`
 Zod validation schemas for all domains, one file per domain, consumed by `validate(schema)` middleware. See `schemas/CLAUDE.md` for the full file/export/importer table and conventions (`.passthrough()` vs `.strict()`, exported enum constants, `superRefine` for cross-field validation).
+
+### `config/`
+Static config-as-code modules (no DB access):
+- `business-modules.js` — the Business Modules catalog. Every `DEFAULT_FEATURE_FLAGS` key is classified into a bucket A/B/C card (`BUSINESS_MODULES`: flags, sub_toggles, mode, depends_on, permissions, impact_queries, Bucket C setup_route/connected_check) or listed in `UNMANAGED_FLAGS` (Bucket D — stays writable via the legacy PUT). Exports `classifyFlag`, `cardManagedFlags`, `presetRecommendedModules`, `MODULE_STATES`. `tests/unit/business-modules-catalog.test.js` is a bidirectional drift guard — an unclassified flag key fails CI.
+- `permissions-catalog.js` — every registered permission string (29), grouped for the role editor; exports `PERMISSIONS_CATALOG`, `isKnownPermission`. `tests/unit/permissions-catalog.test.js` scans all `requirePerm`/`requireAnyPerm` call sites for drift.
+- `mode-registry.js` — `tenant_modes` registry (mode → feature flags), used by preset seeding, admin mode CRUD, and the business-modules first-row backfill.
+- `country-packs.js`, `industry-config.js`, `vertical-usage-sources.js` — signup tax packs, industry preset definitions, admin vertical-usage count sources.
 
 ### `boot/workers.js`
 All worker startup. Imported by `index.js`. Mixes pg-boss workers with setInterval pollers (e.g. Shopify sync polling, report schedule worker). Do not start workers elsewhere.
@@ -262,7 +272,7 @@ SQLite code is deleted. `schema-pg.sql` is the DDL source of truth. All queries 
 Routes receive a `deps` object containing `db` (the tenant proxy), plus references to middleware functions and external clients. Routes are factory functions: `module.exports = (app, deps) => { ... }`.
 
 ### Feature flags
-Apply `requireFeature('flag_name')` as per-route middleware, sometimes combined with `requireMode('mode_name')` for vertical-specific gating. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql`. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes.
+Apply `requireFeature('flag_name')` as per-route middleware, sometimes combined with `requireMode('mode_name')` for vertical-specific gating. New flags must be added to `DEFAULT_FEATURE_FLAGS` in `middleware/feature-flags.js` AND seeded in `schema-pg.sql` — AND classified in `config/business-modules.js` (card flag, sub_toggle, or `UNMANAGED_FLAGS`); the catalog unit test fails otherwise. Use `invalidateFeatureFlagCache(tenantId)` after admin flag changes. `PUT /api/feature-flags/:key` no longer accepts module primary/bundle flags (409 `MANAGED_BY_BUSINESS_MODULES`) — module state changes go through `POST /api/business-modules/:key/toggle` so bucket rules, dependencies, mode sync, saved_flags, locks, and audit all apply.
 
 ### Permission guards
 Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (e.g. receipts, country-packs, public bookings/storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute.

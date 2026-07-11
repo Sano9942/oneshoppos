@@ -4,7 +4,7 @@ All routes here are under `/api/admin/*` and mount **before** tenant middleware 
 
 ## index.js — Orchestrator
 
-Builds one shared `deps` object and registers 8 domain modules in order: `auth.js`, `tenants.js`, `monitoring.js`, `billing.js`, `operations.js`, `compliance.js`, `messaging.js`, `system.js`. `deps` carries: `db`, `masterDb`, `jwt`, `jwtDefaults`, `tenantDbManager`, `requireAllowedIp`, `requireSuperAdmin`, `authLimiter`, `bcrypt`, `BCRYPT_ROUNDS`, `provision`, `PLAN_DEFAULTS`, `auditLog`, `logAdminAction`, `logSecurityEvent`. Calls `tenantDbManager.init(db)` before any route registers.
+Builds one shared `deps` object and registers 9 domain modules in order: `auth.js`, `tenants.js`, `monitoring.js`, `billing.js`, `operations.js`, `compliance.js`, `messaging.js`, `system.js`, `module-locks.js`. `deps` carries: `db`, `masterDb`, `jwt`, `jwtDefaults`, `tenantDbManager`, `requireAllowedIp`, `requireSuperAdmin`, `authLimiter`, `bcrypt`, `BCRYPT_ROUNDS`, `provision`, `PLAN_DEFAULTS`, `auditLog`, `logAdminAction`, `logSecurityEvent`. Calls `tenantDbManager.init(db)` before any route registers.
 
 ## helpers.js — Shared Utilities
 
@@ -99,6 +99,10 @@ Uses `masterDb` for everything here (`plan_pricing`, `payment_records`, `upgrade
 `GET /api/admin/orphaned-schemas` reads a cached snapshot from `public.infra_cache` (key `orphaned_schemas`, populated hourly by `workers/orphan-schema-scan-worker-boss.js`); `?force=1` triggers `runScan(db)` live, which was measured at up to ~104s in prod — avoid forcing without reason. `POST /api/admin/orphaned-schemas/cleanup` always does a live comparison of `information_schema.schemata` against the tenant registry and drops anything unmatched (no cache involved — this one always runs live since it's a mutating action).
 
 `POST /api/admin/backup` shells out to `pg_dump` (checks availability first via `isPgDumpAvailable()`) across all active tenant schemas + public, uploads the resulting dump to R2, and logs to `backup_log`. `POST /api/admin/backup/verify` takes a `filePath`, lists the schemas actually present in that dump, and diffs against the expected schema set. `GET /api/admin/backup-history` returns `[]` on error rather than a 500 (backup history is non-critical dashboard chrome).
+
+## module-locks.js — Business Modules Platform Locks
+
+CRUD over `public.platform_module_locks` — the super-admin backstop for the tenant-facing Business Modules page. A lock row means the tenant cannot self-ENABLE that module via `POST /api/business-modules/:key/toggle` (403 `MODULE_LOCKED`, enforced in `services/business-modules.js`); disable is always allowed and locks never force a module off. `tenant_id NULL` = global lock, non-NULL = one tenant. `GET /api/admin/module-locks` (list, with tenant slug join + valid module keys), `PUT /api/admin/module-locks/:moduleKey` (create/refresh — manual select-then-insert/update upsert because the two partial unique indexes can't be targeted by a plain ON CONFLICT), `DELETE /api/admin/module-locks/:moduleKey?tenant_id=` (remove). Both mutations validate `tenant_id` is an integer, verify the tenant exists on PUT, and call `logAdminAction`. Frontend: `pages/admin/AdminModuleLocks.jsx`.
 
 ## Cross-Cutting Conventions
 

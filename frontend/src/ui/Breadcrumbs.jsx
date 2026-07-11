@@ -48,6 +48,7 @@ const LABELS = {
   "smart-collections": "Smart Collections",
   "scheduled-changes": "Scheduled Changes",
   "outlet-tax-profiles": "Outlet Tax Profiles",
+  "business-modules": "Business Modules",
   commissions: "Commissions",
   tips: "Tip Pools",
   "report-builder": "Report Builder",

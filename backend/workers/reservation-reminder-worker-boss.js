@@ -16,6 +16,13 @@ const logger = require("../services/logger").child({ component: "reservation-rem
 
 // Exported so tests can drive the tenant-scoped handler without pg-boss.
 async function runOnce(db) {
+  // Feature-flag gate — no-op for tenants with the Restaurant module's
+  // reservations flag off (Business Modules rule). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant_reservations'`
+  );
+  if (!flagRows[0]?.enabled) return { sent: 0, considered: 0 };
+
   // 2h ± 10min window. Narrow enough that 15-min cadence never misses a
   // reservation and wide enough to tolerate a cron skip.
   const { rows } = await db.query(`

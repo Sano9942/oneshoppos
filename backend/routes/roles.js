@@ -1,8 +1,16 @@
+const {
+  PERMISSIONS_CATALOG,
+  isKnownPermission,
+} = require("../config/permissions-catalog");
+
 module.exports = function registerRoleRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
-  // Get all roles
-  app.get("/api/roles", async (req, res) => {
+  // Get all roles.
+  // Guard (PLAN.md business-modules Step 7): the only frontend consumers are
+  // AdministratorRedesign and EmployeesRedesign, both behind
+  // perm("all_access") routes — so the list itself is admin-only.
+  app.get("/api/roles", requirePerm("all_access"), async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM roles ORDER BY id ASC");
       res.json({ roles: rows });
@@ -10,6 +18,16 @@ module.exports = function registerRoleRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // The permission catalog backing the role editor (PLAN.md Step 7) —
+  // replaces the stale hardcoded list in AdministratorRedesign.jsx.
+  app.get(
+    "/api/permissions-catalog",
+    requirePerm("all_access"),
+    (req, res) => {
+      res.json({ permissions: PERMISSIONS_CATALOG });
+    }
+  );
 
   // Add a new role
   app.post("/api/roles", requirePerm("all_access"), async (req, res) => {
@@ -23,7 +41,9 @@ module.exports = function registerRoleRoutes(app, deps) {
       );
       res.json({ id: rows[0].id, name, description });
     } catch (err) {
-      if (err.constraint) {
+      // Only the name-unique violation means a duplicate name — a pkey
+      // violation here is a desynced roles_id_seq, not a name clash.
+      if (err.code === "23505" && String(err.constraint || "").includes("name")) {
         return res.status(400).json({ error: "Role name already exists" });
       }
       res.status(500).json({ error: err.message });
@@ -43,7 +63,9 @@ module.exports = function registerRoleRoutes(app, deps) {
       if (rowCount === 0) return res.status(404).json({ error: "Role not found" });
       res.json({ message: "Role updated successfully" });
     } catch (err) {
-      if (err.constraint) {
+      // Only the name-unique violation means a duplicate name — a pkey
+      // violation here is a desynced roles_id_seq, not a name clash.
+      if (err.code === "23505" && String(err.constraint || "").includes("name")) {
         return res.status(400).json({ error: "Role name already exists" });
       }
       res.status(500).json({ error: err.message });
@@ -82,8 +104,46 @@ module.exports = function registerRoleRoutes(app, deps) {
     }
   });
 
+  /**
+   * Self-or-admin guard for reading a role's permission list (PLAN.md
+   * business-modules Step 7). Every logged-in user — Cashier and Field Rep
+   * included — reads their OWN role's permissions on boot via
+   * AuthProvider.refreshPermissions (frontend/src/auth/AuthProvider.jsx),
+   * so an admin-only guard here would break all non-admin logins. The rule:
+   *   - all_access / manage_employees → any role
+   *   - anyone else → only their own role (JWT req.employee.role_id when
+   *     present; single-tenant/harness falls back to an employees lookup via
+   *     the x-employee-id header, which is the ST trust model everywhere)
+   */
+  async function requireSelfRoleOrAdmin(req, res, next) {
+    try {
+      const perms = req.employeePerms || [];
+      if (perms.includes("all_access") || perms.includes("manage_employees")) {
+        return next();
+      }
+      const roleId = String(req.params.id);
+      if (req.employee?.role_id != null) {
+        if (String(req.employee.role_id) === roleId) return next();
+      } else {
+        const empId = parseInt(req.headers["x-employee-id"], 10);
+        if (Number.isInteger(empId) && empId > 0) {
+          const { rows } = await db.query(
+            "SELECT role_id FROM employees WHERE id = $1",
+            [empId]
+          );
+          if (rows[0] && String(rows[0].role_id) === roleId) return next();
+        }
+      }
+      return res
+        .status(403)
+        .json({ error: "Forbidden: insufficient permissions" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // Get permissions for a specific role
-  app.get("/api/roles/:id/permissions", async (req, res) => {
+  app.get("/api/roles/:id/permissions", requireSelfRoleOrAdmin, async (req, res) => {
     const { id } = req.params;
     try {
       const { rows } = await db.query(
@@ -115,6 +175,18 @@ module.exports = function registerRoleRoutes(app, deps) {
 
     if (!Array.isArray(permissions)) {
       return res.status(400).json({ error: "Permissions must be an array of strings" });
+    }
+
+    // PLAN.md Step 7: every submitted string must be a registered permission —
+    // stops silent drift (typos, stale UI lists) at the source.
+    const unknown = permissions.filter(
+      (p) => typeof p !== "string" || !isKnownPermission(p)
+    );
+    if (unknown.length > 0) {
+      return res.status(400).json({
+        error: `Unknown permission(s): ${unknown.join(", ")}`,
+        unknown,
+      });
     }
 
     try {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import {
   BarChart3,
   TrendingUp,
@@ -770,6 +770,18 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
 }
 
 export function ReportTabStandalone({ tabId }) {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
+
+  // Inline self-guard (Business Modules): flag-gated tabs (registry `flag`
+  // field in GROUPS) must not render via deep link with the flag off — the
+  // backend 403s anyway, but the page shouldn't paint at all.
+  const registryTab = GROUPS.flatMap((g) => g.tabs).find((t) => t.id === tabId);
+  if (registryTab?.flag) {
+    if (flagsLoading) return null;
+    if (!flags[registryTab.flag]) return <Navigate to="/" replace />;
+  }
+
   const standaloneFilters = {
     dateFrom: "",
     dateTo: "",

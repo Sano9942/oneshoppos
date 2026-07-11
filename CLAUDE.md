@@ -59,7 +59,7 @@ oneshoppos/
 │   ├── railway.toml              # Dockerfile builder, healthcheck /api/health, restart config, /data volume mount
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Contains inline health check routes, feature-flag routes, middleware wiring, and outlet-assignment enforcement
-│   │   ├── admin/                # /api/admin/* — auth, tenants, monitoring, billing, operations, compliance, messaging, system — mounted BEFORE tenant middleware
+│   │   ├── admin/                # /api/admin/* — auth, tenants, monitoring, billing, operations, compliance, messaging, system, module-locks — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
 │   │   ├── products.js           # /api/products
@@ -87,6 +87,7 @@ oneshoppos/
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── customer-display.js   # /api/customer-display
 │   │   ├── country-packs.js      # GET /api/country-packs/:country — no auth, pre-seeded tax rates + flags
+│   │   ├── business-modules.js   # /api/business-modules (GET page payload, GET :key/impact preview, POST :key/toggle) — self-service module toggles, perm manage_business_modules (no default role; admins pass via all_access)
 │   │   ├── service-tickets.js    # CRUD workflow tickets (phase4_workflow_tickets gated)
 │   │   ├── rentals.js            # Rental contracts, asset check-out/in (phase4_rentals gated)
 │   │   ├── rooms.js              # Room CRUD, bookings, folio, check-in/check-out (phase4_room_management gated)
@@ -101,6 +102,11 @@ oneshoppos/
 │   │   ├── shopify/              # /api/integrations/shopify* (modular)
 │   │   ├── tier4/                # Tier 4 features (accounting, approvals, notifications, crm, hr, commissions, report-builder)
 │   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, projects, contracts, bookings, gift-cards(+public), loyalty, holds, tips, modifiers, price-books/price-lists/price-list-assignments, pos-devices, pos-layouts, scheduled-changes, smart-collections, subscriptions, customer-invoices, draft-orders, item-suggestions, inventory-intelligence, risk-controls, approval-policies, override-reasons, return-policies, outlet-tax-profiles, outlet-visibility, storefront.js, marketing.js, messaging.js, printer.js, kds.js, product-serials.js, schedules.js, van.js (wholesale van sales), backorders.js, batches.js (expiry/FEFO), classes.js (gym/studio), client-service-records.js, forms.js, handouts.js, member-kiosk.js, members.js, notification-settings.js, packages.js (prepaid credits), recalls.js, report-builder.js, stock-conversions.js, ai.js (content/invoice generation), commissions.js, etc.
+│   ├── config/
+│   │   ├── business-modules.js   # Business Modules catalog — every feature flag classified into bucket A/B/C cards, sub_toggles, or UNMANAGED (Bucket D); exports BUSINESS_MODULES, classifyFlag, cardManagedFlags, presetRecommendedModules. Bidirectional drift guard: tests/unit/business-modules-catalog.test.js fails if a DEFAULT_FEATURE_FLAGS key is unclassified.
+│   │   ├── permissions-catalog.js # Registered permission strings (29) grouped for the role editor; exports PERMISSIONS_CATALOG, isKnownPermission. Drift guard: tests/unit/permissions-catalog.test.js scans all requirePerm/requireAnyPerm call sites.
+│   │   ├── mode-registry.js      # tenant_modes registry — mode → feature flags mapping
+│   │   └── [country-packs.js, industry-config.js, vertical-usage-sources.js]
 │   ├── middleware/
 │   │   ├── plan-limits.js        # requireActiveSubscription + requirePlanLimit (tenant plan cap + subscription enforcement)
 │   │   ├── rate-limit.js         # Rate limiter config (global, auth, webhook, portal, booking)
@@ -133,6 +139,7 @@ oneshoppos/
 │   │   ├── product-visibility.js # Customer-group catalog visibility resolution (wholesale Option C/C2)
 │   │   ├── phase4-polling.js     # Shared polling helpers for phase4 vertical workers
 │   │   ├── public-tenant-context.js # resolvePublicTenantDb() — tenant routing for portal auth modules (customer + manufacturer), bypasses resolveTenant
+│   │   ├── business-modules.js   # Module toggle engine: atomic flag+mode writes, saved_flags snapshot/restore on disable/re-enable, depends_on cascade (Bucket C dependents left connected), platform-lock enforcement, first-mode-row drift backfill, action_history audit, rejectCatalogManagedFlagWrites (legacy PUT lockdown)
 │   │   ├── stock-ledger.js       # decrementStock/incrementStock — the ONE shared "move on-hand stock" implementation (POS sale, quotation-convert, transfers, supplier returns, PO receive, stock count all funnel through it). Must run inside caller's deps.db.transaction(...); takes FOR UPDATE.
 │   │   ├── tax-snapshot.js       # resolveTaxSnapshot() — the ONE shared per-line tax cascade (outlet tax profile → product tax_id → legacy gst → category-inherited → 0) every sale writer applies
 │   │   └── [restaurant/clinic/rental/room/booking services] # restaurant-checks, restaurant-floor, restaurant-kds, modifiers, tips, booking-availability, booking-services, booking-reminders, rental-service, room-service, room-deposits, room-channel-sync, room-night-audit, treatment-plan-service, treatment-plan-deposits, service-tickets, contracts, projects, project-billing, customer-invoicing, quote.js, pricing.js, allocation.js, approval-policy.js, inventory-intelligence.js, catalog-scheduler.js, online-inbox.js, menu-schedule-resolver.js, marketing.js, messaging.js, sms.js, subscriptions.js, storefront-cart.js, reservation.js, retail-flag-preset.js, batch-stock.js, kit-engine.js, preset-apply.js, lifecycle-events.js, embedded-barcode.js, aggregator-orders.js, credit.js, backorder.js, commission-calc.js, promo-engine.js, recall-service.js, deposit-engine.js, waitlist.js, members.js, class-bookings.js, packages.js, forms.js, client-service-records.js, sms-templates.js, customer-notify.js, admin-login-alert.js, admin-totp.js, ai.js, import/
@@ -192,6 +199,7 @@ oneshoppos/
         │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
         │   ├── pos/cartMath.js        # Pure cart calculation functions (extracted for testability)
         │   ├── ProfileRedesign.jsx    # Employee profile page (PIN/password change)
+        │   ├── BusinessModulesRedesign.jsx # /settings/business-modules — self-service module toggles (bucket-grouped cards, enable/disable confirm dialogs, Bucket C setup buttons); refreshes nav in-place via refreshFeatureFlags() + refreshPreset()
         │   ├── MyTicketsRedesign.jsx  # Tenant-side support ticket viewer (/my-tickets)
         │   ├── BillingRedesign.jsx    # Trial countdown, Pay Now (gateway), payment history, upgrade requests
         │   ├── ImportRedesign.jsx     # Bulk CSV/XLSX import (products, customers, suppliers)
@@ -383,6 +391,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`), service tickets (`manage_tickets`), rentals (`manage_rentals`), room management (`manage_rooms`), treatment plans (`manage_treatment_plans`), tips (`manage_tips`), void/comp override (`override_void_comp`), gift cards (`manage_gift_cards`), price override (`override_price`), credit-limit override (`override_credit_limit`), field-sales management (`manage_field_sales`)
 - **All authenticated**: view reports, read-only data, send receipts, POS operations
 - **All GET routes require auth** — `requirePerm` or `requireAnyPerm` on every data-returning GET
+- **Permission catalog**: `backend/config/permissions-catalog.js` registers every live permission string (29); `PUT /api/roles/:id/permissions` rejects unregistered strings (400) and the role editor reads `GET /api/permissions-catalog` (no more hardcoded frontend list). `manage_business_modules` gates `/api/business-modules` — granted to NO default role (delegable via custom role; Administrators pass via `all_access`). `GET /api/roles` is all_access-only; `GET /api/roles/:id/permissions` is self-or-admin (every employee reads their own role's perms on boot)
 
 ## Migrations
 
@@ -392,7 +401,8 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - Restaurant expansion wave: infra_cache, split-bill, modifiers, course timing, KDS routing rules, online ordering inbox, tip capture/pooling, several restaurant waves
 - Retail/inventory hardening wave: gift cards/loyalty, manager price override, variant outlet stock, serialized inventory, return reason codes, schema hygiene, inventory intelligence hub (ABC class + cycle counts), layaway/holds, per-device quick grid, anti-theft shrinkage tracking, refund idempotency, merchant home preference, receipt designer + shift auto-close
 - Retail launch + dedup wave: retail launch flags, email verification columns, loyalty-tier/chart-of-accounts/courier-integration dedup fixes, products.sku partial unique index, tax_mode + per-line tax snapshot, backup_log column union
-- Restaurant kiosk + wholesale wave (most recent): customer order kiosk (counter-mode tablet), tenant legal-consent tracking, Tier 0 wholesale foundation (AR aging), Tier 0.1 wholesale (credit limits/payment terms + hotfix), Tier 1.1 wholesale field sales (geocoding, geofence, field visits/routes, Field Rep role + hotfix), Tier 1.2 field sales (sale↔visit link), Tier 1.3 wholesale schemes (slab_percent promotions + audit table), Tier 1.4 wholesale secondary sales (manufacturer partners), Tier 2.2 MOQ, Tier 2.11 catalog visibility, impersonation jti/revocation columns, and the public-schema RLS enablement sweep
+- Restaurant kiosk + wholesale wave: customer order kiosk (counter-mode tablet), tenant legal-consent tracking, Tier 0 wholesale foundation (AR aging), Tier 0.1 wholesale (credit limits/payment terms + hotfix), Tier 1.1 wholesale field sales (geocoding, geofence, field visits/routes, Field Rep role + hotfix), Tier 1.2 field sales (sale↔visit link), Tier 1.3 wholesale schemes (slab_percent promotions + audit table), Tier 1.4 wholesale secondary sales (manufacturer partners), Tier 2.2 MOQ, Tier 2.11 catalog visibility, impersonation jti/revocation columns, and the public-schema RLS enablement sweep
+- Business Modules wave (most recent): v131 (`public.platform_module_locks` super-admin enable-lock table + per-tenant `tenant_business_modules` with `saved_flags` snapshot), v132 (serial-sequence repair — wizard-seeded explicit ids on roles/outlets/receipt_templates left nextval() behind MAX(id), breaking the first POST /api/roles on every seeded tenant)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all `status='active'` tenant schemas sequentially
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run — otherwise migrate sees version 0 and tries to re-apply v1 (idempotent but slow)
 - **Per-tenant failures**: caught and logged per-tenant — one failed tenant doesn't block others
@@ -407,6 +417,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - **Shifts**: no status filter on `GET /api/shifts` — use `GET /api/shifts/active?outlet_id=1`
 - **Action history**: `date_from`/`date_to` params
 - **Notifications mark-read**: `PUT /api/notifications/read-all` (not POST)
+- **Feature flags**: `PUT /api/feature-flags/:key` 409s (`MANAGED_BY_BUSINESS_MODULES`) for module primary/bundle flags — those toggle via `POST /api/business-modules/:key/toggle`; sub_toggles and unmanaged (Bucket D) keys still accepted
 - **Kiosk MT mode**: `/kiosk?tenant=<slug>` required for unauthenticated endpoints
 - **Reports that exist**: `item-wise`, `inventory-dump`, `product-movement`, `cash-flow`, `shift-summary` (needs `session_id`), `shrinkage`
 - **Quotations**: must PUT status to `accepted` before `convert` works

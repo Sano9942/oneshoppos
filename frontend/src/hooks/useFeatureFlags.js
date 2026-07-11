@@ -49,6 +49,16 @@ function writeCachedFlags(next) {
   }
 }
 
+// Cross-component refresh: code that changes flags server-side (the Business
+// Modules toggle page) dispatches this event; every mounted useFeatureFlags
+// instance refetches and rewrites the warm cache, so nav/gates update
+// in-place without a re-login.
+export const FLAGS_REFRESH_EVENT = "sanopos:flags-refresh";
+
+export function refreshFeatureFlags() {
+  window.dispatchEvent(new Event(FLAGS_REFRESH_EVENT));
+}
+
 export default function useFeatureFlags(authHeaders) {
   // Initial state prefers cached flags so the sidebar/UI paints with the
   // last-known truth instead of all-false. `loading` still starts true so
@@ -58,6 +68,13 @@ export default function useFeatureFlags(authHeaders) {
     return cached ? { ...DEFAULT_FLAGS, ...cached } : DEFAULT_FLAGS;
   });
   const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const onRefresh = () => setRefreshTick((t) => t + 1);
+    window.addEventListener(FLAGS_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(FLAGS_REFRESH_EVENT, onRefresh);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -92,7 +109,10 @@ export default function useFeatureFlags(authHeaders) {
     return () => {
       mounted = false;
     };
-  }, [authHeaders]);
+  }, [authHeaders, refreshTick]);
 
-  return useMemo(() => ({ flags, loading }), [flags, loading]);
+  return useMemo(
+    () => ({ flags, loading, refresh: refreshFeatureFlags }),
+    [flags, loading]
+  );
 }

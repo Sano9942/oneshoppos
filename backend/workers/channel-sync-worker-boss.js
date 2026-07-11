@@ -80,6 +80,12 @@ async function registerChannelSyncWorker(boss, pool) {
     global.__channelSyncWorkerStatus.lastPollAt = Date.now();
     let synced = 0;
     await forEachTenant(async (db, tenant) => {
+      // Feature-flag gate — no-op for tenants with the Room Channel Sync
+      // card off (Business Modules rule). Pattern: abc-worker-boss.js.
+      const { rows: flagRows } = await db.query(
+        `SELECT enabled FROM feature_flags WHERE key = 'room_channel_sync'`
+      );
+      if (!flagRows[0]?.enabled) return;
       const { rows: feeds } = await db.query(
         "SELECT 1 FROM room_channel_feeds WHERE direction = 'import' AND is_active = TRUE LIMIT 1"
       );
@@ -114,6 +120,12 @@ async function registerChannelSyncWorker(boss, pool) {
   await boss.work("room-reservation-expiry", async () => {
     global.__channelSyncWorkerStatus.lastPollAt = Date.now();
     await forEachTenant(async (db, tenant) => {
+      // Gate on the Rooms module (this queue formalizes public-reservation
+      // expiry, a rooms surface — not channel-sync-specific).
+      const { rows: flagRows } = await db.query(
+        `SELECT enabled FROM feature_flags WHERE key = 'phase4_room_management'`
+      );
+      if (!flagRows[0]?.enabled) return;
       const expired = await roomService.expireStaleRoomReservations(db);
       if (expired.length) {
         logger.info({ tenantSlug: tenant.slug, expired: expired.length }, "expired stale room reservations");

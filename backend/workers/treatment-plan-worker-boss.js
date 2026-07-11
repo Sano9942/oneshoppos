@@ -76,6 +76,13 @@ async function registerTreatmentPlanWorker(boss, pool) {
 async function runDailyCheck(db, logger, tenantSlug, tenantName, enqueueEmail, tp) {
   let count = 0;
 
+  // Feature-flag gate — no-op for tenants with the Clinical / Treatment
+  // Plans module off (Business Modules rule). Pattern: abc-worker-boss.js.
+  const { rows: flagRows } = await db.query(
+    `SELECT enabled FROM feature_flags WHERE key = 'phase4_treatment_plans'`
+  );
+  if (!flagRows[0]?.enabled) return 0;
+
   // Store/company name for email subject
   let storeName = tenantName || tenantSlug;
   try {

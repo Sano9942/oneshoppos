@@ -7,7 +7,11 @@ import { api } from "../../../../api";
 const DEFAULT_EARN_RATE = 1; // 1pt per PKR 100 of spend
 const DEFAULT_REDEEM_RATE = 10; // PKR 10 off per 100 points
 
-export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyaltyConfig }) {
+// `enabled` gates the whole loyalty/wallet surface on the phase2g_loyalty
+// feature flag (Business Modules): when off, the wallet fetch never fires and
+// every derived value is zeroed so checkout math + the sale payload
+// (points_earned / points_redeemed) behave as if no loyalty system exists.
+export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyaltyConfig, enabled = true }) {
   const [checkoutWalletBalance, setCheckoutWalletBalance] = useState(0);
   const [checkoutWalletLoading, setCheckoutWalletLoading] = useState(false);
   const [redeemPointsOn, setRedeemPointsOn] = useState(false);
@@ -22,7 +26,7 @@ export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyalty
   const redeemRate = Number(loyaltyConfig?.redeem_rate ?? DEFAULT_REDEEM_RATE);
 
   useEffect(() => {
-    if (!checkoutCustomerId) {
+    if (!checkoutCustomerId || !enabled) {
       setCheckoutWalletBalance(0);
       setRedeemPointsOn(false);
       setPayWithWalletOn(false);
@@ -33,7 +37,7 @@ export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyalty
       .then((d) => setCheckoutWalletBalance(Number(d.balance || 0)))
       .catch(() => setCheckoutWalletBalance(0))
       .finally(() => setCheckoutWalletLoading(false));
-  }, [checkoutCustomerId]);
+  }, [checkoutCustomerId, enabled]);
 
   const checkoutCustomer = useMemo(
     () => customers.find((c) => String(c.id) === String(checkoutCustomerId)) || null,
@@ -49,11 +53,13 @@ export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyalty
       }
     : null;
   const tierMultiplier = checkoutCustomerTier?.multiplier || 1;
-  const pointsEarned = Math.floor((total / 100) * earnRate * tierMultiplier);
-  const pointsDiscount = redeemPointsOn
+  const pointsEarned = enabled
+    ? Math.floor((total / 100) * earnRate * tierMultiplier)
+    : 0;
+  const pointsDiscount = enabled && redeemPointsOn
     ? Math.floor(checkoutCustomerPoints / 100) * redeemRate
     : 0;
-  const pointsRedeemed = redeemPointsOn
+  const pointsRedeemed = enabled && redeemPointsOn
     ? Math.floor(checkoutCustomerPoints / 100) * 100
     : 0;
 

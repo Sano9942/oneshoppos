@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, CheckCircle, XCircle, Edit2, Download } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtLocalDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -39,6 +42,8 @@ const EMPTY_FORM = {
 };
 
 export default function CreditDebitNotesRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const [tab, setTab] = useState("credit");
   const [notes, setNotes] = useState([]);
@@ -209,6 +214,11 @@ export default function CreditDebitNotesRedesign() {
       s.name?.toLowerCase().includes(pickerSearch.toLowerCase()) ||
       s.contact_person?.toLowerCase().includes(pickerSearch.toLowerCase())
   );
+
+  // Inline self-guard (Business Modules): backend already 403s without
+  // accounting_core; this stops the page rendering via deep link too.
+  if (flagsLoading) return null;
+  if (!flags.accounting_core) return <Navigate to="/" replace />;
 
   return (
     <PageShell

@@ -102,6 +102,7 @@ const TipPoolsRoute = lazy(() => import("../pages/TipPoolsRoute"));
 const ReportBuilderRoute = lazy(() => import("../pages/ReportBuilderRoute"));
 const POSLayoutsRoute = lazy(() => import("../pages/POSLayoutsRoute"));
 const OutletTaxProfilesRoute = lazy(() => import("../pages/OutletTaxProfilesRoute"));
+const BusinessModulesRoute = lazy(() => import("../pages/BusinessModulesRoute"));
 const ScheduledChangesRoute = lazy(() => import("../pages/ScheduledChangesRoute"));
 const RestaurantFloorRoute = lazy(() => import("../pages/RestaurantFloorRoute"));
 const RestaurantChecksRoute = lazy(() => import("../pages/RestaurantChecksRoute"));
@@ -259,6 +260,7 @@ export const appRoutes = [
     {/* Phase 2B — Catalog Depth */}
     <Route path="/smart-collections" element={perm("all_access", <SmartCollectionsRoute />)} />
     <Route path="/settings/outlet-tax-profiles" element={perm("all_access", <OutletTaxProfilesRoute />)} />
+    <Route path="/settings/business-modules" element={perm("all_access", <BusinessModulesRoute />)} />
     <Route path="/scheduled-changes" element={perm("all_access", <ScheduledChangesRoute />)} />
     {/* Phase 3 — Marketing, Engagement & Financial Tools */}
     <Route path="/marketing/campaigns" element={perm("all_access", <MarketingCampaignsRoute />)} />

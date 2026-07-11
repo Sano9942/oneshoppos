@@ -8,7 +8,10 @@ import {
   Trash2,
   Search,
 } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtLocalDate, todayLocalStr } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -33,6 +36,8 @@ const TABS = [
 // ── Journal Entries Page ─────────────────────────────────────────────
 
 export default function JournalEntriesRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const [tab, setTab] = useState("entries");
 
@@ -295,6 +300,11 @@ export default function JournalEntriesRedesign() {
 
   // ── Pagination ─────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(total / 50));
+
+  // Inline self-guard (Business Modules): backend already 403s without
+  // accounting_core; this stops the page rendering via deep link too.
+  if (flagsLoading) return null;
+  if (!flags.accounting_core) return <Navigate to="/" replace />;
 
   // ── Render ─────────────────────────────────────────────────────────
   return (

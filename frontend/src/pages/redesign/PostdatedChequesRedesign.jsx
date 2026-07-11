@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Edit2, ArrowDown, CheckCircle, XCircle, AlertTriangle, Download } from "lucide-react";
+import { Navigate } from "react-router-dom";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtLocalDate, fmtLocalDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -44,6 +47,8 @@ function daysUntil(dateStr) {
 }
 
 export default function PostdatedChequesRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const { fmt: money } = useCurrency();
   const [cheques, setCheques] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
@@ -215,6 +220,11 @@ export default function PostdatedChequesRedesign() {
         );
 
   const actionLabel = { deposit: "Deposit", clear: "Clear", bounce: "Bounce", cancel: "Cancel" };
+
+  // Inline self-guard (Business Modules): backend already 403s without
+  // accounting_core; this stops the page rendering via deep link too.
+  if (flagsLoading) return null;
+  if (!flags.accounting_core) return <Navigate to="/" replace />;
 
   return (
     <PageShell

@@ -48,6 +48,7 @@ const PresetContext = createContext({
   ...DEFAULT_PRESET,
   presetLoaded: false,
   updatePreset: () => {},
+  refreshPreset: () => {},
   hasMode: () => true,
   label: (key) => DEFAULT_LABELS[key] || key,
 });
@@ -61,6 +62,21 @@ export function PresetProvider({ children }) {
     if (data) {
       setPreset({ ...DEFAULT_PRESET, ...data });
       setPresetLoaded(true);
+    }
+  }, []);
+
+  // Re-fetch the bootstrap payload in place (no logout) — called after a
+  // business-module toggle so hasMode()/nav mode gates reflect the new
+  // tenant_modes rows immediately. Keeps current preset on failure.
+  const refreshPreset = useCallback(async () => {
+    try {
+      const data = await api.get("/api/context/bootstrap");
+      if (data?.preset) {
+        setPreset({ ...DEFAULT_PRESET, ...data.preset });
+        setPresetLoaded(true);
+      }
+    } catch {
+      // transient failure — keep the preset we already have
     }
   }, []);
 
@@ -161,7 +177,7 @@ export function PresetProvider({ children }) {
 
   return (
     <PresetContext.Provider value={{
-      ...preset, presetLoaded, updatePreset, hasMode, label,
+      ...preset, presetLoaded, updatePreset, refreshPreset, hasMode, label,
     }}>
       {children}
     </PresetContext.Provider>

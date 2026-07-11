@@ -5867,3 +5867,38 @@ CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
   applied_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ═══════════════════════════════════════════════════════════════
+-- Business Modules (v131) — self-service module toggles
+-- ═══════════════════════════════════════════════════════════════
+
+-- Super-admin backstop: a lock row means the tenant cannot self-ENABLE the
+-- module (disable is always allowed; force-off remains the existing admin
+-- per-tenant flag write). tenant_id NULL = global lock. Public schema only —
+-- explicit `public.` qualifier so a provisioner running inside a tenant
+-- search_path still creates it in public (same pattern as infra_cache).
+CREATE TABLE IF NOT EXISTS public.platform_module_locks (
+  id         SERIAL PRIMARY KEY,
+  module_key TEXT NOT NULL,
+  tenant_id  INTEGER,            -- NULL = global lock
+  locked_by  TEXT,
+  reason     TEXT,
+  locked_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_module_locks_global_uniq
+  ON public.platform_module_locks (module_key) WHERE tenant_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS platform_module_locks_tenant_uniq
+  ON public.platform_module_locks (module_key, tenant_id) WHERE tenant_id IS NOT NULL;
+ALTER TABLE public.platform_module_locks ENABLE ROW LEVEL SECURITY;
+
+-- Per-tenant module state + config preservation. saved_flags snapshots the
+-- card's flag values at disable time so re-enable restores the merchant's
+-- exact previous setup (registry-bundle defaults apply only on FIRST enable,
+-- when no row / NULL snapshot exists).
+CREATE TABLE IF NOT EXISTS tenant_business_modules (
+  module_key  TEXT PRIMARY KEY,
+  enabled     BOOLEAN NOT NULL,
+  saved_flags JSONB,
+  updated_by  TEXT,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);

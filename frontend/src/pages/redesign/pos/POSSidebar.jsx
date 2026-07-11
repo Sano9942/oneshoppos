@@ -30,6 +30,7 @@ export default function POSSidebar({ mobile }) {
     appliedPromotions,
     promoDiscount,
     presetLabels,
+    loyaltyEnabled,
   } = usePOS();
 
   const customerLabel = presetLabels?.customer || "Customer";
@@ -110,7 +111,7 @@ export default function POSSidebar({ mobile }) {
               </p>
             )}
             <div className="flex justify-center gap-2 mt-2 text-xs">
-              {selectedCustomer.tier_name && (
+              {loyaltyEnabled && selectedCustomer.tier_name && (
                 <span
                   className="rounded-full px-2 py-0.5 font-semibold flex items-center gap-1"
                   style={{ backgroundColor: (selectedCustomer.tier_color || "#101010") + "33", color: selectedCustomer.tier_color || "#101010" }}
@@ -122,9 +123,11 @@ export default function POSSidebar({ mobile }) {
                   )}
                 </span>
               )}
-              <span className="rounded-full bg-(--ui-border-strong) text-(--ui-text) px-2 py-0.5 font-semibold">
-                {selectedCustomer.loyalty_points || 0} pts
-              </span>
+              {loyaltyEnabled && (
+                <span className="rounded-full bg-(--ui-border-strong) text-(--ui-text) px-2 py-0.5 font-semibold">
+                  {selectedCustomer.loyalty_points || 0} pts
+                </span>
+              )}
             </div>
             <button
               onClick={() => {

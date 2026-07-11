@@ -23,6 +23,12 @@ async function registerNightAuditWorker(boss, pool) {
   };
 
   const auditTenant = async (db, tenantSlug) => {
+    // Feature-flag gate — no-op for tenants with the Rooms & Lodging module
+    // off (Business Modules rule). Pattern: abc-worker-boss.js.
+    const { rows: flagRows } = await db.query(
+      `SELECT enabled FROM feature_flags WHERE key = 'phase4_room_management'`
+    );
+    if (!flagRows[0]?.enabled) return false;
     // Skip tenants without room management (no rooms → nothing to audit).
     const { rows: hasRooms } = await db.query("SELECT 1 FROM rooms LIMIT 1");
     if (!hasRooms.length) return false;
