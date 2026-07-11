@@ -79,7 +79,7 @@ Provider nesting (outermost → innermost): `CurrencyProvider → ToastProvider 
 
 - `CurrencyContext.jsx` → `useCurrency()` → `{ symbol, code, denominations, fmt(n), refresh() }`. Uses raw `fetch()` intentionally (renders before the interceptor is wired). Appends `?tenant=slug` in MT mode.
 - `ToastContext.jsx` → `useToast()` → `{ toast(msg, type?), success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside the provider.
-- `PresetContext.jsx` → `usePreset()` → `{ industry_type, labels, hasMode(mode), label(key), enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset() }`. Fetches `GET /api/context/bootstrap` only once `employee?.id` is set and `isBootstrapping` is false. `hasMode()` fail-opens to `true` before load so feature flags remain the sole pre-load gate.
+- `PresetContext.jsx` → `usePreset()` → `{ industry_type, labels, hasMode(mode), label(key), enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset(), refreshPreset() }`. Fetches `GET /api/context/bootstrap` only once `employee?.id` is set and `isBootstrapping` is false. `hasMode()` fail-opens to `true` before load so feature flags remain the sole pre-load gate. `refreshPreset()` re-fetches the bootstrap payload in place (no logout) — used after business-module toggles; keeps the current preset on failure.
 
 ### `utils/` — see `utils/CLAUDE.md`
 Pure/no-React helpers except `errorLog.js` (uses `api.js`). **No `theme.js`** — confirmed absent from disk.
