@@ -273,11 +273,15 @@ describe("Batch 8 — Middleware & startup hooks (Postgres)", () => {
   describe("ensureDefaultRolePermissions", () => {
     it("seeds permissions for default roles", async () => {
       // Implementation: insert default perms and verify they exist
+      // D4 split (PLAN-V2 Step 4) — Manager holds all five report splits;
+      // Cashier converges on the sales split only.
       const DEFAULT_ROLE_PERMISSIONS = {
         Administrator: ["all_access"],
-        Manager: ["manage_inventory", "manage_orders", "view_reports", "manage_employees",
+        Manager: ["manage_inventory", "manage_orders",
+                   "view_sales_reports", "view_inventory_reports", "view_financial_reports",
+                   "view_hr_reports", "view_customer_reports", "manage_employees",
                    "pos_discount", "void_sales", "pos_park", "pos_void"],
-        Cashier: ["view_reports", "pos_discount", "pos_park"],
+        Cashier: ["view_sales_reports", "pos_discount", "pos_park"],
       };
 
       const { rows: roles } = await db.query("SELECT id, name FROM roles");

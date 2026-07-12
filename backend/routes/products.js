@@ -178,8 +178,35 @@ module.exports = function registerProductRoutes(app, deps) {
    *       401:
    *         description: Unauthorized
    */
+  // S5 (PLAN-V2 Step 4, REPORT-PERMS.md §7 mixed #6): product reads are a
+  // POS-adjacency composite — a sales-class token keeps a working POS
+  // (grid/search/scan/detail) but gets a POS-shaped response with cost
+  // fields stripped. Cost visibility requires an inventory- or
+  // financial-class perm (manage_inventory / view_inventory_reports /
+  // view_financial_reports / all_access). Field-rep tokens are stripped too.
+  const COST_FIELDS = ["cost_price", "component_cost"];
+  function canSeeCost(req) {
+    const perms = req.employeePerms || [];
+    return [
+      "all_access",
+      "manage_inventory",
+      "view_inventory_reports",
+      "view_financial_reports",
+    ].some((p) => perms.includes(p));
+  }
+  function stripCostFields(rowsOrRow, req) {
+    if (canSeeCost(req)) return rowsOrRow;
+    const rows = Array.isArray(rowsOrRow) ? rowsOrRow : [rowsOrRow];
+    for (const row of rows) {
+      if (row && typeof row === "object") {
+        for (const f of COST_FIELDS) delete row[f];
+      }
+    }
+    return rowsOrRow;
+  }
+
   // Get all products (with aggregated stock, sort/filter/search support)
-  app.get("/api/products", requireAnyPerm(["view_reports", "manage_inventory", "manage_field_sales", "execute_field_sales", "all_access"]), async (req, res) => {
+  app.get("/api/products", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "manage_field_sales", "execute_field_sales", "all_access"]), async (req, res) => {
     try {
       const { search, sort, order, status, category_id, outlet_id } = req.query;
 
@@ -299,7 +326,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const { rows } = await db.query(sql, params);
       await enrichKitAvailability(rows, outlet_id);
-      res.json({ products: await decorateProductsWithCategoryPaths(rows) });
+      res.json({ products: stripCostFields(await decorateProductsWithCategoryPaths(rows), req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -307,7 +334,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
   // Search products by name or barcode (for autocomplete and search)
   // NOTE: must be registered BEFORE /:id to prevent Express matching "search" as an id param
-  app.get("/api/products/search", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/search", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { query, outlet_id, field } = req.query;
 
@@ -367,7 +394,7 @@ module.exports = function registerProductRoutes(app, deps) {
       });
 
       await enrichKitAvailability(productsWithTax, outlet_id);
-      res.json({ products: productsWithTax });
+      res.json({ products: stripCostFields(productsWithTax, req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -375,7 +402,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
   // Scan/Find a product by barcode (Crucial for POS speed)
   // NOTE: must be registered BEFORE /:id to prevent Express matching "scan" as an id param
-  app.get("/api/products/scan/:barcode", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/scan/:barcode", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { barcode } = req.params;
       const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
@@ -473,7 +500,7 @@ module.exports = function registerProductRoutes(app, deps) {
       }
 
       await enrichKitAvailability([productWithTax], outlet_id);
-      res.json({ product: productWithTax });
+      res.json({ product: stripCostFields(productWithTax, req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -507,7 +534,7 @@ module.exports = function registerProductRoutes(app, deps) {
    *         description: Unauthorized
    */
   // Get a single product by id
-  app.get("/api/products/:id", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/:id", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [row] } = await db.query(
@@ -553,14 +580,14 @@ module.exports = function registerProductRoutes(app, deps) {
         row.bundle_components = components;
       }
 
-      res.json({ product: row });
+      res.json({ product: stripCostFields(row, req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
   // Get variants for a specific product
-  app.get("/api/products/:id/variants", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/:id/variants", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const outletId = req.query.outlet_id ? Number(req.query.outlet_id) : null;
@@ -601,14 +628,14 @@ module.exports = function registerProductRoutes(app, deps) {
         ...r,
         options: r.options_json || [],
       }));
-      res.json({ variants });
+      res.json({ variants: stripCostFields(variants, req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
   // Get individual product stock across all outlets
-  app.get("/api/products/:id/stock", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/:id/stock", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows } = await db.query(
@@ -625,7 +652,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Get bundle components for a product
-  app.get("/api/products/:id/bundle-components", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/:id/bundle-components", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows } = await db.query(
@@ -652,7 +679,7 @@ module.exports = function registerProductRoutes(app, deps) {
   // GET returns bom_type + the rich component set (with component cost for the
   // live plate-cost sum). PUT replaces the set through the shared engine, which
   // rejects self-reference / nested kits / non-positive qty.
-  app.get("/api/products/:id/components", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+  app.get("/api/products/:id/components", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [prod] } = await db.query(
@@ -676,7 +703,7 @@ module.exports = function registerProductRoutes(app, deps) {
           ORDER BY pb.component_product_id, pb.component_variant_id`,
         [id]
       );
-      res.json({ bom_type: prod.bom_type, components: rows });
+      res.json({ bom_type: prod.bom_type, components: stripCostFields(rows, req) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

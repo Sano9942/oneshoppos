@@ -1,9 +1,13 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const hrView = requirePerm("view_hr_reports");
 
-  app.get("/api/reports/labor-performance", async (req, res) => {
+  app.get("/api/reports/labor-performance", hrView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -96,7 +100,7 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/loss-prevention", async (req, res) => {
+  app.get("/api/reports/loss-prevention", hrView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -215,7 +219,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // ── Labor vs Sales Report (Phase 2) ──────────────────────────────────────
-  app.get("/api/reports/labor-vs-sales", async (req, res) => {
+  app.get("/api/reports/labor-vs-sales", hrView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -291,7 +295,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // ── Staff Attribution Report (Phase 2) ───────────────────────────────────
-  app.get("/api/reports/staff-attribution", async (req, res) => {
+  app.get("/api/reports/staff-attribution", hrView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";

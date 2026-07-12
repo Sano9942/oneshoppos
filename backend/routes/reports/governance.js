@@ -452,7 +452,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get(
     "/api/reports/schedules",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -468,7 +468,7 @@ module.exports = function (app, deps, helpers) {
 
   app.post(
     "/api/reports/schedules",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const {
@@ -512,7 +512,7 @@ module.exports = function (app, deps, helpers) {
 
   app.put(
     "/api/reports/schedules/:id",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const { id } = req.params;
@@ -565,7 +565,7 @@ module.exports = function (app, deps, helpers) {
 
   app.delete(
     "/api/reports/schedules/:id",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -584,7 +584,7 @@ module.exports = function (app, deps, helpers) {
 
   app.post(
     "/api/reports/schedules/:id/run-now",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -604,7 +604,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get(
     "/api/reports/schedules/:id/runs",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -621,7 +621,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get(
     "/api/reports/delivery-log",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -637,7 +637,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get(
     "/api/reports/saved-views",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"]),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const reportKey = req.query.report_key || null;
@@ -665,7 +665,7 @@ module.exports = function (app, deps, helpers) {
 
   app.post(
     "/api/reports/saved-views",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"]),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const {
@@ -703,7 +703,7 @@ module.exports = function (app, deps, helpers) {
 
   app.put(
     "/api/reports/saved-views/:id",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"]),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const { id } = req.params;
@@ -731,7 +731,7 @@ module.exports = function (app, deps, helpers) {
 
   app.delete(
     "/api/reports/saved-views/:id",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"]),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -750,7 +750,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get(
     "/api/reports/governance/definitions",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       try {
@@ -766,7 +766,7 @@ module.exports = function (app, deps, helpers) {
 
   app.post(
     "/api/reports/governance/definitions",
-    requirePerm("manage_employees"),
+    requirePerm("manage_reports"),
     requireFeature("reports_scheduled_exports"),
     async (req, res) => {
       const {

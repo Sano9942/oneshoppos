@@ -6,8 +6,8 @@ import { MonitorPlay, Receipt, Banknote, Package, Users } from "lucide-react";
 // authenticated employee (the target route has no permission guard).
 const ACTIONS = {
   pos: { label: "Open POS", icon: MonitorPlay, path: "/pos", newTab: true, perm: null },
-  reports: { label: "Reports", icon: Receipt, path: "/reports", perm: "view_reports" },
-  shift: { label: "Cash Management", icon: Banknote, path: "/cash-management", perm: "view_reports" },
+  reports: { label: "Reports", icon: Receipt, path: "/reports", perm: ["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"] },
+  shift: { label: "Cash Management", icon: Banknote, path: "/cash-management", perm: "view_sales_reports" },
   products: { label: "Add Product", icon: Package, path: "/inventory", perm: "manage_inventory" },
   employees: { label: "Employees", icon: Users, path: "/employees", perm: "all_access" },
 };

@@ -96,21 +96,26 @@ const PERMISSIONS_CATALOG = Object.freeze([
   { id: "manage_customers", label: "Manage Customers", category: "Customers" },
 
   // ── Reporting ─────────────────────────────────────────────────────────────
-  // view_reports is being SPLIT (PLAN-V2 Step 3/4 — D4). The five split
-  // permissions below are registered ahead of consumption (Step 3, drift test
-  // only enforces call-site → catalog, so registered-but-unused is legal);
-  // Step 4 sweeps every call site onto them, migrates role_permissions rows
-  // (pristine default Cashiers → view_sales_reports only, everything else
-  // grandfathered with all five), and REMOVES view_reports from this catalog
-  // so any straggler guard fails CI. Data-class boundaries are defined in
+  // view_reports was SPLIT into the five data-classified permissions below
+  // (PLAN-V2 Step 4 — D4b; taxonomy + mapping table in
   // docs/fable5/business-modules/REPORT-PERMS.md — read it before mapping a
-  // new report route to one of these.
-  { id: "view_reports", label: "View Reports (legacy — being split)", category: "Reporting" },
+  // new report route to one of these). view_reports is deliberately NOT
+  // registered anymore: any straggler guard still using it fails the
+  // permissions-catalog drift test at CI. Migration v134 converted every
+  // role_permissions row (pristine default Cashiers → view_sales_reports
+  // only, everything else grandfathered with all five).
   { id: "view_sales_reports", label: "View Sales & POS Reports", category: "Reporting" },
   { id: "view_inventory_reports", label: "View Inventory Reports", category: "Reporting" },
   { id: "view_financial_reports", label: "View Financial Reports", category: "Reporting" },
   { id: "view_hr_reports", label: "View Staff & Attendance Reports", category: "Reporting" },
   { id: "view_customer_reports", label: "View Customer Reports", category: "Reporting" },
+  // C6 split (Step 4 — REPORT-PERMS.md §9.2): carved out of manage_employees
+  // so future custom HR roles don't inherit financial authority. Both
+  // defaulted to Manager (no capability change for default Managers).
+  // Spine permissions — no module_key: accounting surfaces they gate span
+  // the accounting_core flag but the perms themselves are not module-granted.
+  { id: "manage_finance", label: "Manage Finance (periods, cheques, notes, payment voids)", category: "Reporting" },
+  { id: "manage_reports", label: "Manage Report Schedules & Definitions", category: "Reporting" },
 
   // ── POS ───────────────────────────────────────────────────────────────────
   { id: "pos_discount", label: "Apply Custom Discounts", category: "POS" },

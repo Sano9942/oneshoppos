@@ -44,7 +44,7 @@ describe("W0a — audit security fixes (Postgres)", () => {
       "INSERT INTO roles (name) VALUES ('Clerk W0a') RETURNING id"
     );
     await db.query(
-      "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'view_reports')",
+      "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'view_sales_reports')",
       [role.id]
     );
     const { rows: [emp] } = await db.query(
@@ -223,7 +223,7 @@ describe("W0a — audit security fixes (Postgres)", () => {
       const res = await request(app)
         .put("/api/roles/1/permissions")
         .set("x-employee-id", ADMIN)
-        .send({ permissions: ["view_reports", "manage_employees"] });
+        .send({ permissions: ["view_sales_reports", "manage_employees"] });
       expect(res.status).toBe(400);
       expect(res.body.code).toBe("CANNOT_REMOVE_LAST_ADMIN");
       // Nothing was written.
@@ -244,7 +244,7 @@ describe("W0a — audit security fixes (Postgres)", () => {
       const res = await request(app)
         .put("/api/roles/1/permissions")
         .set("x-employee-id", ADMIN)
-        .send({ permissions: ["view_reports"] });
+        .send({ permissions: ["view_sales_reports"] });
       expect(res.status).toBe(400);
       expect(res.body.code).toBe("CANNOT_REMOVE_LAST_ADMIN");
       await db.query("DELETE FROM role_permissions WHERE role_id = $1", [role.id]);
@@ -272,7 +272,7 @@ describe("W0a — audit security fixes (Postgres)", () => {
         const res = await request(app)
           .put(`/api/roles/${role.id}/permissions`)
           .set("x-employee-id", String(onlyAdmin.id))
-          .send({ permissions: ["view_reports"] });
+          .send({ permissions: ["view_sales_reports"] });
         expect(res.status).toBe(400);
         expect(res.body.code).toBe("CANNOT_REMOVE_LAST_ADMIN");
       } finally {
@@ -296,12 +296,12 @@ describe("W0a — audit security fixes (Postgres)", () => {
       const res = await request(app)
         .put(`/api/roles/${role.id}/permissions`)
         .set("x-employee-id", ADMIN)
-        .send({ permissions: ["view_reports"] });
+        .send({ permissions: ["view_sales_reports"] });
       expect(res.status).toBe(200);
       const check = await request(app)
         .get(`/api/roles/${role.id}/permissions`)
         .set("x-employee-id", ADMIN);
-      expect(check.body.permissions).toEqual(["view_reports"]);
+      expect(check.body.permissions).toEqual(["view_sales_reports"]);
       await db.query("DELETE FROM role_permissions WHERE role_id = $1", [role.id]);
       await db.query("DELETE FROM roles WHERE id = $1", [role.id]);
     });
@@ -310,7 +310,7 @@ describe("W0a — audit security fixes (Postgres)", () => {
       const res = await request(app)
         .put("/api/roles/1/permissions")
         .set("x-employee-id", ADMIN)
-        .send({ permissions: ["all_access", "view_reports"] });
+        .send({ permissions: ["all_access", "view_sales_reports"] });
       expect(res.status).toBe(200);
       // Restore the seeded state.
       await request(app)

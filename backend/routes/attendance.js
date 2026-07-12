@@ -238,7 +238,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // prefix is already on both PUBLIC_TENANT_PARAM_PATHS and
   // KIOSK_ALLOWED_PATHS, so this needs no auth-middleware change. POST (not
   // GET) like the other pin- endpoints: PERMISSION_RULES blanket-guards
-  // GET /api/attendance/* behind view_reports. Exposes id + name only.
+  // GET /api/attendance/* behind view_hr_reports. Exposes id + name only.
   // ---------------------------------------------------------------------------
   app.post("/api/attendance/pin-outlets", async (req, res) => {
     try {
@@ -588,7 +588,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   // PUT /api/attendance/:id — manager manually corrects a day-level record
   // ---------------------------------------------------------------------------
-  app.put("/api/attendance/:id", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/attendance/:id", requirePerm("manage_employees"), async (req, res) => {
     try {
       const { id } = req.params;
       const { check_in, check_out, status, comment } = req.body || {};

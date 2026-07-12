@@ -18,7 +18,7 @@
  * snapshot in v1) — surfaced in the `basis` field of each response so the UI can
  * state the limitation.
  *
- * Gate: kit_bom_engine + view_reports (recipes span retail + food service, so
+ * Gate: kit_bom_engine + view_financial_reports (margin rule) (recipes span retail + food service, so
  * no restaurant-mode gate).
  */
 
@@ -27,7 +27,7 @@ const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 module.exports = function registerRecipeCostingReports(app, deps) {
   const { requireFeature, requirePerm } = deps;
 
-  const gate = [requireFeature("kit_bom_engine"), requirePerm("view_reports")];
+  const gate = [requireFeature("kit_bom_engine"), requirePerm("view_financial_reports")];
 
   function dateFilters(req) {
     const tz = req.company?.timezone || "UTC";

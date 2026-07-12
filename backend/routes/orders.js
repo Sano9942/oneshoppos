@@ -21,7 +21,7 @@ module.exports = function registerOrderRoutes(app, deps) {
 
 // --- ROUTES: ORDERS (Website order staging before live Shopify integration) ---
 
-  app.get("/api/orders/aging-summary", requireAnyPerm(["manage_orders", "view_reports"]), async (req, res) => {
+  app.get("/api/orders/aging-summary", requireAnyPerm(["manage_orders", "view_sales_reports"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT

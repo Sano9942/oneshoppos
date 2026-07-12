@@ -45,7 +45,7 @@ describe("Phase 2-R.5 — KDS analytics + balance strategies", () => {
     app.use((req, _res, next) => {
       const eid = req.headers["x-employee-id"];
       if (eid) req.employee = { id: Number(eid) };
-      // Analytics endpoint requires view_reports perm — grant all_access in tests.
+      // Analytics endpoint requires view_sales_reports perm — grant all_access in tests.
       req.employeePerms = ["all_access"];
       next();
     });

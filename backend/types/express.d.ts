@@ -20,7 +20,7 @@ declare global {
 
       /**
        * Flat array of permission strings for the authenticated employee.
-       * e.g. ["view_reports", "manage_inventory"]
+       * e.g. ["view_sales_reports", "manage_inventory"]
        * Use requirePerm() / requireAnyPerm() middleware to check — don't read this directly in routes.
        */
       employeePerms?: string[];

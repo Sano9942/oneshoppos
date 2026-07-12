@@ -147,7 +147,7 @@ module.exports = function registerRiskControlsRoutes(app, deps) {
 
   // ── no-sale event listing ────────────────────────────────────────────
 
-  app.get("/api/risk/no-sale-events", feat, requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/risk/no-sale-events", feat, requirePerm("view_hr_reports"), async (req, res) => {
     try {
       const { employee_id, outlet_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
       const conditions = [];
@@ -198,7 +198,7 @@ module.exports = function registerRiskControlsRoutes(app, deps) {
 
   // ── anomaly flags ────────────────────────────────────────────────────
 
-  app.get("/api/risk/anomaly-flags", feat, requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/risk/anomaly-flags", feat, requirePerm("view_hr_reports"), async (req, res) => {
     try {
       const { reviewed, limit = 50, offset = 0 } = req.query;
       const conditions = [];
@@ -264,7 +264,7 @@ module.exports = function registerRiskControlsRoutes(app, deps) {
 
   // ── dashboard summary ────────────────────────────────────────────────
 
-  app.get("/api/risk/summary", feat, requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/risk/summary", feat, requirePerm("view_hr_reports"), async (req, res) => {
     try {
       const { rows: [noSale] } = await db.query(
         `SELECT COUNT(*)::int AS no_sale_count_7d

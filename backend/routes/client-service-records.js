@@ -9,7 +9,7 @@
  *
  * Gated by the appointments mode + phase4_appointments feature (salon and the
  * other appointment-driven presets). Perms are deliberately light — stylists
- * are Cashier-role staff (view_reports), and the plan makes formulas visible
+ * are Cashier-role staff (view_customer_reports), and the plan makes formulas visible
  * to all staff by design. Registered in registerAllRoutes.js.
  */
 
@@ -31,7 +31,7 @@ module.exports = (app, deps) => {
   // requireMode) — same pattern as bookings.js / recalls.js.
   const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requireAnyPerm } = require("../middleware/permissions");
-  const gate = [requireMode("appointments"), requireFeature("phase4_appointments"), requireAnyPerm(["view_reports", "manage_bookings"])];
+  const gate = [requireMode("appointments"), requireFeature("phase4_appointments"), requireAnyPerm(["view_customer_reports", "manage_bookings"])];
 
   // Full timeline for a customer's Service History tab.
   app.get("/api/customers/:customerId/service-records", ...gate, async (req, res) => {

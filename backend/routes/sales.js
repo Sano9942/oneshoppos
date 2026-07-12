@@ -152,7 +152,7 @@ module.exports = function registerSalesRoutes(app, deps) {
    *         description: Unauthorized
    */
   // GET all sales (paginated, filterable)
-  app.get("/api/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/sales", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     try {
       const {
         page = 1,
@@ -238,7 +238,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   // to auto-load a sale when the cashier scans the receipt.
   app.get(
     "/api/sales/by-barcode/:code",
-    requireAnyPerm(["view_reports", "pos_park", "all_access"]),
+    requireAnyPerm(["view_sales_reports", "pos_park", "all_access"]),
     async (req, res) => {
       const code = String(req.params.code || "").trim();
       if (!code) return res.status(400).json({ error: "barcode required" });
@@ -275,7 +275,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   );
 
   // GET a single sale with full line items and payments
-  app.get("/api/sales/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/sales/:id", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
 
     try {

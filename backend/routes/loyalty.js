@@ -22,7 +22,7 @@ module.exports = function registerLoyaltyRoutes(app, deps) {
   // GET /api/loyalty/config — always available, even when flag off.
   // Falls back to the historical constants if the columns aren't yet
   // present (tenant DB still on < v63).
-  app.get("/api/loyalty/config", requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/loyalty/config", requirePerm("view_sales_reports"), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT loyalty_earn_rate::numeric AS earn_rate,
@@ -74,7 +74,7 @@ module.exports = function registerLoyaltyRoutes(app, deps) {
   app.get(
     "/api/loyalty/customers/:id/ledger",
     requireFeature("phase2g_loyalty"),
-    requirePerm("view_reports"),
+    requirePerm("view_customer_reports"),
     async (req, res) => {
       try {
         const customerId = Number(req.params.id);

@@ -67,7 +67,7 @@ describe("validate — with LoginSchema", () => {
 describe("requirePerm", () => {
   it("calls next() when employee has the exact permission", () => {
     const { req, res, next } = mockHttp();
-    req.employeePerms = ["view_reports", "manage_inventory"];
+    req.employeePerms = ["view_sales_reports", "manage_inventory"];
     requirePerm("manage_inventory")(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
   });
@@ -81,7 +81,7 @@ describe("requirePerm", () => {
 
   it("returns 403 when permission is missing", () => {
     const { req, res, next } = mockHttp();
-    req.employeePerms = ["view_reports"];
+    req.employeePerms = ["view_sales_reports"];
     requirePerm("manage_inventory")(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe("requirePerm", () => {
   it("returns 403 when employeePerms is empty", () => {
     const { req, res, next } = mockHttp();
     req.employeePerms = [];
-    requirePerm("view_reports")(req, res, next);
+    requirePerm("view_sales_reports")(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });
@@ -98,7 +98,7 @@ describe("requirePerm", () => {
   it("returns 403 when employeePerms is undefined", () => {
     const { req, res, next } = mockHttp();
     // req.employeePerms not set — defaults to []
-    requirePerm("view_reports")(req, res, next);
+    requirePerm("view_sales_reports")(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });
@@ -107,22 +107,22 @@ describe("requirePerm", () => {
 describe("requireAnyPerm", () => {
   it("calls next() when employee has any one of the required permissions", () => {
     const { req, res, next } = mockHttp();
-    req.employeePerms = ["view_reports"];
-    requireAnyPerm(["manage_inventory", "view_reports"])(req, res, next);
+    req.employeePerms = ["view_sales_reports"];
+    requireAnyPerm(["manage_inventory", "view_sales_reports"])(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
   it("calls next() when employee has all_access", () => {
     const { req, res, next } = mockHttp();
     req.employeePerms = ["all_access"];
-    requireAnyPerm(["manage_inventory", "view_reports"])(req, res, next);
+    requireAnyPerm(["manage_inventory", "view_sales_reports"])(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
   it("returns 403 when employee has none of the required permissions", () => {
     const { req, res, next } = mockHttp();
     req.employeePerms = ["pos_discount"];
-    requireAnyPerm(["manage_inventory", "view_reports"])(req, res, next);
+    requireAnyPerm(["manage_inventory", "view_sales_reports"])(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });

@@ -38,7 +38,7 @@ describe("Employee & Role CRUD Integration Tests", () => {
       const res = await makeRequest(app, ADMIN_ID)
         .put(`/api/roles/${roleId}/permissions`)
         .send({
-          permissions: ["manage_inventory", "view_reports"],
+          permissions: ["manage_inventory", "view_sales_reports"],
         });
       expect(res.status).toBe(200);
 

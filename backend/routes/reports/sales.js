@@ -1,7 +1,12 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
-  const { db, requireFeature } = deps;
+  const { db, requireFeature, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const salesView = requirePerm("view_sales_reports");
+  const financeView = requirePerm("view_financial_reports"); // margin rule: profit layer
   const {
     pgWhere,
     buildCategoryMetaMap,
@@ -126,7 +131,7 @@ module.exports = function (app, deps, helpers) {
   }
 
   // Top Salespeople: revenue per employee
-  app.get("/api/reports/top-salespeople", async (req, res) => {
+  app.get("/api/reports/top-salespeople", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to } = req.query;
@@ -156,7 +161,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Sales Summary: high-level totals by date/outlet
-  app.get("/api/reports/sales-summary", async (req, res) => {
+  app.get("/api/reports/sales-summary", salesView, async (req, res) => {
     try {
       const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
@@ -259,7 +264,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Sales Detail: flat line-item list with parent sale info
-  app.get("/api/reports/sales-detail", async (req, res) => {
+  app.get("/api/reports/sales-detail", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { search } = req.query;
@@ -296,7 +301,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Order Wise report
-  app.get("/api/reports/order-wise", async (req, res) => {
+  app.get("/api/reports/order-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { search = "" } = req.query;
@@ -333,7 +338,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Monthly MOP Matrix: month-wise sales by payment method
-  app.get("/api/reports/monthly-mop-matrix", async (req, res) => {
+  app.get("/api/reports/monthly-mop-matrix", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -420,7 +425,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Category Wise: sales grouped by product category
-  app.get("/api/reports/category-wise", async (req, res) => {
+  app.get("/api/reports/category-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -456,7 +461,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Sub-Category Wise: sales grouped by leaf category with parent context
-  app.get("/api/reports/subcategory-wise", async (req, res) => {
+  app.get("/api/reports/subcategory-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -555,7 +560,7 @@ module.exports = function (app, deps, helpers) {
    *         description: Unauthorized
    */
   // Item Wise: sales grouped by product
-  app.get("/api/reports/item-wise", async (req, res) => {
+  app.get("/api/reports/item-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -589,7 +594,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Brand Wise: sales grouped by brand
-  app.get("/api/reports/brand-wise", async (req, res) => {
+  app.get("/api/reports/brand-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -630,7 +635,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Customer Wise report (summary)
-  app.get("/api/reports/customer-wise", async (req, res) => {
+  app.get("/api/reports/customer-wise", salesView, async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT c.name as customer, COUNT(s.id) as order_count,
@@ -647,7 +652,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Product Performance: same as item-wise but sorted by margin %
-  app.get("/api/reports/product-performance", async (req, res) => {
+  app.get("/api/reports/product-performance", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -689,7 +694,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Unified merchandising workspace: one payload for item/category/brand/supplier performance
-  app.get("/api/reports/performance-workspace", async (req, res) => {
+  app.get("/api/reports/performance-workspace", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false"];
@@ -814,7 +819,7 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/performance-comparison", async (req, res) => {
+  app.get("/api/reports/performance-comparison", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const ranges = parseComparisonRanges(req.query);
@@ -1108,7 +1113,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Refunds and Voids: operational exception summary plus detailed lists
-  app.get("/api/reports/refunds-voids", async (req, res) => {
+  app.get("/api/reports/refunds-voids", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const saleWhere = ["s.voided = true"];
@@ -1239,7 +1244,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Cashier Wise: sales, voids, refunds, and discounts by employee
-  app.get("/api/reports/cashier-wise", async (req, res) => {
+  app.get("/api/reports/cashier-wise", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = false", "s.employee_id IS NOT NULL"];
@@ -1394,6 +1399,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/profit-summary",
     requireFeature("reports_profit_layer"),
+    financeView,
     async (req, res) => {
       try {
         const { where, params } = await buildReportFilterParts(req);
@@ -1445,6 +1451,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/profit-by-product",
     requireFeature("reports_profit_layer"),
+    financeView,
     async (req, res) => {
       try {
         const sortable = new Set([
@@ -1509,6 +1516,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/profit-by-outlet",
     requireFeature("reports_profit_layer"),
+    financeView,
     async (req, res) => {
       try {
         const { where, params } = await buildReportFilterParts(req, {

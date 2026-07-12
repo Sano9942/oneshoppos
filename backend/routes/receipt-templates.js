@@ -81,7 +81,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.put("/api/receipt-templates/:id", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/receipt-templates/:id", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     const { name, header_text, footer_text, show_barcode, show_logo, is_active } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
@@ -209,7 +209,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.get("/api/action-history", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/action-history", requireAnyPerm(["view_hr_reports", "all_access"]), async (req, res) => {
     const { search, date_from, date_to, action_type } = req.query;
     const conditions = [];
     const params = [];

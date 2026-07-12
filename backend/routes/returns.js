@@ -838,7 +838,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
   });
 
   // Get all returns (with details)
-  app.get("/api/returns", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/returns", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     const { date_from, date_to } = req.query;
     const tz = req.company?.timezone || "UTC";
     const where = [];
@@ -882,7 +882,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
   // Lookup web orders for return initiation
   // NOTE: Must be registered BEFORE /:id so Express doesn't match "lookup-web-order" as an id.
-  app.get("/api/returns/lookup-web-order", requireAnyPerm(["manage_returns", "view_reports"]), async (req, res) => {
+  app.get("/api/returns/lookup-web-order", requireAnyPerm(["manage_returns", "view_sales_reports"]), async (req, res) => {
     const { q } = req.query;
     if (!q || !q.trim()) {
       return res.status(400).json({ error: "Search query is required" });
@@ -910,7 +910,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
   });
 
   // Get a single return with items
-  app.get("/api/returns/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/returns/:id", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
 
     try {

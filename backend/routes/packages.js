@@ -12,7 +12,7 @@
  *   POST   /api/packages/:id/redeem               — redeem 1+ credits
  *   POST   /api/packages/:id/reverse              — reverse a redemption (give credit back)
  *
- * Template admin gated by manage_bookings; sell/redeem/balance by view_reports
+ * Template admin gated by manage_bookings; sell/redeem/balance by view_sales_reports
  * (any counter staff). All gated by requireFeature("packages_passes").
  *
  * The credit ledger + locking live in services/packages.js — routes are thin.
@@ -28,7 +28,7 @@ module.exports = function registerPackageRoutes(app, deps) {
   ];
   const staffGuard = [
     requireFeature("packages_passes"),
-    requireAnyPerm(["view_reports", "manage_bookings", "all_access"]),
+    requireAnyPerm(["view_sales_reports", "manage_bookings", "all_access"]),
   ];
 
   // ── Template CRUD ──────────────────────────────────────────────────────

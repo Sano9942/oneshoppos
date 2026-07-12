@@ -632,8 +632,8 @@ describe("Batch 4 — Reports routes (Postgres)", () => {
   // ─── PERMISSION GATING ──────────────────────────────────
 
   describe("permission gating", () => {
-    it("reports accessible with view_reports perm", async () => {
-      // Employee 3 is Cashier with view_reports
+    it("reports accessible with view_sales_reports perm", async () => {
+      // Employee 3 is Cashier with view_sales_reports
       const res = await request(app)
         .get("/api/reports/sales-summary")
         .set("x-employee-id", "3");

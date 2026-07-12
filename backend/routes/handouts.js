@@ -30,7 +30,7 @@ module.exports = function registerHandoutRoutes(app, deps) {
   const readGate = [
     requireMode("treatment_plans"),
     requireFeature("clinical_handouts"),
-    requireAnyPerm(["manage_treatment_plans", "view_reports"]),
+    requireAnyPerm(["manage_treatment_plans", "view_customer_reports"]),
   ];
   const writeGate = [
     requireMode("treatment_plans"),

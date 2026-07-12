@@ -62,7 +62,7 @@ describe("roles & permissions contract (Postgres)", () => {
     it("any employee can read their OWN role (AuthProvider boot path)", async () => {
       const res = await as(CASHIER).get("/api/roles/3/permissions");
       expect(res.status).toBe(200);
-      expect(res.body.permissions).toContain("view_reports");
+      expect(res.body.permissions).toContain("view_sales_reports");
     });
 
     it("a Cashier reading ANOTHER role 403s", async () => {
@@ -112,7 +112,7 @@ describe("roles & permissions contract (Postgres)", () => {
   describe("PUT /api/roles/:id/permissions catalog validation", () => {
     it("400s on unknown strings, naming them", async () => {
       const res = await as(ADMIN).put("/api/roles/3/permissions", {
-        permissions: ["view_reports", "not_a_real_perm", "also_fake"],
+        permissions: ["view_sales_reports", "not_a_real_perm", "also_fake"],
       });
       expect(res.status).toBe(400);
       expect(res.body.unknown).toEqual(["not_a_real_perm", "also_fake"]);
@@ -123,20 +123,20 @@ describe("roles & permissions contract (Postgres)", () => {
 
     it("accepts catalog members incl. manage_business_modules and persists", async () => {
       const res = await as(ADMIN).put("/api/roles/3/permissions", {
-        permissions: ["view_reports", "pos_discount", "pos_park", "manage_business_modules"],
+        permissions: ["view_sales_reports", "pos_discount", "pos_park", "manage_business_modules"],
       });
       expect(res.status).toBe(200);
       const check = await as(ADMIN).get("/api/roles/3/permissions");
       expect(check.body.permissions).toContain("manage_business_modules");
       // Restore the seeded Cashier set for any later assertions.
       await as(ADMIN).put("/api/roles/3/permissions", {
-        permissions: ["view_reports", "pos_discount", "pos_park"],
+        permissions: ["view_sales_reports", "pos_discount", "pos_park"],
       });
     });
 
     it("still rejects a non-array body", async () => {
       const res = await as(ADMIN).put("/api/roles/3/permissions", {
-        permissions: "view_reports",
+        permissions: "view_sales_reports",
       });
       expect(res.status).toBe(400);
     });

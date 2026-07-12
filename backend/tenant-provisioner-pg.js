@@ -24,7 +24,14 @@ const ALL_PERMISSIONS = [
   "pos_discount",
   "pos_park",
   "pos_void",
-  "view_reports",
+  // D4 split (PLAN-V2 Step 4) — view_reports replaced by the five split
+  // report permissions. Seeded onto the Administrator role only (redundant
+  // under all_access, kept for parity with grandfathered prod admins).
+  "view_sales_reports",
+  "view_inventory_reports",
+  "view_financial_reports",
+  "view_hr_reports",
+  "view_customer_reports",
   "void_sales",
 ];
 

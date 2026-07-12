@@ -14,6 +14,9 @@ module.exports = function registerBillingRoutes(app, deps) {
   const masterDb = require("../master-db-pg");
   const paymentGateway = require("../services/payment-gateway");
   const { validate } = require("../middleware/validate");
+  // §9.3 (Step 4): billable plan changes are owner actions — guard matches the
+  // frontend, where /billing is already perm("all_access").
+  const { requirePerm } = require("../middleware/permissions");
   const { RequestUpgradeSchema, CreateCheckoutSchema } = require("../schemas/billing");
 
   /**
@@ -218,7 +221,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Request Upgrade ────────────────────────────────────────────────────
-  app.post("/api/billing/request-upgrade", validate(RequestUpgradeSchema), async (req, res) => {
+  app.post("/api/billing/request-upgrade", requirePerm("all_access"), validate(RequestUpgradeSchema), async (req, res) => {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
@@ -250,7 +253,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   // (routes/webhooks.js context 1) bumps tenants.max_outlets via Math.max
   // when payment_intents.outlet_count is greater than the current limit, so
   // no webhook changes are needed.
-  app.post("/api/billing/add-outlet", async (req, res) => {
+  app.post("/api/billing/add-outlet", requirePerm("all_access"), async (req, res) => {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
@@ -318,7 +321,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Create Checkout ──────────────────────────────────────────────────
-  app.post("/api/billing/create-checkout", validate(CreateCheckoutSchema), async (req, res) => {
+  app.post("/api/billing/create-checkout", requirePerm("all_access"), validate(CreateCheckoutSchema), async (req, res) => {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) return res.status(400).json({ error: "Tenant context required" });

@@ -131,7 +131,7 @@ export default function RetailRiskRedesign() {
 
   if (flagsLoading) return null;
   if (!flags.phase2g_risk_controls) return <Navigate to="/" replace />;
-  if (!hasPerm("all_access") && !hasPerm("view_reports")) return <Navigate to="/" replace />;
+  if (!hasPerm(["view_hr_reports", "view_financial_reports"])) return <Navigate to="/" replace />;
 
   return (
     <PageShell

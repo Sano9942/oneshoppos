@@ -135,7 +135,7 @@ module.exports = function registerCommissionRoutes(app, deps) {
   // earning_type filter: "commission" | "tip" | "both" (default — no filter).
   // After Phase 2.1 C tip rows live in this table with sale_id+plan_id NULL,
   // so the legacy JOINs are now LEFT to keep tips visible.
-  app.get("/api/commissions/earnings", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  app.get("/api/commissions/earnings", feat, requireAnyPerm(["all_access", "view_hr_reports"]), async (req, res) => {
     const { employee_id, status, from, to, earning_type } = req.query;
     try {
       let where = "1=1";
@@ -220,7 +220,7 @@ module.exports = function registerCommissionRoutes(app, deps) {
   // 2-G.10 semantics live in services/commission-calc.js (shared with the
   // POS checkout auto-calc in routes/sales.js — F06 attribution fix).
   // Body: { sale_id }
-  app.post("/api/commissions/calculate", feat, async (req, res) => {
+  app.post("/api/commissions/calculate", feat, requireAnyPerm(["manage_employees"]), async (req, res) => {
     const { sale_id } = req.body;
     if (!sale_id) return res.status(400).json({ error: "sale_id required" });
     try {

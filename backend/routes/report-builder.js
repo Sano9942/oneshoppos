@@ -32,6 +32,25 @@ const DATASETS = {
   },
 };
 
+// D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §7 mixed #3) — each dataset maps
+// to exactly one split report permission, enforced at run time and at
+// definition create/update. product_performance is FINANCIAL (its measures
+// include cost/margin/margin_percent — the margin rule).
+const DATASET_PERMS = {
+  sales_summary: "view_sales_reports",
+  product_performance: "view_financial_reports",
+  inventory_snapshot: "view_inventory_reports",
+  customer_analysis: "view_customer_reports",
+  employee_performance: "view_hr_reports",
+};
+
+function canUseDataset(req, dataset) {
+  const perms = req.employeePerms || [];
+  if (perms.includes("all_access")) return true;
+  const needed = DATASET_PERMS[dataset];
+  return !!needed && perms.includes(needed);
+}
+
 // Build SQL from dataset + dimensions + measures + filters.
 // tz: tenant IANA timezone for the "date" dimension — s.timestamp is
 // TIMESTAMPTZ, so a bare ::date would bucket days in the DB session timezone.
@@ -159,18 +178,27 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
   const feat = requireFeature("phase2_report_builder");
 
   // GET /api/reports/builder/datasets
-  app.get("/api/reports/builder/datasets", feat, requireAnyPerm(["all_access", "view_reports"]), (req, res) => {
-    const datasets = Object.entries(DATASETS).map(([key, val]) => ({
-      key, label: val.label, dimensions: val.dimensions, measures: val.measures,
-    }));
+  app.get("/api/reports/builder/datasets", feat, requireAnyPerm(["all_access", "view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"]), (req, res) => {
+    // Response filtered to the datasets this token's perms allow (§7 mixed #3).
+    const datasets = Object.entries(DATASETS)
+      .filter(([key]) => canUseDataset(req, key))
+      .map(([key, val]) => ({
+        key, label: val.label, dimensions: val.dimensions, measures: val.measures,
+      }));
     res.json({ datasets });
   });
 
   // POST /api/reports/builder/run
-  app.post("/api/reports/builder/run", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  app.post("/api/reports/builder/run", feat, requireAnyPerm(["all_access", "view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"]), async (req, res) => {
     const { dataset, dimensions, measures, filters, sort_by, sort_order } = req.body;
     if (!dataset || !dimensions?.length || !measures?.length) {
       return res.status(400).json({ error: "dataset, dimensions, and measures are required" });
+    }
+    // Per-dataset enforcement (§7 mixed #3): the route-level any-split guard
+    // only proves the caller can see SOME reports; each dataset requires its
+    // own data-class permission.
+    if (!canUseDataset(req, dataset)) {
+      return res.status(403).json({ error: "Forbidden: insufficient permissions for this dataset" });
     }
     try {
       const { sql, params } = buildQuery(dataset, dimensions, measures, filters, sort_by, sort_order, req.company?.timezone);
@@ -182,7 +210,7 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
   });
 
   // GET /api/reports/builder/definitions
-  app.get("/api/reports/builder/definitions", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  app.get("/api/reports/builder/definitions", feat, requireAnyPerm(["all_access", "view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT crd.*, e.name AS created_by_name
@@ -198,11 +226,17 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
     }
   });
 
-  // POST /api/reports/builder/definitions
-  app.post("/api/reports/builder/definitions", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  // POST /api/reports/builder/definitions — definition writes are report
+  // governance (C6 §9.2): manage_reports, not the read splits.
+  app.post("/api/reports/builder/definitions", feat, requireAnyPerm(["manage_reports"]), async (req, res) => {
     const { name, description, dataset, dimensions, measures, filters_json, sort_by, sort_order, is_shared } = req.body;
     if (!name || !dataset || !dimensions?.length || !measures?.length) {
       return res.status(400).json({ error: "name, dataset, dimensions, and measures are required" });
+    }
+    // A definition author must also hold the dataset's own data-class perm —
+    // manage_reports alone can't mint definitions over data it can't read.
+    if (!canUseDataset(req, dataset)) {
+      return res.status(403).json({ error: "Forbidden: insufficient permissions for this dataset" });
     }
     try {
       const { rows } = await db.query(
@@ -219,14 +253,20 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
     }
   });
 
-  // PUT /api/reports/builder/definitions/:id
-  app.put("/api/reports/builder/definitions/:id", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  // PUT /api/reports/builder/definitions/:id — governance write (C6 §9.2).
+  app.put("/api/reports/builder/definitions/:id", feat, requireAnyPerm(["manage_reports"]), async (req, res) => {
     const { name, description, dimensions, measures, filters_json, sort_by, sort_order, is_shared } = req.body;
     try {
       const { rows: existing } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [req.params.id]);
       if (!existing.length) return res.status(404).json({ error: "Definition not found" });
       if (existing[0].created_by !== req.employee?.id && !req.employeePerms?.includes("all_access")) {
         return res.status(403).json({ error: "Not authorized to edit this definition" });
+      }
+      // Dataset is immutable on update — validate the existing one against
+      // the caller's perms so an editor can't reshape a definition over data
+      // it can't read (§7 mixed #3).
+      if (!canUseDataset(req, existing[0].dataset)) {
+        return res.status(403).json({ error: "Forbidden: insufficient permissions for this dataset" });
       }
 
       const sets = [];
@@ -252,8 +292,8 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
     }
   });
 
-  // DELETE /api/reports/builder/definitions/:id
-  app.delete("/api/reports/builder/definitions/:id", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
+  // DELETE /api/reports/builder/definitions/:id — governance write (C6 §9.2).
+  app.delete("/api/reports/builder/definitions/:id", feat, requireAnyPerm(["manage_reports"]), async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [req.params.id]);
       if (!rows.length) return res.status(404).json({ error: "Definition not found" });

@@ -9780,6 +9780,98 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 134,
+    description:
+      "D4 view_reports split (PLAN-V2 Step 4, REPORT-PERMS.md §10 — owner-ratified split posture): every role holding view_reports is classified per the pristine-Cashier predicate. Pristine default Cashier (name exactly 'Cashier', dedup perm set exactly {view_reports, pos_discount, pos_park}) → view_sales_reports only, plus view_customer_reports on tenants with the appointments mode enabled (§8 #2 ruling b — preserves clinic/salon front-desk surfaces without widening retail Cashiers). Every other holder (customized Cashiers, Managers, custom roles, Administrators with redundant explicit rows) → grandfathered with all five splits so no deliberate owner grant is silently revoked. Then the view_reports rows are deleted. Idempotent by construction (post-run there are no view_reports rows to classify); one transaction per tenant via the normal MIGRATIONS path; logs (tenant, role, posture) per classification for the deploy audit trail. Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'role_permissions'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v134] no role_permissions table in this schema — skipped");
+        return;
+      }
+      const {
+        rows: [{ schema }],
+      } = await client.query(`SELECT current_schema() AS schema`);
+
+      const { rows: holders } = await client.query(
+        `SELECT r.id, r.name,
+                array_agg(DISTINCT rp.permission) AS perms
+         FROM roles r
+         JOIN role_permissions rp ON rp.role_id = r.id
+         WHERE r.id IN (
+           SELECT role_id FROM role_permissions WHERE permission = 'view_reports'
+         )
+         GROUP BY r.id, r.name`
+      );
+      if (!holders.length) {
+        console.log(`[migrate-pg v134] ${schema}: no roles hold view_reports — nothing to classify`);
+        return;
+      }
+
+      // §8 #2 ruling (b): appointments-mode tenants seed view_customer_reports
+      // onto pristine Cashiers too, so clinic/salon front desks keep their
+      // deliberately Cashier-reachable surfaces (recalls, handouts, client
+      // service records, vaccination cards) on migration day.
+      let appointmentsMode = false;
+      const { rows: hasModes } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'tenant_modes'`
+      );
+      if (hasModes.length) {
+        const { rows } = await client.query(
+          `SELECT 1 FROM tenant_modes WHERE mode = 'appointments' AND enabled = true`
+        );
+        appointmentsMode = rows.length > 0;
+      }
+
+      const ALL_SPLITS = [
+        "view_sales_reports",
+        "view_inventory_reports",
+        "view_financial_reports",
+        "view_hr_reports",
+        "view_customer_reports",
+      ];
+      const PRISTINE_CASHIER_SET = ["pos_discount", "pos_park", "view_reports"];
+
+      for (const role of holders) {
+        const perms = [...(role.perms || [])].sort();
+        const pristine =
+          role.name === "Cashier" &&
+          perms.length === PRISTINE_CASHIER_SET.length &&
+          PRISTINE_CASHIER_SET.every((p, i) => perms[i] === p);
+
+        const grants = pristine
+          ? appointmentsMode
+            ? ["view_sales_reports", "view_customer_reports"]
+            : ["view_sales_reports"]
+          : ALL_SPLITS;
+
+        for (const perm of grants) {
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            [role.id, perm]
+          );
+        }
+        await client.query(
+          "DELETE FROM role_permissions WHERE role_id = $1 AND permission = 'view_reports'",
+          [role.id]
+        );
+
+        const posture = pristine
+          ? appointmentsMode
+            ? "pristine → sales-only + customer (appointments mode)"
+            : "pristine → sales-only"
+          : "customized/other → grandfathered all five";
+        console.log(
+          `[migrate-pg v134] ${schema}: role ${role.id} "${role.name}" — ${posture}`
+        );
+      }
+    },
+  },
 ];
 
 /**

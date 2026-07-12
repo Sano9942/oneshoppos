@@ -23,7 +23,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
 // --- INVENTORY TRANSFERS ---
 
   // Get all transfers (with product, outlet, employee names)
-  app.get("/api/transfers", requireAnyPerm(["manage_inventory", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/transfers", requireAnyPerm(["manage_inventory", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(`
         SELECT it.*,
@@ -212,7 +212,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
   // Reverse a completed inventory transfer
   // 2-G.1 follow-up: if the original transfer carried a variant_id, the
   // reversal mirrors the variant_outlet_stock adjustments at both outlets.
-  app.post("/api/transfers/:id/reverse", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/transfers/:id/reverse", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows: transferRows } = await db.query(
@@ -278,7 +278,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
 
   // --- STOCK ADJUSTMENTS ---
 
-  app.get("/api/adjustments", requireAnyPerm(["manage_inventory", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/adjustments", requireAnyPerm(["manage_inventory", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(`
         SELECT sa.*, p.name as product_name, p.barcode,

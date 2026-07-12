@@ -24,7 +24,7 @@ module.exports = function createAccountingRouter({
 
   router.get(
     "/api/accounting/pnl",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -127,7 +127,7 @@ module.exports = function createAccountingRouter({
 
   router.get(
     "/api/accounting/cashflow",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -195,7 +195,7 @@ module.exports = function createAccountingRouter({
   // ── Daily Cashflow Breakdown ──────────────────────────────────────────────
   router.get(
     "/api/accounting/cashflow/daily",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -266,7 +266,7 @@ module.exports = function createAccountingRouter({
   // ── AP/AR Summary ─────────────────────────────────────────────────────────
   router.get(
     "/api/accounting/ap-ar",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -296,7 +296,7 @@ module.exports = function createAccountingRouter({
 
   router.get(
     "/api/accounting/ap",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -348,7 +348,7 @@ module.exports = function createAccountingRouter({
 
   router.get(
     "/api/accounting/periods",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -364,7 +364,7 @@ module.exports = function createAccountingRouter({
 
   router.post(
     "/api/accounting/periods",
-    requireAnyPerm(["manage_employees", "all_access"]),
+    requireAnyPerm(["manage_finance", "all_access"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -385,7 +385,7 @@ module.exports = function createAccountingRouter({
 
   router.put(
     "/api/accounting/periods/:id",
-    requireAnyPerm(["manage_employees", "all_access"]),
+    requireAnyPerm(["manage_finance", "all_access"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -414,7 +414,7 @@ module.exports = function createAccountingRouter({
 
   router.get(
     "/api/accounting/balance-sheet",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -494,7 +494,7 @@ module.exports = function createAccountingRouter({
   // ── Expense Ledger ─────────────────────────────────────────────────────────
   router.get(
     "/api/accounting/expenses",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -527,7 +527,7 @@ module.exports = function createAccountingRouter({
   // ── AP Aging ───────────────────────────────────────────────────────────────
   router.get(
     "/api/accounting/ap-aging",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -573,7 +573,7 @@ module.exports = function createAccountingRouter({
   // ── Tax Ledger ─────────────────────────────────────────────────────────────
   router.get(
     "/api/accounting/tax-ledger",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -611,7 +611,7 @@ module.exports = function createAccountingRouter({
   // ── Supplier Payment History ───────────────────────────────────────────────
   router.get(
     "/api/accounting/supplier-payments",
-    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireAnyPerm(["view_financial_reports"]),
     requireFeature("accounting_core"),
     async (req, res) => {
       try {
@@ -645,7 +645,7 @@ module.exports = function createAccountingRouter({
   // Shared CRUD factory for both note types (identical schema)
   function mountNoteRoutes(table, prefix) {
     const authMw = [
-      requireAnyPerm(["manage_employees", "all_access"]),
+      requireAnyPerm(["manage_finance", "all_access"]),
       requireFeature("accounting_core"),
     ];
 
@@ -1180,7 +1180,7 @@ module.exports = function createAccountingRouter({
   // ── Post-Dated Cheques ─────────────────────────────────────────────────
 
   const chequeAuth = [
-    requireAnyPerm(["manage_employees", "all_access"]),
+    requireAnyPerm(["manage_finance", "all_access"]),
     requireFeature("accounting_core"),
   ];
 

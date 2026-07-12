@@ -1,7 +1,11 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function registerPurchasingReports(app, deps, helpers) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const financeView = requirePerm("view_financial_reports"); // procurement spend
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
     helpers;
 
@@ -70,7 +74,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     }
   }
 
-  app.get("/api/reports/total-purchases", async (req, res) => {
+  app.get("/api/reports/total-purchases", financeView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const taxMode = String(req.query.tax_mode || "all");
@@ -160,7 +164,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/itemwise-purchases", async (req, res) => {
+  app.get("/api/reports/itemwise-purchases", financeView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const taxMode = String(req.query.tax_mode || "all");
@@ -246,7 +250,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/po-workflow", async (req, res) => {
+  app.get("/api/reports/po-workflow", financeView, async (req, res) => {
     try {
       const { date_from, date_to, supplier_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -376,7 +380,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
   });
 
   // Purchase Orders Report: read-only PO list for the reports tab
-  app.get("/api/reports/purchase-orders-report", async (req, res) => {
+  app.get("/api/reports/purchase-orders-report", financeView, async (req, res) => {
     try {
       const { date_from, date_to, status, supplier_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -429,7 +433,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/procurement-parity", async (req, res) => {
+  app.get("/api/reports/procurement-parity", financeView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";

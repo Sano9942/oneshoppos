@@ -174,7 +174,7 @@ describe("Step 2 — delegation perms + field split (Postgres)", () => {
       expect((await as(integrationsMgrId).get("/api/roles")).status).toBe(403);
       expect(
         (await as(integrationsMgrId).put("/api/roles/3/permissions", {
-          permissions: ["view_reports"],
+          permissions: ["view_sales_reports"],
         })).status
       ).toBe(403);
     });
@@ -214,14 +214,14 @@ describe("Step 2 — delegation perms + field split (Postgres)", () => {
       expect((await as(rolesMgrId).get("/api/permissions-catalog")).status).toBe(200);
 
       const res = await as(rolesMgrId).put("/api/roles/3/permissions", {
-        permissions: ["view_reports", "pos_discount", "pos_park"],
+        permissions: ["view_sales_reports", "pos_discount", "pos_park"],
       });
       expect(res.status).toBe(200);
     });
 
     it("delegate cannot grant all_access or touch the Administrator role", async () => {
       const grant = await as(rolesMgrId).put("/api/roles/3/permissions", {
-        permissions: ["view_reports", "all_access"],
+        permissions: ["view_sales_reports", "all_access"],
       });
       expect(grant.status).toBe(403);
 
@@ -241,7 +241,7 @@ describe("Step 2 — delegation perms + field split (Postgres)", () => {
 
     it("Manager (no manage_roles) still 403s on role mutations", async () => {
       const res = await as(MANAGER).put("/api/roles/3/permissions", {
-        permissions: ["view_reports"],
+        permissions: ["view_sales_reports"],
       });
       expect(res.status).toBe(403);
     });

@@ -1266,7 +1266,8 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
   // Admin-only approval (maker-checker): managers import/match/resolve, admin approves
   app.post(
     "/api/fulfillment/cod/settlements/:id/approve",
-    requirePerm("all_access"),
+    // C2 #8 (Step 4): cash reconciliation approval = finance authority (C6 perm).
+    requirePerm("manage_finance"),
     requireFeature("phase5_cod_reconciliation"),
     async (req, res) => {
     try {

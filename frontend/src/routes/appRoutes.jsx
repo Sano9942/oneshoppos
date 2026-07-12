@@ -160,7 +160,7 @@ export const appRoutes = [
     <Route path="/orders" element={perm("manage_orders", <OrdersRoute />)} />
     <Route path="/parked-sales" element={perm("manage_orders", <ParkedSalesRedesign />)} />
     <Route path="/holds" element={perm("manage_orders", <HoldsRoute />)} />
-    <Route path="/retail-risk" element={perm("view_reports", wrap(RetailRiskRoute))} />
+    <Route path="/retail-risk" element={perm(["view_hr_reports", "view_financial_reports"], wrap(RetailRiskRoute))} />
     <Route path="/lookup" element={<PlaceholderPage />} />
     <Route path="/custom-fields" element={<PlaceholderPage />} />
     <Route path="/partners" element={<PlaceholderPage />} />
@@ -180,7 +180,7 @@ export const appRoutes = [
     <Route path="/promotions" element={perm("manage_inventory", <PromotionsRoute />)} />
     <Route path="/settings/manufacturer-partners" element={perm("manage_inventory", <ManufacturerPartnersRoute />)} />
     <Route path="/expenses" element={perm("manage_inventory", <ExpensesRoute />)} />
-    <Route path="/accounting" element={perm("view_reports", <AccountingRoute />)} />
+    <Route path="/accounting" element={perm("view_financial_reports", <AccountingRoute />)} />
     <Route path="/categories" element={perm("manage_inventory", <CategoriesRoute />)} />
     <Route path="/taxes" element={perm("manage_inventory", <TaxesRoute />)} />
     <Route path="/brands" element={perm("manage_inventory", <BrandsRoute />)} />
@@ -201,7 +201,7 @@ export const appRoutes = [
     <Route path="/integrations/shopify" element={perm("manage_inventory", <ShopifyIntegrationRoute />)} />
     <Route path="/integrations/woocommerce" element={perm("manage_inventory", <WooCommerceIntegrationRedesign />)} />
     <Route path="/notifications" element={<NotificationsRedesign />} />
-    <Route path="/attendance" element={perm("view_reports", <AttendanceRedesign />)} />
+    <Route path="/attendance" element={perm("view_hr_reports", <AttendanceRedesign />)} />
     <Route path="/hr" element={perm("all_access", <HRManagementRoute />)} />
     <Route path="/scheduling" element={perm("all_access", <SchedulingRoute />)} />
     <Route path="/company-settings" element={perm("all_access", <CompanySettingsRoute />)} />
@@ -238,8 +238,8 @@ export const appRoutes = [
     {/* Wave 2 — Accounting */}
     <Route path="/chart-of-accounts" element={perm("all_access", <ChartOfAccountsRedesign />)} />
     <Route path="/journal-entries" element={perm("all_access", <JournalEntriesRedesign />)} />
-    <Route path="/credit-debit-notes" element={perm("view_reports", <CreditDebitNotesRedesign />)} />
-    <Route path="/postdated-cheques" element={perm("view_reports", <PostdatedChequesRedesign />)} />
+    <Route path="/credit-debit-notes" element={perm("view_financial_reports", <CreditDebitNotesRedesign />)} />
+    <Route path="/postdated-cheques" element={perm("view_financial_reports", <PostdatedChequesRedesign />)} />
     {/* Wave 3 — Inventory & Commerce */}
     <Route path="/stock-counts" element={perm("manage_inventory", <StockCountRedesign />)} />
     <Route path="/price-lists" element={perm("manage_inventory", <PriceListsRedesign />)} />
@@ -255,7 +255,7 @@ export const appRoutes = [
     <Route path="/backorders" element={perm("manage_orders", <BackordersRedesign />)} />
     <Route path="/cod-settlements" element={perm("manage_orders", <CODSettlementsRoute />)} />
     {/* Phase 2B — Report Builder, POS Layouts */}
-    <Route path="/report-builder" element={perm("view_reports", <ReportBuilderRoute />)} />
+    <Route path="/report-builder" element={perm(["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"], <ReportBuilderRoute />)} />
     <Route path="/settings/pos-layouts" element={perm("all_access", <POSLayoutsRoute />)} />
     {/* Phase 2B — Commissions */}
     <Route path="/commissions" element={perm("all_access", <CommissionPlansRoute />)} />
