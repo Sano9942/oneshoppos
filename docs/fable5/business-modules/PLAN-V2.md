@@ -61,8 +61,8 @@
 | — | **GATE 0: merge + deploy Wave 0 to `main` (pre-branch)** | ☑ done (merged 5befd903, deployed) | **PAUSE — owner-gated merge/deploy/watch** |
 | 1 | Create working branch (off post-Gate-0 main) | ☑ done (`feat/business-modules-v2`) | — |
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
-| 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ◐ analysis complete — **awaiting owner ratification** ([REPORT-PERMS.md](REPORT-PERMS.md)) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) |
-| 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ☐ not started | **PAUSE before** (migration + guard changes) — cleared by Step 3 ratification |
+| 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
+| 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ☐ not started — **UNBLOCKED** (Step 3 ratified) | **PAUSE before** (migration + guard changes) — cleared by Step 3 ratification |
 | 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☐ not started | **PAUSE before** (migration + gate-semantics change) |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☐ not started | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☐ not started | **PAUSE mid-step** (wire-vs-retire rulings) |
@@ -256,6 +256,7 @@ Report: outcome first — taxonomy chosen, occurrence count vs mapped count (mus
 4. **Pristine-Cashier predicate** (name `Cashier` exact + perm set exactly `{view_reports, pos_discount, pos_park}`) validated read-only against all 48 local `sanopos_dev` tenant schemas: 47 pristine, 0 customized, 1 schema with no Cashier role (no-ops correctly). Prod re-validation is a Step 4 pre-deploy gate item.
 5. **Catalog registration done this step** (drift test verified tolerant first — it only enforces call-site → catalog): the five splits registered in `permissions-catalog.js`, `view_reports` relabeled "(legacy — being split)". `manage_finance`/`manage_reports` (C6 proposals) deliberately NOT registered pending ratification. Both catalog suites green (26/26).
 6. **Owner must explicitly rule on** (beyond ratifying the table): (a) clinic/salon front-desk surfaces — recommend migration seeds `view_customer_reports` onto pristine Cashiers of appointments-mode tenants (REPORT-PERMS.md §8 #2); (b) notifications bell mapping vs. dropping its guard (§7 #7); (c) each C2 row, the C6 two-perm split (`manage_finance`, `manage_reports`, both defaulted to Manager), and the unguarded-trio guards (§9).
+7. **RATIFIED 2026-07-12**: owner ratified the entire deliverable as written — all recommendations accepted, including §8 #2 option (b) (appointments-mode Cashier seeding), §7 #7 keep-guard (`view_sales_reports`), all 12 C2 rulings, the C6 split, and the trio guards. Full ruling record in the REPORT-PERMS.md header block. Step 4's pause is cleared.
 
 ---
 

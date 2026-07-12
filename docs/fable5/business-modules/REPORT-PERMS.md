@@ -1,7 +1,26 @@
 # REPORT-PERMS — D4a: `view_reports` split taxonomy + data-classified mapping table
 
+> ## ✅ RATIFIED BY OWNER — 2026-07-12
+> Everything in this document is ratified **as written**, including every recommendation
+> where an option was left open. Step 4 applies it verbatim. Explicit rulings on the
+> previously open items:
+>
+> 1. **Taxonomy, mapping table, and pristine-Cashier predicate (§1–§6, §10)**: ratified as written.
+> 2. **§8 #2 (clinic/salon front desks)**: option **(b)** — the Step 4 migration seeds
+>    `view_customer_reports` onto pristine Cashiers **only on tenants with the
+>    `appointments` mode enabled**, in addition to `view_sales_reports`.
+> 3. **§7 #7 (notifications bell)**: keep the guard, mapped to `view_sales_reports`
+>    (the any-authenticated alternative is rejected).
+> 4. **§9.1 C2**: all 12 per-row rulings ratified exactly as proposed.
+> 5. **§9.2 C6**: the `manage_finance` + `manage_reports` split ratified; both perms
+>    registered in the catalog at Step 4 and defaulted to Manager.
+> 6. **§9.3 unguarded trio**: all three guard recommendations ratified
+>    (add-outlet + create-checkout + request-upgrade → `all_access`;
+>    commissions/calculate → `manage_employees`).
+> 7. All ten mixed-endpoint decisions (§7) ratified as written.
+
 > PLAN-V2 Step 3 deliverable (2026-07-12). **Analysis only — nothing here is applied yet.**
-> Step 4 (D4b) applies this table verbatim after owner ratification. If Step 4 finds a
+> Step 4 (D4b) applies this table verbatim per the ratification above. If Step 4 finds a
 > call site this table doesn't cover, it must stop and report, not improvise.
 > Evidence basis: fresh grep of every `view_reports` occurrence (417 across 106 files,
 > reconciled below), payload inspection of every judgment-call endpoint, and a read-only
