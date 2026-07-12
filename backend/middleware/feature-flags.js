@@ -55,7 +55,8 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (subscriptions mode): flag default flipped false so retail
   // tenants without the subscriptions mode don't see the Subscriptions nav.
   // Tenants on the subscriptions mode get the flag enabled via v44 backfill.
-  subscription_billing: false,  subscription_autocharge: false,
+  subscription_billing: false,
+  subscription_autocharge: false,
   // Phase 4 — New Verticals
   // Mode-gated (restaurant mode): flag default false. Enabled for tenants
   // whose mode row is seeded by setup wizard (restaurant / cafe presets)
@@ -74,7 +75,8 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_restaurant_reservations: false,
   phase4_restaurant_kds_analytics: false,
   phase4_restaurant_day_parting: false,
-  phase4_restaurant_fire_chits: false,  phase4_restaurant_drive_thru: false,
+  phase4_restaurant_fire_chits: false,
+  phase4_restaurant_drive_thru: false,
   phase4_restaurant_menu_engineering: false,
   // V03 — delivery-aggregator order injection (foodpanda / Careem). Default OFF;
   // restaurant + cafe presets seed it ON at wizard completion (RESTAURANT_SEED_FLAGS).
@@ -91,7 +93,8 @@ const DEFAULT_FEATURE_FLAGS = {
   member_checkin: false,
   // Mode-gated (service_projects mode).
   phase4_service_projects: false,
-  phase4_service_contracts: false,  // Mode-gated (workflow_tickets mode).
+  phase4_service_contracts: false,
+  // Mode-gated (workflow_tickets mode).
   phase4_workflow_tickets: false,
   // Mode-gated: flipped ON only by setup/company-profile when a rental preset
   // is selected. Leaving globally ON would show rental nav to retail tenants.
@@ -127,7 +130,8 @@ const DEFAULT_FEATURE_FLAGS = {
   custom_forms: false,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
-  phase5_cod_reconciliation: false,  phase5_sms_providers: false,
+  phase5_cod_reconciliation: false,
+  phase5_sms_providers: false,
   // Phase 2-G — General Retail Tier-1 Parity (all default false; each feature
   // is opt-in per tenant via the admin feature-flags UI). DEFAULT entries
   // ensure requireFeature() is deterministic on fresh tenants before the
@@ -140,7 +144,8 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_price_override: false,
   phase2g_serialized_inventory: false,
   phase2g_per_line_restock: false,
-  phase2g_inventory_intelligence: false,  phase2g_holds: false,
+  phase2g_inventory_intelligence: false,
+  phase2g_holds: false,
   phase2g_risk_controls: false,
   retail_weekly_digest: false,
   // Phase 2-G Bucket F polish (migration v76). Receipt designer is ON by
