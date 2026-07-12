@@ -96,7 +96,6 @@ const BUCKET_A = {
       "phase4_restaurant_kds_analytics",
       "phase4_restaurant_day_parting",
       "phase4_restaurant_fire_chits",
-      "phase4_restaurant_seats",
       "phase4_restaurant_drive_thru",
       "phase4_restaurant_menu_engineering",
     ],
@@ -276,14 +275,7 @@ const BUCKET_A = {
     scope: "outlet",
     mode: "service_projects",
     flags: ["phase4_service_projects", "phase4_service_contracts"],
-    sub_toggles: [
-      {
-        key: "phase4_contract_ai",
-        title: "AI contract drafting",
-        description: "Draft contract text with AI from a short brief. Uses the platform AI service and its usage caps.",
-        note: "Uses the platform AI service; subject to platform cost caps.",
-      },
-    ],
+    sub_toggles: [],
     depends_on: [],
     impact_queries: {
       active_projects: {
@@ -698,7 +690,6 @@ const BUCKET_B = {
       "phase2g_variant_picker",
       "phase2g_price_override",
       "phase2g_per_line_restock",
-      "phase2g_receipt_barcode_lookup",
       "phase2_pos_approvals",
     ],
     sub_toggles: [
@@ -769,17 +760,6 @@ const BUCKET_B = {
     description: "Customize receipt layout, sections and branding.",
     scope: "device",
     flags: ["receipt_designer_v2"],
-    sub_toggles: [],
-    depends_on: [],
-    impact_queries: {},
-  },
-
-  label_designer: {
-    bucket: "B",
-    title: "Label Designer",
-    description: "Design and print product/barcode labels.",
-    scope: "device",
-    flags: ["phase2g_label_designer"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
@@ -931,7 +911,7 @@ const BUCKET_C = {
       "Accept online card payments, payment links on invoices and automatic subscription charging. " +
       "Availability depends on the platform payment gateway.",
     scope: "hybrid",
-    flags: ["phase5_payment_gateways", "payment_links", "subscription_autocharge"],
+    flags: ["payment_links", "subscription_autocharge"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
@@ -946,7 +926,7 @@ const BUCKET_C = {
     description:
       "Connect an SMS provider (Zong, Jazz, Twilio or generic HTTP) to send campaign and reminder texts.",
     scope: "hybrid",
-    flags: ["phase5_sms_providers", "sms_campaigns"],
+    flags: ["phase5_sms_providers"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},

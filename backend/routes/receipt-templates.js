@@ -1,7 +1,7 @@
 const multer = require("multer");
 
 module.exports = function registerReceiptTemplateRoutes(app, deps) {
-  const { db, requirePerm, requireAnyPerm } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature } = deps;
 
   // Best-effort column additions (idempotent — Postgres will error if exists, which we ignore)
   (async () => {
@@ -48,7 +48,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.post("/api/receipt-templates", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/receipt-templates", requirePerm("all_access"), requireFeature("receipt_designer_v2"), async (req, res) => {
     const { name, header_text, footer_text, show_barcode, show_logo, is_active } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
     const d = coerceDesignerFields(req.body);
@@ -81,7 +81,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.put("/api/receipt-templates/:id", requirePerm("manage_inventory"), async (req, res) => {
+  app.put("/api/receipt-templates/:id", requirePerm("manage_inventory"), requireFeature("receipt_designer_v2"), async (req, res) => {
     const { id } = req.params;
     const { name, header_text, footer_text, show_barcode, show_logo, is_active } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
@@ -128,7 +128,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/receipt-templates/:id", requirePerm("all_access"), async (req, res) => {
+  app.delete("/api/receipt-templates/:id", requirePerm("all_access"), requireFeature("receipt_designer_v2"), async (req, res) => {
     try {
       const { rowCount } = await db.query("DELETE FROM receipt_templates WHERE id = $1", [req.params.id]);
       if (rowCount === 0) return res.status(404).json({ error: "Template not found" });
@@ -155,6 +155,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
   app.post(
     "/api/uploads/receipt-logo",
     requirePerm("all_access"),
+    requireFeature("receipt_designer_v2"),
     receiptLogoUpload.single("image"),
     async (req, res) => {
       if (!req.file) return res.status(400).json({ error: "Image file is required" });
