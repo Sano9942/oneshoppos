@@ -10,7 +10,7 @@ module.exports = function registerStockAgingReport(app, deps, helpers) {
 
   app.get(
     "/api/reports/stock-aging",
-    requireAnyPerm(["view_reports", "manage_inventory"]),
+    requireAnyPerm(["view_inventory_reports", "manage_inventory"]),
     async (req, res) => {
       try {
         const { outlet_id, bucket, category_id, brand_id, supplier_id, search } =

@@ -1,9 +1,12 @@
 module.exports = function registerShopifyConfigRoutes(app, deps) {
-  const { db, requirePerm, encryptShopifySecret, maskSecret, getActiveShopifyConnection } = deps;
+  const { db, requireAnyPerm, encryptShopifySecret, maskSecret, getActiveShopifyConnection } = deps;
 
+  // PLAN-V2 Step 2: Shopify connection config is a credential surface —
+  // manage_integrations delegate included; manage_inventory kept for the
+  // existing Manager-facing Shopify settings page.
   app.get(
     "/api/integrations/shopify/config",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     async (req, res) => {
       try {
         const conn = await getActiveShopifyConnection();
@@ -31,7 +34,7 @@ module.exports = function registerShopifyConfigRoutes(app, deps) {
 
   app.put(
     "/api/integrations/shopify/config",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     async (req, res) => {
       try {
         const {
@@ -95,7 +98,7 @@ module.exports = function registerShopifyConfigRoutes(app, deps) {
 
   app.post(
     "/api/integrations/shopify/disconnect",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     async (req, res) => {
       try {
         const { rowCount } = await db.query(

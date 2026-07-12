@@ -74,13 +74,15 @@ describe("Tenant Preset Engine — Setup + Bootstrap", () => {
       expect(profile.business_model).toBe("food_service");
       expect(profile.country_code).toBe("PK");
 
-      // Verify tenant_modes
+      // Verify tenant_modes — D5 full materialisation (PLAN-V2 Step 5): every
+      // registry mode has an explicit row (preset mode enabled, the rest
+      // disabled), not just the enabled ones.
+      const { VALID_MODES } = require("../../config/mode-registry");
       const { rows: modes } = await db.query(
         "SELECT mode, enabled FROM tenant_modes ORDER BY mode"
       );
-      expect(modes).toEqual([
-        { mode: "restaurant", enabled: true },
-      ]);
+      expect(modes.length).toBe(VALID_MODES.length);
+      expect(modes.filter((m) => m.enabled).map((m) => m.mode)).toEqual(["restaurant"]);
 
       // Verify feature flags were enabled
       const { rows: flags } = await db.query(
@@ -129,6 +131,45 @@ describe("Tenant Preset Engine — Setup + Bootstrap", () => {
       expect(flags.map(f => f.key)).toEqual(["phase2_commissions", "phase4_appointments"]);
     });
 
+    it("seeds clinic-family preset (dental_clinic) with a full materialised mode set", async () => {
+      // D5 fresh-provision coverage for the clinic preset family (PLAN-V2 Step
+      // 5 verify list: retail + restaurant + clinic).
+      await db.query(
+        "UPDATE company_profile SET setup_complete = false, setup_token = 'test-token-clinic', setup_token_expires_at = NOW() + INTERVAL '1 hour' WHERE id = 1"
+      );
+      await db.query("DELETE FROM tenant_modes");
+
+      const res = await request(app)
+        .post("/api/setup/complete")
+        .send({
+          token: "test-token-clinic",
+          company_name: "Bright Smile Dental",
+          admin_name: "Clinic Admin",
+          admin_pin: "9012",
+          industry_type: "dental_clinic",
+          country: "Pakistan",
+        });
+
+      expect(res.status).toBe(200);
+
+      const { rows: [profile] } = await db.query(
+        "SELECT industry_type FROM company_profile WHERE id = 1"
+      );
+      expect(profile.industry_type).toBe("dental_clinic");
+
+      // Full materialisation: all registry modes present; the preset's two
+      // clinical modes enabled, the rest disabled.
+      const { VALID_MODES } = require("../../config/mode-registry");
+      const { rows: modes } = await db.query(
+        "SELECT mode, enabled FROM tenant_modes ORDER BY mode"
+      );
+      expect(modes.length).toBe(VALID_MODES.length);
+      expect(modes.filter((m) => m.enabled).map((m) => m.mode)).toEqual([
+        "appointments",
+        "treatment_plans",
+      ]);
+    });
+
     it("defaults to general_retail when no industry_type sent", async () => {
       await db.query(
         "UPDATE company_profile SET setup_complete = false, setup_token = 'test-token-default', setup_token_expires_at = NOW() + INTERVAL '1 hour' WHERE id = 1"
@@ -153,9 +194,12 @@ describe("Tenant Preset Engine — Setup + Bootstrap", () => {
       expect(profile.industry_type).toBe("general_retail");
       expect(profile.business_model).toBe("buy_sell");
 
-      // No modes should be seeded for retail
-      const { rows: modes } = await db.query("SELECT mode FROM tenant_modes");
-      expect(modes).toEqual([]);
+      // D5 full materialisation (PLAN-V2 Step 5): retail has no vertical modes,
+      // but still gets a full row set — every mode present, all disabled.
+      const { VALID_MODES } = require("../../config/mode-registry");
+      const { rows: modes } = await db.query("SELECT mode, enabled FROM tenant_modes");
+      expect(modes.length).toBe(VALID_MODES.length);
+      expect(modes.filter((m) => m.enabled)).toEqual([]);
     });
   });
 

@@ -11,7 +11,7 @@ const batchStock = require("../services/batch-stock");
 
 module.exports = function registerBatchRoutes(app, deps) {
   const { db, requireAnyPerm, requirePerm, requireFeature } = deps;
-  const VIEW = requireAnyPerm(["view_reports", "manage_inventory", "all_access"]);
+  const VIEW = requireAnyPerm(["view_inventory_reports", "manage_inventory", "all_access"]);
   const FLAG = requireFeature("batch_expiry_tracking");
 
   // ── Expiring-soon list ─────────────────────────────────────────────────

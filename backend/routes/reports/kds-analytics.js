@@ -5,7 +5,7 @@
  * and category, plus recent load snapshots. Drives the KDS analytics tab and
  * its delta-vs-target column.
  *
- * Gate: restaurant mode + phase4_restaurant_kds_analytics flag + view_reports perm.
+ * Gate: restaurant mode + phase4_restaurant_kds_analytics flag + view_sales_reports perm.
  */
 
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
@@ -17,7 +17,7 @@ module.exports = function registerKdsAnalyticsRoutes(app, deps /* , helpers */) 
   const gate = [
     requireMode("restaurant"),
     requireFeature("phase4_restaurant_kds_analytics"),
-    requirePerm("view_reports"),
+    requirePerm("view_sales_reports"),
   ];
 
   app.get("/api/reports/kds/prep-times", ...gate, async (req, res) => {

@@ -2,14 +2,19 @@
 
 /**
  * Clinical reports (M10) — for tenants running treatment_plans mode.
- * All routes gated by `phase4_treatment_plans` feature flag and `view_reports` perm.
+ * All routes gated by `phase4_treatment_plans` feature flag and
+ * `view_customer_reports` or `manage_treatment_plans` (D4 split — clinical
+ * outcomes are customer-class data; providers pass via their vertical perm).
  */
 
 module.exports = function registerClinicalReports(app, deps /* , helpers */) {
   const { requireFeature } = require("../../middleware/feature-flags");
-  const { requirePerm } = require("../../middleware/permissions");
+  const { requireAnyPerm } = require("../../middleware/permissions");
 
-  const gate = [requireFeature("phase4_treatment_plans"), requirePerm("view_reports")];
+  const gate = [
+    requireFeature("phase4_treatment_plans"),
+    requireAnyPerm(["view_customer_reports", "manage_treatment_plans"]),
+  ];
 
   // Completion rate by provider / by plan title
   app.get("/api/reports/clinical/plan-completion", ...gate, async (req, res) => {

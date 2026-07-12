@@ -12,7 +12,12 @@ module.exports = function registerVanRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, requireFeature } = deps;
   const { toUtcStart, toUtcEnd, isValidTz } = require("../utils/tz");
 
-  const repGate = [requireFeature("wholesale_van_sales"), requirePerm("manage_field_sales")];
+  // S3 split (PLAN-V2 Step 2): rep-self van surfaces accept execute_field_sales
+  // (Field Rep role) or manage_field_sales (owners doing double duty).
+  const repGate = [
+    requireFeature("wholesale_van_sales"),
+    requireAnyPerm(["execute_field_sales", "manage_field_sales"]),
+  ];
   const mgrGate = [
     requireFeature("wholesale_van_sales"),
     requireAnyPerm(["manage_inventory", "manage_field_sales", "all_access"]),

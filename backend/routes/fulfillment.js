@@ -1263,7 +1263,13 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
   });
 
   // ── POST /api/fulfillment/cod/settlements/:id/approve ───────────────
-  // Admin-only approval (maker-checker): managers import/match/resolve, admin approves
+  // Admin-only approval (maker-checker): managers import/match/resolve, admin approves.
+  // C2 #8 (Step 4) ratified relaxing this to manage_finance, but the default Manager
+  // HOLDS manage_finance (C6) and is also the maker here — that collapses the
+  // maker-checker separation on courier cash reconciliation. Gate 1 disposition
+  // (owner, 2026-07-12): keep approval on all_access so the checker outranks the
+  // maker. Delegated COD approval, if ever needed, becomes a dedicated
+  // approve_cod_settlement perm (not auto-granted to Managers) — not all_access.
   app.post(
     "/api/fulfillment/cod/settlements/:id/approve",
     requirePerm("all_access"),

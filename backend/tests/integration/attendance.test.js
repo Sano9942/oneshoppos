@@ -149,12 +149,16 @@ describe("Attendance & Kiosk Integration Tests", () => {
       expect(res.body.records).toBeInstanceOf(Array);
     });
 
-    it("should allow cashier to view attendance (has view_reports perm)", async () => {
+    it("should block cashier from team attendance (D4 split §8 #3 — no view_hr_reports)", async () => {
+      // Post-split, GET /api/attendance requires view_hr_reports (or
+      // manage_employees). A pristine Cashier holds only view_sales_reports,
+      // so team attendance is now 403. Own clock-in (kiosk PIN) and the
+      // own-attendance dashboard row are unaffected.
       const res = await supertest(app)
         .get("/api/attendance")
-        .set("x-employee-id", "3"); // Cashier has view_reports perm in seedData.js
+        .set("x-employee-id", "3");
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(403);
     });
 
     it("should allow manager to update attendance configuration", async () => {

@@ -96,7 +96,6 @@ const BUCKET_A = {
       "phase4_restaurant_kds_analytics",
       "phase4_restaurant_day_parting",
       "phase4_restaurant_fire_chits",
-      "phase4_restaurant_seats",
       "phase4_restaurant_drive_thru",
       "phase4_restaurant_menu_engineering",
     ],
@@ -123,9 +122,21 @@ const BUCKET_A = {
     mode: "appointments",
     flags: ["phase4_appointments"],
     sub_toggles: [
-      { key: "phase4_appointments_classes", title: "Group classes & timetable" },
-      { key: "phase4_appointments_waitlists", title: "Waitlists on full slots" },
-      { key: "phase4_appointments_resources", title: "Bookable resources (rooms, chairs, equipment)" },
+      {
+        key: "phase4_appointments_classes",
+        title: "Group classes & timetable",
+        description: "Run scheduled group classes with a shared timetable, not just one-to-one bookings.",
+      },
+      {
+        key: "phase4_appointments_waitlists",
+        title: "Waitlists on full slots",
+        description: "Let customers join a waitlist for full slots and notify them if a spot opens up.",
+      },
+      {
+        key: "phase4_appointments_resources",
+        title: "Bookable resources (rooms, chairs, equipment)",
+        description: "Reserve rooms, chairs or equipment alongside staff so nothing gets double-booked.",
+      },
     ],
     depends_on: [],
     impact_queries: {
@@ -168,6 +179,7 @@ const BUCKET_A = {
       {
         key: "rental_online_booking",
         title: "Public online rental booking",
+        description: "Publish a public page where customers can request rental bookings online.",
         note: "Exposes a public booking surface — confirm before enabling.",
       },
     ],
@@ -194,6 +206,7 @@ const BUCKET_A = {
       {
         key: "room_online_booking",
         title: "Public direct room booking",
+        description: "Publish a public page where guests can book rooms with you directly.",
         note: "Exposes a public booking surface — confirm before enabling.",
       },
     ],
@@ -216,8 +229,16 @@ const BUCKET_A = {
     // registry bundle [phase4_treatment_plans] + clinical-preset extra.
     flags: ["phase4_treatment_plans", "clinical_recalls"],
     sub_toggles: [
-      { key: "vet_vaccinations", title: "Vaccination tracking (veterinary)" },
-      { key: "clinical_handouts", title: "Patient handout library (physiotherapy)" },
+      {
+        key: "vet_vaccinations",
+        title: "Vaccination tracking (veterinary)",
+        description: "Track vaccinations and their due dates on patient records — for veterinary practices.",
+      },
+      {
+        key: "clinical_handouts",
+        title: "Patient handout library (physiotherapy)",
+        description: "Attach printable exercise and care handouts to a patient's plan — for physiotherapy.",
+      },
     ],
     depends_on: [],
     impact_queries: {
@@ -254,13 +275,7 @@ const BUCKET_A = {
     scope: "outlet",
     mode: "service_projects",
     flags: ["phase4_service_projects", "phase4_service_contracts"],
-    sub_toggles: [
-      {
-        key: "phase4_contract_ai",
-        title: "AI contract drafting",
-        note: "Uses the platform AI service; subject to platform cost caps.",
-      },
-    ],
+    sub_toggles: [],
     depends_on: [],
     impact_queries: {
       active_projects: {
@@ -302,14 +317,27 @@ const BUCKET_A = {
     // verified) — mode row written for registry consistency.
     flags: ["wholesale_credit_controls"],
     sub_toggles: [
-      { key: "wholesale_schemes", title: "Trade schemes (slab/tier discounts)" },
-      { key: "wholesale_backorders", title: "Backorders & partial fulfillment" },
+      {
+        key: "wholesale_schemes",
+        title: "Trade schemes (slab/tier discounts)",
+        description: "Give wholesale buyers automatic volume-based slab and tier discounts.",
+      },
+      {
+        key: "wholesale_backorders",
+        title: "Backorders & partial fulfillment",
+        description: "Take orders for out-of-stock items and fulfil them partially as stock arrives.",
+      },
       {
         key: "wholesale_van_sales",
         title: "Van sales (sell from vehicle stock)",
+        description: "Let reps sell straight from stock loaded on their vehicle. Needs Field Sales on.",
         depends_on: ["field_sales"],
       },
-      { key: "wholesale_secondary_sales", title: "Manufacturer partner portal" },
+      {
+        key: "wholesale_secondary_sales",
+        title: "Manufacturer partner portal",
+        description: "Give brand partners a portal to monitor onward sales of their products.",
+      },
     ],
     depends_on: [],
     impact_queries: {
@@ -612,9 +640,21 @@ const BUCKET_B = {
     scope: "outlet",
     flags: ["phase2g_price_books"],
     sub_toggles: [
-      { key: "phase2_outlet_pricing", title: "Per-outlet prices" },
-      { key: "phase2_outlet_visibility", title: "Per-outlet product visibility" },
-      { key: "phase2_outlet_tax", title: "Per-outlet tax profiles" },
+      {
+        key: "phase2_outlet_pricing",
+        title: "Per-outlet prices",
+        description: "Set a different selling price for the same product at each outlet.",
+      },
+      {
+        key: "phase2_outlet_visibility",
+        title: "Per-outlet product visibility",
+        description: "Show or hide individual products per outlet so each location has its own catalog.",
+      },
+      {
+        key: "phase2_outlet_tax",
+        title: "Per-outlet tax profiles",
+        description: "Apply a different tax profile at each outlet for region-specific rates.",
+      },
     ],
     depends_on: [],
     impact_queries: {},
@@ -627,7 +667,11 @@ const BUCKET_B = {
     scope: "tenant",
     flags: ["phase2_smart_collections", "phase2_scheduled_changes"],
     sub_toggles: [
-      { key: "phase2_item_suggestions", title: "Item suggestions" },
+      {
+        key: "phase2_item_suggestions",
+        title: "Item suggestions",
+        description: "Suggest related add-on items at the till based on what's in the cart.",
+      },
     ],
     depends_on: [],
     impact_queries: {},
@@ -646,14 +690,17 @@ const BUCKET_B = {
       "phase2g_variant_picker",
       "phase2g_price_override",
       "phase2g_per_line_restock",
-      "phase2g_receipt_barcode_lookup",
       "phase2_pos_approvals",
     ],
     sub_toggles: [
       // Drift fix 2026-07-10: phase2_pos_layouts (default ON, gates
       // routes/pos-layouts.js + routes/pos-devices.js) was missing from
       // FEATURE-CATALOG.md — classified here as a POS add-on child.
-      { key: "phase2_pos_layouts", title: "Per-device quick grid layouts" },
+      {
+        key: "phase2_pos_layouts",
+        title: "Per-device quick grid layouts",
+        description: "Save a custom quick-access product grid for each POS device.",
+      },
     ],
     depends_on: [],
     impact_queries: {},
@@ -686,7 +733,11 @@ const BUCKET_B = {
       "phase2_report_builder",
     ],
     sub_toggles: [
-      { key: "retail_weekly_digest", title: "Weekly owner digest email" },
+      {
+        key: "retail_weekly_digest",
+        title: "Weekly owner digest email",
+        description: "Email the owner a weekly summary of sales and key numbers.",
+      },
     ],
     depends_on: [],
     impact_queries: {},
@@ -709,17 +760,6 @@ const BUCKET_B = {
     description: "Customize receipt layout, sections and branding.",
     scope: "device",
     flags: ["receipt_designer_v2"],
-    sub_toggles: [],
-    depends_on: [],
-    impact_queries: {},
-  },
-
-  label_designer: {
-    bucket: "B",
-    title: "Label Designer",
-    description: "Design and print product/barcode labels.",
-    scope: "device",
-    flags: ["phase2g_label_designer"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
@@ -871,7 +911,7 @@ const BUCKET_C = {
       "Accept online card payments, payment links on invoices and automatic subscription charging. " +
       "Availability depends on the platform payment gateway.",
     scope: "hybrid",
-    flags: ["phase5_payment_gateways", "payment_links", "subscription_autocharge"],
+    flags: ["payment_links", "subscription_autocharge"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
@@ -886,7 +926,7 @@ const BUCKET_C = {
     description:
       "Connect an SMS provider (Zong, Jazz, Twilio or generic HTTP) to send campaign and reminder texts.",
     scope: "hybrid",
-    flags: ["phase5_sms_providers", "sms_campaigns"],
+    flags: ["phase5_sms_providers"],
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
@@ -958,9 +998,24 @@ const MODULE_PERMISSIONS = Object.freeze({
   clinical: ["manage_treatment_plans"],
   service_tickets: ["manage_tickets"],
   projects_contracts: ["manage_projects", "manage_contracts"],
-  field_sales: ["manage_field_sales"],
+  // S3 split (PLAN-V2 Step 2): manage = owner surfaces, execute = rep-self.
+  field_sales: ["manage_field_sales", "execute_field_sales"],
   gift_cards: ["manage_gift_cards"],
   custom_forms: ["manage_forms"],
+  // D7 (PLAN-V2 Step 2): manage_integrations is cross-module — it gates the
+  // credential/config surfaces behind each integration-connection card's
+  // setup_route, so roles_with_access reflects the delegation. Listed only on
+  // the cards whose setup surfaces the permission actually reaches:
+  // online_payments is excluded (platform env gate — no tenant credential
+  // surface exists) and room_channel_sync is excluded (its setup lives in the
+  // Rooms UI behind manage_rooms).
+  fbr_digital_invoicing: ["manage_integrations"],
+  marketplace_channels: ["manage_integrations"],
+  woocommerce: ["manage_integrations"],
+  shopify: ["manage_integrations"],
+  couriers_shipping: ["manage_integrations"],
+  sms_provider: ["manage_integrations"],
+  delivery_aggregators: ["manage_integrations"],
 });
 
 function withPermissions(cards) {

@@ -20,7 +20,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
   // --- ROUTES: PURCHASE ORDERS ---
 
   // Get all purchase orders (with supplier names)
-  app.get("/api/purchase-orders", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/purchase-orders", requireAnyPerm(["manage_orders", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT po.*, s.name as supplier_name
@@ -35,7 +35,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
   });
 
   // Get a single purchase order with its items
-  app.get("/api/purchase-orders/:id", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/purchase-orders/:id", requireAnyPerm(["manage_orders", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [po] } = await db.query(

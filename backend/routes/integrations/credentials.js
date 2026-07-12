@@ -1,12 +1,14 @@
 module.exports = function registerCredentialRoutes(router, deps) {
-  const { db, requirePerm, requireFeature, encryptSecret, decryptSecret, maskSecret } = deps;
+  const { db, requireAnyPerm, requireFeature, encryptSecret, decryptSecret, maskSecret } = deps;
   const { validate } = require("../../middleware/validate");
   const { connectProviderSchema, disconnectProviderSchema } = require("../../schemas/integrations");
 
   // POST /api/integrations/connect — save encrypted credentials
+  // PLAN-V2 Step 2 / D7: credential writes are delegable via
+  // manage_integrations (all_access passes via the requireAnyPerm bypass).
   router.post(
     "/connect",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     requireFeature("marketplace_integrations"),
     validate(connectProviderSchema),
     async (req, res) => {
@@ -61,7 +63,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
   // POST /api/integrations/disconnect — remove credentials
   router.post(
     "/disconnect",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     requireFeature("marketplace_integrations"),
     validate(disconnectProviderSchema),
     async (req, res) => {
@@ -79,9 +81,12 @@ module.exports = function registerCredentialRoutes(router, deps) {
   );
 
   // POST /api/integrations/test — test connection for a provider
+  // Config-surface read: manage_inventory kept (the Integrations Hub page is
+  // manage_inventory-gated for Managers), manage_integrations added so the
+  // delegate can verify what they just saved.
   router.post(
     "/test",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {
@@ -116,7 +121,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
   // POST /api/integrations/:provider/send-test-sms — test SMS delivery
   router.post(
     "/:provider/send-test-sms",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     requireFeature("phase5_sms_providers"),
     async (req, res) => {
       try {
@@ -140,7 +145,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
   // GET /api/integrations/:provider/status — get masked credentials + status
   router.get(
     "/:provider/status",
-    requirePerm("manage_inventory"),
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     requireFeature("marketplace_integrations"),
     async (req, res) => {
       try {

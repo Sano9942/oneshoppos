@@ -1,7 +1,11 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const salesView = requirePerm("view_sales_reports"); // cash ops — cashiers close shifts
 
   async function loadShift(shiftId) {
     const { rows } = await db.query(
@@ -16,7 +20,7 @@ module.exports = function (app, deps, helpers) {
   }
 
   // Cash Flow: shift records with start/end cash (no sales/returns — unchanged)
-  app.get("/api/reports/cash-flow", async (req, res) => {
+  app.get("/api/reports/cash-flow", salesView, async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -62,7 +66,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Cash Audit: cash sales and cash returns linked to this shift
-  app.get("/api/reports/cash-audit", async (req, res) => {
+  app.get("/api/reports/cash-audit", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       if (!session_id) return res.status(400).json({ error: "session_id required" });
@@ -86,7 +90,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Shift Summary
-  app.get("/api/reports/shift-summary", async (req, res) => {
+  app.get("/api/reports/shift-summary", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       if (!session_id) return res.status(400).json({ error: "session_id required" });
@@ -111,7 +115,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Shift Sales: list of sales linked to this shift
-  app.get("/api/reports/shift-sales", async (req, res) => {
+  app.get("/api/reports/shift-sales", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       if (!session_id) return res.status(400).json({ error: "session_id required" });
@@ -136,7 +140,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Payment Summary: breakdown of payments by method for this shift
-  app.get("/api/reports/payment-summary", async (req, res) => {
+  app.get("/api/reports/payment-summary", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       if (!session_id) return res.status(400).json({ error: "session_id required" });
@@ -161,7 +165,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // All Denominations (unchanged — already uses shift_id via shift_denominations table)
-  app.get("/api/reports/all-denominations", async (req, res) => {
+  app.get("/api/reports/all-denominations", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       const params = [];
@@ -199,7 +203,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Current Session Z-Report
-  app.get("/api/reports/current-session-zreport", async (req, res) => {
+  app.get("/api/reports/current-session-zreport", salesView, async (req, res) => {
     try {
       const { session_id } = req.query;
       if (!session_id) return res.status(400).json({ error: "session_id required" });

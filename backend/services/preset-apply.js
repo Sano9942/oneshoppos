@@ -25,7 +25,7 @@
  */
 
 const { getPreset, VALID_INDUSTRY_TYPES, getExtraFlagsForPreset, ALL_PRESET_EXTRA_FLAGS } = require("../config/industry-config");
-const { getFeatureFlagsForModes, VALID_MODES } = require("../config/mode-registry");
+const { getFeatureFlagsForModes, VALID_MODES, fullModeRows } = require("../config/mode-registry");
 const {
   seedRetailFlags,
   seedRestaurantFlags,
@@ -50,12 +50,14 @@ async function applyPreset(db, industryType, { includeBundles = false } = {}) {
     [preset.industry_type, preset.business_model]
   );
 
-  // Clear old modes and seed new ones.
+  // Clear old modes and re-materialise the FULL row set (D5 / PLAN-V2 Step 5):
+  // every registry mode gets an explicit row — preset modes enabled, the rest
+  // disabled — so a preset switch never leaves a tenant with a partial map.
   await db.query("DELETE FROM tenant_modes");
-  for (const mode of preset.modes) {
+  for (const { mode, enabled } of fullModeRows(preset.modes)) {
     await db.query(
-      `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, true, NOW()) ON CONFLICT (mode) DO NOTHING`,
-      [mode]
+      `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, $2, NOW()) ON CONFLICT (mode) DO NOTHING`,
+      [mode, enabled]
     );
   }
 

@@ -1,10 +1,13 @@
 const { validateConnection } = require("../services/fbr");
 
 module.exports = function registerFbrRoutes(app, deps) {
-  const { db, requirePerm, requireFeature } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature } = deps;
 
   // GET /api/fbr/config — returns FBR fields from company_profile + feature flag status
-  app.get("/api/fbr/config", requirePerm("all_access"), async (req, res) => {
+  // PLAN-V2 Step 2 / D7: FBR credential/config surface (NTN + API token) is
+  // delegable via manage_integrations; Administrators pass via all_access.
+  // The invoice-queue dashboard/retry surfaces below stay all_access.
+  app.get("/api/fbr/config", requireAnyPerm(["manage_integrations"]), async (req, res) => {
     try {
       const {
         rows: [profile],
@@ -28,7 +31,7 @@ module.exports = function registerFbrRoutes(app, deps) {
   });
 
   // PUT /api/fbr/config — updates FBR fields + optionally toggles feature flag
-  app.put("/api/fbr/config", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/fbr/config", requireAnyPerm(["manage_integrations"]), async (req, res) => {
     try {
       const {
         fbr_api_token,
@@ -99,7 +102,7 @@ module.exports = function registerFbrRoutes(app, deps) {
   // POST /api/fbr/test-connection — validate FBR token
   app.post(
     "/api/fbr/test-connection",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     async (req, res) => {
       try {
         const {

@@ -9716,6 +9716,207 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 133,
+    description:
+      "S3 Field Rep split (PLAN-V2 Step 2) — execute_field_sales for rep-self surfaces. Pristine Field Rep roles (permission set exactly {manage_field_sales}) convert to execute_field_sales; customized Field Rep roles keep manage_field_sales and gain execute_field_sales (grandfathered — never removes capability). Other roles holding manage_field_sales (e.g. Manager) are untouched: rep-self endpoints accept either perm, and losing the outlet-assignment-enforcement bypass for Managers is the audit's intended fix. Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      // Tenant-only: the public schema has no roles/role_permissions tables.
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'role_permissions'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v133] no role_permissions table in this schema — skipped");
+        return;
+      }
+      const { rows: fieldRepRoles } = await client.query(
+        `SELECT r.id,
+                COALESCE(
+                  array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
+                  '{}'
+                ) AS perms
+         FROM roles r
+         LEFT JOIN role_permissions rp ON rp.role_id = r.id
+         WHERE r.name = 'Field Rep'
+         GROUP BY r.id`
+      );
+      for (const role of fieldRepRoles) {
+        const perms = role.perms || [];
+        const pristine =
+          perms.length === 1 && perms[0] === "manage_field_sales";
+        if (pristine) {
+          // Convert: the default rep role loses the owner/admin surfaces.
+          await client.query(
+            "DELETE FROM role_permissions WHERE role_id = $1 AND permission = 'manage_field_sales'",
+            [role.id]
+          );
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'execute_field_sales') ON CONFLICT DO NOTHING",
+            [role.id]
+          );
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: pristine — converted to execute_field_sales`
+          );
+        } else if (perms.includes("manage_field_sales")) {
+          // Grandfather: customized role keeps manage_field_sales (its extra
+          // grants signal owner intent we can't infer) and gains
+          // execute_field_sales so its reps keep the rep-self surfaces AND
+          // the outlet-assignment bypass, which is now keyed on execute.
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'execute_field_sales') ON CONFLICT DO NOTHING",
+            [role.id]
+          );
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: customized (${perms.length} perms) — grandfathered with both`
+          );
+        } else {
+          // Already converted (idempotent re-run) or fully custom without the
+          // perm — nothing to do.
+          console.log(
+            `[migrate-pg v133] Field Rep role ${role.id}: no manage_field_sales — skipped`
+          );
+        }
+      }
+    },
+  },
+  {
+    version: 134,
+    description:
+      "D4 view_reports split (PLAN-V2 Step 4, REPORT-PERMS.md §10 — owner-ratified split posture): every role holding view_reports is classified per the pristine-Cashier predicate. Pristine default Cashier (name exactly 'Cashier', dedup perm set exactly {view_reports, pos_discount, pos_park}) → view_sales_reports only, plus view_customer_reports on tenants with the appointments mode enabled (§8 #2 ruling b — preserves clinic/salon front-desk surfaces without widening retail Cashiers). Every other holder (customized Cashiers, Managers, custom roles, Administrators with redundant explicit rows) → grandfathered with all five splits so no deliberate owner grant is silently revoked. Then the view_reports rows are deleted. Idempotent by construction (post-run there are no view_reports rows to classify); one transaction per tenant via the normal MIGRATIONS path; logs (tenant, role, posture) per classification for the deploy audit trail. Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'role_permissions'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v134] no role_permissions table in this schema — skipped");
+        return;
+      }
+      const {
+        rows: [{ schema }],
+      } = await client.query(`SELECT current_schema() AS schema`);
+
+      const { rows: holders } = await client.query(
+        `SELECT r.id, r.name,
+                array_agg(DISTINCT rp.permission) AS perms
+         FROM roles r
+         JOIN role_permissions rp ON rp.role_id = r.id
+         WHERE r.id IN (
+           SELECT role_id FROM role_permissions WHERE permission = 'view_reports'
+         )
+         GROUP BY r.id, r.name`
+      );
+      if (!holders.length) {
+        console.log(`[migrate-pg v134] ${schema}: no roles hold view_reports — nothing to classify`);
+        return;
+      }
+
+      // §8 #2 ruling (b): appointments-mode tenants seed view_customer_reports
+      // onto pristine Cashiers too, so clinic/salon front desks keep their
+      // deliberately Cashier-reachable surfaces (recalls, handouts, client
+      // service records, vaccination cards) on migration day.
+      let appointmentsMode = false;
+      const { rows: hasModes } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'tenant_modes'`
+      );
+      if (hasModes.length) {
+        const { rows } = await client.query(
+          `SELECT 1 FROM tenant_modes WHERE mode = 'appointments' AND enabled = true`
+        );
+        appointmentsMode = rows.length > 0;
+      }
+
+      const ALL_SPLITS = [
+        "view_sales_reports",
+        "view_inventory_reports",
+        "view_financial_reports",
+        "view_hr_reports",
+        "view_customer_reports",
+      ];
+      const PRISTINE_CASHIER_SET = ["pos_discount", "pos_park", "view_reports"];
+
+      for (const role of holders) {
+        const perms = [...(role.perms || [])].sort();
+        const pristine =
+          role.name === "Cashier" &&
+          perms.length === PRISTINE_CASHIER_SET.length &&
+          PRISTINE_CASHIER_SET.every((p, i) => perms[i] === p);
+
+        const grants = pristine
+          ? appointmentsMode
+            ? ["view_sales_reports", "view_customer_reports"]
+            : ["view_sales_reports"]
+          : ALL_SPLITS;
+
+        for (const perm of grants) {
+          await client.query(
+            "INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            [role.id, perm]
+          );
+        }
+        await client.query(
+          "DELETE FROM role_permissions WHERE role_id = $1 AND permission = 'view_reports'",
+          [role.id]
+        );
+
+        const posture = pristine
+          ? appointmentsMode
+            ? "pristine → sales-only + customer (appointments mode)"
+            : "pristine → sales-only"
+          : "customized/other → grandfathered all five";
+        console.log(
+          `[migrate-pg v134] ${schema}: role ${role.id} "${role.name}" — ${posture}`
+        );
+      }
+    },
+  },
+  {
+    version: 135,
+    description:
+      "D5 full mode normalization (PLAN-V2 Step 5) — materialise an explicit tenant_modes row for EVERY registry mode on every tenant so requireMode never sees an empty map for a live tenant. enabled=true where the mode's registry feature_flags_to_enable are already on for the tenant (the SAME predicate as services/business-modules.js:backfillModesIfFirstRowTx, shared via config/mode-registry.js:modeActiveForFlags), enabled=false otherwise. ON CONFLICT (mode) DO NOTHING preserves any existing explicit row (setup/preset/admin/backfill). Retires the empty→enforcing transition trap: after this every tenant has a non-empty map so requireMode enforces uniformly. Measured prod drift was 0/29 tenants (VERIFICATION.md), so no tenant loses a working vertical. Idempotent (second run inserts nothing). Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'tenant_modes'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v135] no tenant_modes table in this schema — skipped");
+        return;
+      }
+      const { VALID_MODES, modeActiveForFlags } = require("./config/mode-registry");
+      const { DEFAULT_FEATURE_FLAGS } = require("./middleware/feature-flags");
+
+      // Live flag map = defaults merged with this tenant's feature_flags rows
+      // (DB overrides default), mirroring getFeatureFlagsMap/loadLiveFlags.
+      const liveFlags = { ...DEFAULT_FEATURE_FLAGS };
+      try {
+        const { rows: flagRows } = await client.query("SELECT key, enabled FROM feature_flags");
+        for (const r of flagRows) liveFlags[r.key] = r.enabled === true;
+      } catch { /* no feature_flags table on a pre-flag schema — defaults only */ }
+
+      let inserted = 0;
+      for (const mode of VALID_MODES) {
+        const enabled = modeActiveForFlags(mode, liveFlags);
+        const { rowCount } = await client.query(
+          `INSERT INTO tenant_modes (mode, enabled, enabled_at)
+           VALUES ($1, $2, NOW()) ON CONFLICT (mode) DO NOTHING`,
+          [mode, enabled]
+        );
+        inserted += rowCount;
+      }
+      const {
+        rows: [{ n }],
+      } = await client.query("SELECT COUNT(*)::int AS n FROM tenant_modes");
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      console.log(
+        `[migrate-pg v135] ${schema}: materialised ${inserted} new mode row(s); total now ${n}/${VALID_MODES.length}`
+      );
+    },
+  },
 ];
 
 /**

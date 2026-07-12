@@ -68,7 +68,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET all tags in use (for autocomplete) — must be before :id routes
-  app.get("/api/customers/tags", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+  app.get("/api/customers/tags", requireAnyPerm(["view_customer_reports", "manage_customers"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT DISTINCT unnest(tags) AS tag FROM customers WHERE tags IS NOT NULL AND deleted_at IS NULL ORDER BY tag"
@@ -86,7 +86,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // utilization bar and by POS Credit-tender flow to surface available room.
   app.get(
     "/api/customers/:id/credit-status",
-    requireAnyPerm(["view_reports", "manage_customers", "manage_field_sales", "all_access"]),
+    requireAnyPerm(["view_sales_reports", "view_customer_reports", "manage_customers", "manage_field_sales", "execute_field_sales", "all_access"]),
     async (req, res) => {
       const { id } = req.params;
       try {
@@ -138,7 +138,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   );
 
   // GET customer ledger — all financial transactions in one timeline
-  app.get("/api/customers/:id/ledger", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+  app.get("/api/customers/:id/ledger", requireAnyPerm(["view_customer_reports", "manage_customers"]), async (req, res) => {
     const { id } = req.params;
     const { from, to, page = 1, per_page = 50 } = req.query;
     const tz = req.company?.timezone || "UTC";
@@ -422,7 +422,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
   app.get(
     "/api/customers/:id/statement",
-    requireAnyPerm(["view_reports", "manage_customers", "all_access"]),
+    requireAnyPerm(["view_customer_reports", "manage_customers", "all_access"]),
     async (req, res) => {
       try {
         const data = await buildStatementData(
@@ -522,7 +522,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
    *         description: Unauthorized
    */
   // GET all customers (with total order count and spend)
-  app.get("/api/customers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/customers", requireAnyPerm(["view_sales_reports", "view_customer_reports", "all_access"]), async (req, res) => {
     const { search = "", group_id } = req.query;
     let query = `
     SELECT c.*,
@@ -561,7 +561,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET single customer's sales history
-  app.get("/api/customers/:id/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/customers/:id/sales", requireAnyPerm(["view_customer_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows } = await db.query(
@@ -621,7 +621,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
    *         description: Unauthorized
    */
   // GET unified order history (POS sales + web orders)
-  app.get("/api/customers/:id/order-history", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+  app.get("/api/customers/:id/order-history", requireAnyPerm(["view_customer_reports", "manage_customers"]), async (req, res) => {
     const { id } = req.params;
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
@@ -788,7 +788,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET customer wallet balance + ledger
-  app.get("/api/customers/:id/wallet", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/customers/:id/wallet", requireAnyPerm(["view_sales_reports", "view_customer_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows: custRows } = await db.query(
@@ -984,7 +984,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET enriched customer profile
-  app.get("/api/customers/:id/profile", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+  app.get("/api/customers/:id/profile", requireAnyPerm(["view_sales_reports", "view_customer_reports", "manage_customers"]), async (req, res) => {
     const { id } = req.params;
     try {
       // Basic info + group
@@ -1067,7 +1067,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // ── Loyalty Tier CRUD ──────────────────────────────────────────────────────
 
   // GET all loyalty tiers
-  app.get("/api/loyalty/tiers", requireFeature("phase2g_loyalty"), requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/loyalty/tiers", requireFeature("phase2g_loyalty"), requireAnyPerm(["view_sales_reports", "view_customer_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT lt.*,

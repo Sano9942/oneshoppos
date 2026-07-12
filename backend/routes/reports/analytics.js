@@ -1,7 +1,13 @@
 const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
-  const { db, requireFeature } = deps;
+  const { db, requireFeature, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const salesView = requirePerm("view_sales_reports");
+  const financeView = requirePerm("view_financial_reports"); // margin rule: retail-matrix, exceptions (§7 mixed #4 documented composite)
+  const customerView = requirePerm("view_customer_reports");
   const { buildCategoryMetaMap, withCategoryPaths, buildReportFilterParts, pgWhere } =
     helpers;
 
@@ -18,7 +24,7 @@ module.exports = function (app, deps, helpers) {
   }
 
   // Comparative Trends: Revenue comparison across periods
-  app.get("/api/reports/comparative-trends", async (req, res) => {
+  app.get("/api/reports/comparative-trends", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { period1_from, period1_to, period2_from, period2_to, outlet_id } =
@@ -93,7 +99,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Heatmaps: Day/Hour sales density
-  app.get("/api/reports/heatmaps", async (req, res) => {
+  app.get("/api/reports/heatmaps", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
@@ -134,7 +140,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Revenue Leaks: Deep Dive on Discounts, Comps, and Voids
-  app.get("/api/reports/revenue-leaks", async (req, res) => {
+  app.get("/api/reports/revenue-leaks", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
@@ -227,7 +233,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Product Mix Analysis (Market Basket)
-  app.get("/api/reports/product-mix", async (req, res) => {
+  app.get("/api/reports/product-mix", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id, limit = 20 } = req.query;
@@ -286,7 +292,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Retail Matrix / Menu Engineering
-  app.get("/api/reports/retail-matrix", async (req, res) => {
+  app.get("/api/reports/retail-matrix", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
@@ -390,7 +396,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Customer RFM data
-  app.get("/api/reports/customer-rfm", async (req, res) => {
+  app.get("/api/reports/customer-rfm", customerView, async (req, res) => {
     try {
       const sql = `
       SELECT c.id, c.name, c.mobile, c.email,
@@ -411,7 +417,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Customer Details report
-  app.get("/api/reports/customer-details", async (req, res) => {
+  app.get("/api/reports/customer-details", customerView, async (req, res) => {
     try {
       const { search = "" } = req.query;
       let query = `
@@ -435,7 +441,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Customer Retention
-  app.get("/api/reports/customer-retention", async (req, res) => {
+  app.get("/api/reports/customer-retention", customerView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
@@ -517,7 +523,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Customer Capture Rate
-  app.get("/api/reports/customer-capture-rate", async (req, res) => {
+  app.get("/api/reports/customer-capture-rate", customerView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
@@ -597,6 +603,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/discount-leakage",
     requireFeature("reports_profit_layer"),
+    salesView,
     async (req, res) => {
       try {
         const { where, params } = await buildReportFilterParts(req, {
@@ -657,6 +664,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/exceptions",
     requireFeature("reports_exceptions"),
+    financeView,
     async (req, res) => {
       try {
         const type = String(req.query.type || "negative_margin_sales");
@@ -786,7 +794,7 @@ module.exports = function (app, deps, helpers) {
   );
 
   // Outlet comparison
-  app.get("/api/reports/outlet-comparison", async (req, res) => {
+  app.get("/api/reports/outlet-comparison", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { from, to, date_from, date_to } = req.query;
@@ -832,7 +840,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Supplier Wise
-  app.get("/api/reports/supplier-wise", async (req, res) => {
+  app.get("/api/reports/supplier-wise", salesView, async (req, res) => {
     try {
       const sql = `
       SELECT s.id, s.name AS supplier_name, s.contact_person, s.phone,
@@ -856,7 +864,7 @@ module.exports = function (app, deps, helpers) {
   // returns spiked this month — flag supplier X"). Splits restocked vs
   // scrapped so the shrinkage vector is visible alongside the refund
   // impact. UTC timestamp range matches the canonical returns filter.
-  app.get("/api/reports/returns-by-reason", async (req, res) => {
+  app.get("/api/reports/returns-by-reason", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id, supplier_id } = req.query;

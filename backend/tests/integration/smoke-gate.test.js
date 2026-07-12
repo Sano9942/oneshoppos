@@ -65,7 +65,7 @@ describe("T1 — Login and Role Session Bootstrap", () => {
     expect(res.status).toBe(200);
     expect(res.body.permissions).not.toContain("manage_orders");
     expect(res.body.permissions).not.toContain("manage_inventory");
-    expect(res.body.permissions).toContain("view_reports");
+    expect(res.body.permissions).toContain("view_sales_reports");
   });
 
   it("Context bootstrap — admin sees all outlets", async () => {

@@ -9,7 +9,7 @@
  * completion and re-arms the interval (hook in treatment-plan-service).
  *
  * Gates: treatment_plans mode + clinical_recalls flag; vaccination endpoints
- * additionally require vet_vaccinations. Reads allow view_reports so front
+ * additionally require vet_vaccinations. Reads allow view_customer_reports so front
  * desk staff can work the list; writes need manage_treatment_plans.
  */
 
@@ -29,7 +29,7 @@ module.exports = function registerRecallRoutes(app, deps) {
   const readGate = [
     requireMode("treatment_plans"),
     requireFeature("clinical_recalls"),
-    requireAnyPerm(["manage_treatment_plans", "view_reports"]),
+    requireAnyPerm(["manage_treatment_plans", "view_customer_reports"]),
   ];
   const writeGate = [
     requireMode("treatment_plans"),
@@ -39,7 +39,7 @@ module.exports = function registerRecallRoutes(app, deps) {
   const vaxReadGate = [
     requireMode("treatment_plans"),
     requireFeature("vet_vaccinations"),
-    requireAnyPerm(["manage_treatment_plans", "view_reports"]),
+    requireAnyPerm(["manage_treatment_plans", "view_customer_reports"]),
   ];
   const vaxWriteGate = [
     requireMode("treatment_plans"),

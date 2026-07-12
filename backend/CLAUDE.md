@@ -140,7 +140,7 @@ Exports: `requirePerm`, `requireAnyPerm`, `requireContextOutlet`, `DEFAULT_ROLE_
 - **`requirePerm(permission)`** — `all_access` bypasses everything. Returns 403 on failure.
 - **`requireAnyPerm(permissions[])`** — passes if employee has `all_access` OR any one listed.
 - **`requireContextOutlet`** — backfills `req.query.outlet_id` from `req.context.outletId` if absent.
-- **`DEFAULT_ROLE_PERMISSIONS`**: Administrator = `all_access`; Manager = a broad permission set covering inventory, orders, reports, employees, POS discount/void/park, restaurant/KDS/bookings/projects/contracts/tickets/rentals/rooms/treatment-plans management, tips, void/comp override, gift cards, price override, credit-limit override, and field-sales management; Cashier = view_reports, pos_discount, pos_park; "Field Rep" = manage_field_sales only (minimal role for the wholesale mobile order-booker app).
+- **`DEFAULT_ROLE_PERMISSIONS`**: Administrator = `all_access`; Manager = a broad permission set covering inventory, orders, the five `view_*_reports` splits + `manage_finance`/`manage_reports`, employees, customers, POS discount/void/park, restaurant/KDS/bookings/projects/contracts/tickets/rentals/rooms/treatment-plans management, tips, void/comp override, gift cards, price override, credit-limit override, and field-sales management; Cashier = `view_sales_reports`, pos_discount, pos_park (the D4 split retired `view_reports`; migration v134 also grants `view_customer_reports` to pristine Cashiers on appointments-mode tenants); "Field Rep" = `execute_field_sales` only (rep-self surfaces; PLAN-V2 Step 2 split from `manage_field_sales`, migration v133).
 - **`PERMISSION_RULES`** — declarative array covering common route-level guards; consumed by test helpers and route registration, not auto-applied.
 
 ### `feature-flags.js`
@@ -149,7 +149,7 @@ Exports: `init(deps)`, `DEFAULT_FEATURE_FLAGS`, `requireFeature`, `requireMode`,
 Requires `init({ db, IS_MULTI_TENANT, tenantDbManager, dbProxy })` at boot.
 
 - **`requireFeature(flagKey)`** — 403 if flag is off (deliberately 403 not 503 — "feature off" is a permission-style refusal, not a service outage). 500 on unexpected DB error.
-- **`requireMode(modeName)`** — 403 if the named mode is off/missing. Falls through if the `tenant_modes` table is empty (pre-migration back-compat) — feature flags become the sole gate in that case.
+- **`requireMode(modeName)`** — 403 if the named mode is off/missing. If the `tenant_modes` map is empty it still falls through (feature flags become the sole gate) BUT now emits a Sentry warning + `logger.warn` via `reportEmptyModes()` first (PLAN-V2 Step 5 D5 "warn-and-pass" posture, `NODE_ENV=test`-gated). Post-migration-v135 every live tenant has a full mode-row set, so an empty map means a failed migration/unseeded path — expected 0 occurrences. Queued follow-up: flip to hard fail-closed next release once prod Sentry reads zero warns.
 - Flags: short in-memory cache per tenant. Merges `DEFAULT_FEATURE_FLAGS` with DB rows (DB overrides default). Gracefully degrades if `feature_flags` table is missing.
 - Most `DEFAULT_FEATURE_FLAGS` entries are mode-gated (restaurant, appointments, rentals, rooms, treatment plans, wholesale field sales/secondary sales, etc.) and default `false` — flipped on by the setup wizard or a migration backfill for the matching preset, never globally.
 - **Gotchas**: `fbr_integration` is NOT in `DEFAULT_FEATURE_FLAGS` (DB-seeded by a dedicated migration). `ai_insights` is a soft check in the route, not enforced via `requireFeature`. Shopify routes are gated by connection check, not a flag.
@@ -242,7 +242,7 @@ Zod validation schemas for all domains, one file per domain, consumed by `valida
 ### `config/`
 Static config-as-code modules (no DB access):
 - `business-modules.js` — the Business Modules catalog. Every `DEFAULT_FEATURE_FLAGS` key is classified into a bucket A/B/C card (`BUSINESS_MODULES`: flags, sub_toggles, mode, depends_on, permissions, impact_queries, Bucket C setup_route/connected_check) or listed in `UNMANAGED_FLAGS` (Bucket D — stays writable via the legacy PUT). Exports `classifyFlag`, `cardManagedFlags`, `presetRecommendedModules`, `MODULE_STATES`. `tests/unit/business-modules-catalog.test.js` is a bidirectional drift guard — an unclassified flag key fails CI.
-- `permissions-catalog.js` — every registered permission string (29), grouped for the role editor; exports `PERMISSIONS_CATALOG`, `isKnownPermission`. `tests/unit/permissions-catalog.test.js` scans all `requirePerm`/`requireAnyPerm` call sites for drift.
+- `permissions-catalog.js` — every registered permission string (39 after the PLAN-V2 governance slice — delegation perms `manage_integrations`/`manage_roles`/`manage_outlet_modules`, `execute_field_sales`, and the `view_reports`→5 `view_*_reports` splits + `manage_finance`/`manage_reports`), grouped for the role editor; exports `PERMISSIONS_CATALOG`, `isKnownPermission`. `tests/unit/permissions-catalog.test.js` scans all `requirePerm`/`requireAnyPerm` call sites for drift.
 - `mode-registry.js` — `tenant_modes` registry (mode → feature flags), used by preset seeding, admin mode CRUD, and the business-modules first-row backfill.
 - `country-packs.js`, `industry-config.js`, `vertical-usage-sources.js` — signup tax packs, industry preset definitions, admin vertical-usage count sources.
 

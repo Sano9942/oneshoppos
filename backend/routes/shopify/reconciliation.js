@@ -36,7 +36,7 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
   // GET reconciliation list
   app.get(
     "/api/integrations/shopify/reconciliation",
-    requireAnyPerm(["view_reports", "manage_inventory"]),
+    requireAnyPerm(["view_inventory_reports", "manage_inventory"]),
     async (req, res) => {
       try {
         const { status, resolution_status } = req.query;

@@ -84,7 +84,7 @@ export default function VaccinationCardRedesign() {
   useEffect(() => { load(); }, [load]);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!hasPerm("manage_treatment_plans") && !hasPerm("view_reports")) return <Navigate to="/access-denied" replace />;
+  if (!hasPerm("manage_treatment_plans") && !hasPerm("view_customer_reports")) return <Navigate to="/access-denied" replace />;
   if (flagsLoading) return null;
   if (!flags.vet_vaccinations) return <Navigate to="/dashboard" replace />;
 

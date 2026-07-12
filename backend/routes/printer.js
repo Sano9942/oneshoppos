@@ -13,7 +13,7 @@
  */
 
 module.exports = function printerRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
   const { printReceipt, printerStatus, printTest, openDrawer } = require("../services/printer")(db);
 
   // POST /api/print/receipt
@@ -121,7 +121,7 @@ module.exports = function printerRoutes(app, deps) {
   });
 
   // GET /api/print/config — load current printer_config row
-  app.get("/api/print/config", async (req, res) => {
+  app.get("/api/print/config", requireAnyPerm(["manage_kds", "manage_restaurant"]), async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
     try {

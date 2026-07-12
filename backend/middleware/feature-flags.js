@@ -56,7 +56,6 @@ const DEFAULT_FEATURE_FLAGS = {
   // tenants without the subscriptions mode don't see the Subscriptions nav.
   // Tenants on the subscriptions mode get the flag enabled via v44 backfill.
   subscription_billing: false,
-  sms_campaigns: false,
   subscription_autocharge: false,
   // Phase 4 — New Verticals
   // Mode-gated (restaurant mode): flag default false. Enabled for tenants
@@ -77,7 +76,6 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_restaurant_kds_analytics: false,
   phase4_restaurant_day_parting: false,
   phase4_restaurant_fire_chits: false,
-  phase4_restaurant_seats: false,
   phase4_restaurant_drive_thru: false,
   phase4_restaurant_menu_engineering: false,
   // V03 — delivery-aggregator order injection (foodpanda / Careem). Default OFF;
@@ -96,7 +94,6 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (service_projects mode).
   phase4_service_projects: false,
   phase4_service_contracts: false,
-  phase4_contract_ai: false,
   // Mode-gated (workflow_tickets mode).
   phase4_workflow_tickets: false,
   // Mode-gated: flipped ON only by setup/company-profile when a rental preset
@@ -134,7 +131,6 @@ const DEFAULT_FEATURE_FLAGS = {
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,
-  phase5_payment_gateways: false,
   phase5_sms_providers: false,
   // Phase 2-G — General Retail Tier-1 Parity (all default false; each feature
   // is opt-in per tenant via the admin feature-flags UI). DEFAULT entries
@@ -149,8 +145,6 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_serialized_inventory: false,
   phase2g_per_line_restock: false,
   phase2g_inventory_intelligence: false,
-  phase2g_receipt_barcode_lookup: false,
-  phase2g_label_designer: false,
   phase2g_holds: false,
   phase2g_risk_controls: false,
   retail_weekly_digest: false,
@@ -304,13 +298,44 @@ function invalidateModeCache(tenantId) {
   else _modeCache.clear();
 }
 
+/**
+ * D5 (PLAN-V2 Step 5) empty-map telemetry. After migration v135 + the
+ * provisioning seeders, EVERY live tenant has a full tenant_modes row set, so
+ * reaching requireMode with an empty map means a failed per-tenant migration
+ * or an unseeded provisioning path — surface it loudly. Owner-chosen posture
+ * for this release is warn-and-pass (keep falling through so a gap degrades to
+ * "flags are the sole gate" instead of a 403 storm); flip to fail-closed next
+ * release once prod telemetry reads zero. Skipped under NODE_ENV=test so the
+ * integration harness (which never seeds tenant_modes) stays quiet.
+ */
+function reportEmptyModes(modeName, tenantId) {
+  if (process.env.NODE_ENV === "test") return;
+  try {
+    const Sentry = require("@sentry/node");
+    Sentry.captureMessage("requireMode: empty tenant_modes map (D5 warn-and-pass)", {
+      level: "warning",
+      tags: { mode: modeName, tenantId: tenantId != null ? String(tenantId) : "unknown" },
+    });
+  } catch { /* Sentry absent/uninitialised — no-op */ }
+  try {
+    require("../services/logger").warn(
+      { mode: modeName, tenantId },
+      "requireMode: tenant has an empty tenant_modes map — feature flags are the sole gate. Expected 0 occurrences after migrate v135; investigate this tenant's migration/provisioning."
+    );
+  } catch { /* logger unavailable — no-op */ }
+}
+
 function requireMode(modeName) {
   return async (req, res, next) => {
     try {
       const modes = await getModesMap(req.tenantId);
-      // If modes map is empty (pre-migration or no modes set), fall through
-      // to let feature flags be the sole gate (backward compat)
-      if (Object.keys(modes).length === 0) return next();
+      // Empty map = failed migration or unseeded provisioning path (should be
+      // impossible post-v135). Warn-and-pass for one release: fall through so
+      // feature flags remain the sole gate rather than 403-storming a tenant.
+      if (Object.keys(modes).length === 0) {
+        reportEmptyModes(modeName, req.tenantId);
+        return next();
+      }
       if (!modes[modeName]) {
         // M29 (Phase 3.14): align with requireFeature — "mode off" is a
         // permission-style refusal, not a service-availability error.

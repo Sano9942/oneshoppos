@@ -49,7 +49,7 @@ const {
   cardManagedFlags,
 } = require("../config/business-modules");
 const { DEFAULT_FEATURE_FLAGS } = require("../middleware/feature-flags");
-const { MODE_REGISTRY } = require("../config/mode-registry");
+const { MODE_REGISTRY, modeActiveForFlags } = require("../config/mode-registry");
 
 function isMissingTableError(err) {
   return String(err?.message || "").includes("does not exist");
@@ -251,9 +251,9 @@ async function backfillModesIfFirstRowTx(client, excludeMode, liveFlags) {
   const { rows } = await client.query("SELECT COUNT(*)::int AS n FROM tenant_modes");
   if (rows[0].n > 0) return [];
   const backfilled = [];
-  for (const [mode, cfg] of Object.entries(MODE_REGISTRY)) {
+  for (const mode of Object.keys(MODE_REGISTRY)) {
     if (mode === excludeMode) continue;
-    if (cfg.feature_flags_to_enable.some((f) => liveFlags[f] === true)) {
+    if (modeActiveForFlags(mode, liveFlags)) {
       await client.query(
         `INSERT INTO tenant_modes (mode, enabled, enabled_at)
          VALUES ($1, true, NOW()) ON CONFLICT (mode) DO NOTHING`,

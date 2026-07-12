@@ -1,7 +1,22 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps) {
-  const { db } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
+
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §7 mixed #1) — the dashboard is
+  // a composite payload spanning four data classes, so the response is
+  // permission-filtered per segment: sales scalars/trends → view_sales_reports,
+  // profit/expenses/purchases/cash → view_financial_reports, inventory
+  // value/low-stock → view_inventory_reports, attendance/staff → view_hr_reports
+  // (except the caller's OWN attendance row, always included). The route guard
+  // only requires SOME split; the segment filter enforces the right one.
+  const anySplitView = requireAnyPerm([
+    "view_sales_reports",
+    "view_inventory_reports",
+    "view_financial_reports",
+    "view_hr_reports",
+    "view_customer_reports",
+  ]);
 
   /**
    * Build an outlet filter clause with numbered Postgres params.
@@ -21,8 +36,15 @@ module.exports = function (app, deps) {
     };
   }
 
-  app.get("/api/reports/dashboard", async (req, res) => {
+  app.get("/api/reports/dashboard", anySplitView, async (req, res) => {
     try {
+      const perms = req.employeePerms || [];
+      const hasPerm = (p) => perms.includes("all_access") || perms.includes(p);
+      const canSales = hasPerm("view_sales_reports");
+      const canInventory = hasPerm("view_inventory_reports");
+      const canFinancial = hasPerm("view_financial_reports");
+      const canHr = hasPerm("view_hr_reports");
+
       const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const todayStr = new Intl.DateTimeFormat("en-CA", {
         timeZone: tz,
@@ -588,7 +610,10 @@ module.exports = function (app, deps) {
         fbrIntegrationEnabled = r?.enabled === true;
       } catch { /* table missing — leave false */ }
 
-      res.json({
+      // ─── D4 permission-filtered assembly (§7 mixed #1) ───
+      // Base: onboarding signals, currency, thresholds — config/counts, not
+      // report data. Always included.
+      const payload = {
         currency: {
           symbol: req.company?.currency_symbol || "PKRs",
           code: req.company?.currency_code || "PKR",
@@ -612,75 +637,119 @@ module.exports = function (app, deps) {
           refund_threshold_pct: Number(req.company?.refund_threshold_pct || 5),
           void_threshold_pct: Number(req.company?.void_threshold_pct || 3),
         },
-        totalRevenueToday: Number(totalRevenueToday.toFixed(2)),
-        saleCount,
-        averageBill,
-        yesterdayRevenue,
-        yesterdaySaleCount,
-        yesterdayProfit,
-        yesterdayRefunds,
-        monthSales,
-        monthPurchases,
-        monthGrossMargin,
-        zReport,
-        paymentContribution,
-        todayProfit,
-        todayGrossProfit: Number(todayGrossProfit.toFixed(2)),
-        todayExpenses,
-        refundsToday: {
-          count: refundsToday.count,
-          value: refundsToday.value,
-          pct_of_sales: totalRevenueToday > 0
-            ? Number(((refundsToday.value / totalRevenueToday) * 100).toFixed(1))
-            : 0,
-          pct_of_orders: saleCount > 0
-            ? Number(((refundsToday.count / saleCount) * 100).toFixed(1))
-            : 0,
-        },
-        voidsToday: {
-          count: voidsToday.count,
-          value: voidsToday.value,
-          pct_of_sales: totalRevenueToday > 0
-            ? Number(((voidsToday.value / totalRevenueToday) * 100).toFixed(1))
-            : 0,
-          pct_of_orders: saleCount > 0
-            ? Number(((voidsToday.count / saleCount) * 100).toFixed(1))
-            : 0,
-        },
-        discountsToday: {
-          count: discountsToday.count,
-          value: discountsToday.value,
-          pct_of_sales: totalRevenueToday > 0
-            ? Number(((discountsToday.value / totalRevenueToday) * 100).toFixed(1))
-            : 0,
-          pct_of_orders: saleCount > 0
-            ? Number(((discountsToday.count / saleCount) * 100).toFixed(1))
-            : 0,
-        },
-        taxInclusive,
-        taxExclusive,
-        inventoryValue,
-        currentStockUnits: Number(inventoryValue.total_units || 0),
-        topSelling,
-        lowStock,
-        salesTrend,
-        salePurchaseComparison,
-        categoryContribution,
-        attendanceSummary,
-        operationalReadiness,
-        salesByOutlet,
-        topProducts,
-        monthlyTrend,
-        hourlySales,
-        categoryPerformance: categoryMatrix,
-        inventory: inventoryStatus[0] || {
-          total_products: 0,
-          low_stock_items: 0,
-        },
-        // 2-G.16 Merchant home — new retail-focused cards
-        staffOfDay,
-        cashPosition,
-      });
+      };
+
+      if (canSales) {
+        Object.assign(payload, {
+          totalRevenueToday: Number(totalRevenueToday.toFixed(2)),
+          saleCount,
+          averageBill,
+          yesterdayRevenue,
+          yesterdaySaleCount,
+          yesterdayRefunds,
+          monthSales,
+          zReport,
+          paymentContribution,
+          refundsToday: {
+            count: refundsToday.count,
+            value: refundsToday.value,
+            pct_of_sales: totalRevenueToday > 0
+              ? Number(((refundsToday.value / totalRevenueToday) * 100).toFixed(1))
+              : 0,
+            pct_of_orders: saleCount > 0
+              ? Number(((refundsToday.count / saleCount) * 100).toFixed(1))
+              : 0,
+          },
+          voidsToday: {
+            count: voidsToday.count,
+            value: voidsToday.value,
+            pct_of_sales: totalRevenueToday > 0
+              ? Number(((voidsToday.value / totalRevenueToday) * 100).toFixed(1))
+              : 0,
+            pct_of_orders: saleCount > 0
+              ? Number(((voidsToday.count / saleCount) * 100).toFixed(1))
+              : 0,
+          },
+          discountsToday: {
+            count: discountsToday.count,
+            value: discountsToday.value,
+            pct_of_sales: totalRevenueToday > 0
+              ? Number(((discountsToday.value / totalRevenueToday) * 100).toFixed(1))
+              : 0,
+            pct_of_orders: saleCount > 0
+              ? Number(((discountsToday.count / saleCount) * 100).toFixed(1))
+              : 0,
+          },
+          taxInclusive,
+          taxExclusive,
+          topSelling,
+          salesTrend,
+          // Purchase spend is financial-class — a sales-only token gets the
+          // sales half of the comparison series only.
+          salePurchaseComparison: canFinancial
+            ? salePurchaseComparison
+            : salePurchaseComparison.map(({ day, sales_total }) => ({ day, sales_total })),
+          categoryContribution,
+          operationalReadiness,
+          salesByOutlet,
+          topProducts,
+          monthlyTrend,
+          hourlySales,
+          categoryPerformance: categoryMatrix,
+        });
+      }
+
+      if (canFinancial) {
+        Object.assign(payload, {
+          yesterdayProfit,
+          monthPurchases,
+          monthGrossMargin,
+          todayProfit,
+          todayGrossProfit: Number(todayGrossProfit.toFixed(2)),
+          todayExpenses,
+          cashPosition,
+        });
+      }
+
+      if (canInventory) {
+        Object.assign(payload, {
+          inventoryValue,
+          currentStockUnits: Number(inventoryValue.total_units || 0),
+          lowStock,
+          inventory: inventoryStatus[0] || {
+            total_products: 0,
+            low_stock_items: 0,
+          },
+        });
+      }
+
+      if (canHr) {
+        Object.assign(payload, {
+          attendanceSummary,
+          // 2-G.16 Merchant home — per-employee sales attribution is
+          // staff-performance data (HR class).
+          staffOfDay,
+        });
+      } else {
+        // The caller's OWN attendance row is always included (§7 mixed #1) —
+        // keeps the Cashier's own-attendance dashboard widget alive without
+        // exposing the team. Counts are recomputed over the filtered set so
+        // nothing about other staff leaks.
+        const ownDetails = attendanceSummary.details.filter(
+          (row) => row.id === req.employee?.id
+        );
+        payload.attendanceSummary = {
+          clocked_in: ownDetails.filter((r) => r.status === "clocked_in").length,
+          on_break: ownDetails.filter((r) => r.status === "on_break").length,
+          clocked_out: ownDetails.filter((r) => r.status === "clocked_out").length,
+          not_started: ownDetails.filter((r) => r.status === "not_started").length,
+          total_employees: ownDetails.length,
+          details: ownDetails,
+          own_only: true,
+        };
+      }
+
+      res.json(payload);
     } catch (err) {
       console.error("Dashboard Error:", err);
       res.status(500).json({ error: "Failed to load dashboard data" });
@@ -692,7 +761,8 @@ module.exports = function (app, deps) {
   // outstanding A/R, overdue total (days_overdue > overdue_days, default
   // 30), and top 5 buyers by balance. "Unpaid" matches the rest of the
   // wholesale stack: balance_due > 0 AND status NOT IN ('paid','cancelled','void').
-  app.get("/api/reports/dashboard/wholesale", async (req, res) => {
+  // §7 mixed #2: AR outstanding/overdue + top buyers are financial-class.
+  app.get("/api/reports/dashboard/wholesale", requirePerm("view_financial_reports"), async (req, res) => {
     try {
       const overdueDays = Math.max(0, Math.min(365, parseInt(req.query.overdue_days, 10) || 30));
       // Days-overdue counts from the TENANT-local day, not the DB session's

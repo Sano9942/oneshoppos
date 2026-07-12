@@ -12,7 +12,7 @@ module.exports = function registerBackorderRoutes(app, deps) {
 
   const gate = [
     requireFeature("wholesale_backorders"),
-    requireAnyPerm(["manage_orders", "manage_inventory", "view_reports", "all_access"]),
+    requireAnyPerm(["manage_orders", "manage_inventory", "view_inventory_reports", "all_access"]),
   ];
   const writeGate = [
     requireFeature("wholesale_backorders"),

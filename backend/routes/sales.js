@@ -152,7 +152,7 @@ module.exports = function registerSalesRoutes(app, deps) {
    *         description: Unauthorized
    */
   // GET all sales (paginated, filterable)
-  app.get("/api/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/sales", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     try {
       const {
         page = 1,
@@ -238,7 +238,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   // to auto-load a sale when the cashier scans the receipt.
   app.get(
     "/api/sales/by-barcode/:code",
-    requireAnyPerm(["view_reports", "pos_park", "all_access"]),
+    requireAnyPerm(["view_sales_reports", "pos_park", "all_access"]),
     async (req, res) => {
       const code = String(req.params.code || "").trim();
       if (!code) return res.status(400).json({ error: "barcode required" });
@@ -275,7 +275,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   );
 
   // GET a single sale with full line items and payments
-  app.get("/api/sales/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/sales/:id", requireAnyPerm(["view_sales_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -901,6 +901,32 @@ module.exports = function registerSalesRoutes(app, deps) {
     }
     if (!authenticatedEmployeeId) {
       return res.status(401).json({ error: "Login is required for checkout" });
+    }
+
+    // S3 (PLAN-V2 Step 2) — field-order writes are scoped to the rep's own
+    // visit: a rep cannot book an order against another rep's check-in.
+    // manage_field_sales (owner surfaces) and all_access callers may link any
+    // visit (e.g. a manager keying in a rep's phoned-in order).
+    if (field_visit_id) {
+      const callerPerms = req.employeePerms || [];
+      if (
+        !callerPerms.includes("all_access") &&
+        !callerPerms.includes("manage_field_sales")
+      ) {
+        const { rows: [ownVisit] } = await db.query(
+          "SELECT employee_id FROM field_visits WHERE id = $1",
+          [field_visit_id]
+        );
+        if (!ownVisit) {
+          return res.status(400).json({ error: "field_visit_id not found" });
+        }
+        if (Number(ownVisit.employee_id) !== Number(authenticatedEmployeeId)) {
+          return res.status(403).json({
+            error: "Forbidden: field orders must be linked to your own visit",
+            code: "FIELD_VISIT_NOT_OWN",
+          });
+        }
+      }
     }
 
     // Phase 2-G Wave 3 (2-G.5) — validate per-line price_override metadata

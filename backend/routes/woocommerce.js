@@ -2,7 +2,7 @@ const { encryptSecret, decryptSecret } = require("../services/crypto");
 
 module.exports = function mountWooCommerceRoutes(app, deps) {
   const db = deps.db;
-  const { requirePerm } = deps;
+  const { requirePerm, requireAnyPerm } = deps;
 
   // Credentials are stored AES-256-GCM encrypted (enc:v1 format, same path
   // Shopify/marketplace use). Decrypt in place after loading a config row so
@@ -32,7 +32,8 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
   // GET /api/integrations/woocommerce/status — check connection
   app.get(
     "/api/integrations/woocommerce/status",
-    requirePerm("manage_inventory"),
+    // PLAN-V2 Step 2: config-surface read — manage_integrations delegate included.
+    requireAnyPerm(["manage_inventory", "manage_integrations"]),
     async (req, res) => {
       try {
         const {
@@ -64,7 +65,8 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
   // POST /api/integrations/woocommerce/connect — save credentials
   app.post(
     "/api/integrations/woocommerce/connect",
-    requirePerm("all_access"),
+    // PLAN-V2 Step 2 / D7: credential write — delegable via manage_integrations.
+    requireAnyPerm(["manage_integrations"]),
     async (req, res) => {
       const { store_url, consumer_key, consumer_secret } = req.body || {};
       if (!store_url || !consumer_key || !consumer_secret) {
@@ -99,7 +101,7 @@ module.exports = function mountWooCommerceRoutes(app, deps) {
   // POST /api/integrations/woocommerce/disconnect
   app.post(
     "/api/integrations/woocommerce/disconnect",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_integrations"]),
     async (req, res) => {
       await db.query(
         "DELETE FROM integration_settings WHERE provider = 'woocommerce'",

@@ -102,9 +102,9 @@ If `req.context?.outletId` is set and `req.query.outlet_id` is absent, backfills
 
 ### `DEFAULT_ROLE_PERMISSIONS`
 - `Administrator`: `["all_access"]`
-- `Manager`: a broad set — `manage_inventory`, `manage_orders`, `view_reports`, `manage_employees`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`, `override_credit_limit`, `manage_field_sales`, `manage_forms`
-- `Cashier`: `["view_reports", "pos_discount", "pos_park"]`
-- `"Field Rep"`: `["manage_field_sales"]` only — the minimal role for the wholesale mobile order-booker/DSR app; scoping to "only their own route/check-ins" is enforced in the route handlers, not here.
+- `Manager`: a broad set — `manage_inventory`, `manage_orders`, the five report splits (`view_sales_reports`, `view_inventory_reports`, `view_financial_reports`, `view_hr_reports`, `view_customer_reports`), `manage_finance`, `manage_reports`, `manage_employees`, `manage_customers`, `pos_discount`, `void_sales`, `pos_park`, `pos_void`, `manage_restaurant`, `manage_kds`, `manage_bookings`, `manage_projects`, `manage_contracts`, `manage_tickets`, `manage_rentals`, `manage_rooms`, `manage_treatment_plans`, `manage_tips`, `override_void_comp`, `manage_gift_cards`, `override_price`, `override_credit_limit`, `manage_field_sales`, `manage_forms`
+- `Cashier`: `["view_sales_reports", "pos_discount", "pos_park"]` (D4 split retired `view_reports`; POS keeps working via the products/customers POS-adjacency composites that accept `view_sales_reports`)
+- `"Field Rep"`: `["execute_field_sales"]` only — the minimal role for the wholesale mobile order-booker/DSR app (PLAN-V2 Step 2 split from `manage_field_sales`; owner surfaces stay on `manage_field_sales`); scoping to "only their own route/check-ins" is enforced in the route handlers, not here.
 
 ### `ensureDefaultRolePermissions(db)`
 Async. Looks up the `roles` table, and for each role name present in `DEFAULT_ROLE_PERMISSIONS`, inserts each permission via `INSERT ... ON CONFLICT DO NOTHING`. Idempotent — safe to call repeatedly (tenant provisioning, role backfills). Logs and swallows errors rather than throwing.
@@ -140,7 +140,7 @@ Returns async middleware. 403 `{ error: "Feature disabled: <key>", flag: <key> }
 Async. Same 60s-cache pattern (`MODE_CACHE_MS`) against the `tenant_modes` table. Returns `{}` (not an error) if `init()` was never called — some test harnesses build an app without wiring feature-flags deps — or if the table doesn't exist yet, so `requireMode` can fall through to its back-compat branch below instead of 500ing.
 
 ### `requireMode(modeName)`
-Returns async middleware. If the resolved mode map is **empty** (pre-migration, or a tenant with no `tenant_modes` rows at all), falls through via `next()` — feature flags alone are the gate in that case (back-compat). Otherwise 403 `{ error: "Mode not enabled: <name>", mode: <name> }` if the named mode is off or missing from the map.
+Returns async middleware. If the resolved mode map is **empty** it still falls through via `next()` (feature flags alone are the gate) — but now calls `reportEmptyModes()` first, emitting a Sentry warning + `logger.warn` (PLAN-V2 Step 5 D5 "warn-and-pass"; `NODE_ENV=test`-gated so the harness stays quiet). After migration v135 + the provisioning seeders, every live tenant has a full `tenant_modes` row set, so an empty map now signals a failed migration/unseeded path (expected 0 in prod). Queued follow-up: remove the fall-through (hard fail-closed) next release once prod telemetry reads zero. Otherwise 403 `{ error: "Mode not enabled: <name>", mode: <name> }` if the named mode is off or missing from the map.
 
 ### `invalidateFeatureFlagCache(tenantId)` / `invalidateModeCache(tenantId)`
 Bust the respective cache for one tenant, or the whole cache if `tenantId` is falsy. Call after any admin flag/mode mutation.

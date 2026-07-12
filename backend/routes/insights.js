@@ -3,7 +3,7 @@ module.exports = function mountInsightRoutes(app, deps) {
   const { requirePerm } = deps;
 
   // GET /api/insights/auto — pre-built analytical insight cards
-  app.get("/api/insights/auto", requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/insights/auto", requirePerm("view_sales_reports"), async (req, res) => {
     try {
       const cards = [];
 

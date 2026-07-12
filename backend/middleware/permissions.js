@@ -39,8 +39,23 @@ const DEFAULT_ROLE_PERMISSIONS = {
   Manager: [
     "manage_inventory",
     "manage_orders",
-    "view_reports",
+    // D4 split (PLAN-V2 Step 4) — view_reports replaced by the five
+    // data-classified report permissions. Manager holds all five.
+    "view_sales_reports",
+    "view_inventory_reports",
+    "view_financial_reports",
+    "view_hr_reports",
+    "view_customer_reports",
     "manage_employees",
+    // C6 split (Step 4) — financial mutations + report governance writes,
+    // carved out of manage_employees so custom HR roles stop inheriting
+    // financial authority. Default Manager keeps both (no capability change).
+    "manage_finance",
+    "manage_reports",
+    // C2 #1 (Step 4) — guard on customer edit/delete was already
+    // manage_customers; the gap was the role. Store managers routinely edit
+    // customers.
+    "manage_customers",
     "pos_discount",
     "void_sales",
     "pos_park",
@@ -71,10 +86,22 @@ const DEFAULT_ROLE_PERMISSIONS = {
     // F03 — form builder (intake/waivers/questionnaires) across verticals.
     "manage_forms",
   ],
-  Cashier: ["view_reports", "pos_discount", "pos_park"],
+  // D4 split (Step 4): pristine Cashiers converge on least-privilege —
+  // sales-class reads only. POS keeps working via the POS-adjacency
+  // composites (products/customers reads accept view_sales_reports).
+  // Migration v134 converts existing pristine Cashier roles; appointments-
+  // mode tenants additionally get view_customer_reports there (§8 #2b) —
+  // deliberately NOT in this constant, which describes the retail default.
+  Cashier: ["view_sales_reports", "pos_discount", "pos_park"],
   // Tier 1.1 wholesale — minimal role for mobile order bookers / DSRs.
   // Only sees their own route, posts check-ins, reads their own visit history.
-  "Field Rep": ["manage_field_sales"],
+  // S3 split (PLAN-V2 Step 2): execute_field_sales = rep-self surfaces only;
+  // the owner/admin surfaces (all-reps visit log, summary, route planning)
+  // require manage_field_sales, which Field Rep deliberately does NOT hold.
+  // C4 rule: this constant is the durable source — ensureDefaultRolePermissions
+  // re-seeds from it at every boot, so changing role_permissions rows alone
+  // would be undone. Migration v133 converts existing pristine Field Rep roles.
+  "Field Rep": ["execute_field_sales"],
 };
 
 async function ensureDefaultRolePermissions(db) {
@@ -97,16 +124,33 @@ async function ensureDefaultRolePermissions(db) {
 }
 
 const PERMISSION_RULES = [
-  // Reporting and analytics
+  // Reporting and analytics — D4 split (Step 4): this blanket rule is a
+  // BACKSTOP only (defense in depth so an unguarded new report route still
+  // requires *some* report permission). The per-domain guard inside each
+  // routes/reports/* file is what enforces the RIGHT split perm.
   {
     methods: ["GET"],
     path: /^\/api\/reports(\/|$)/,
-    anyPerms: ["view_reports", "manage_employees"],
+    anyPerms: [
+      "view_sales_reports",
+      "view_inventory_reports",
+      "view_financial_reports",
+      "view_hr_reports",
+      "view_customer_reports",
+      "manage_reports",
+    ],
   },
   {
+    // D4 split (Step 4) — team attendance is HR-class. `my-status` is exempt:
+    // it is SELF-scoped (returns only the caller's own clock-in status, keyed
+    // on x-employee-id) and drives the POS shift gate (useShiftGate →
+    // isReadyForCheckout), which every Cashier needs. §8 #3 keeps self
+    // clock-in unaffected; blocking it here would brick POS checkout for
+    // sales-only Cashiers. The negative lookahead keeps every OTHER
+    // /api/attendance GET (team list, sessions) HR-gated.
     methods: ["GET"],
-    path: /^\/api\/attendance(\/|$)/,
-    anyPerms: ["view_reports", "manage_employees"],
+    path: /^\/api\/attendance(?!\/my-status(?:$|[/?]))(\/|$)/,
+    anyPerms: ["view_hr_reports", "manage_employees"],
   },
   // Attendance manual edit (manager write)
   {
@@ -175,7 +219,9 @@ const PERMISSION_RULES = [
   {
     methods: ["POST", "PUT", "DELETE"],
     path: /^\/api\/receipt-templates(\/\d+)?$/,
-    anyPerms: ["manage_employees"],
+    // C2 #3 (Step 4): template design is store config — manage_inventory
+    // holders save templates (the inline PUT guard was relaxed to match).
+    anyPerms: ["manage_employees", "manage_inventory"],
   },
 
   // Orders/procurement mutation

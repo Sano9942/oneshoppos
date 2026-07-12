@@ -1,7 +1,12 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
-  const { db, requireFeature } = deps;
+  const { db, requireFeature, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const invView = requirePerm("view_inventory_reports");
+  const financeView = requirePerm("view_financial_reports"); // margin rule: pricing-margin/exceptions
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
     helpers;
 
@@ -48,7 +53,7 @@ module.exports = function (app, deps, helpers) {
   }
 
   // Sales & Stock: product with all-time sales + current stock
-  app.get("/api/reports/sales-stock", async (req, res) => {
+  app.get("/api/reports/sales-stock", invView, async (req, res) => {
     try {
       const sql = `
       SELECT p.id, p.name, p.barcode, COALESCE(cat.name,'—') AS category,
@@ -115,7 +120,7 @@ module.exports = function (app, deps, helpers) {
    *         description: Unauthorized
    */
   // Inventory Dump: stock per product per outlet with full product info
-  app.get("/api/reports/inventory-dump", async (req, res) => {
+  app.get("/api/reports/inventory-dump", invView, async (req, res) => {
     try {
       const { outlet_id, aggregate = "0", anomaly = "" } = req.query;
       const aggregateMode = String(aggregate) === "1";
@@ -227,7 +232,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Product Specification: full product table with all FK names and inventory master context
-  app.get("/api/reports/product-spec", async (req, res) => {
+  app.get("/api/reports/product-spec", invView, async (req, res) => {
     try {
       let where = [];
       const params = [];
@@ -260,7 +265,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // On Hand Inventory: current stock per product per outlet or aggregated across all outlets
-  app.get("/api/reports/on-hand", async (req, res) => {
+  app.get("/api/reports/on-hand", invView, async (req, res) => {
     try {
       const { outlet_id, aggregate = "0", anomaly = "" } = req.query;
       const aggregateMode = String(aggregate) === "1";
@@ -370,7 +375,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Inventory Loss: stock adjustments with negative quantity
-  app.get("/api/reports/inventory-loss", async (req, res) => {
+  app.get("/api/reports/inventory-loss", invView, async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -403,7 +408,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Wastage: stock adjustments for Damaged or Expired reasons
-  app.get("/api/reports/wastage", async (req, res) => {
+  app.get("/api/reports/wastage", invView, async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -436,7 +441,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Replenishment: products at or below threshold per outlet
-  app.get("/api/reports/replenishment", async (req, res) => {
+  app.get("/api/reports/replenishment", invView, async (req, res) => {
     try {
       const threshold = parseInt(req.query.threshold) || 10;
       const sql = `
@@ -458,7 +463,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Pricing Exceptions: price, cost, and margin-risk views by product/outlet or aggregated across all outlets
-  app.get("/api/reports/pricing-exceptions", async (req, res) => {
+  app.get("/api/reports/pricing-exceptions", financeView, async (req, res) => {
     try {
       const marginThreshold = Math.max(
         0,
@@ -570,7 +575,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Pricing Margin: all products with cost vs sell price and margin analysis
-  app.get("/api/reports/pricing-margin", async (req, res) => {
+  app.get("/api/reports/pricing-margin", financeView, async (req, res) => {
     try {
       const { outlet_id, category_id } = req.query;
       const where = [];
@@ -629,7 +634,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Dead Stock (ungated): products with zero sales in last N days (default 90)
-  app.get("/api/reports/dead-stock", async (req, res) => {
+  app.get("/api/reports/dead-stock", invView, async (req, res) => {
     try {
       const inactiveDays = Math.max(
         1,
@@ -673,7 +678,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Forecast Demand (ungated): avg daily sales over lookback window per product
-  app.get("/api/reports/forecast-demand", async (req, res) => {
+  app.get("/api/reports/forecast-demand", invView, async (req, res) => {
     try {
       const { rows, lookbackDays } = await buildForecastRows(req.query || {}, req.company?.timezone || "UTC");
       const categoryMeta = await buildCategoryMetaMap();
@@ -691,7 +696,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Replenishment Smart (ungated): days_of_cover < 14, sorted by urgency ASC
-  app.get("/api/reports/replenishment-smart", async (req, res) => {
+  app.get("/api/reports/replenishment-smart", invView, async (req, res) => {
     try {
       const forecastDays = Math.max(
         7,
@@ -733,7 +738,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // NOTE: The /api/reports/stock-aging route lives in reports/stock-aging.js
-  // (Wave 3, ungated — requireAnyPerm(["view_reports","manage_inventory"])).
+  // (Wave 3, ungated — requireAnyPerm(["view_inventory_reports","manage_inventory"])).
   // A shadowing gated duplicate previously lived here and, being registered
   // first in reports/index.js, prevented the real implementation from serving.
   // Removed in completion-00 so the ungated report reaches every tenant.
@@ -823,6 +828,7 @@ module.exports = function (app, deps, helpers) {
   app.get(
     "/api/reports/stockout-risk",
     requireFeature("reports_inventory_health_plus"),
+    invView,
     async (req, res) => {
       try {
         const tz = req.company?.timezone || "UTC";
@@ -900,7 +906,7 @@ module.exports = function (app, deps, helpers) {
   );
 
   // Product Movement (Inter-Outlet Transfers)
-  app.get("/api/reports/product-movement", async (req, res) => {
+  app.get("/api/reports/product-movement", invView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -938,7 +944,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // STR Report (Stock Transfer Register - functionally similar to product movement but used as a formal register)
-  app.get("/api/reports/str-report", async (req, res) => {
+  app.get("/api/reports/str-report", invView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
@@ -975,7 +981,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // GRN Report: Historical log of stock receipts from suppliers
-  app.get("/api/reports/grn-report", async (req, res) => {
+  app.get("/api/reports/grn-report", invView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       let where = [];
@@ -1017,7 +1023,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // History Cost: GRN-level purchase cost history by product
-  app.get("/api/reports/history-cost", async (req, res) => {
+  app.get("/api/reports/history-cost", invView, async (req, res) => {
     try {
       let where = [];
       const params = [];
@@ -1086,7 +1092,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // History Sale: sale-line history by product with realized sell/cost
-  app.get("/api/reports/history-sale", async (req, res) => {
+  app.get("/api/reports/history-sale", invView, async (req, res) => {
     try {
       let where = ["s.voided = false", "si.quantity > 0"];
       const params = [];
@@ -1163,7 +1169,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // Product Audit: master-data and reference utility checks from the live schema
-  app.get("/api/reports/product-audit", async (req, res) => {
+  app.get("/api/reports/product-audit", invView, async (req, res) => {
     try {
       let where = [];
       const params = [];
@@ -1317,7 +1323,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   // --- Shrinkage / Stock Discrepancy Report -----------------------------------
-  app.get("/api/reports/shrinkage", async (req, res) => {
+  app.get("/api/reports/shrinkage", invView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { outlet_id, category_id, search } = req.query;

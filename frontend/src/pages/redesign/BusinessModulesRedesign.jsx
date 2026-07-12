@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "../../contexts/ToastContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { refreshFeatureFlags } from "../../hooks/useFeatureFlags";
-import { PageShell, SectionCard, Badge, Button, Toggle, ConfirmDialog, EmptyState } from "../../ui/primitives";
-import { Lock, Sparkles } from "lucide-react";
+import { PageShell, SectionCard, Badge, Button, Toggle, Tooltip, ConfirmDialog, EmptyState } from "../../ui/primitives";
+import { Lock, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
 import { api } from "../../api";
 
 const STATE_BADGE = {
@@ -37,6 +37,13 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
   const isOn = m.state === "on";
   const busy = busyKey === m.key;
   const subsEnabled = isOn && !busy;
+  // Sub-toggles are only usable once the parent module is on. When it's off we
+  // still render them (so the merchant sees what's inside) but disabled with a
+  // tooltip. Bucket C sub-toggles are read-only badges, so they never gate here.
+  const parentOff = m.bucket !== "C" && !isOn;
+  const subs = m.sub_toggles || [];
+  const useExpander = subs.length > 3;
+  const [showCustomize, setShowCustomize] = useState(false);
 
   return (
     <div className="border border-(--ui-border) rounded-lg p-4 flex flex-col gap-2">
@@ -76,23 +83,55 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
         <p className="text-xs text-(--ui-muted)">This module is locked for your account. Contact support to enable it.</p>
       )}
 
-      {m.sub_toggles?.length > 0 && (
-        <div className="mt-1 border-t border-(--ui-border) pt-2 space-y-1.5">
-          {m.sub_toggles.map((s) => (
-            <div key={s.key} className="flex items-center justify-between gap-2">
-              <span className={`text-sm ${subsEnabled ? "text-(--ui-text)" : "text-(--ui-muted)"}`}>{s.title}</span>
-              {m.bucket === "C" ? (
-                <Badge tone={s.enabled ? "success" : "default"}>{s.enabled ? "On" : "Off"}</Badge>
-              ) : (
-                <Toggle
-                  checked={s.enabled}
-                  disabled={!subsEnabled || busyKey === s.key}
-                  onChange={() => onSubToggle(m, s)}
-                  aria-label={`Toggle ${s.title}`}
-                />
-              )}
+      {subs.length > 0 && (
+        <div className="mt-1 border-t border-(--ui-border) pt-2">
+          {/* Long sub-toggle lists (>3) collapse behind a Customize expander;
+              short lists stay inline. */}
+          {useExpander && (
+            <Button
+              tone="link"
+              size="sm"
+              onClick={() => setShowCustomize((v) => !v)}
+              aria-expanded={showCustomize}
+            >
+              {showCustomize ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Customize ({subs.length})
+            </Button>
+          )}
+          {(!useExpander || showCustomize) && (
+            <div className={`space-y-2.5 ${useExpander ? "mt-2" : ""}`}>
+              {subs.map((s) => {
+                let control;
+                if (m.bucket === "C") {
+                  control = <Badge tone={s.enabled ? "success" : "default"}>{s.enabled ? "On" : "Off"}</Badge>;
+                } else if (parentOff) {
+                  control = (
+                    <Tooltip label={`Enable ${m.title} first`}>
+                      <Toggle checked={s.enabled} disabled aria-label={`Toggle ${s.title}`} />
+                    </Tooltip>
+                  );
+                } else {
+                  control = (
+                    <Toggle
+                      checked={s.enabled}
+                      disabled={!subsEnabled || busyKey === s.key}
+                      onChange={() => onSubToggle(m, s)}
+                      aria-label={`Toggle ${s.title}`}
+                    />
+                  );
+                }
+                return (
+                  <div key={s.key} className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className={`text-sm ${subsEnabled ? "text-(--ui-text)" : "text-(--ui-muted)"}`}>{s.title}</span>
+                      {s.description && <p className="text-xs text-(--ui-muted)">{s.description}</p>}
+                    </div>
+                    <div className="shrink-0 pt-0.5">{control}</div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -132,6 +171,17 @@ export default function BusinessModulesRedesign() {
     () => Object.fromEntries(modules.map((m) => [m.key, m.title])),
     [modules]
   );
+  // subKey -> { title, depends_on } so a skipped_restores toast can name the
+  // sub-toggle that stayed off and the prerequisite it's waiting on.
+  const subToggleByKey = useMemo(() => {
+    const map = {};
+    for (const mod of modules) {
+      for (const s of mod.sub_toggles || []) {
+        map[s.key] = { title: s.title, depends_on: s.depends_on || [] };
+      }
+    }
+    return map;
+  }, [modules]);
   const recommended = modules.filter((m) => m.preset_recommended);
 
   const doToggle = async (key, enabled, cascade) => {
@@ -152,6 +202,19 @@ export default function BusinessModulesRedesign() {
         toast.warning(
           `${res.left_connected.map((d) => d.title || d.key).join(", ")} stays connected — disconnect it from its setup page.`
         );
+      }
+      // A restored sub-toggle whose prerequisite isn't on is kept off by the
+      // backend (dependency invariant beats exact restore) — tell the merchant why.
+      if (res.skipped_restores?.length) {
+        const msgs = res.skipped_restores.map((subKey) => {
+          const sub = subToggleByKey[subKey];
+          const subTitle = sub?.title || subKey;
+          const prereqs = (sub?.depends_on || []).map((k) => titleByKey[k] || k);
+          return prereqs.length
+            ? `${subTitle} stayed off — enable ${prereqs.join(", ")} first`
+            : `${subTitle} stayed off`;
+        });
+        toast.toast(msgs.join("; "), "info");
       }
       setConfirm(null);
       await reload();

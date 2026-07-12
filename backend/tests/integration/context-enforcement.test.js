@@ -114,10 +114,10 @@ describe("CE1–CE3 — Context header enforcement (flag ON)", () => {
     // Simulate loadEmployeePerms setting perms for employee 2 (manager, no all_access)
     miniApp.use((req, res, next) => {
       const eid = Number(req.headers["x-employee-id"] || 0);
-      // Manager (id=2) has manage_orders, manage_inventory, view_reports — no all_access
-      if (eid === 2) req.employeePerms = ["manage_orders", "manage_inventory", "view_reports"];
+      // Manager (id=2) has manage_orders, manage_inventory, view_sales_reports — no all_access
+      if (eid === 2) req.employeePerms = ["manage_orders", "manage_inventory", "view_sales_reports"];
       else if (eid === 1) req.employeePerms = ["all_access"];
-      else if (eid === 3) req.employeePerms = ["view_reports"];
+      else if (eid === 3) req.employeePerms = ["view_sales_reports"];
       else req.employeePerms = [];
       next();
     });
@@ -159,7 +159,7 @@ describe("CE1–CE3 — Context header enforcement (flag ON)", () => {
     const miniApp = express();
     miniApp.use(express.json());
     miniApp.use((req, res, next) => {
-      req.employeePerms = ["manage_orders", "view_reports"];
+      req.employeePerms = ["manage_orders", "view_sales_reports"];
       next();
     });
     miniApp.use(buildEnforcingResolveContext());
@@ -193,7 +193,7 @@ describe("CE3 — Exempt paths pass without context header (enforcement ON)", ()
     const miniApp = express();
     miniApp.use(express.json());
     miniApp.use((req, res, next) => {
-      req.employeePerms = ["manage_orders", "view_reports"];
+      req.employeePerms = ["manage_orders", "view_sales_reports"];
       next();
     });
     miniApp.use(buildEnforcingResolveContext());

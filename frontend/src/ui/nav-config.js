@@ -144,10 +144,13 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Field Sales",
     items: [
+      // S3 split: Routes/Visits are owner surfaces (manage_field_sales);
+      // Today's Route / My Van are rep-self (either perm — hasPerm accepts
+      // an any-of array).
       { name: "Routes", path: "/field/routes", icon: ClipboardList, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
       { name: "Visits", path: "/field/visits", icon: History, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
-      { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_field_sales" },
-      { name: "My Van", path: "/field/van", icon: Truck, requiredPerm: "manage_field_sales", requiredFlag: "wholesale_van_sales" },
+      { name: "Today's Route", path: "/field/today", icon: Calendar, requiredPerm: ["execute_field_sales", "manage_field_sales"], requiredFlag: "wholesale_field_sales" },
+      { name: "My Van", path: "/field/van", icon: Truck, requiredPerm: ["execute_field_sales", "manage_field_sales"], requiredFlag: "wholesale_van_sales" },
     ],
   },
   {
@@ -227,26 +230,26 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Cash Management", path: "/cash-management", icon: Banknote },
       { name: "Expenses", path: "/expenses", icon: Banknote, requiredPerm: "manage_inventory" },
       { name: "Approvals", path: "/approvals", icon: CheckSquare, requiredPerm: "manage_orders" },
-      { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
+      { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_financial_reports", requiredFlag: "accounting_core" },
       { name: "Chart of Accounts", path: "/chart-of-accounts", icon: BookOpen, requiredPerm: "all_access", requiredFlag: "accounting_core" },
       { name: "Journal Entries", path: "/journal-entries", icon: ClipboardList, requiredPerm: "all_access", requiredFlag: "accounting_core" },
-      { name: "Credit/Debit Notes", path: "/credit-debit-notes", icon: FileCheck, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
-      { name: "Post-Dated Cheques", path: "/postdated-cheques", icon: Banknote, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
+      { name: "Credit/Debit Notes", path: "/credit-debit-notes", icon: FileCheck, requiredPerm: "view_financial_reports", requiredFlag: "accounting_core" },
+      { name: "Post-Dated Cheques", path: "/postdated-cheques", icon: Banknote, requiredPerm: "view_financial_reports", requiredFlag: "accounting_core" },
     ],
   },
   {
     label: "Insights",
     items: [
       { name: "Reports", path: "/reports", icon: Receipt },
-      { name: "Report Builder", path: "/report-builder", icon: BarChart2, requiredPerm: "view_reports", requiredFlag: "phase2_report_builder" },
-      { name: "Retail Risk", path: "/retail-risk", icon: Shield, requiredPerm: "view_reports", requiredFlag: "phase2g_risk_controls" },
+      { name: "Report Builder", path: "/report-builder", icon: BarChart2, requiredPerm: ["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports"], requiredFlag: "phase2_report_builder" },
+      { name: "Retail Risk", path: "/retail-risk", icon: Shield, requiredPerm: ["view_hr_reports", "view_financial_reports"], requiredFlag: "phase2g_risk_controls" },
     ],
   },
   {
     label: "People",
     items: [
       { name: "Employees", path: "/employees", icon: Users, requiredPerm: "all_access" },
-      { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "view_reports" },
+      { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "view_hr_reports" },
       { name: "Scheduling", path: "/scheduling", icon: Calendar, requiredPerm: "all_access", requiredFlag: "phase2_scheduling" },
       { name: "Commissions", path: "/commissions", icon: Percent, requiredPerm: "all_access", requiredFlag: "phase2_commissions", requiredMode: "commissions" },
       { name: "HR", path: "/hr", icon: User, requiredPerm: "all_access", requiredFlag: "advanced_hr" },
@@ -273,7 +276,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Manufacturer Partners", path: "/settings/manufacturer-partners", icon: Briefcase, requiredPerm: "manage_inventory", requiredFlag: "wholesale_secondary_sales" },
       { name: "Forms", path: "/settings/forms", icon: ClipboardList, requiredPerm: "manage_forms", requiredFlag: "custom_forms" },
       { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },
-      { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
+      { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory", requiredFlag: "receipt_designer_v2" },
       { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },
       { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },

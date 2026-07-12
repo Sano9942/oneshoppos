@@ -16,7 +16,7 @@
  *     and amount from popularity/profit so a comp'd-out item doesn't inflate
  *     popularity or misclassify the product.
  *
- * Gate: restaurant mode + phase4_restaurant_menu_engineering + view_reports.
+ * Gate: restaurant mode + phase4_restaurant_menu_engineering + view_financial_reports (margin rule).
  */
 
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
@@ -29,7 +29,7 @@ module.exports = function registerMenuEngineeringReport(app, deps /* , helpers *
   const gate = [
     requireMode("restaurant"),
     requireFeature("phase4_restaurant_menu_engineering"),
-    requirePerm("view_reports"),
+    requirePerm("view_financial_reports"),
   ];
 
   app.get("/api/reports/menu-engineering", ...gate, async (req, res) => {

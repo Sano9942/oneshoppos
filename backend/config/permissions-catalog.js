@@ -23,9 +23,12 @@
  *   - GET /api/business-modules derives roles_with_access per card from the
  *     module_key/permissions linkage
  *
- * Entry shape: { id, label, category, module_key? } — module_key links a
- * permission to the business-modules card whose surfaces it gates (absent
- * for spine permissions that aren't module-specific).
+ * Entry shape: { id, label, category, module_key?, module_keys? } —
+ * module_key links a permission to the business-modules card whose surfaces
+ * it gates (absent for spine permissions that aren't module-specific).
+ * module_keys (plural) marks a cross-module permission that gates the
+ * setup/config surfaces of SEVERAL cards (PLAN-V2 Step 2: manage_integrations
+ * spans every integration-connection card).
  *
  * Invariant (PLAN Step 7): a module toggle never grants or revokes any
  * permission — role assignments stay dormant while a module is off.
@@ -44,6 +47,43 @@ const PERMISSIONS_CATALOG = Object.freeze([
     // management without full admin.
   },
 
+  // ── Delegation (PLAN-V2 Step 2 / D7) ──────────────────────────────────────
+  // Like manage_business_modules above: granted to NO default role —
+  // Administrators pass via the all_access bypass; grant to a custom role to
+  // delegate the surface without full admin.
+  {
+    id: "manage_integrations",
+    label: "Manage Integrations & Connections",
+    category: "Delegation",
+    // Cross-module: gates the credential/config surfaces of every
+    // integration-connection card whose setup routes accept it (see
+    // MODULE_PERMISSIONS in config/business-modules.js).
+    module_keys: [
+      "fbr_digital_invoicing",
+      "marketplace_channels",
+      "woocommerce",
+      "shopify",
+      "couriers_shipping",
+      "sms_provider",
+      "delivery_aggregators",
+    ],
+  },
+  {
+    id: "manage_roles",
+    label: "Manage Roles & Permissions",
+    category: "Delegation",
+    // Delegable role editing (routes/roles.js). Guard rails stay server-side:
+    // a manage_roles holder cannot edit the Administrator role or grant
+    // all_access to anyone.
+  },
+  {
+    id: "manage_outlet_modules",
+    label: "Manage Per-Outlet Modules",
+    category: "Delegation",
+    // Reserved (PLAN-V2 Step 2) — no route consumes it yet; Step 10 wires the
+    // per-outlet module overrides to it.
+  },
+
   // ── Inventory & Catalog ───────────────────────────────────────────────────
   { id: "manage_inventory", label: "Manage Inventory & Catalog", category: "Inventory" },
   { id: "manage_products", label: "Manage Product Channels", category: "Inventory" },
@@ -56,7 +96,26 @@ const PERMISSIONS_CATALOG = Object.freeze([
   { id: "manage_customers", label: "Manage Customers", category: "Customers" },
 
   // ── Reporting ─────────────────────────────────────────────────────────────
-  { id: "view_reports", label: "View Reports", category: "Reporting" },
+  // view_reports was SPLIT into the five data-classified permissions below
+  // (PLAN-V2 Step 4 — D4b; taxonomy + mapping table in
+  // docs/fable5/business-modules/REPORT-PERMS.md — read it before mapping a
+  // new report route to one of these). view_reports is deliberately NOT
+  // registered anymore: any straggler guard still using it fails the
+  // permissions-catalog drift test at CI. Migration v134 converted every
+  // role_permissions row (pristine default Cashiers → view_sales_reports
+  // only, everything else grandfathered with all five).
+  { id: "view_sales_reports", label: "View Sales & POS Reports", category: "Reporting" },
+  { id: "view_inventory_reports", label: "View Inventory Reports", category: "Reporting" },
+  { id: "view_financial_reports", label: "View Financial Reports", category: "Reporting" },
+  { id: "view_hr_reports", label: "View Staff & Attendance Reports", category: "Reporting" },
+  { id: "view_customer_reports", label: "View Customer Reports", category: "Reporting" },
+  // C6 split (Step 4 — REPORT-PERMS.md §9.2): carved out of manage_employees
+  // so future custom HR roles don't inherit financial authority. Both
+  // defaulted to Manager (no capability change for default Managers).
+  // Spine permissions — no module_key: accounting surfaces they gate span
+  // the accounting_core flag but the perms themselves are not module-granted.
+  { id: "manage_finance", label: "Manage Finance (periods, cheques, notes, payment voids)", category: "Reporting" },
+  { id: "manage_reports", label: "Manage Report Schedules & Definitions", category: "Reporting" },
 
   // ── POS ───────────────────────────────────────────────────────────────────
   { id: "pos_discount", label: "Apply Custom Discounts", category: "POS" },
@@ -88,7 +147,12 @@ const PERMISSIONS_CATALOG = Object.freeze([
   { id: "manage_gift_cards", label: "Manage Gift Cards", category: "Retail", module_key: "gift_cards" },
 
   // ── Wholesale / B2B ───────────────────────────────────────────────────────
-  { id: "manage_field_sales", label: "Manage Field Sales", category: "Wholesale", module_key: "field_sales" },
+  // S3 split (PLAN-V2 Step 2): manage_field_sales = owner/admin surfaces
+  // (all-reps visit log, per-rep summary, route planning);
+  // execute_field_sales = rep-self surfaces (own route, check-in, own order
+  // capture, own van). The Field Rep default role holds execute only.
+  { id: "manage_field_sales", label: "Manage Field Sales (owner/admin)", category: "Wholesale", module_key: "field_sales" },
+  { id: "execute_field_sales", label: "Do Field Sales (rep-self)", category: "Wholesale", module_key: "field_sales" },
 ]);
 
 const PERMISSION_IDS = Object.freeze(

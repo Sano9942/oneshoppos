@@ -4,13 +4,14 @@ const {
 } = require("../config/permissions-catalog");
 
 module.exports = function registerRoleRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requireAnyPerm } = deps;
 
   // Get all roles.
-  // Guard (PLAN.md business-modules Step 7): the only frontend consumers are
-  // AdministratorRedesign and EmployeesRedesign, both behind
-  // perm("all_access") routes — so the list itself is admin-only.
-  app.get("/api/roles", requirePerm("all_access"), async (req, res) => {
+  // Guard (PLAN-V2 Step 2 / D7): role editing is delegable via manage_roles
+  // (Administrators pass via the all_access bypass in requireAnyPerm). The
+  // frontend consumers (AdministratorRedesign, EmployeesRedesign) remain
+  // behind perm("all_access") routes — the delegation is API-level.
+  app.get("/api/roles", requireAnyPerm(["manage_roles"]), async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM roles ORDER BY id ASC");
       res.json({ roles: rows });
@@ -23,14 +24,14 @@ module.exports = function registerRoleRoutes(app, deps) {
   // replaces the stale hardcoded list in AdministratorRedesign.jsx.
   app.get(
     "/api/permissions-catalog",
-    requirePerm("all_access"),
+    requireAnyPerm(["manage_roles"]),
     (req, res) => {
       res.json({ permissions: PERMISSIONS_CATALOG });
     }
   );
 
   // Add a new role
-  app.post("/api/roles", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/roles", requireAnyPerm(["manage_roles"]), async (req, res) => {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ error: "Role name is required" });
 
@@ -51,7 +52,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Update a role
-  app.put("/api/roles/:id", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/roles/:id", requireAnyPerm(["manage_roles"]), async (req, res) => {
     const { id } = req.params;
     const { name, description } = req.body;
 
@@ -73,7 +74,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Delete a role
-  app.delete("/api/roles/:id", requirePerm("all_access"), async (req, res) => {
+  app.delete("/api/roles/:id", requireAnyPerm(["manage_roles"]), async (req, res) => {
     const { id } = req.params;
 
     // Prevent deleting default roles (id 1, 2, 3)
@@ -158,7 +159,10 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Update permissions for a specific role
-  app.put("/api/roles/:id/permissions", requirePerm("all_access"), async (req, res) => {
+  // PLAN-V2 Step 2: manage_roles-delegable, but the in-body guard rails below
+  // (Administrator role locked to admins, all_access not grantable by
+  // non-admins, last-admin protection) are what keep delegation safe.
+  app.put("/api/roles/:id/permissions", requireAnyPerm(["manage_roles"]), async (req, res) => {
     const { id } = req.params;
     const { permissions } = req.body;
     const perms = req.employeePerms || [];

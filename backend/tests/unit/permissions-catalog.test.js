@@ -111,15 +111,18 @@ describe("permissions catalog (Step 7 drift guard)", () => {
   });
 
   it("module_key linkage agrees bidirectionally with the module catalog", () => {
-    // catalog → cards
+    // catalog → cards (single module_key AND cross-module module_keys —
+    // PLAN-V2 Step 2 added manage_integrations spanning the Bucket C cards)
     for (const p of PERMISSIONS_CATALOG) {
-      if (!p.module_key) continue;
-      const card = BUSINESS_MODULES[p.module_key];
-      expect(card, `${p.id} → unknown module_key ${p.module_key}`).toBeDefined();
-      expect(
-        card.permissions.includes(p.id),
-        `${p.module_key}.permissions missing ${p.id}`
-      ).toBe(true);
+      const keys = p.module_keys || (p.module_key ? [p.module_key] : []);
+      for (const key of keys) {
+        const card = BUSINESS_MODULES[key];
+        expect(card, `${p.id} → unknown module key ${key}`).toBeDefined();
+        expect(
+          card.permissions.includes(p.id),
+          `${key}.permissions missing ${p.id}`
+        ).toBe(true);
+      }
     }
     // cards → catalog
     for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
@@ -127,7 +130,10 @@ describe("permissions catalog (Step 7 drift guard)", () => {
       for (const p of card.permissions) {
         const entry = PERMISSIONS_CATALOG.find((c) => c.id === p);
         expect(entry, `${key}.permissions has unregistered ${p}`).toBeDefined();
-        expect(entry.module_key, `${p} should link back to ${key}`).toBe(key);
+        const linksBack =
+          entry.module_key === key ||
+          (entry.module_keys || []).includes(key);
+        expect(linksBack, `${p} should link back to ${key}`).toBe(true);
       }
     }
     // MODULE_PERMISSIONS keys must all be real cards
@@ -136,13 +142,24 @@ describe("permissions catalog (Step 7 drift guard)", () => {
     }
   });
 
-  it("manage_business_modules is registered but granted to no default role", () => {
-    expect(PERMISSION_IDS.has("manage_business_modules")).toBe(true);
-    for (const [role, perms] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-      expect(
-        perms.includes("manage_business_modules"),
-        `${role} must not hold manage_business_modules by default`
-      ).toBe(false);
+  it("delegation permissions are registered but granted to no default role", () => {
+    // manage_business_modules (v1 Step 7) + the PLAN-V2 Step 2 delegation
+    // trio share the same posture: registered, delegable via a custom role,
+    // held by no default role (Administrators pass via all_access).
+    const delegation = [
+      "manage_business_modules",
+      "manage_integrations",
+      "manage_roles",
+      "manage_outlet_modules",
+    ];
+    for (const perm of delegation) {
+      expect(PERMISSION_IDS.has(perm), `${perm} must be registered`).toBe(true);
+      for (const [role, perms] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+        expect(
+          perms.includes(perm),
+          `${role} must not hold ${perm} by default`
+        ).toBe(false);
+      }
     }
   });
 });

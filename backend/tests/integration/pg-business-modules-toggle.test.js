@@ -24,7 +24,6 @@ const RESTAURANT_BUNDLE = [
   "phase4_restaurant_kds_analytics",
   "phase4_restaurant_day_parting",
   "phase4_restaurant_fire_chits",
-  "phase4_restaurant_seats",
   "phase4_restaurant_drive_thru",
   "phase4_restaurant_menu_engineering",
 ];

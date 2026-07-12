@@ -1,0 +1,151 @@
+/**
+ * Flag → runtime-consumer drift guard (PLAN-V2 Step 6b, audit §3 systemic).
+ *
+ * The v1 catalog test (business-modules-catalog.test.js) proves every
+ * DEFAULT_FEATURE_FLAGS key is CLASSIFIED into a card / sub_toggle / UNMANAGED
+ * entry. It does NOT prove the flag is ever READ at runtime — the audit found
+ * several "ghost" flags that are seeded, classified, and toggleable in the
+ * Business Modules UI yet gate nothing. This guard closes that missing
+ * direction: every flag must have a runtime consumer, or sit on the exemption
+ * list below with a stated reason.
+ *
+ * A flag is CONSUMED if any of:
+ *   - Backend: its literal token appears anywhere in
+ *     backend/{routes,services,workers,boot,middleware} EXCEPT the flag
+ *     DECLARATION file (middleware/feature-flags.js) and the two seed-list
+ *     services (retail-flag-preset.js, preset-apply.js). This catches
+ *     requireFeature("X"), soft `flags.X` reads in a route/service, and worker
+ *     feature_flags gates. (config/ — the catalog, mode-registry, and preset
+ *     definitions — is intentionally NOT in the corpus: classification and
+ *     seeding are not consumption.)
+ *   - Frontend: a *flags-object* gate in frontend/src — `flags.X`, `posFlags?.X`,
+ *     `flags["X"]`, or a nav-config `requiredFlag: "X"`. The super-admin flag
+ *     EDITOR (AdminTenantDetail.jsx `key === "X"` / `[...].includes(key)`)
+ *     lists every flag for toggling and is deliberately NOT a consumer.
+ *
+ * NEGATIVE TEST (manual, Step 6b task 3): delete the sole `requireFeature`
+ * gate of a consumed flag (e.g. accounting_core) → this suite fails with that
+ * flag in "unexpected orphan". Restore it → green again.
+ */
+
+import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { DEFAULT_FEATURE_FLAGS } = require("../../middleware/feature-flags");
+const { DB_ONLY_FLAGS } = require("../../config/business-modules");
+
+const BACKEND = path.join(__dirname, "..", "..");
+const REPO = path.join(BACKEND, "..");
+
+// Backend files that DECLARE or SEED flags — never a runtime consumer.
+const BACKEND_EXCLUDE = [
+  "middleware/feature-flags.js", // the DEFAULT_FEATURE_FLAGS map itself
+  "services/retail-flag-preset.js", // RETAIL/RESTAURANT seed lists
+  "services/preset-apply.js", // preset seeding logic
+].map((p) => p.replace(/\//g, path.sep));
+
+function walk(dir, exts) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...walk(p, exts));
+    else if (exts.some((x) => e.name.endsWith(x))) out.push(p);
+  }
+  return out;
+}
+
+// Build the corpora once.
+const backendText = ["routes", "services", "workers", "boot", "middleware"]
+  .flatMap((d) => walk(path.join(BACKEND, d), [".js"]))
+  .filter((f) => !BACKEND_EXCLUDE.some((s) => f.endsWith(s)))
+  .map((f) => fs.readFileSync(f, "utf8"))
+  .join("\n\n");
+
+const frontendText = walk(path.join(REPO, "frontend", "src"), [".js", ".jsx"])
+  .map((f) => fs.readFileSync(f, "utf8"))
+  .join("\n\n");
+
+function isConsumed(flag) {
+  const F = flag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Backend: any whole-token occurrence in the consumer corpus.
+  if (new RegExp("\\b" + F + "\\b").test(backendText)) return true;
+  // Frontend: a real flags-object gate (any `*flags`/`*Flags` object, with or
+  // without optional chaining), OR a nav-config requiredFlag. NOT the admin
+  // flag-editor's `key === "X"` categorization.
+  const feGates = [
+    new RegExp("[A-Za-z_]*[Ff]lags\\s*(?:\\?\\.|\\.)\\s*" + F + "\\b"),
+    new RegExp("[A-Za-z_]*[Ff]lags\\s*(?:\\?\\.)?\\[\\s*[\"']" + F + "[\"']\\s*\\]"),
+    new RegExp("requiredFlag\\s*:\\s*[\"']" + F + "[\"']"),
+  ];
+  return feGates.some((re) => re.test(frontendText));
+}
+
+/**
+ * Flags with NO runtime consumer, deliberately allowed. Each entry needs a
+ * reason.
+ *
+ * The Step 6b wire-vs-retire ruling (2026-07-12) resolved the 7 truthless
+ * ghosts: 6 were RETIRED (removed from DEFAULT_FEATURE_FLAGS + the catalog —
+ * phase4_restaurant_seats, phase4_contract_ai, phase5_payment_gateways,
+ * sms_campaigns, phase2g_receipt_barcode_lookup, phase2g_label_designer) and
+ * receipt_designer_v2 was WIRED (real gate: requireFeature on the
+ * receipt-template write routes + a nav requiredFlag). Only the reserved flag
+ * remains exempt.
+ */
+const CONSUMER_EXEMPTIONS = {
+  phase4_restaurant_preauth:
+    "RESERVED — dormant by design; restaurant_preauth_holds is DDL-only. Also in UNMANAGED_FLAGS (Bucket D); revisit when pre-auth ships.",
+};
+
+const ALL_FLAGS = [...Object.keys(DEFAULT_FEATURE_FLAGS), ...DB_ONLY_FLAGS];
+
+describe("feature-flag consumer drift guard (Step 6b — flag → runtime consumer)", () => {
+  it("enumerates DEFAULT_FEATURE_FLAGS plus the DB-only flags (fbr_integration)", () => {
+    expect(ALL_FLAGS).toContain("fbr_integration");
+    expect(ALL_FLAGS.length).toBeGreaterThan(90);
+    // corpus sanity — make sure the file walk actually loaded content
+    expect(backendText.length).toBeGreaterThan(100000);
+    expect(frontendText.length).toBeGreaterThan(100000);
+  });
+
+  it("every flag has a runtime consumer or an exemption with a reason", () => {
+    const orphans = ALL_FLAGS.filter((f) => !isConsumed(f));
+    const unexpected = orphans.filter((f) => !(f in CONSUMER_EXEMPTIONS));
+    expect(
+      unexpected,
+      "Feature flag(s) with NO runtime consumer and NO exemption.\n" +
+        "Wire a consumer (requireFeature / flags-object gate), or add to " +
+        "CONSUMER_EXEMPTIONS with a reason:\n" +
+        unexpected.join("\n")
+    ).toEqual([]);
+  });
+
+  it("has no stale exemption (every exempted flag is still an orphan)", () => {
+    // Forces cleanup: once the owner rules "wire X" and a real consumer lands,
+    // X stops being an orphan and MUST be removed from CONSUMER_EXEMPTIONS.
+    const stillOrphan = new Set(ALL_FLAGS.filter((f) => !isConsumed(f)));
+    const stale = Object.keys(CONSUMER_EXEMPTIONS).filter((f) => {
+      // A retired flag leaves DEFAULT_FEATURE_FLAGS entirely → drop it from the
+      // exemption list too (it is no longer enumerated).
+      if (!ALL_FLAGS.includes(f)) return true;
+      return !stillOrphan.has(f);
+    });
+    expect(
+      stale,
+      "Exempted flag(s) that now HAVE a consumer (or were removed) — delete them " +
+        "from CONSUMER_EXEMPTIONS:\n" +
+        stale.join("\n")
+    ).toEqual([]);
+  });
+
+  it("every exemption reason is a non-empty string", () => {
+    for (const [flag, reason] of Object.entries(CONSUMER_EXEMPTIONS)) {
+      expect(typeof reason, `${flag} reason`).toBe("string");
+      expect(reason.length, `${flag} reason too short`).toBeGreaterThan(15);
+    }
+  });
+});

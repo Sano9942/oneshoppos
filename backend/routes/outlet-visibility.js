@@ -23,7 +23,7 @@ module.exports = function registerOutletVisibilityRoutes(app, deps) {
 
   // PUT /api/products/:id/outlet-visibility
   // Body: { outlets: [{ outlet_id, is_visible }] }
-  app.put("/api/products/:id/outlet-visibility", feat, requirePerm("all_access"), async (req, res) => {
+  app.put("/api/products/:id/outlet-visibility", feat, requirePerm("manage_inventory"), async (req, res) => {
     const { outlets } = req.body;
     if (!Array.isArray(outlets)) return res.status(400).json({ error: "outlets array required" });
     try {

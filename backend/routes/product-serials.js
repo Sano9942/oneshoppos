@@ -11,7 +11,7 @@ module.exports = function registerProductSerialRoutes(app, deps) {
   // variant when the product has variants.
   app.get(
     "/api/products/:id/serials",
-    requireAnyPerm(["view_reports", "manage_inventory", "all_access"]),
+    requireAnyPerm(["view_inventory_reports", "manage_inventory", "all_access"]),
     async (req, res) => {
       const { id } = req.params;
       const status = req.query.status || "available";
@@ -47,7 +47,7 @@ module.exports = function registerProductSerialRoutes(app, deps) {
   // original invoice so they pick the right serial to return).
   app.get(
     "/api/sales/:id/serials",
-    requireAnyPerm(["view_reports", "manage_inventory", "all_access"]),
+    requireAnyPerm(["view_inventory_reports", "manage_inventory", "all_access"]),
     async (req, res) => {
       const { id } = req.params;
       try {

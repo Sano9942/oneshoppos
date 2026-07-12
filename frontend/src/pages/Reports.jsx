@@ -579,6 +579,99 @@ const GROUPS = [
   },
 ];
 
+// D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §4) — per-tab required permission,
+// mirroring each tab's backend route guard exactly so a token that lacks the
+// class never sees a tab it would 403 on. Value is a single perm or an any-of
+// array (hasPerm accepts both). Unmapped tab ids fall through as visible (no
+// tab-level gate) — matches pre-split behavior for anything added later.
+const TAB_PERMS = {
+  // Sales / shifts / POS-operational → view_sales_reports
+  overview: "view_sales_reports",
+  "daily-operations": "view_sales_reports",
+  "comparative-trends": "view_sales_reports",
+  heatmaps: "view_sales_reports",
+  "revenue-leaks": "view_sales_reports",
+  "product-mix": "view_sales_reports",
+  "sales-summary": "view_sales_reports",
+  "sales-detail": "view_sales_reports",
+  "order-wise": "view_sales_reports",
+  "item-wise": "view_sales_reports",
+  "category-wise": "view_sales_reports",
+  "subcategory-wise": "view_sales_reports",
+  "monthly-mop-matrix": "view_sales_reports",
+  "cashier-wise": "view_sales_reports",
+  "refunds-voids": "view_sales_reports",
+  "shift-summary": "view_sales_reports",
+  "shift-sales": "view_sales_reports",
+  "payment-summary": "view_sales_reports",
+  "cash-flow": "view_sales_reports",
+  "cash-audit": "view_sales_reports",
+  denominations: "view_sales_reports",
+  "current-session-zreport": "view_sales_reports",
+  multichannel: "view_sales_reports",
+  "kds-analytics": "view_sales_reports",
+  // Customers → view_customer_reports (customer-wise lives in the sales route)
+  "customer-details": "view_customer_reports",
+  "customer-wise": ["view_customer_reports", "view_sales_reports"],
+  "customer-rfm": "view_customer_reports",
+  "customer-retention": "view_customer_reports",
+  "customer-capture": "view_customer_reports",
+  clinical: ["view_customer_reports", "manage_treatment_plans"],
+  // Inventory → view_inventory_reports (with margin/sales exceptions)
+  "performance-workspace": "view_sales_reports",
+  "product-performance": "view_sales_reports",
+  "brand-wise": "view_sales_reports",
+  "retail-matrix": "view_financial_reports",
+  "pricing-margin": "view_financial_reports",
+  "sales-stock": "view_inventory_reports",
+  "inventory-dump": "view_inventory_reports",
+  "on-hand": "view_inventory_reports",
+  "product-spec": "view_inventory_reports",
+  "history-cost": "view_inventory_reports",
+  "history-sale": "view_inventory_reports",
+  "product-audit": "view_inventory_reports",
+  replenishment: "view_inventory_reports",
+  "dead-stock": "view_inventory_reports",
+  "stock-aging": "view_inventory_reports",
+  "stockout-risk": "view_inventory_reports",
+  "forecast-demand": "view_inventory_reports",
+  "replenishment-smart": "view_inventory_reports",
+  shrinkage: "view_inventory_reports",
+  "inventory-loss": "view_inventory_reports",
+  wastage: "view_inventory_reports",
+  "product-movement": "view_inventory_reports",
+  "str-report": "view_inventory_reports",
+  "grn-report": "view_inventory_reports",
+  "outlet-comparison": "view_sales_reports",
+  // Procurement / finance → view_financial_reports
+  "total-purchases": "view_financial_reports",
+  "itemwise-purchases": "view_financial_reports",
+  "po-workflow": "view_financial_reports",
+  "procurement-parity": "view_financial_reports",
+  "purchase-orders-report": "view_financial_reports",
+  "supplier-wise": "view_sales_reports",
+  "settlement-overview": "view_financial_reports",
+  "payables-receivables": "view_financial_reports",
+  "ar-aging": "view_financial_reports",
+  "supplier-payments-invoices": "view_financial_reports",
+  "finance-payment-mix": "view_financial_reports",
+  "gst-output": "view_financial_reports",
+  "gst-type-summary": "view_financial_reports",
+  "fbr-export": "all_access",
+  "menu-engineering": "view_financial_reports",
+  // Staff / HR → view_hr_reports
+  attendance: "view_hr_reports",
+  "labor-performance": "view_hr_reports",
+  "labor-vs-sales": "view_hr_reports",
+  "staff-attribution": "view_hr_reports",
+  "loss-prevention": "view_hr_reports",
+  "commission-summary": "view_hr_reports",
+  // Governance / audit
+  governance: "manage_reports",
+  "discount-leakage": "view_sales_reports",
+  exceptions: "view_financial_reports",
+};
+
 function TabBreadcrumb({ activeTab }) {
   for (const group of GROUPS) {
     const tab = group.tabs.find((t) => t.id === activeTab);
@@ -770,7 +863,7 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
 }
 
 export function ReportTabStandalone({ tabId }) {
-  const { authHeaders } = useAuth();
+  const { authHeaders, hasPerm } = useAuth();
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
 
   // Inline self-guard (Business Modules): flag-gated tabs (registry `flag`
@@ -780,6 +873,11 @@ export function ReportTabStandalone({ tabId }) {
   if (registryTab?.flag) {
     if (flagsLoading) return null;
     if (!flags[registryTab.flag]) return <Navigate to="/" replace />;
+  }
+  // D4 split (Step 4): same guard for the tab's data-class permission on the
+  // deep-link path — don't paint a tab the API will 403.
+  if (TAB_PERMS[tabId] && !hasPerm(TAB_PERMS[tabId])) {
+    return <Navigate to="/" replace />;
   }
 
   const standaloneFilters = {
@@ -820,7 +918,7 @@ const TAB_ALIASES = {
 };
 
 export default function Reports() {
-  const { isBootstrapping, authHeaders } = useAuth();
+  const { isBootstrapping, authHeaders, hasPerm } = useAuth();
   const toast = useToast();
   const { visible_report_groups, hasMode } = usePreset();
   const { flags } = useFeatureFlags(authHeaders);
@@ -832,12 +930,18 @@ export default function Reports() {
     ? GROUPS.filter((g) => visible_report_groups.includes(g.label))
     : GROUPS
   ).filter((g) => !g.mode || hasMode(g.mode));
-  // Drop feature-flagged tabs whose flag is off (e.g. the premium
-  // reports_inventory_health_plus tabs would otherwise render and 403 on click).
+  // Drop tabs the caller can't see: feature-flagged tabs whose flag is off
+  // (e.g. reports_inventory_health_plus premium tabs) AND — D4 split (Step 4) —
+  // tabs whose data-class permission the caller lacks, so a sales-only Cashier
+  // sees only sales tabs instead of a wall of 403s. Then drop empty groups.
   const sidebarGroups = presetGroups
     .map((g) => ({
       ...g,
-      tabs: g.tabs.filter((t) => !t.flag || flags?.[t.flag]),
+      tabs: g.tabs.filter(
+        (t) =>
+          (!t.flag || flags?.[t.flag]) &&
+          (!TAB_PERMS[t.id] || hasPerm(TAB_PERMS[t.id])),
+      ),
     }))
     .filter((g) => g.tabs.length > 0);
   const _ctx = readContext();

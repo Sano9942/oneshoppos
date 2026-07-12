@@ -10,11 +10,13 @@
  * POST /api/admin/field-routes      — owner seeds/updates a rep's weekly beat
  *
  * Gated by feature flag `wholesale_field_sales`.
- * Permissions:
- *   - manage_field_sales   — owner-side endpoints (visits report, summary, route admin)
- *   - field reps can POST their own check-ins + GET their own route via implicit
- *     ownership check (employee_id = req.employee.id) — no extra permission needed,
- *     but the Field Rep role carries manage_field_sales so requirePerm passes.
+ * Permissions (S3 split, PLAN-V2 Step 2):
+ *   - execute_field_sales — rep-self endpoints (own route, check-in, price
+ *     quote); self-scoping via employee_id = req.employee.id stays in the
+ *     handlers. The Field Rep default role holds ONLY this perm.
+ *   - manage_field_sales  — owner/admin endpoints (all-reps visit log,
+ *     per-rep summary, route planning). Rep-self endpoints accept it too so
+ *     Managers/owners who also work the field keep working.
  */
 
 const { validate } = require("../middleware/validate");
@@ -25,7 +27,10 @@ const { isValidTz } = require("../utils/tz");
 const crypto = require("crypto");
 
 module.exports = function registerFieldRoutes(app, deps) {
-  const { db, requirePerm, requireFeature } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature } = deps;
+  // Rep-self surfaces: execute_field_sales (Field Rep role) or
+  // manage_field_sales (owners doing double duty).
+  const repSelfPerm = requireAnyPerm(["execute_field_sales", "manage_field_sales"]);
 
   // ─────────────────────────────────────────────────────────────────────
   // Helper: tenant-local day-of-week (0=Sun..6=Sat) using req.company.timezone
@@ -61,7 +66,7 @@ module.exports = function registerFieldRoutes(app, deps) {
   app.post(
     "/api/field/price-quote",
     requireFeature("wholesale_field_sales"),
-    requirePerm("manage_field_sales"),
+    repSelfPerm,
     async (req, res) => {
       const { customer_id, items } = req.body || {};
       if (!customer_id || !Array.isArray(items) || items.length === 0) {
@@ -102,7 +107,7 @@ module.exports = function registerFieldRoutes(app, deps) {
   app.get(
     "/api/field/route/today",
     requireFeature("wholesale_field_sales"),
-    requirePerm("manage_field_sales"),
+    repSelfPerm,
     async (req, res) => {
       try {
         const employeeId = req.employee?.id;
@@ -162,7 +167,7 @@ module.exports = function registerFieldRoutes(app, deps) {
   app.post(
     "/api/field/check-in",
     requireFeature("wholesale_field_sales"),
-    requirePerm("manage_field_sales"),
+    repSelfPerm,
     validate(CheckInSchema),
     async (req, res) => {
       const {

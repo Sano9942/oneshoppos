@@ -5,12 +5,16 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function registerMultichannelReports(app, deps, helpers) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const salesView = requirePerm("view_sales_reports");
   const { pgWhere } = helpers;
 
   // ── GET /api/reports/multichannel-summary ──────────────────────────────
   // Per-channel summary: order_count, gross_revenue, discount_total, tax_total, net_revenue, aov
-  app.get("/api/reports/multichannel-summary", async (req, res) => {
+  app.get("/api/reports/multichannel-summary", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { from, to, outlet_id } = req.query;
@@ -95,7 +99,7 @@ module.exports = function registerMultichannelReports(app, deps, helpers) {
 
   // ── GET /api/reports/multichannel-daily ────────────────────────────────
   // Daily breakdown per channel — useful for trend charts
-  app.get("/api/reports/multichannel-daily", async (req, res) => {
+  app.get("/api/reports/multichannel-daily", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { from, to, outlet_id } = req.query;
@@ -172,7 +176,7 @@ module.exports = function registerMultichannelReports(app, deps, helpers) {
 
   // ── GET /api/reports/multichannel-products ─────────────────────────────
   // Top products across all channels
-  app.get("/api/reports/multichannel-products", async (req, res) => {
+  app.get("/api/reports/multichannel-products", salesView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const { from, to, outlet_id, limit: rawLimit } = req.query;

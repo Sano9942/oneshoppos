@@ -282,7 +282,7 @@ describe("Batch 1 — Core CRUD routes (Postgres)", () => {
       const res = await request(app)
         .put(`/api/roles/${rows[0].id}/permissions`)
         .set("x-employee-id", "1")
-        .send({ permissions: ["view_reports", "manage_inventory"] });
+        .send({ permissions: ["view_sales_reports", "manage_inventory"] });
       expect(res.status).toBe(200);
     });
 
@@ -292,7 +292,7 @@ describe("Batch 1 — Core CRUD routes (Postgres)", () => {
         .get(`/api/roles/${rows[0].id}/permissions`)
         .set("x-employee-id", "1");
       expect(res.status).toBe(200);
-      expect(res.body.permissions).toContain("view_reports");
+      expect(res.body.permissions).toContain("view_sales_reports");
       expect(res.body.permissions).toContain("manage_inventory");
     });
 

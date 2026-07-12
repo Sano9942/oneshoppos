@@ -811,7 +811,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
   // --- NOTIFICATIONS ---
 
-  app.get("/api/notifications", requirePerm("view_reports"), async (req, res) => {
+  app.get("/api/notifications", requirePerm("view_sales_reports"), async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT * FROM notifications ORDER BY is_read ASC, created_at DESC"
@@ -822,7 +822,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     }
   });
 
-  app.post("/api/notifications/:id/read", requirePerm("view_reports"), async (req, res) => {
+  app.post("/api/notifications/:id/read", requirePerm("view_sales_reports"), async (req, res) => {
     const { id } = req.params;
     try {
       const { rowCount } = await db.query(

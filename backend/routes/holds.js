@@ -103,7 +103,7 @@ module.exports = function registerHoldRoutes(app, deps) {
 
   // ── DETAIL ─────────────────────────────────────────────────────────
 
-  app.get("/api/holds/expiring", feat, requireAnyPerm(["pos_park", "manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/holds/expiring", feat, requireAnyPerm(["pos_park", "manage_orders", "view_sales_reports", "all_access"]), async (req, res) => {
     const days = Number(req.query.days || 7);
     try {
       const { rows } = await db.query(
@@ -124,7 +124,7 @@ module.exports = function registerHoldRoutes(app, deps) {
     }
   });
 
-  app.get("/api/holds/by-barcode/:code", feat, requireAnyPerm(["pos_park", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/holds/by-barcode/:code", feat, requireAnyPerm(["pos_park", "view_sales_reports", "all_access"]), async (req, res) => {
     const code = String(req.params.code || "").trim();
     if (!code) return res.status(400).json({ error: "barcode required" });
     try {
@@ -140,7 +140,7 @@ module.exports = function registerHoldRoutes(app, deps) {
     }
   });
 
-  app.get("/api/holds/:id", feat, requireAnyPerm(["pos_park", "manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/holds/:id", feat, requireAnyPerm(["pos_park", "manage_orders", "view_sales_reports", "all_access"]), async (req, res) => {
     try {
       const detail = await fetchHoldFull(db, req.params.id);
       if (!detail) return res.status(404).json({ error: "Hold not found" });

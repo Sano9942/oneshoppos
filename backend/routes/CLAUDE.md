@@ -86,7 +86,7 @@ Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant mi
 |------|-------------|--------------|
 | `employees.js` | `/api/employees` | Employee CRUD, PIN/password change, validate-pin (POS re-auth) |
 | `attendance.js` | `/api/attendance` | Attendance sessions + kiosk PIN check-in endpoint |
-| `roles.js` | `/api/roles` | Role + permission management. `GET /api/roles` is all_access-only; `GET /:id/permissions` is self-or-admin (every employee reads their own role on boot); `PUT /:id/permissions` rejects strings not in `config/permissions-catalog.js`; `GET /api/permissions-catalog` backs the role editor |
+| `roles.js` | `/api/roles` | Role + permission management. `GET /api/roles` + all role mutations require `manage_roles` (PLAN-V2 Step 2 — was all_access; Administrators still pass via the `requireAnyPerm` all_access bypass); `GET /:id/permissions` is self-or-admin (every employee reads their own role on boot); `PUT /:id/permissions` rejects strings not in `config/permissions-catalog.js`; `GET /api/permissions-catalog` (also `manage_roles`) backs the role editor |
 | `schedules.js` | `/api/schedules` | Employee scheduling |
 | `commissions.js` | `/api/commissions` | Commission plans + earnings |
 | `approval-policies.js` | `/api/approval-policies` | POS discount approval rules |

@@ -43,26 +43,27 @@ export default function DashboardRedesign() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
-  // W0b C3 (role audit): permission gating, no role inference. The old
-  // `isManager = hasPerm("view_reports")` treated the Cashier default perm
-  // view_reports as "is a manager", leaking owner banners to Cashiers and
-  // misclassifying custom roles. Each widget now gates on the permission
-  // that guards its own data/target:
+  // W0b C3 (role audit) + PLAN-V2 Step 4 (D4 split): permission gating, no
+  // role inference. view_reports was split into five data-classed perms, so
+  // each widget now gates on the split that guards its own data — mirroring
+  // the server-side /api/reports/dashboard segment filter (REPORT-PERMS.md
+  // §7 mixed #1), so the UI never shows a card the API will blank:
   //  - account/config banners (plan usage, multi-outlet, FBR setup,
-  //    onboarding, backup) → all_access (their pages + /api/billing are
-  //    all_access)
-  //  - report widgets (insights, KPIs, trends, exceptions, contribution,
-  //    top products, inventory alerts, retail/wholesale cards, outlet
-  //    ranking, team attendance) → view_reports (guards /api/reports/* +
-  //    /api/insights/auto). Default Cashier DOES hold view_reports and can
-  //    already open /reports — PLAN-V2 Step 4 re-sweeps these gates when
-  //    view_reports splits.
+  //    onboarding, backup) → all_access
+  //  - sales widgets (insights, sales KPIs, trends, contribution, top
+  //    products, exceptions, retail cards, outlet ranking) → view_sales_reports
+  //  - profit/margin KPIs → view_financial_reports (KPICards reduced view
+  //    when absent); wholesale A/R cards → view_financial_reports
+  //  - inventory alerts → view_inventory_reports
+  //  - team attendance + risk summary → view_hr_reports (own-attendance row
+  //    stays for everyone; the server always includes the caller's own row)
   //  - field summary → manage_field_sales (routes/field.js guard)
   const isAdmin = hasPerm("all_access");
-  const canViewReports = hasPerm("view_reports");
+  const canSales = hasPerm("view_sales_reports");
+  const canFinancial = hasPerm("view_financial_reports");
+  const canInventory = hasPerm("view_inventory_reports");
+  const canHr = hasPerm("view_hr_reports");
   const canFieldSales = hasPerm("manage_field_sales");
-  // "Reduced view" flag consumed by KPI/attendance widgets.
-  const limitedView = !canViewReports;
 
   // Scope detection
   const ctx = readContext();
@@ -80,10 +81,10 @@ export default function DashboardRedesign() {
   // models — and wait for presetLoaded so nothing flashes. Service / food /
   // clinical / rental / subscription tenants keep the original dashboard.
   const RETAIL_BUSINESS_MODELS = ["buy_sell", "b2b_distribution"];
-  const showRetailCards = canViewReports && presetLoaded && RETAIL_BUSINESS_MODELS.includes(business_model);
+  const showRetailCards = canSales && presetLoaded && RETAIL_BUSINESS_MODELS.includes(business_model);
   // Tier 0.5 — wholesale dashboard cards. Render when the tenant has the
-  // `wholesale` mode set. Cashiers don't see A/R surfaces.
-  const showWholesaleCards = canViewReports && typeof hasMode === "function" && hasMode("wholesale");
+  // `wholesale` mode set. A/R surfaces are financial-class (§7 mixed #2).
+  const showWholesaleCards = canFinancial && typeof hasMode === "function" && hasMode("wholesale");
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -183,8 +184,8 @@ export default function DashboardRedesign() {
         <DashboardOnboarding data={data} onNavigate={onNavigate} />
       )}
 
-      {/* AI Insight cards — pre-built analytics */}
-      {canViewReports && <InsightCards />}
+      {/* AI Insight cards — pre-built analytics (sales-class payload) */}
+      {canSales && <InsightCards />}
 
       {/* Tier 1.1 wholesale: per-rep field sales summary. Renders nothing
           unless wholesale_field_sales flag is on AND tenant has field reps. */}
@@ -210,9 +211,11 @@ export default function DashboardRedesign() {
         <DashboardHoldsExpiring />
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — reduced view (Revenue + Avg Bill only) when the caller
+          lacks the financial split, since the full grid exposes Net Profit +
+          Month Gross Margin (server strips those fields too). */}
       <div className="mb-4">
-        <DashboardKPICards data={data} isCashier={limitedView} onNavigate={onNavigate} />
+        <DashboardKPICards data={data} isCashier={!canFinancial} onNavigate={onNavigate} />
       </div>
 
       {/* Tier 0.5 — wholesale A/R cards (mode-gated) */}
@@ -230,54 +233,56 @@ export default function DashboardRedesign() {
         </div>
       )}
 
-      {/* Outlet ranking — all-branches only, admin/manager only */}
-      {!isSingleBranch && canViewReports && (
+      {/* Outlet ranking — all-branches only, sales-class */}
+      {!isSingleBranch && canSales && (
         <div className="mb-4">
           <DashboardOutletRanking data={data} onNavigate={onNavigate} />
         </div>
       )}
 
-      {/* Exceptions — hidden for cashier */}
-      {canViewReports && (
+      {/* Exceptions (refund/void/discount — sales-class) + risk summary
+          (conduct — HR-class). Each gated on its own data class. */}
+      {(canSales || canHr) && (
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <DashboardExceptions data={data} onNavigate={onNavigate} />
-          <DashboardRiskSummary />
+          {canSales && <DashboardExceptions data={data} onNavigate={onNavigate} />}
+          {canHr && <DashboardRiskSummary />}
         </div>
       )}
 
-      {/* Trends — hidden for cashier */}
-      {canViewReports && (
+      {/* Trends — sales-class */}
+      {canSales && (
         <div className="mb-4">
           <DashboardTrends data={data} />
         </div>
       )}
 
-      {/* Payment + category contribution — hidden for cashier */}
-      {canViewReports && (
+      {/* Payment + category contribution — sales-class */}
+      {canSales && (
         <div className="mb-4">
           <DashboardContribution data={data} />
         </div>
       )}
 
-      {/* Top products — hidden for cashier */}
-      {canViewReports && (
+      {/* Top products — sales-class */}
+      {canSales && (
         <div className="mb-4">
           <DashboardTopProducts data={data} />
         </div>
       )}
 
-      {/* Inventory alerts — hidden for cashier + hidden if preset disables it */}
-      {canViewReports && (!presetLoaded || dashboard_widgets.inventory_alerts) && (
+      {/* Inventory alerts — inventory-class + hidden if preset disables it */}
+      {canInventory && (!presetLoaded || dashboard_widgets.inventory_alerts) && (
         <div className="mb-4">
           <DashboardInventoryAlerts data={data} />
         </div>
       )}
 
-      {/* Attendance */}
+      {/* Attendance — team view is HR-class; a non-HR caller sees only their
+          own row (server includes it regardless via the own-row carve-out). */}
       <div className="mb-4">
         <DashboardAttendance
           data={data}
-          isCashier={limitedView}
+          isCashier={!canHr}
           currentEmployeeId={currentEmployeeId}
         />
       </div>

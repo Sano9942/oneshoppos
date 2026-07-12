@@ -1,8 +1,10 @@
 /**
  * pg-mode-gates.test.js — Verifies the 3-stage gate (mode → feature → perm)
- * added to rentals + rooms routes in wave-b. Backward-compat behavior at
- * middleware/feature-flags.js:187 — empty tenant_modes falls through to
- * feature flag + perm gates.
+ * added to rentals + rooms routes in wave-b. requireMode returns 403 (M29:
+ * "mode off" is a permission-style refusal) with body.mode when a mode row is
+ * disabled. Empty tenant_modes still falls through to feature-flag + perm gates
+ * (D5 / PLAN-V2 Step 5 warn-and-pass posture — no longer expected for a live
+ * tenant, but retained for one release).
  */
 
 require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
@@ -58,10 +60,10 @@ describe("wave-b mode gates — rentals + rooms", () => {
     }
   });
 
-  it("b) mode disabled — rentals=false → /api/rental-items returns 503 with body.mode=rentals", async () => {
+  it("b) mode disabled — rentals=false → /api/rental-items returns 403 with body.mode=rentals", async () => {
     await setMode("rentals", false);
     const res = await request(app).get("/api/rental-items").set(authHeaders);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(403);
     expect(res.body.mode).toBe("rentals");
   });
 
@@ -71,13 +73,13 @@ describe("wave-b mode gates — rentals + rooms", () => {
     expect(res.status).toBe(200);
   });
 
-  it("d) rooms variant — mode room_management disabled → 503, enabled → 200", async () => {
+  it("d) rooms variant — mode room_management disabled → 403, enabled → 200", async () => {
     await clearModes();
     // Also re-seed rentals=true so the rentals route does not leak into rooms assertions.
     await setMode("rentals", true);
     await setMode("room_management", false);
     const disabled = await request(app).get("/api/room-types").set(authHeaders);
-    expect(disabled.status).toBe(503);
+    expect(disabled.status).toBe(403);
     expect(disabled.body.mode).toBe("room_management");
 
     await setMode("room_management", true);

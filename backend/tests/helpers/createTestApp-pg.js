@@ -92,13 +92,19 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_inventory_intelligence: false,
   phase2g_receipt_barcode_lookup: false,
   phase2g_label_designer: false,
+  receipt_designer_v2: true,
   phase2g_risk_controls: false,
   retail_weekly_digest: false,
 };
 
 const PERMISSION_RULES = [
-  { methods: ["GET"], path: /^\/api\/reports(\/|$)/, anyPerms: ["view_reports", "manage_employees"] },
-  { methods: ["GET"], path: /^\/api\/attendance(\/|$)/, anyPerms: ["view_reports", "manage_employees"] },
+  // D4 split (PLAN-V2 Step 4) — mirrors middleware/permissions.js: reports
+  // blanket rule is a backstop over all five splits + manage_reports;
+  // attendance is HR-class.
+  { methods: ["GET"], path: /^\/api\/reports(\/|$)/, anyPerms: ["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"] },
+  // D4 split (Step 4) — my-status is SELF-scoped (POS shift gate); exempt from
+  // the team-attendance HR gate so sales-only Cashiers keep POS checkout.
+  { methods: ["GET"], path: /^\/api\/attendance(?!\/my-status(?:$|[/?]))(\/|$)/, anyPerms: ["view_hr_reports", "manage_employees"] },
   { methods: ["PUT"], path: /^\/api\/attendance\/\d+$/, anyPerms: ["manage_employees"] },
   { methods: ["GET", "PUT"], path: /^\/api\/employees\/\d+\/attendance-config$/, anyPerms: ["manage_employees"] },
   { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
@@ -247,13 +253,19 @@ async function seedData(db) {
 
   // Role permissions
   await db.query(`INSERT INTO role_permissions (role_id, permission) VALUES (1, 'all_access')`);
+  // D4 split (PLAN-V2 Step 4) — mirrors DEFAULT_ROLE_PERMISSIONS: Manager holds
+  // all five report splits + the C6 finance/reports perms + manage_customers
+  // (C2 #1); Cashier converges on the sales split only.
   for (const perm of [
-    "manage_inventory", "manage_orders", "view_reports", "manage_employees",
+    "manage_inventory", "manage_orders",
+    "view_sales_reports", "view_inventory_reports", "view_financial_reports",
+    "view_hr_reports", "view_customer_reports",
+    "manage_employees", "manage_finance", "manage_reports", "manage_customers",
     "pos_discount", "void_sales", "pos_park", "pos_void",
   ]) {
     await db.query(`INSERT INTO role_permissions (role_id, permission) VALUES (2, $1)`, [perm]);
   }
-  for (const perm of ["view_reports", "pos_discount", "pos_park"]) {
+  for (const perm of ["view_sales_reports", "pos_discount", "pos_park"]) {
     await db.query(`INSERT INTO role_permissions (role_id, permission) VALUES (3, $1)`, [perm]);
   }
 

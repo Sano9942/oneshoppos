@@ -1,7 +1,11 @@
 const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../../utils/tz");
 
 module.exports = function registerFinanceReports(app, deps, helpers) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
+  // D4 split (PLAN-V2 Step 4, REPORT-PERMS.md §3.8) — explicit per-domain
+  // guard on every route; the /api/reports blanket rule in
+  // middleware/permissions.js is only a backstop.
+  const financeView = requirePerm("view_financial_reports");
   const { getDescendantLeafIds } = helpers || {};
 
   /* ── helper: convert ? placeholders to $1,$2,... ── */
@@ -144,7 +148,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   }
 
-  app.get("/api/reports/settlement-overview", async (req, res) => {
+  app.get("/api/reports/settlement-overview", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = false"];
@@ -411,7 +415,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/payables-receivables", async (req, res) => {
+  app.get("/api/reports/payables-receivables", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const supplierWhere = ["1 = 1"];
@@ -536,7 +540,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/ar-aging", async (req, res) => {
+  app.get("/api/reports/ar-aging", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
 
@@ -630,7 +634,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/supplier-payments-invoices", async (req, res) => {
+  app.get("/api/reports/supplier-payments-invoices", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const invoiceWhere = ["1 = 1"];
@@ -788,7 +792,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/finance-payment-mix", async (req, res) => {
+  app.get("/api/reports/finance-payment-mix", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = false"];
@@ -898,7 +902,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/gst-output", async (req, res) => {
+  app.get("/api/reports/gst-output", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = false", "si.quantity > 0"];
@@ -1045,7 +1049,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
   });
 
-  app.get("/api/reports/gst-type-summary", async (req, res) => {
+  app.get("/api/reports/gst-type-summary", financeView, async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = false", "si.quantity > 0"];

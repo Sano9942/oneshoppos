@@ -5,7 +5,7 @@ module.exports = function registerGRNRoutes(app, deps) {
 
 // --- GRN (Goods Received Notes) ---
 
-  app.get("/api/grn", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/grn", requireAnyPerm(["manage_orders", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
       const where = [];
@@ -44,7 +44,7 @@ module.exports = function registerGRNRoutes(app, deps) {
     }
   });
 
-  app.get("/api/grn/by-po/:poId", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/grn/by-po/:poId", requireAnyPerm(["manage_orders", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { rows: [grn] } = await db.query(
         "SELECT id, grn_number FROM goods_received_notes WHERE po_id = $1 ORDER BY id DESC LIMIT 1",
@@ -57,7 +57,7 @@ module.exports = function registerGRNRoutes(app, deps) {
     }
   });
 
-  app.get("/api/grn/:id", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+  app.get("/api/grn/:id", requireAnyPerm(["manage_orders", "view_inventory_reports", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [grn] } = await db.query(
@@ -339,7 +339,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET all supplier invoices (with supplier name, payment totals)
   app.get(
     "/api/supplier-invoices",
-    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
+    requireAnyPerm(["manage_orders", "view_financial_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -378,7 +378,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET single supplier invoice with its payments
   app.get(
     "/api/supplier-invoices/:id",
-    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
+    requireAnyPerm(["manage_orders", "view_financial_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -473,7 +473,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET supplier aging summary — one row per supplier with total owed
   app.get(
     "/api/supplier-aging",
-    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
+    requireAnyPerm(["manage_orders", "view_financial_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -501,7 +501,8 @@ module.exports = function registerGRNRoutes(app, deps) {
   // POST void a supplier payment
   app.post(
     "/api/supplier-payments/:id/void",
-    requirePerm("all_access"),
+    // C2 #6 (Step 4): money mutation — manage_finance (C6 perm), not blanket admin.
+    requirePerm("manage_finance"),
     async (req, res) => {
       try {
         const { id } = req.params;
@@ -558,7 +559,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // Includes: supplier invoices (debit), GRN receipts (info), supplier payments (credit), supplier returns (credit)
   app.get(
     "/api/supplier-ledger/:supplier_id",
-    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
+    requireAnyPerm(["manage_orders", "view_financial_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {

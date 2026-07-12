@@ -155,6 +155,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             sub_toggles: card.sub_toggles.map((s) => ({
               key: s.key,
               title: s.title,
+              description: s.description || null,
               enabled: flags[s.key] === true,
               depends_on: s.depends_on || [],
               note: s.note || null,

@@ -106,7 +106,7 @@ describe("Auth Guards", () => {
             <Route
               path="/restricted"
               element={
-                <RequirePerm perm="view_reports">
+                <RequirePerm perm="view_sales_reports">
                   <div data-testid="secret">Sensitive</div>
                 </RequirePerm>
               }
