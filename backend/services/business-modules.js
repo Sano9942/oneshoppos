@@ -227,6 +227,132 @@ function collectEnabledDependents(cardKey, flags, modes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Per-outlet module activation (Business Modules v2 / D1a, PLAN-V2 Step 8)
+//
+// Only scope:'outlet' cards participate. tenant/device/hybrid cards are
+// tenant-wide in v2 and are rejected from every outlet operation (409
+// TENANT_SCOPED). Resolution, frozen at Step 7:
+//   effective(outlet) = companyEnabled AND (override ?? default_outlet_enabled ?? TRUE)
+// — explicit override row wins; a missing row inherits the card's default; a
+// module with no tenant_business_modules row at all inherits TRUE; company-off
+// wins everywhere. A company disable NEVER deletes or rewrites override rows
+// (they lie dormant, hide-not-delete) — enforced structurally by never writing
+// outlet_business_modules from the company-level toggle path.
+//
+// All reads are bulk: one query for the outlet list, one for every override,
+// one for every default — never per-card or per-outlet (query-budget invariant,
+// asserted by an integration test).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Active (non-van) outlets — the set the per-outlet UI + resolver operate on.
+ * "Active" is the SAME non-van definition GET already uses for outlet_count, so
+ * a single-outlet tenant's outlet_count (and whole payload) stays byte-
+ * compatible with v1. Missing outlets table ⇒ [].
+ */
+async function loadActiveOutlets(db) {
+  try {
+    const { rows } = await db.query(
+      "SELECT id, name FROM outlets WHERE COALESCE(outlet_type, 'store') <> 'van' ORDER BY id ASC"
+    );
+    return rows.map((r) => ({ id: r.id, name: r.name }));
+  } catch (err) {
+    if (isMissingTableError(err)) return [];
+    throw err;
+  }
+}
+
+/** Every explicit per-outlet override, one bulk query. Map key `${outletId}:${moduleKey}` → bool. */
+async function loadOutletOverrides(db) {
+  const map = new Map();
+  try {
+    const { rows } = await db.query(
+      "SELECT outlet_id, module_key, enabled FROM outlet_business_modules"
+    );
+    for (const r of rows) map.set(`${r.outlet_id}:${r.module_key}`, r.enabled === true);
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+  return map;
+}
+
+/**
+ * Per-module default_outlet_enabled, one bulk query. Map moduleKey → bool.
+ * A missing row (or a pre-v136 schema with no such column — "does not exist")
+ * is absent from the map; callers apply the sparse-row rule (inherit TRUE).
+ */
+async function loadModuleDefaults(db) {
+  const map = new Map();
+  try {
+    const { rows } = await db.query(
+      "SELECT module_key, default_outlet_enabled FROM tenant_business_modules"
+    );
+    for (const r of rows) map.set(r.module_key, r.default_outlet_enabled === true);
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+  }
+  return map;
+}
+
+/**
+ * Per-outlet effective state for every scope:'outlet' card. Two bulk queries
+ * (overrides + defaults); `outlets` is passed in so the caller fetches the
+ * outlet list exactly once. Returns:
+ *   { [cardKey]: { default_outlet_enabled, outlets: [{outlet_id,name,effective,override}],
+ *                  outlet_count, enabled_outlet_count } }
+ * `override` is the raw explicit value (true/false) or null when no row exists.
+ * `enabled_outlet_count` counts outlets where the module is EFFECTIVE (company
+ * AND resolved) — a company-off card reads 0 everywhere.
+ */
+async function resolveOutletStates(db, { outlets, flags, modes }) {
+  const [overrides, defaults] = await Promise.all([
+    loadOutletOverrides(db),
+    loadModuleDefaults(db),
+  ]);
+  const out = {};
+  for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
+    if (card.scope !== "outlet") continue;
+    const companyEnabled = isCardEnabled(card, flags, modes);
+    const defaultEnabled = defaults.has(key) ? defaults.get(key) : true;
+    const perOutlet = outlets.map((o) => {
+      const ov = overrides.has(`${o.id}:${key}`) ? overrides.get(`${o.id}:${key}`) : null;
+      const resolved = ov === null ? defaultEnabled : ov;
+      return {
+        outlet_id: o.id,
+        name: o.name,
+        effective: companyEnabled && resolved,
+        override: ov,
+      };
+    });
+    out[key] = {
+      default_outlet_enabled: defaultEnabled,
+      outlets: perOutlet,
+      outlet_count: perOutlet.length,
+      enabled_outlet_count: perOutlet.filter((p) => p.effective).length,
+    };
+  }
+  return out;
+}
+
+/** Parse the single source table out of a fixed-shape impact COUNT query. */
+function parseImpactTable(sql) {
+  const m = /\bfrom\s+([a-z_][a-z0-9_]*)/i.exec(sql);
+  return m ? m[1] : null;
+}
+
+/**
+ * Add an `outlet_id = $1` predicate to a fixed-shape impact COUNT query. Only
+ * the simple `SELECT COUNT(*)... FROM <table> [WHERE ...]` shape is handled;
+ * anything with a join/group/subquery returns null so the caller falls back to
+ * a tenant-wide count rather than risk a wrong scoped query.
+ */
+function scopeImpactSql(sql, outletCol = "outlet_id") {
+  if (/\b(group\s+by|having|union|join)\b/i.test(sql)) return null;
+  if (/\bwhere\b/i.test(sql)) return `${sql} AND ${outletCol} = $1`;
+  return `${sql} WHERE ${outletCol} = $1`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Transaction helpers (all take the transaction client, never db)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -423,7 +549,7 @@ async function auditTx(client, actor, key, enabled, result) {
  * direction "enable": prerequisites that would also be enabled + lock state.
  * Returns { status, body }.
  */
-async function computeImpact(db, { key, direction = "disable", tenantId }) {
+async function computeImpact(db, { key, direction = "disable", tenantId, outletId }) {
   const target = resolveToggleTarget(key);
   if (!target) return { status: 404, body: { error: `Unknown module: ${key}` } };
 
@@ -454,24 +580,85 @@ async function computeImpact(db, { key, direction = "disable", tenantId }) {
     };
   }
 
+  // Optional per-outlet scoping (v2): disable-direction counts scoped to one
+  // outlet, but only for an outlet-scoped card. For any other card, or when no
+  // outlet_id is passed, behaviour is unchanged from v1 (tenant-wide, no flag).
+  let outlet = null;
+  if (
+    outletId !== undefined &&
+    outletId !== null &&
+    target.type === "card" &&
+    target.card.scope === "outlet"
+  ) {
+    const { rows } = await db.query(
+      "SELECT id, name FROM outlets WHERE id = $1 AND COALESCE(outlet_type, 'store') <> 'van'",
+      [outletId]
+    );
+    if (!rows.length) {
+      return {
+        status: 404,
+        body: { code: "OUTLET_NOT_FOUND", error: `Outlet ${outletId} not found or not a valid store outlet.` },
+      };
+    }
+    outlet = rows[0];
+  }
+
   const counts = [];
   if (target.type === "card") {
-    for (const [qKey, q] of Object.entries(target.card.impact_queries)) {
+    const impactQueries = Object.entries(target.card.impact_queries);
+    // One query resolves which of the referenced tables carry outlet_id.
+    let outletCols = new Set();
+    if (outlet && impactQueries.length) {
+      const tables = [
+        ...new Set(impactQueries.map(([, q]) => parseImpactTable(q.sql)).filter(Boolean)),
+      ];
+      if (tables.length) {
+        try {
+          const { rows } = await db.query(
+            `SELECT table_name FROM information_schema.columns
+              WHERE table_schema = current_schema()
+                AND column_name = 'outlet_id' AND table_name = ANY($1)`,
+            [tables]
+          );
+          outletCols = new Set(rows.map((r) => r.table_name));
+        } catch {
+          // information_schema read failed — treat all as tenant-wide.
+        }
+      }
+    }
+    for (const [qKey, q] of impactQueries) {
       let count = null;
+      let tenantWide = false;
       try {
-        const { rows } = await db.query(q.sql);
-        count = rows[0]?.count ?? 0;
+        const table = outlet ? parseImpactTable(q.sql) : null;
+        const scoped = outlet && table && outletCols.has(table) ? scopeImpactSql(q.sql) : null;
+        if (scoped) {
+          const { rows } = await db.query(scoped, [outlet.id]);
+          count = rows[0]?.count ?? 0;
+        } else {
+          if (outlet) tenantWide = true; // outlet asked for, but this table isn't per-outlet
+          const { rows } = await db.query(q.sql);
+          count = rows[0]?.count ?? 0;
+        }
       } catch {
         // Missing table on an older tenant schema — report unknown, not 500.
       }
-      counts.push({ key: qKey, label: q.label, count });
+      const entry = { key: qKey, label: q.label, count };
+      if (outlet && tenantWide) entry.tenant_wide = true;
+      counts.push(entry);
     }
   }
   const dependents =
     target.type === "card" ? collectEnabledDependents(key, flags, modes) : [];
   return {
     status: 200,
-    body: { key, direction: "disable", counts, dependents },
+    body: {
+      key,
+      direction: "disable",
+      ...(outlet ? { outlet_id: outlet.id } : {}),
+      counts,
+      dependents,
+    },
   };
 }
 
@@ -632,6 +819,160 @@ async function toggleModule(db, { key, enabled, cascade = false, actor, tenantId
   };
 }
 
+/** One audit row per outlet write. scope is `outlet <id>` or `default`. */
+async function auditOutletTx(client, actor, key, { scope, direction }) {
+  await client.query(
+    `INSERT INTO action_history (user_name, action_type, description) VALUES ($1, $2, $3)`,
+    [
+      actor,
+      "business_module_outlet_toggle",
+      `${direction} per-outlet activation for business module '${key}' (${scope})`,
+    ]
+  );
+}
+
+/**
+ * The per-outlet write path (PLAN-V2 Step 8). Two shapes, one endpoint:
+ *   { outletId, enabled: true|false|null } — upsert an override for one outlet;
+ *       enabled:null CLEARS the override (row deleted, outlet re-inherits the
+ *       card default).
+ *   { defaultOutletEnabled } — set the card's default for unlisted/new outlets,
+ *       upserting a sparse tenant_business_modules row (column-scoped: only
+ *       default_outlet_enabled changes — enabled/saved_flags are preserved).
+ *
+ * Only scope:'outlet' cards are eligible (409 TENANT_SCOPED otherwise). Platform
+ * locks block the ENABLE direction of BOTH shapes (enabled:true and
+ * defaultOutletEnabled:true); a clear (enabled:null) is lock-EXEMPT — the
+ * default it falls back to already cleared the lock gate when it was set.
+ * Company-level state is never touched here. Returns { status, body }.
+ */
+async function setOutletModuleState(
+  db,
+  { key, outletId, enabled, defaultOutletEnabled, actor, tenantId }
+) {
+  const card = BUSINESS_MODULES[key];
+  if (!card) return { status: 404, body: { error: `Unknown module: ${key}` } };
+  if (card.scope !== "outlet") {
+    return {
+      status: 409,
+      body: {
+        code: "TENANT_SCOPED",
+        scope: card.scope,
+        error: `'${card.title}' is ${card.scope}-scoped — per-outlet activation does not apply.`,
+      },
+    };
+  }
+
+  const isDefaultShape = defaultOutletEnabled !== undefined;
+  const [flags, modes] = await Promise.all([loadLiveFlags(db), loadLiveModes(db)]);
+  const companyEnabled = isCardEnabled(card, flags, modes);
+
+  // Enable-direction platform-lock gate (both shapes). A clear is exempt.
+  const enableDirection = isDefaultShape
+    ? defaultOutletEnabled === true
+    : enabled === true;
+  if (enableDirection) {
+    const locked = await getLockedKeys(db, tenantId);
+    if (locked.has(key)) {
+      return {
+        status: 403,
+        body: {
+          code: "MODULE_LOCKED",
+          module_key: key,
+          error: `'${card.title}' has been locked by the platform — contact support.`,
+        },
+      };
+    }
+  }
+
+  if (isDefaultShape) {
+    await db.transaction(async (client) => {
+      // Column-scoped upsert: on INSERT the row's `enabled` mirrors the current
+      // company state (matching a first-enable row); on CONFLICT only
+      // default_outlet_enabled moves — enabled + saved_flags stay put.
+      await client.query(
+        `INSERT INTO tenant_business_modules (module_key, enabled, default_outlet_enabled, updated_by, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (module_key) DO UPDATE SET
+           default_outlet_enabled = EXCLUDED.default_outlet_enabled,
+           updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [key, companyEnabled, defaultOutletEnabled, actor]
+      );
+      await auditOutletTx(client, actor, key, {
+        scope: "default",
+        direction: defaultOutletEnabled ? "Enabled" : "Disabled",
+      });
+    });
+  } else {
+    // Shape B — the outlet must exist and be a real (non-van) store outlet.
+    const { rows: outletRows } = await db.query(
+      "SELECT id, name FROM outlets WHERE id = $1 AND COALESCE(outlet_type, 'store') <> 'van'",
+      [outletId]
+    );
+    if (!outletRows.length) {
+      return {
+        status: 404,
+        body: {
+          code: "OUTLET_NOT_FOUND",
+          error: `Outlet ${outletId} not found or not a valid store outlet.`,
+        },
+      };
+    }
+    await db.transaction(async (client) => {
+      if (enabled === null) {
+        await client.query(
+          "DELETE FROM outlet_business_modules WHERE outlet_id = $1 AND module_key = $2",
+          [outletId, key]
+        );
+        await auditOutletTx(client, actor, key, {
+          scope: `outlet ${outletId}`,
+          direction: "Cleared override on",
+        });
+      } else {
+        await client.query(
+          `INSERT INTO outlet_business_modules (outlet_id, module_key, enabled, updated_by, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (outlet_id, module_key) DO UPDATE SET
+             enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [outletId, key, enabled, actor]
+        );
+        await auditOutletTx(client, actor, key, {
+          scope: `outlet ${outletId}`,
+          direction: enabled ? "Enabled" : "Disabled",
+        });
+      }
+    });
+  }
+
+  // Invalidate both caches for the tenant — outlet writes don't touch company
+  // flags/modes today, but Step 9 makes requireFeature outlet-aware off the same
+  // resolver, so keep the caches honest now.
+  const {
+    invalidateFeatureFlagCache,
+    invalidateModeCache,
+  } = require("../middleware/feature-flags");
+  invalidateFeatureFlagCache(tenantId);
+  invalidateModeCache(tenantId);
+
+  // Echo the freshly-resolved per-outlet state for this card.
+  const outlets = await loadActiveOutlets(db);
+  const resolved = await resolveOutletStates(db, { outlets, flags, modes });
+  return {
+    status: 200,
+    body: {
+      key,
+      scope: "outlet",
+      company_enabled: companyEnabled,
+      ...(resolved[key] || {
+        default_outlet_enabled: true,
+        outlets: [],
+        outlet_count: outlets.length,
+        enabled_outlet_count: 0,
+      }),
+    },
+  };
+}
+
 /**
  * Legacy-endpoint lockdown middleware for PUT /api/feature-flags/:key
  * (registerAllRoutes.js — the ONE sanctioned edit to that route). Module
@@ -673,4 +1014,10 @@ module.exports = {
   computeImpact,
   toggleModule,
   rejectCatalogManagedFlagWrites,
+  // Business Modules v2 — per-outlet activation (Step 8)
+  loadActiveOutlets,
+  loadOutletOverrides,
+  loadModuleDefaults,
+  resolveOutletStates,
+  setOutletModuleState,
 };

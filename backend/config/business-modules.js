@@ -35,7 +35,9 @@
  *                 preserved on disable and remain writable via the legacy
  *                 PUT /api/feature-flags/:key endpoint (v1 has no sub-toggle
  *                 editing UI — PLAN.md deferral D3).
- *   depends_on    card keys that must be enabled first (simple, no cycles)
+ *   depends_on    card keys that must be enabled first (simple, no cycles).
+ *                 Stays COMPANY-level in Business Modules v2 — per-outlet
+ *                 dependency cascades are deferred (PLAN-V2 E1).
  *   impact_queries named COUNT queries run against the tenant schema for the
  *                 disable-direction warn+confirm dialog
  *   setup_route / connected_check / setup_required_when   Bucket C only

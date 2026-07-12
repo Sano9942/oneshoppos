@@ -45,9 +45,12 @@ const {
   rolesWithAccessForCard,
   computeImpact,
   toggleModule,
+  loadActiveOutlets,
+  resolveOutletStates,
+  setOutletModuleState,
 } = require("../services/business-modules");
 const { validate } = require("../middleware/validate");
-const { ToggleModuleSchema } = require("../schemas/business-modules");
+const { ToggleModuleSchema, OutletToggleSchema } = require("../schemas/business-modules");
 
 async function runConnectedCheck(db, check) {
   if (!check) return null;
@@ -95,7 +98,7 @@ function computeState(card, flags, modes, connected, isLocked) {
 }
 
 module.exports = function registerBusinessModulesRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
 
   app.get(
     "/api/business-modules",
@@ -122,17 +125,25 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             industry = "general_retail";
           }
         }
-        let outletCount = 1;
-        try {
-          const { rows } = await db.query(
-            "SELECT COUNT(*)::int AS n FROM outlets WHERE COALESCE(outlet_type, 'store') <> 'van'"
-          );
-          outletCount = rows[0]?.n || 1;
-        } catch { /* default 1 */ }
+        // Non-van outlets drive both the recommended chips and the v2 per-outlet
+        // augmentation. Same non-van definition v1 used for outlet_count, so the
+        // top-level outlet_count stays byte-compatible.
+        const activeOutlets = await loadActiveOutlets(db);
+        const outletCount = activeOutlets.length || 1;
 
         const recommended = new Set(
           presetRecommendedModules(industry, { outletCount })
         );
+
+        // Per-outlet augmentation (v2, D1b) — ONLY when the tenant actually has
+        // more than one active outlet. Single-outlet tenants keep the byte-
+        // identical v1 payload (no outlets[]/enabled_outlet_count/outlet_count/
+        // default_outlet_enabled fields on any card). Two bulk queries total,
+        // independent of card/outlet count.
+        const outletStates =
+          activeOutlets.length > 1
+            ? await resolveOutletStates(db, { outlets: activeOutlets, flags, modes })
+            : null;
 
         const modules = [];
         for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
@@ -171,6 +182,9 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
                   connected,
                 }
               : {}),
+            // v2: per-outlet breakdown for scope:'outlet' cards on multi-outlet
+            // tenants only (outletStates is null otherwise → v1 payload).
+            ...(outletStates && outletStates[key] ? outletStates[key] : {}),
           });
         }
 
@@ -192,10 +206,17 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
     async (req, res) => {
       try {
         const direction = req.query.direction === "enable" ? "enable" : "disable";
+        // ?outlet_id= scopes disable-direction counts to one outlet (ignored for
+        // enable direction and non-outlet-scoped cards). Ignore a non-numeric.
+        const rawOutlet = req.query.outlet_id;
+        const parsed =
+          rawOutlet !== undefined && rawOutlet !== "" ? Number(rawOutlet) : undefined;
+        const outletId = Number.isFinite(parsed) ? parsed : undefined;
         const { status, body } = await computeImpact(db, {
           key: req.params.key,
           direction,
           tenantId: req.tenantId,
+          outletId,
         });
         return res.status(status).json(body);
       } catch (err) {
@@ -220,6 +241,37 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
           key: req.params.key,
           enabled: req.body.enabled,
           cascade: req.body.cascade === true,
+          actor,
+          tenantId: req.tenantId,
+        });
+        return res.status(status).json(body);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // Per-outlet activation write path (v2, D1b). Two body shapes — a single
+  // outlet override {outlet_id, enabled:true|false|null} or the card default
+  // {default_outlet_enabled}. Delegable to manage_outlet_modules as well as
+  // manage_business_modules; all the inherit/lock/audit rules live in the
+  // service.
+  app.post(
+    "/api/business-modules/:key/outlet-toggle",
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
+    validate(OutletToggleSchema),
+    async (req, res) => {
+      try {
+        const actor =
+          req.employee?.name ||
+          (req.headers["x-employee-id"]
+            ? `employee:${req.headers["x-employee-id"]}`
+            : "unknown");
+        const { status, body } = await setOutletModuleState(db, {
+          key: req.params.key,
+          outletId: req.body.outlet_id,
+          enabled: req.body.enabled,
+          defaultOutletEnabled: req.body.default_outlet_enabled,
           actor,
           tenantId: req.tenantId,
         });
