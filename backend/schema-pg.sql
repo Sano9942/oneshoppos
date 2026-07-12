@@ -5900,5 +5900,23 @@ CREATE TABLE IF NOT EXISTS tenant_business_modules (
   enabled     BOOLEAN NOT NULL,
   saved_flags JSONB,
   updated_by  TEXT,
-  updated_at  TIMESTAMPTZ DEFAULT NOW()
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  -- (D1a, migration v136) The value new/unlisted outlets inherit. Sparse-row
+  -- rule: a module with NO row here behaves as default_outlet_enabled = TRUE.
+  default_outlet_enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Explicit per-outlet module overrides (Business Modules v2 / D1a, migration
+-- v136). Resolution (implemented Step 8):
+--   effective(outlet) = company-enabled AND (explicit row ?? default_outlet_enabled ?? TRUE)
+-- Explicit row wins; a missing row inherits tenant_business_modules
+-- .default_outlet_enabled; company-off wins everywhere. Only scope:'outlet'
+-- cards ever get a row here — tenant/device/hybrid cards are tenant-wide in v2.
+CREATE TABLE IF NOT EXISTS outlet_business_modules (
+  outlet_id  INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+  module_key TEXT NOT NULL,
+  enabled    BOOLEAN NOT NULL,
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (outlet_id, module_key)
 );
