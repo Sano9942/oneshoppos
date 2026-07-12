@@ -300,7 +300,7 @@ Note: C1 (GET /api/employees) already fixed in Wave 0. "Relax" = swap guard to t
 | 5 | Reverse transfer (`POST /api/transfers/:id/reverse`) | **Relax → `manage_inventory`** | operational correction, itself audited; Managers own transfers end-to-end otherwise |
 | 6 | Void supplier payment (`POST /api/supplier-payments/:id/void`) | **Relax → `manage_finance`** (new perm, §9.2); keep admin-only if C6 isn't ratified | money mutation — belongs to the finance perm, not blanket admin |
 | 7 | Connect/disconnect integration (`POST /api/integrations/connect\|disconnect`) | **Relax → `manage_integrations`** (registered in Step 2) + hide control without it | exactly what D7 delegation built; Manager doesn't get it by default |
-| 8 | Approve COD settlement (`POST /api/fulfillment/cod/settlements/:id/approve`) | **Relax → `manage_finance`** | cash reconciliation approval = finance authority |
+| 8 | Approve COD settlement (`POST /api/fulfillment/cod/settlements/:id/approve`) | ~~Relax → `manage_finance`~~ → **REVERTED to `all_access` at Gate 1 (owner, 2026-07-12)** | Taxonomy said "approval = finance authority", but the default Manager holds `manage_finance` (C6) AND is the maker here (import/match/resolve) — relaxing collapsed the maker-checker separation on courier cash. Kept admin-only so the checker outranks the maker; a delegated `approve_cod_settlement` perm is the future path if non-admin approval is ever wanted. |
 | 9 | Risk config (`GET\|PUT /api/risk/config`) | **Keep admin-only + hide control** | fraud-control thresholds monitor managers too; reads of events go to view_hr_reports (§3.4) |
 | 10 | Product outlet-visibility (`PUT /api/products/:id/outlet-visibility`) | **Relax → `manage_inventory`** | catalog scoping is inventory management |
 | 11 | FBR export (`GET /api/reports/fbr-export`) | **Keep admin-only + hide button for non-admins** | statutory filing export; keep blast radius minimal |
@@ -314,7 +314,7 @@ Non-HR (28 sites) — **propose two new perms**, both defaulted to Manager (no c
 
 | New perm | Call sites it takes over | Count |
 |---|---|---|
-| **`manage_finance`** — financial mutations | tier4/accounting.js periods POST/PUT (:367,:388), credit/debit-notes mount guard (:648 → both `credit-notes` + `debit-notes` route families), cheques `chequeAuth` (:1183 → 12 cheque routes incl. deposit/clear/bounce/cancel); plus C2 #6 (void supplier payment) and #8 (COD approve) | 4 guard defs / ~17 routes |
+| **`manage_finance`** — financial mutations | tier4/accounting.js periods POST/PUT (:367,:388), credit/debit-notes mount guard (:648 → both `credit-notes` + `debit-notes` route families), cheques `chequeAuth` (:1183 → 12 cheque routes incl. deposit/clear/bounce/cancel); plus C2 #6 (void supplier payment) [C2 #8 COD approve was reverted to `all_access` at Gate 1 — see §9 #8] | 4 guard defs / ~16 routes |
 | **`manage_reports`** — report governance writes | reports/governance.js requirePerm(manage_employees) ×9 (:455,:471,:515,:568,:587,:607,:624 schedules CRUD/run-now/runs + :753,:769 definition versions), saved-views composite member (×4), report-builder definitions writes (§3.7) | 13 guard sites |
 | (read sites) | tier4/accounting.js ×11 `manage_employees` members in view guards → replaced by `view_financial_reports` (§3.3) | 11 |
 
