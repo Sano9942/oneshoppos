@@ -372,7 +372,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 
 - **Dashboard login**: password-based (`POST /api/auth/login` or `/api/auth/mt-login` with `{ username, password }`)
 - **Graceful fallback**: if no `password_hash` set, the password field is treated as a PIN (transition period)
-- **Kiosk login**: PIN-only (`POST /api/auth/kiosk-login`) — unchanged, never uses passwords
+- **Kiosk clock-in**: PIN-only via `POST /api/attendance/pin-checkin?tenant=<slug>` (unauthenticated, `?tenant=`-scoped). The old `POST /api/auth/kiosk-login` endpoint (which minted an 8h `kiosk`-scoped JWT) was **removed 2026-07-12** — it had zero callers; the kiosk page is stateless PIN check-in
 - **POS session re-auth**: PIN-only via `/api/employees/validate-pin` — NOT `/api/auth/login`
 - **Forgot password**: `POST /api/auth/forgot-password` → sends Resend email → `POST /api/auth/reset-password`
 - **Reset page**: `/reset-password?token=xxx&tenant=slug` (public, no auth)

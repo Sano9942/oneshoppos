@@ -18,11 +18,6 @@ const COMPANY_CACHE_MS = 5 * 60 * 1000;
 const _contextFlagCache = new Map();
 const CONTEXT_FLAG_CACHE_MS = 30000;
 
-const KIOSK_ALLOWED_PATHS = [
-  /^\/api\/attendance\/pin-/,
-  /^\/api\/auth\//,
-];
-
 // Paths allowed to resolve a tenant via ?tenant=<slug> WITHOUT a JWT.
 // Anything else hitting resolveTenant without req.tenantId derived from a
 // verified JWT will be ignored — the request continues with no tenant DB
@@ -31,7 +26,7 @@ const KIOSK_ALLOWED_PATHS = [
 // customer portal, etc.) do their own tenant resolution and aren't
 // affected by this list.
 const PUBLIC_TENANT_PARAM_PATHS = [
-  /^\/api\/auth\//,                  // login, mt-login, kiosk-login, signup, refresh, forgot/reset password
+  /^\/api\/auth\//,                  // login, mt-login, signup, refresh, forgot/reset password
   /^\/api\/attendance\/pin-/,        // kiosk PIN check-in
   /^\/api\/feature-flags/,           // anonymous bootstrap before auth
   /^\/api\/setup\//,                 // first-run wizard (setup_token-gated)
@@ -98,7 +93,6 @@ async function loadTenantAndPerms(req, res, next) {
 
     req.tenantId = decoded.tid;
     req.employee = { id: decoded.eid, role_id: decoded.rid };
-    req.tokenScope = decoded.scope || "full";
     req.isImpersonating = !!decoded.impersonating;
     if (decoded.impersonating && decoded.realIdentity) {
       req.impersonatedBy = decoded.realIdentity;
@@ -114,11 +108,6 @@ async function loadTenantAndPerms(req, res, next) {
       if (!req.headers["x-outlet-id"]) {
         req.headers["x-outlet-id"] = String(decoded.oid);
       }
-    }
-
-    // Kiosk scope: restrict to attendance PIN endpoints only
-    if (req.tokenScope === "kiosk" && !KIOSK_ALLOWED_PATHS.some(rx => rx.test(req.path))) {
-      return res.status(403).json({ error: "Kiosk scope: access denied", code: "KIOSK_RESTRICTED" });
     }
 
     // Load permissions — in MT mode, query the tenant's DB directly

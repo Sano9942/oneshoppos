@@ -45,14 +45,12 @@ Primary JWT auth middleware. Reads `Authorization: Bearer <token>`, verifies via
 - `req.tenantId` — from `decoded.tid`
 - `req.employee` — `{ id, role_id, name, email }` (name/email backfilled after the permission lookup)
 - `req.employeePerms` — array of permission strings
-- `req.tokenScope` — `"full"` (default) or `"kiosk"`
 - `req.isImpersonating` — boolean; `req.impersonatedBy` only set when true
 - `req.context.outletId` — from the JWT's `oid` claim, if present; also backfills `req.headers["x-outlet-id"]` if the header is absent
 - `req.headers["x-employee-id"]` — backfilled from `decoded.eid` as a compatibility bridge for code still reading the header directly
 
 **Behavior:**
 - No `Authorization` header at all → `req.employeePerms = []`, calls `next()` without rejecting. Many routes rely on this to allow unauthenticated fall-through (their own `requirePerm` guard is what actually blocks them).
-- Kiosk scope (`decoded.scope === "kiosk"`) is restricted to `KIOSK_ALLOWED_PATHS` — `/^\/api\/attendance\/pin-/` and `/^\/api\/auth\//`. Anything else → 403 `{ code: "KIOSK_RESTRICTED" }`.
 - Token revocation: checks `revoked_tokens` by `token_jti`, then (for impersonation tokens specifically) cross-checks `public.impersonation_sessions.revoked_at` — belt-and-suspenders because the revoked_tokens insert on impersonation-end is best-effort and can silently fail. Also checks `employees.tokens_revoked_before` against `decoded.iat`. Missing table/column errors here are swallowed (pre-migration tolerance), not surfaced as failures.
 - The permission lookup (`role_id` → `role_permissions`) runs against the **tenant-scoped** DB (`tenantDbManager.getDb(decoded.tid)` in MT mode) and retries once after a 100ms delay on a transient failure. If both attempts fail → 503 `{ code: "PERM_LOAD_FAILED" }` — deliberately not a silent empty-perms fallback, which used to masquerade as a misleading 403 for Admin users under pool pressure.
 - Impersonation appends `" (impersonated by Super-Admin)"` to `req.employee.name`.
@@ -79,7 +77,7 @@ No-op in single-tenant mode. In MT mode:
 - Checks the `context_header_enforced` feature flag using its own small cache (`CONTEXT_FLAG_CACHE_MS`, 30s — independent of `feature-flags.js`'s cache).
 - When enforced and the path is under `/api/`: paths matching `CONTEXT_EXEMPT_PATHS` (`/api/auth/*`, `/api/context/*`, `/api/feature-flags*`, `/api/attendance/pin-*`, `/api/roles/:id/permissions`, `/api/outlets` exact) skip the check entirely. A request with no `x-employee-id` header passes through silently (relies on downstream auth to reject it). A non-admin employee (no `all_access` permission) without `x-outlet-id` set → 428 `{ code: "CONTEXT_REQUIRED" }`.
 
-**`req.*` set across the full chain:** `req.tenantId`, `req.tenantSlug`, `req.tenantDir`, `req.employee`, `req.employeePerms`, `req.tokenScope`, `req.isImpersonating`, `req.impersonatedBy`, `req.company`, `req.context`
+**`req.*` set across the full chain:** `req.tenantId`, `req.tenantSlug`, `req.tenantDir`, `req.employee`, `req.employeePerms`, `req.isImpersonating`, `req.impersonatedBy`, `req.company`, `req.context`
 
 **Env vars:** `JWT_SECRET`, `MULTI_TENANT` (via `IS_MULTI_TENANT` passed into `init`)
 
@@ -334,7 +332,7 @@ globalLimiter                      ← before route mounting
 [manufacturer portal routes: manufacturerPortalAuthLimiter/manufacturerPortalDataLimiter → loadManufacturerAuth(deps) → handler]
 
 authLimiter                        ← applied to /api/auth/* routes specifically
-loadTenantAndPerms                 ← req.employee, req.employeePerms, req.tenantId, req.tokenScope
+loadTenantAndPerms                 ← req.employee, req.employeePerms, req.tenantId
 enrichReqLog                       ← (request-id.js) re-binds req.log with tenant/employee, optional
 resolveTenant                      ← req.tenantSlug, asyncStore context wired, deps.db proxy now live
 [tenant /uploads static]

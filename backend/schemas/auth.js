@@ -22,12 +22,6 @@ const MtLoginSchema = z.object({
   { message: "tenant_slug, username, and password (or pin) are required" }
 );
 
-// POST /api/auth/kiosk-login (MT only — tenant_slug always required)
-const KioskLoginSchema = z.object({
-  pin: z.string().min(1, "pin is required"),
-  tenant_slug: z.string().min(1, "tenant_slug is required"),
-}).passthrough();
-
 // POST /api/auth/forgot-password
 const ForgotPasswordSchema = z.object({
   username: z.string().min(1, "username is required"),
@@ -53,4 +47,4 @@ const SignupSchema = z.object({
   privacy_version: z.string().min(1).optional(),
 }).passthrough();
 
-module.exports = { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema };
+module.exports = { LoginSchema, MtLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema };
