@@ -9872,6 +9872,51 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 135,
+    description:
+      "D5 full mode normalization (PLAN-V2 Step 5) — materialise an explicit tenant_modes row for EVERY registry mode on every tenant so requireMode never sees an empty map for a live tenant. enabled=true where the mode's registry feature_flags_to_enable are already on for the tenant (the SAME predicate as services/business-modules.js:backfillModesIfFirstRowTx, shared via config/mode-registry.js:modeActiveForFlags), enabled=false otherwise. ON CONFLICT (mode) DO NOTHING preserves any existing explicit row (setup/preset/admin/backfill). Retires the empty→enforcing transition trap: after this every tenant has a non-empty map so requireMode enforces uniformly. Measured prod drift was 0/29 tenants (VERIFICATION.md), so no tenant loses a working vertical. Idempotent (second run inserts nothing). Tenant-only — the public pass is an information_schema-guarded no-op.",
+    up: async (client) => {
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'tenant_modes'`
+      );
+      if (!hasTable.length) {
+        console.log("[migrate-pg v135] no tenant_modes table in this schema — skipped");
+        return;
+      }
+      const { VALID_MODES, modeActiveForFlags } = require("./config/mode-registry");
+      const { DEFAULT_FEATURE_FLAGS } = require("./middleware/feature-flags");
+
+      // Live flag map = defaults merged with this tenant's feature_flags rows
+      // (DB overrides default), mirroring getFeatureFlagsMap/loadLiveFlags.
+      const liveFlags = { ...DEFAULT_FEATURE_FLAGS };
+      try {
+        const { rows: flagRows } = await client.query("SELECT key, enabled FROM feature_flags");
+        for (const r of flagRows) liveFlags[r.key] = r.enabled === true;
+      } catch { /* no feature_flags table on a pre-flag schema — defaults only */ }
+
+      let inserted = 0;
+      for (const mode of VALID_MODES) {
+        const enabled = modeActiveForFlags(mode, liveFlags);
+        const { rowCount } = await client.query(
+          `INSERT INTO tenant_modes (mode, enabled, enabled_at)
+           VALUES ($1, $2, NOW()) ON CONFLICT (mode) DO NOTHING`,
+          [mode, enabled]
+        );
+        inserted += rowCount;
+      }
+      const {
+        rows: [{ n }],
+      } = await client.query("SELECT COUNT(*)::int AS n FROM tenant_modes");
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      console.log(
+        `[migrate-pg v135] ${schema}: materialised ${inserted} new mode row(s); total now ${n}/${VALID_MODES.length}`
+      );
+    },
+  },
 ];
 
 /**

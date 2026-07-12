@@ -13,7 +13,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { getPreset, VALID_INDUSTRY_TYPES, getExtraFlagsForPreset } = require("../config/industry-config");
-const { getFeatureFlagsForModes } = require("../config/mode-registry");
+const { getFeatureFlagsForModes, fullModeRows } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
 const {
@@ -239,13 +239,16 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           [preset.industry_type, preset.business_model, country_code]
         );
 
-        // 1c. Seed tenant_modes for this preset
-        for (const mode of preset.modes) {
+        // 1c. Seed the FULL tenant_modes row set (D5 / PLAN-V2 Step 5): every
+        // registry mode gets an explicit row — preset modes enabled, the rest
+        // disabled — so a fresh tenant is never modeless and requireMode never
+        // sees an empty map for a live tenant.
+        for (const { mode, enabled } of fullModeRows(preset.modes)) {
           await client.query(
             `INSERT INTO tenant_modes (mode, enabled, enabled_at)
-             VALUES ($1, true, NOW())
+             VALUES ($1, $2, NOW())
              ON CONFLICT (mode) DO NOTHING`,
-            [mode]
+            [mode, enabled]
           );
         }
 

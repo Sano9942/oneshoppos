@@ -93,9 +93,36 @@ function getFeatureFlagsForModes(modeNames) {
   return [...flags];
 }
 
+/**
+ * The single "is this mode in use for these flags?" predicate — a mode counts
+ * as active when ANY of its registry flags is already on. Extracted so the
+ * D5 full-materialization migration (migrate-pg.js v135) and the first-row
+ * backfill (services/business-modules.js:backfillModesIfFirstRowTx) share one
+ * definition instead of hand-rolling the `.some(...)` check in two places.
+ */
+function modeActiveForFlags(modeName, flags) {
+  const cfg = MODE_REGISTRY[modeName];
+  if (!cfg) return false;
+  return cfg.feature_flags_to_enable.some((f) => Boolean(flags) && flags[f] === true);
+}
+
+/**
+ * Return the full explicit mode-row set — every registry mode, enabled iff it
+ * appears in enabledModeNames. Used by the provisioning seeders (setup wizard,
+ * preset-apply) so a fresh/reset tenant materialises all |VALID_MODES| rows
+ * (D5 / PLAN-V2 Step 5) rather than only the enabled ones. Pure — the caller
+ * runs the INSERT with whatever ON CONFLICT semantics it needs.
+ */
+function fullModeRows(enabledModeNames) {
+  const enabled = new Set(enabledModeNames || []);
+  return VALID_MODES.map((mode) => ({ mode, enabled: enabled.has(mode) }));
+}
+
 module.exports = {
   MODE_REGISTRY,
   VALID_MODES,
   getModeConfig,
   getFeatureFlagsForModes,
+  modeActiveForFlags,
+  fullModeRows,
 };
