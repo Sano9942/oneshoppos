@@ -55,13 +55,13 @@
 
 | Step | Title | Status | Pause? |
 |---|---|---|---|
-| 0 | Commit this plan + audit docs (docs-only, to main) | ☐ not started | — |
-| W0a | Wave 0 — backend security fixes (S1 `pos_discount`, S4 admin lockout, C1 employees guard) | ☐ not started | **PAUSE before** (money-path + auth guards, destined for main) |
-| W0b | Wave 0 — frontend correctness fixes (P1 POS redirect, C3, C5, C7, kiosk-login disposition, v1 erratum) | ☐ not started | — |
-| — | **GATE 0: merge + deploy Wave 0 to `main` (pre-branch)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
-| 1 | Create working branch (off post-Gate-0 main) | ☐ not started | — |
-| 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☐ not started | **PAUSE before** (auth-guard changes) |
-| 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☐ not started | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) |
+| 0 | Commit this plan + audit docs (docs-only, to main) | ☑ done | — |
+| W0a | Wave 0 — backend security fixes (S1 `pos_discount`, S4 admin lockout, C1 employees guard) | ☑ done (verified) | **PAUSE before** (money-path + auth guards, destined for main) |
+| W0b | Wave 0 — frontend correctness fixes (P1 POS redirect, C3, C5, C7, kiosk-login disposition, v1 erratum) | ☑ done (verified) | — |
+| — | **GATE 0: merge + deploy Wave 0 to `main` (pre-branch)** | ☑ done (merged 5befd903, deployed) | **PAUSE — owner-gated merge/deploy/watch** |
+| 1 | Create working branch (off post-Gate-0 main) | ☑ done (`feat/business-modules-v2`) | — |
+| 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
+| 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ◐ analysis complete — **awaiting owner ratification** ([REPORT-PERMS.md](REPORT-PERMS.md)) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ☐ not started | **PAUSE before** (migration + guard changes) — cleared by Step 3 ratification |
 | 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☐ not started | **PAUSE before** (migration + gate-semantics change) |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☐ not started | — |
@@ -247,6 +247,15 @@ Scope: analysis + catalog registration (if test-compatible) ONLY. Zero route, mi
 Autonomy: run fully; commit the doc/catalog change locally.
 Report: outcome first — taxonomy chosen, occurrence count vs mapped count (must match), every mixed-endpoint decision, the pristine-Cashier predicate + its local validation, the 5 most judgment-call mappings called out explicitly, then the audit-rulings batch (C2 table, C6 proposal, trio recommendations). END THE TURN; the owner ratifies before Step 4.
 ```
+
+**Step 3 as-built notes (2026-07-12 — analysis complete, awaiting ratification):**
+
+1. **Full deliverable lives in [REPORT-PERMS.md](REPORT-PERMS.md)** (mapping table >150 rows-equivalent → separate file per the Touches clause). Taxonomy: all five proposed perms kept (each has ≥3 call sites), plus two canon boundary rules — the **margin rule** (any cost/margin/profit analysis → `view_financial_reports`; stock *valuation* stays inventory) and the **POS-adjacency rule** (POS-terminal reads gain `view_sales_reports` in their anyPerm arrays so a sales-only Cashier keeps a working POS).
+2. **Fresh grep found 417 occurrences / 106 files, not ~166** — the estimate predated the role-audit artifacts (`role-matrix.json` alone: 106). Reconciled 100%: 95 backend route guards (exactly the 34 files the plan named), 9 backend non-route source, 44 backend + 2 frontend test occurrences, 24 frontend source, 14 CLAUDE.md docs, 229 frozen docs/audit history.
+3. **Load-bearing discovery**: `PERMISSION_RULES` is LIVE blanket middleware (`registerAllRoutes.js:308`), and most `routes/reports/*` files have **no inline guard** — the whole `/api/reports/*` surface hangs on one `["view_reports","manage_employees"]` rule. Step 4 must add per-domain inline guards (table in REPORT-PERMS.md §3.8) and demote the blanket rule to an any-split backstop. This is extra Step 4 surface the "34 route files" framing didn't capture.
+4. **Pristine-Cashier predicate** (name `Cashier` exact + perm set exactly `{view_reports, pos_discount, pos_park}`) validated read-only against all 48 local `sanopos_dev` tenant schemas: 47 pristine, 0 customized, 1 schema with no Cashier role (no-ops correctly). Prod re-validation is a Step 4 pre-deploy gate item.
+5. **Catalog registration done this step** (drift test verified tolerant first — it only enforces call-site → catalog): the five splits registered in `permissions-catalog.js`, `view_reports` relabeled "(legacy — being split)". `manage_finance`/`manage_reports` (C6 proposals) deliberately NOT registered pending ratification. Both catalog suites green (26/26).
+6. **Owner must explicitly rule on** (beyond ratifying the table): (a) clinic/salon front-desk surfaces — recommend migration seeds `view_customer_reports` onto pristine Cashiers of appointments-mode tenants (REPORT-PERMS.md §8 #2); (b) notifications bell mapping vs. dropping its guard (§7 #7); (c) each C2 row, the C6 two-perm split (`manage_finance`, `manage_reports`, both defaulted to Manager), and the unguarded-trio guards (§9).
 
 ---
 
