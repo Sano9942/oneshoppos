@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-11T11:39:34.281Z",
+  "generated": "2026-07-12T14:02:20.560Z",
   "counts": {
     "backendRoutes": 1347,
     "frontendStructuredCalls": 1271,
@@ -120,7 +120,7 @@
       "method": "POST",
       "path": "/api/auth/kiosk-login",
       "file": "backend/routes/auth.js",
-      "line": 616,
+      "line": 622,
       "pathOnlyMatch": false,
       "fragment": "auth + kiosk-login",
       "fragmentHits": [],
@@ -177,8 +177,8 @@
       "fragment": "classes + waitlist",
       "fragmentHits": [
         "frontend/src/pages/redesign/ClassTimetableRedesign.jsx:332",
-        "frontend/src/routes/appRoutes.jsx:279",
-        "frontend/src/ui/nav-config.js:168"
+        "frontend/src/routes/appRoutes.jsx:281",
+        "frontend/src/ui/nav-config.js:171"
       ],
       "testHits": []
     },
@@ -186,7 +186,7 @@
       "method": "POST",
       "path": "/api/couriers/:id/test-booking",
       "file": "backend/routes/couriers.js",
-      "line": 171,
+      "line": 172,
       "pathOnlyMatch": false,
       "fragment": "couriers + test-booking",
       "fragmentHits": [],
@@ -196,7 +196,7 @@
       "method": "POST",
       "path": "/api/orders/:id/ship",
       "file": "backend/routes/couriers.js",
-      "line": 220,
+      "line": 221,
       "pathOnlyMatch": false,
       "fragment": "orders + ship",
       "fragmentHits": [
@@ -209,7 +209,7 @@
       "method": "POST",
       "path": "/api/orders/:id/shipments/:shipmentId/cancel",
       "file": "backend/routes/couriers.js",
-      "line": 410,
+      "line": 411,
       "pathOnlyMatch": false,
       "fragment": "orders + cancel",
       "fragmentHits": [
@@ -222,7 +222,7 @@
       "method": "POST",
       "path": "/api/orders/:id/tracking/refresh",
       "file": "backend/routes/couriers.js",
-      "line": 458,
+      "line": 459,
       "pathOnlyMatch": false,
       "fragment": "orders + refresh",
       "fragmentHits": [],
@@ -232,7 +232,7 @@
       "method": "GET",
       "path": "/api/orders/:id/tracking",
       "file": "backend/routes/couriers.js",
-      "line": 538,
+      "line": 539,
       "pathOnlyMatch": false,
       "fragment": "orders + tracking",
       "fragmentHits": [],
@@ -360,7 +360,7 @@
       "method": "POST",
       "path": "/api/employees/:id/revoke-token",
       "file": "backend/routes/employees.js",
-      "line": 262,
+      "line": 265,
       "pathOnlyMatch": false,
       "fragment": "employees + revoke-token",
       "fragmentHits": [],
@@ -418,7 +418,7 @@
       "pathOnlyMatch": false,
       "fragment": "loyalty + adjust",
       "fragmentHits": [
-        "frontend/src/routes/appRoutes.jsx:176",
+        "frontend/src/routes/appRoutes.jsx:177",
         "frontend/src/ui/nav-config.js:118"
       ],
       "testHits": []
@@ -611,7 +611,7 @@
       "method": "POST",
       "path": "/api/price-lists/:id/bulk-items",
       "file": "backend/routes/products.js",
-      "line": 1768,
+      "line": 1795,
       "pathOnlyMatch": false,
       "fragment": "price-lists + bulk-items",
       "fragmentHits": [],
@@ -864,7 +864,7 @@
       "method": "PUT",
       "path": "/api/feature-flags/:key",
       "file": "backend/routes/registerAllRoutes.js",
-      "line": 431,
+      "line": 435,
       "pathOnlyMatch": false,
       "fragment": "feature-flags",
       "fragmentHits": [
@@ -951,12 +951,12 @@
       "method": "POST",
       "path": "/api/reports/builder/definitions/:id/schedule",
       "file": "backend/routes/report-builder.js",
-      "line": 271,
+      "line": 311,
       "pathOnlyMatch": false,
       "fragment": "reports + schedule",
       "fragmentHits": [
         "frontend/src/pages/reports/ReportsGovernance.jsx:214",
-        "frontend/src/routes/appRoutes.jsx:264",
+        "frontend/src/routes/appRoutes.jsx:266",
         "frontend/src/ui/nav-config.js:111"
       ],
       "testHits": [
@@ -1208,7 +1208,7 @@
       "fragmentHits": [
         "frontend/src/pages/shopify/ShopifyContext.jsx:56",
         "frontend/src/pages/shopify/ShopifyImport.jsx:25",
-        "frontend/src/routes/appRoutes.jsx:171"
+        "frontend/src/routes/appRoutes.jsx:172"
       ],
       "testHits": [
         "frontend/tests/onboard-pro.spec.js",
@@ -1576,7 +1576,7 @@
       "method": "GET",
       "path": "/api/van/:outletId/reconcile-preview",
       "file": "backend/routes/van.js",
-      "line": 128,
+      "line": 133,
       "pathOnlyMatch": false,
       "fragment": "van + reconcile-preview",
       "fragmentHits": [],
@@ -1586,7 +1586,7 @@
       "method": "POST",
       "path": "/api/van-reconciliations/:id/confirm",
       "file": "backend/routes/van.js",
-      "line": 260,
+      "line": 265,
       "pathOnlyMatch": false,
       "fragment": "van-reconciliations + confirm",
       "fragmentHits": [],

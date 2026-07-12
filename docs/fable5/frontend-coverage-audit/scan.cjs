@@ -8,6 +8,11 @@
 const fs = require("fs");
 const path = require("path");
 
+// Adapted for CI (PLAN-V2 Step 6b): the whole scan is wrapped in runScan() and
+// exported so backend/tests/unit/frontend-coverage-drift.test.js can freeze the
+// dead-route set as a baseline and fail only on NEW orphans. Running the file
+// directly still writes matrix.json + prints the summary (require.main block).
+function runScan() {
 const ROOT = path.resolve(__dirname, "../../..");
 const BACKEND_ROUTES = path.join(ROOT, "backend", "routes");
 const FRONTEND_SRC = path.join(ROOT, "frontend", "src");
@@ -302,9 +307,18 @@ const out = {
   unlinkedRoutes,
   flagReport,
 };
-fs.writeFileSync(path.join(__dirname, "matrix.json"), JSON.stringify(out, null, 2));
-console.log(JSON.stringify(out.counts, null, 2));
-console.log("\nDead-route candidates by file:");
-const byFile = {};
-for (const r of deadRoutes) byFile[r.file] = (byFile[r.file] || 0) + 1;
-Object.entries(byFile).sort((a, b) => b[1] - a[1]).forEach(([f, n]) => console.log(`  ${n}\t${f}`));
+  return out;
+}
+
+module.exports = { runScan };
+
+// ---------- CLI ----------
+if (require.main === module) {
+  const out = runScan();
+  fs.writeFileSync(path.join(__dirname, "matrix.json"), JSON.stringify(out, null, 2));
+  console.log(JSON.stringify(out.counts, null, 2));
+  console.log("\nDead-route candidates by file:");
+  const byFile = {};
+  for (const r of out.deadRoutes) byFile[r.file] = (byFile[r.file] || 0) + 1;
+  Object.entries(byFile).sort((a, b) => b[1] - a[1]).forEach(([f, n]) => console.log(`  ${n}\t${f}`));
+}
