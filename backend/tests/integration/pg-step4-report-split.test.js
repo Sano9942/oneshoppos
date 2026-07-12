@@ -64,6 +64,11 @@ describe("PLAN-V2 Step 4 — report-perm split + S5 (Postgres)", () => {
     it("403s team attendance (§8 #3)", async () => {
       expect((await get("/api/attendance", CASHIER)).status).toBe(403);
     });
+    it("STILL reaches self attendance my-status (POS shift gate must not break)", async () => {
+      // Self-scoped: drives useShiftGate → isReadyForCheckout. A 403 here
+      // would brick POS checkout for every Cashier. Exempt from the HR gate.
+      expect((await get("/api/attendance/my-status?outlet_id=1", CASHIER)).status).toBe(200);
+    });
   });
 
   describe("Manager (all five splits)", () => {

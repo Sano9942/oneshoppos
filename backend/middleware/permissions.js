@@ -141,8 +141,15 @@ const PERMISSION_RULES = [
     ],
   },
   {
+    // D4 split (Step 4) — team attendance is HR-class. `my-status` is exempt:
+    // it is SELF-scoped (returns only the caller's own clock-in status, keyed
+    // on x-employee-id) and drives the POS shift gate (useShiftGate →
+    // isReadyForCheckout), which every Cashier needs. §8 #3 keeps self
+    // clock-in unaffected; blocking it here would brick POS checkout for
+    // sales-only Cashiers. The negative lookahead keeps every OTHER
+    // /api/attendance GET (team list, sessions) HR-gated.
     methods: ["GET"],
-    path: /^\/api\/attendance(\/|$)/,
+    path: /^\/api\/attendance(?!\/my-status(?:$|[/?]))(\/|$)/,
     anyPerms: ["view_hr_reports", "manage_employees"],
   },
   // Attendance manual edit (manager write)

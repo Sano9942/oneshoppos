@@ -101,7 +101,9 @@ const PERMISSION_RULES = [
   // blanket rule is a backstop over all five splits + manage_reports;
   // attendance is HR-class.
   { methods: ["GET"], path: /^\/api\/reports(\/|$)/, anyPerms: ["view_sales_reports", "view_inventory_reports", "view_financial_reports", "view_hr_reports", "view_customer_reports", "manage_reports"] },
-  { methods: ["GET"], path: /^\/api\/attendance(\/|$)/, anyPerms: ["view_hr_reports", "manage_employees"] },
+  // D4 split (Step 4) — my-status is SELF-scoped (POS shift gate); exempt from
+  // the team-attendance HR gate so sales-only Cashiers keep POS checkout.
+  { methods: ["GET"], path: /^\/api\/attendance(?!\/my-status(?:$|[/?]))(\/|$)/, anyPerms: ["view_hr_reports", "manage_employees"] },
   { methods: ["PUT"], path: /^\/api\/attendance\/\d+$/, anyPerms: ["manage_employees"] },
   { methods: ["GET", "PUT"], path: /^\/api\/employees\/\d+\/attendance-config$/, anyPerms: ["manage_employees"] },
   { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
