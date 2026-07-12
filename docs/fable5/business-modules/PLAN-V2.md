@@ -66,7 +66,7 @@
 | 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ done (committed a8d7a084, migration v135) — **warn-and-pass posture shipped**; hard-fail-closed flip DEFERRED to a post-Gate-1 next-release commit (gated on zero prod "empty tenant_modes" Sentry warns) — see Step 5 as-built | **PAUSE before** — ✅ cleared (owner picked warn-and-pass) |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
-| — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
+| — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☑ done — merged `31bdc884` + DEPLOYED 2026-07-12 (Railway + Vercel READY; migrations v133/v134/v135 applied to all 29 prod tenants → schema_version 135; post-deploy read-only checks green: Cashier splits, Field Rep execute_field_sales, modes 10/10, zero stale view_reports, health deep ok, no empty-modes warns) | **PAUSE — cleared (owner go given)** |
 | 7 | D1a — Per-outlet schema + catalog groundwork (migration, hybrid rule, sparse-row rule) | ☐ not started | **PAUSE before** (schema/migration) |
 | 8 | D1b — Backend per-outlet read + toggle paths (resolution service, default write path, query budget) | ☐ not started | **PAUSE before** (new tenant write path) |
 | 9 | D1c — Shared outlet resolver + outlet-aware enforcement (fail-closed, workers, surface audit) | ☐ not started | **PAUSE before** (touches every gated request) |
