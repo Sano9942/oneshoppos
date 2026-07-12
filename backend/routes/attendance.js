@@ -235,8 +235,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Intentionally unauthenticated. The kiosk page mounts with only ?tenant=
   // in the URL, and the full GET /api/outlets is not on the public ?tenant=
   // allowlist (by design — it returns full outlet objects). The `pin-` path
-  // prefix is already on both PUBLIC_TENANT_PARAM_PATHS and
-  // KIOSK_ALLOWED_PATHS, so this needs no auth-middleware change. POST (not
+  // prefix is already on PUBLIC_TENANT_PARAM_PATHS, so this needs no
+  // auth-middleware change. POST (not
   // GET) like the other pin- endpoints: PERMISSION_RULES blanket-guards
   // GET /api/attendance/* behind view_hr_reports. Exposes id + name only.
   // ---------------------------------------------------------------------------

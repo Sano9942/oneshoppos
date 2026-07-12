@@ -3,7 +3,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   const bcrypt = require("bcryptjs");
   const { getPreset } = require("../config/industry-config");
   const { validate } = require("../middleware/validate");
-  const { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
+  const { LoginSchema, MtLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
 
   /**
    * @swagger
@@ -618,57 +618,6 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     });
 
-    // POST /api/auth/kiosk-login — PIN-only login with limited scope (8h, kiosk scope)
-    app.post("/api/auth/kiosk-login", authLimiter, validate(KioskLoginSchema), async (req, res) => {
-      const { tenant_slug, pin } = req.body;
-      const JWT_SECRET = process.env.JWT_SECRET;
-      if (!JWT_SECRET) {
-        return res.status(500).json({ error: "JWT secrets not configured" });
-      }
-
-      try {
-        // 1. Look up tenant
-        const { rows: [tenant] } = await masterDb.query(
-          "SELECT id, slug, name, status FROM tenants WHERE slug = $1 AND status = 'active'",
-          [String(tenant_slug).trim()]
-        );
-        if (!tenant) {
-          return res.status(401).json({ error: "Invalid store code" });
-        }
-
-        // 2. Scan all employees, compare PIN via bcrypt (manual resolution — no ALS context)
-        const tenantDb = await tenantDbMgr.getDb(tenant.id);
-        const { rows: employees } = await tenantDb.query(
-          "SELECT id, name, role_id, pin_hash FROM employees",
-          []
-        );
-
-        let matched = null;
-        for (const emp of (employees || [])) {
-          if (emp.pin_hash && await bcrypt.compare(String(pin).trim(), emp.pin_hash)) {
-            matched = emp;
-            break;
-          }
-        }
-        if (!matched) {
-          return res.status(401).json({ error: "Invalid PIN" });
-        }
-
-        // 3. Sign kiosk-scoped token (8h, no refresh token)
-        const kioskToken = jwtLib.sign(
-          { tid: tenant.id, eid: matched.id, rid: matched.role_id, oid: null, scope: "kiosk" },
-          JWT_SECRET,
-          { expiresIn: "8h" }
-        );
-
-        return res.json({
-          token: kioskToken,
-          employee: { id: matched.id, name: matched.name },
-        });
-      } catch (err) {
-        return res.status(500).json({ error: err.message });
-      }
-    });
   }
 
   const crypto = require("crypto");
