@@ -63,9 +63,9 @@
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
 | 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ✅ DONE (local, committed) — migration v134 idempotent + both postures verified on `sanopos_dev` (47 pristine / 95 grandfathered / 0 residual `view_reports`), drift green, 13/13 focused split+S5 test | **PAUSE before deploy** (Gate 1 still ahead) — migration + guard changes verified locally, not deployed |
-| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☐ not started | **PAUSE before** (migration + gate-semantics change) |
-| 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☐ not started | — |
-| 6b | Capability-registry drift tests + truthless-flag disposition | ☐ not started | **PAUSE mid-step** (wire-vs-retire rulings) |
+| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ done (committed a8d7a084, migration v135) — **warn-and-pass posture shipped**; hard-fail-closed flip DEFERRED to a post-Gate-1 next-release commit (gated on zero prod "empty tenant_modes" Sentry warns) — see Step 5 as-built | **PAUSE before** — ✅ cleared (owner picked warn-and-pass) |
+| 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
+| 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
 | — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
 | 7 | D1a — Per-outlet schema + catalog groundwork (migration, hybrid rule, sparse-row rule) | ☐ not started | **PAUSE before** (schema/migration) |
 | 8 | D1b — Backend per-outlet read + toggle paths (resolution service, default write path, query budget) | ☐ not started | **PAUSE before** (new tenant write path) |
@@ -741,7 +741,7 @@ unaccounted finding fails verification. **Bold** = Wave 0 (ships to main at Gate
 | §3 public rental booking has no page | E7 (coverage plan) |
 | §3 recipe-costing reports have no tab | E7 (coverage plan) |
 | §2 coverage clusters (78 orphaned endpoints) | E7 — separate plan, explicitly OUT of v2; frozen as Step 6b's test baseline |
-| §2 kiosk-login doc contradiction | **Step W0b** (investigate + recommend) → owner rules at Gate 0 |
+| §2 kiosk-login doc contradiction | **Step W0b** filed evidence (zero frontend callers; sole issuer of the `kiosk` JWT scope; mints a working credential from a 4-digit PIN; already archived "backend_only_by_design"). **RULED at Gate 1 prep 2026-07-12: REMOVE.** Execution DEFERRED to a dedicated post-Gate-1 commit (delete `POST /api/auth/kiosk-login` + `KioskLoginSchema` + the now-dead `kiosk`-scope branch in `tenant-auth.js`, and correct the root `CLAUDE.md` kiosk-login line) — kept OUT of the governance slice so it doesn't widen the auth-sensitive Gate 1 deploy. |
 | §4C preset operator roles | E8 (roadmap, permission wave) |
 | §4C unguarded-mutation trio (`billing/add-outlet`, `billing/create-checkout`, `commissions/calculate`) | Step 3 pause (ruling) → Step 4 (apply) |
 
