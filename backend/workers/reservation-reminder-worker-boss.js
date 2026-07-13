@@ -23,6 +23,16 @@ async function runOnce(db) {
   );
   if (!flagRows[0]?.enabled) return { sent: 0, considered: 0 };
 
+  // Step 9 (D1c): skip reservations at outlets where the Restaurant module
+  // is off (per-outlet analog of the company-level flag gate above).
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "restaurant");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+  const outletFilter = disabledOutlets.length
+    ? "AND (r.outlet_id IS NULL OR NOT (r.outlet_id = ANY($1)))"
+    : "";
+
   // 2h ± 10min window. Narrow enough that 15-min cadence never misses a
   // reservation and wide enough to tolerate a cron skip.
   const { rows } = await db.query(`
@@ -36,8 +46,9 @@ async function runOnce(db) {
       AND r.sms_reminder_sent_at IS NULL
       AND r.reservation_start BETWEEN NOW() + INTERVAL '1 hour 50 minutes'
                                   AND NOW() + INTERVAL '2 hours 10 minutes'
+      ${outletFilter}
     LIMIT 200
-  `);
+  `, disabledOutlets.length ? [disabledOutlets] : []);
 
   let sent = 0;
   for (const r of rows) {

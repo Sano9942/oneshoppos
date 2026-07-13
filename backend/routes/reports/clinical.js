@@ -12,7 +12,9 @@ module.exports = function registerClinicalReports(app, deps /* , helpers */) {
   const { requireAnyPerm } = require("../../middleware/permissions");
 
   const gate = [
-    requireFeature("phase4_treatment_plans"),
+    // companyLevel: cross-outlet report — historical clinical data stays
+    // visible even where the module is off at the viewer's outlet (Step 9).
+    requireFeature("phase4_treatment_plans", { companyLevel: true }),
     requireAnyPerm(["view_customer_reports", "manage_treatment_plans"]),
   ];
 

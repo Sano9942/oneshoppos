@@ -22,8 +22,10 @@ module.exports = function registerTreatmentPlanTemplateRoutes(app, deps) {
   const tp = require("../services/treatment-plan-service");
 
   const gate = [
-    requireMode("treatment_plans"),
-    requireFeature("phase4_treatment_plans"),
+    // companyLevel: reusable plan templates are tenant-level catalog config,
+    // not outlet-operational data (Step 9 allowlist).
+    requireMode("treatment_plans", { companyLevel: true }),
+    requireFeature("phase4_treatment_plans", { companyLevel: true }),
     requirePerm("manage_treatment_plans"),
   ];
 

@@ -414,23 +414,26 @@ describe("requireFeature", () => {
   });
 
   it("invalidateFeatureFlagCache() clears all cached entries", async () => {
+    // Step 9 (D1c): one cache fill = 3 queries (feature_flags + the per-outlet
+    // override map + module defaults, loaded in the same pass — PLAN-V2 Step 9).
+    const QUERIES_PER_FILL = 3;
     // Prime the cache with one call
     const req = { tenantId: null };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
     await requireFeature("accounting_core")(req, res, next);
-    expect(mockDbQuery).toHaveBeenCalledTimes(1);
+    expect(mockDbQuery).toHaveBeenCalledTimes(QUERIES_PER_FILL);
 
-    // Second call should hit cache (no additional DB query)
+    // Second call should hit cache (no additional DB queries)
     const next2 = vi.fn();
     await requireFeature("accounting_core")(req, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next2);
-    expect(mockDbQuery).toHaveBeenCalledTimes(1); // still 1
+    expect(mockDbQuery).toHaveBeenCalledTimes(QUERIES_PER_FILL); // still one fill
 
-    // After invalidation, next call should re-query DB
+    // After invalidation, next call should re-query DB (a second full fill)
     invalidateFeatureFlagCache();
     const next3 = vi.fn();
     await requireFeature("accounting_core")(req, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next3);
-    expect(mockDbQuery).toHaveBeenCalledTimes(2);
+    expect(mockDbQuery).toHaveBeenCalledTimes(QUERIES_PER_FILL * 2);
   });
 });
 

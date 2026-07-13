@@ -101,14 +101,11 @@ async function loadTenantAndPerms(req, res, next) {
     // Bridge: set x-employee-id header so downstream code that reads it still works
     req.headers["x-employee-id"] = String(decoded.eid);
 
-    // Set outlet context from JWT claim
-    if (decoded.oid) {
-      req.context = req.context || {};
-      req.context.outletId = decoded.oid;
-      if (!req.headers["x-outlet-id"]) {
-        req.headers["x-outlet-id"] = String(decoded.oid);
-      }
-    }
+    // Expose the JWT outlet claim for the shared resolver (outlet-context.js).
+    // Step 9 (D1c) removed the old x-outlet-id header backfill — the resolver
+    // is now the ONLY interpreter of outlet context (precedence: validated
+    // header → this claim → none), and resolveContext consumes its result.
+    req.jwtOid = decoded.oid || null;
 
     // Load permissions — in MT mode, query the tenant's DB directly
     const permDb = IS_MULTI_TENANT
@@ -331,11 +328,20 @@ async function loadCompanyProfile(req, res, next) {
 function resolveContext(req, res, next) {
   req.context = { companyId: null, outletId: null, scopeMode: null };
   const companyId = req.headers["x-company-id"];
-  const outletId = req.headers["x-outlet-id"];
   const scopeMode = req.headers["x-scope-mode"];
   if (companyId) req.context.companyId = Number(companyId);
-  if (outletId) req.context.outletId = Number(outletId);
   if (scopeMode) req.context.scopeMode = scopeMode;
+  // Outlet context comes from the shared validated resolver (outlet-context.js,
+  // mounted just before this middleware). Fall back to the legacy raw header
+  // read only when the resolver isn't mounted (standalone/unit-test usage).
+  let outletId;
+  if (req.outletContext !== undefined) {
+    outletId = req.outletContext.outletId || null;
+  } else {
+    const rawOutlet = req.headers["x-outlet-id"];
+    outletId = rawOutlet ? Number(rawOutlet) : null;
+  }
+  if (outletId) req.context.outletId = outletId;
 
   const cacheKey = IS_MULTI_TENANT ? (req.tenantId || "_default") : "_default";
   let flagEntry = _contextFlagCache.get(cacheKey);

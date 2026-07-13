@@ -74,8 +74,19 @@ async function snapshotForTenant(db, logger, tenantSlug) {
   );
   if (!flagRows[0]?.enabled) return 0;
 
+  // Step 9 (D1c): skip stations at outlets where the Restaurant module is
+  // off (per-outlet analog of the company-level flag gate above).
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "restaurant");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+  const stationFilter = disabledOutlets.length
+    ? "AND (outlet_id IS NULL OR NOT (outlet_id = ANY($1)))"
+    : "";
+
   const { rows: stations } = await db.query(
-    "SELECT id FROM kds_stations WHERE is_active = true"
+    `SELECT id FROM kds_stations WHERE is_active = true ${stationFilter}`,
+    disabledOutlets.length ? [disabledOutlets] : [],
   );
 
   for (const station of stations) {

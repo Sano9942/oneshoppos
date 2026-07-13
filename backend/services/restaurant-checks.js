@@ -374,15 +374,21 @@ async function expediteCourse(db, draftOrderId, courseName, employeeId) {
  * and fire the matching course items via sendToKitchen. Returns the
  * number of courses released.
  */
-async function releaseHeldCourses(db, outletId) {
+async function releaseHeldCourses(db, outletId, excludeOutletIds = []) {
   const { sendToKitchen } = require("./restaurant-kds");
 
   // Find due courses. Scope by outlet if provided; otherwise sweep all.
+  // excludeOutletIds (Step 9 D1c): outlets where the Restaurant module is
+  // off — held courses there stay held until the outlet is re-enabled.
   const params = [];
   let where = `cf.status = 'held' AND cf.hold_until IS NOT NULL AND cf.hold_until <= NOW()`;
   if (outletId) {
     params.push(outletId);
     where += ` AND d.outlet_id = $${params.length}`;
+  }
+  if (Array.isArray(excludeOutletIds) && excludeOutletIds.length) {
+    params.push(excludeOutletIds);
+    where += ` AND (d.outlet_id IS NULL OR NOT (d.outlet_id = ANY($${params.length})))`;
   }
   const { rows: due } = await db.query(
     `SELECT cf.id, cf.draft_order_id, cf.course_name

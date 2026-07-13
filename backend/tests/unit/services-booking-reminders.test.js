@@ -57,10 +57,12 @@ describe("processPendingReminders", () => {
     const result = await processPendingReminders(db, boss);
     expect(result).toBe(0);
     expect(boss.send).not.toHaveBeenCalled();
-    // Flag gate + SELECT ran — no UPDATEs.
-    expect(db.queries).toHaveLength(2);
+    // Flag gate + the Step 9 per-outlet activation reads (outlets, overrides,
+    // defaults via getDisabledOutletIds) + SELECT ran — no UPDATEs.
+    expect(db.queries).toHaveLength(5);
     expect(db.queries[0].sql).toContain("FROM feature_flags");
-    expect(db.queries[1].sql).toContain("FROM appointment_reminders");
+    expect(db.queries[db.queries.length - 1].sql).toContain("FROM appointment_reminders");
+    expect(db.queries.some((q) => /UPDATE/i.test(q.sql))).toBe(false);
   });
 
   it("no-ops entirely when the Appointments module flag is off (Business Modules gate)", async () => {

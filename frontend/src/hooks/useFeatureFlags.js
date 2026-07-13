@@ -91,7 +91,12 @@ export default function useFeatureFlags(authHeaders) {
         if (!mounted) return;
         const next = { ...DEFAULT_FLAGS };
         (data?.flags || []).forEach((f) => {
-          next[f.key] = Number(f.enabled || 0) === 1;
+          // Step 9 (D1c): `effective` is the outlet-aware state for the
+          // caller's resolved outlet (company AND per-outlet); `enabled` is
+          // company-level truth. Gates consume effective; older backends
+          // without the field fall back to enabled.
+          const on = f.effective !== undefined ? f.effective : f.enabled;
+          next[f.key] = on === true || Number(on || 0) === 1;
         });
         setFlags(next);
         writeCachedFlags(next);

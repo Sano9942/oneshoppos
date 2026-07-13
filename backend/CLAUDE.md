@@ -49,7 +49,10 @@ Orchestrator. Key responsibilities:
 12. resolveTenant        — SET search_path, run asyncStore, wire deps.db proxy
 13. tenant /uploads      — serve tenant-specific uploaded files
 14. loadCompanyProfile   — query company_profile → req.company (timezone, currency, FBR config)
-15. resolveContext       — read x-outlet-id / x-scope-mode headers → req.context
+14b. resolveOutletContext — (middleware/outlet-context.js, Step 9 D1c) the ONLY interpreter of outlet
+     context: validated x-outlet-id header → JWT oid → none → req.outletContext. Malformed → 400
+     INVALID_OUTLET_CONTEXT; foreign/inactive → 403; unassigned non-all_access → 403 OUTLET_NOT_ASSIGNED
+15. resolveContext       — consumes req.outletContext (+ x-company-id/x-scope-mode headers) → req.context
 
 --- all tenant routes mount here ---
 

@@ -105,6 +105,9 @@ module.exports = function registerOutletRoutes(app, deps) {
         return { id: outletId, multiOutletSeeded };
       });
 
+      // Step 9: the outlet-context resolver caches the tenant's outlet list.
+      require("../middleware/outlet-context").invalidateOutletCache(req.tenantId);
+
       res.json({
         id: result.id,
         name,
@@ -135,6 +138,7 @@ module.exports = function registerOutletRoutes(app, deps) {
         [name, address, phone, van_rep_employee_id != null ? Number(van_rep_employee_id) : null, hasRepKey, id]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Outlet not found" });
+      require("../middleware/outlet-context").invalidateOutletCache(req.tenantId);
       res.json({ message: "Outlet updated successfully" });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -170,6 +174,7 @@ module.exports = function registerOutletRoutes(app, deps) {
 
       const { rowCount } = await db.query("DELETE FROM outlets WHERE id = $1", [id]);
       if (rowCount === 0) return res.status(404).json({ error: "Outlet not found" });
+      require("../middleware/outlet-context").invalidateOutletCache(req.tenantId);
       res.json({ message: "Outlet deleted" });
     } catch (err) {
       res.status(500).json({ error: err.message });

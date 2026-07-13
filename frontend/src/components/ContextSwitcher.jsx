@@ -3,10 +3,13 @@ import { Building2, ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { readContext, writeContext } from "../auth/authStore";
 import { useAuth } from "../auth/AuthProvider";
+import { usePreset } from "../contexts/PresetContext";
+import { refreshFeatureFlags } from "../hooks/useFeatureFlags";
 import { API_BASE as API } from "../config";
 
 export default function ContextSwitcher() {
   const { employee, hasPerm, authHeaders } = useAuth();
+  const { refreshPreset } = usePreset();
   const navigate = useNavigate();
   const [ctx, setCtx] = useState(() => readContext());
   const [outlets, setOutlets] = useState([]);
@@ -42,8 +45,12 @@ export default function ContextSwitcher() {
       writeContext(next);
       setCtx(next);
       setOpen(false);
+      // Step 9 (D1c): flags + modes are outlet-effective — refresh both gate
+      // sources in place so nav and page guards flip without a re-login.
+      refreshFeatureFlags();
+      refreshPreset?.();
     },
-    [outlets],
+    [outlets, refreshPreset],
   );
 
   const switchToAll = useCallback(() => {
@@ -53,7 +60,9 @@ export default function ContextSwitcher() {
     writeContext(next);
     setCtx(next);
     setOpen(false);
-  }, [hasPerm]);
+    refreshFeatureFlags();
+    refreshPreset?.();
+  }, [hasPerm, refreshPreset]);
 
   const goToContextSelect = useCallback(() => {
     setOpen(false);

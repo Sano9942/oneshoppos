@@ -12,8 +12,10 @@ module.exports = function registerRestaurantMenuSchedulesRoutes(app, deps) {
   const { invalidateMenuScheduleCache } = require("../../services/menu-schedule-resolver");
 
   const gate = [
-    requireMode("restaurant"),
-    requireFeature("phase4_restaurant_day_parting"),
+    // companyLevel: day-parting schedules are tenant menu catalog config
+    // (Step 9 allowlist).
+    requireMode("restaurant", { companyLevel: true }),
+    requireFeature("phase4_restaurant_day_parting", { companyLevel: true }),
     requirePerm("manage_restaurant"),
   ];
 

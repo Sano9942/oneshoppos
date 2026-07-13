@@ -20,7 +20,9 @@
 module.exports = function registerPriceBookRoutes(app, deps) {
   const { db, requireAnyPerm, requireFeature } = deps;
   const guard = [
-    requireFeature("phase2g_price_books"),
+    // companyLevel: price book definitions are tenant catalog config; the
+    // per-outlet assignment surface is separate (Step 9 allowlist).
+    requireFeature("phase2g_price_books", { companyLevel: true }),
     requireAnyPerm(["manage_customers", "all_access"]),
   ];
 

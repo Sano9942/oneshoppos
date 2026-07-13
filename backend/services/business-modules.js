@@ -334,6 +334,35 @@ async function resolveOutletStates(db, { outlets, flags, modes }) {
   return out;
 }
 
+/**
+ * Step 9 (D1c) worker helper: outlet ids where `cardKey` is OFF per the
+ * Step 8 resolution rule (override ?? default ?? TRUE), among active store
+ * outlets. Company-level state is deliberately NOT considered — worker
+ * callers gate on the feature flag first (the v1 per-tenant gate), and this
+ * composes with it as a deny-list: work items at these outlets are skipped,
+ * NULL/undimensioned items keep following company state. Returns [] on
+ * pre-v136 schemas (missing tables) and whenever nothing is disabled — the
+ * common fast path where callers add no SQL filter at all.
+ */
+async function getDisabledOutletIds(db, cardKey) {
+  const card = BUSINESS_MODULES[cardKey];
+  if (!card || card.scope !== "outlet") return [];
+  const [outlets, overrides, defaults] = await Promise.all([
+    loadActiveOutlets(db),
+    loadOutletOverrides(db),
+    loadModuleDefaults(db),
+  ]);
+  if (!outlets.length) return [];
+  const dflt = defaults.has(cardKey) ? defaults.get(cardKey) : true;
+  const disabled = [];
+  for (const o of outlets) {
+    const k = `${o.id}:${cardKey}`;
+    const ov = overrides.has(k) ? overrides.get(k) : null;
+    if (!(ov === null ? dflt : ov)) disabled.push(o.id);
+  }
+  return disabled;
+}
+
 /** Parse the single source table out of a fixed-shape impact COUNT query. */
 function parseImpactTable(sql) {
   const m = /\bfrom\s+([a-z_][a-z0-9_]*)/i.exec(sql);
@@ -1020,4 +1049,6 @@ module.exports = {
   loadModuleDefaults,
   resolveOutletStates,
   setOutletModuleState,
+  // Business Modules v2 — per-outlet worker filtering (Step 9)
+  getDisabledOutletIds,
 };

@@ -6,6 +6,21 @@
 
 let db, IS_MULTI_TENANT, tenantDbManager, dbProxy;
 
+// ── Per-outlet module gating (Business Modules v2 / D1c, PLAN-V2 Step 9) ──
+// Static flag→card and mode→card maps for scope:"outlet" cards only (card
+// flags AND sub_toggle keys). config/business-modules.js has no top-level
+// requires, so this import is cycle-safe even though services/business-modules
+// requires this file back (lazily, inside functions).
+const { BUSINESS_MODULES } = require("../config/business-modules");
+const OUTLET_FLAG_TO_CARD = new Map();
+const OUTLET_MODE_TO_CARD = new Map();
+for (const [cardKey, card] of Object.entries(BUSINESS_MODULES)) {
+  if (card.scope !== "outlet") continue;
+  for (const f of card.flags || []) OUTLET_FLAG_TO_CARD.set(f, cardKey);
+  for (const s of card.sub_toggles || []) OUTLET_FLAG_TO_CARD.set(s.key, cardKey);
+  if (card.mode) OUTLET_MODE_TO_CARD.set(card.mode, cardKey);
+}
+
 const DEFAULT_FEATURE_FLAGS = {
   backup_restore: true,
   e_invoicing_export: true,
@@ -198,31 +213,161 @@ const DEFAULT_FEATURE_FLAGS = {
 const _featureFlagCache = new Map();
 const FEATURE_FLAG_CACHE_MS = 60_000;
 
-async function getFeatureFlagsMap(tenantId) {
+// Missing-table tolerance for the per-outlet reads: pre-v136 schemas and
+// pared-down test schemas simply have no overrides — never an error.
+function _isMissingRelation(err) {
+  return String(err && err.message || "").includes("does not exist");
+}
+
+/**
+ * Cache-fill + accessor for the full per-tenant gating bundle:
+ *   { flags, outletOverrides: Map("outletId:cardKey" → bool),
+ *     moduleDefaults: Map(cardKey → bool), timestamp }
+ * The two per-outlet maps are loaded in the SAME 60s cache fill as the flags
+ * (2 extra small queries per fill, zero per request). Both Step 8 toggle
+ * shapes invalidate this cache via invalidateFeatureFlagCache().
+ */
+async function _getBundle(tenantId) {
   const cacheKey = tenantId || "_default";
   const cached = _featureFlagCache.get(cacheKey);
   const now = Date.now();
   if (cached && (now - cached.timestamp) < FEATURE_FLAG_CACHE_MS) {
-    return { ...cached.flags };
+    return cached;
   }
+  let flagDb = db;
+  if (IS_MULTI_TENANT && tenantId && tenantDbManager) {
+    try { flagDb = await tenantDbManager.getDb(tenantId); } catch { /* fall back to db */ }
+  }
+  // init() never called (bare test harness) — same defensive posture as
+  // getModesMap: defaults only, uncached, never a throw.
+  if (!flagDb) {
+    return {
+      flags: { ...DEFAULT_FEATURE_FLAGS },
+      outletOverrides: new Map(),
+      moduleDefaults: new Map(),
+      timestamp: now,
+    };
+  }
+
+  let merged;
   try {
-    let flagDb = db;
-    if (IS_MULTI_TENANT && tenantId && tenantDbManager) {
-      try { flagDb = await tenantDbManager.getDb(tenantId); } catch { /* fall back to db */ }
-    }
     const { rows } = await flagDb.query("SELECT key, enabled FROM feature_flags");
-    const merged = { ...DEFAULT_FEATURE_FLAGS };
+    merged = { ...DEFAULT_FEATURE_FLAGS };
     for (const row of rows || []) {
       merged[row.key] = row.enabled === true;
     }
-    _featureFlagCache.set(cacheKey, { flags: merged, timestamp: now });
-    return merged;
   } catch (err) {
-    if (String(err.message || "").includes("does not exist")) {
-      return { ...DEFAULT_FEATURE_FLAGS };
+    if (_isMissingRelation(err)) {
+      // Uncached deliberately (matches pre-Step-9 behavior for absent tables).
+      return {
+        flags: { ...DEFAULT_FEATURE_FLAGS },
+        outletOverrides: new Map(),
+        moduleDefaults: new Map(),
+        timestamp: now,
+      };
     }
     throw err;
   }
+
+  const outletOverrides = new Map();
+  try {
+    const { rows } = await flagDb.query(
+      "SELECT outlet_id, module_key, enabled FROM outlet_business_modules"
+    );
+    for (const r of rows || []) {
+      outletOverrides.set(`${r.outlet_id}:${r.module_key}`, r.enabled === true);
+    }
+  } catch (err) {
+    if (!_isMissingRelation(err)) throw err;
+  }
+
+  const moduleDefaults = new Map();
+  try {
+    const { rows } = await flagDb.query(
+      "SELECT module_key, default_outlet_enabled FROM tenant_business_modules"
+    );
+    for (const r of rows || []) {
+      moduleDefaults.set(r.module_key, r.default_outlet_enabled === true);
+    }
+  } catch (err) {
+    if (!_isMissingRelation(err)) throw err;
+  }
+
+  const entry = { flags: merged, outletOverrides, moduleDefaults, timestamp: now };
+  _featureFlagCache.set(cacheKey, entry);
+  return entry;
+}
+
+async function getFeatureFlagsMap(tenantId) {
+  const entry = await _getBundle(tenantId);
+  return { ...entry.flags };
+}
+
+/**
+ * Step 8 resolution rule for one card at one outlet (company state checked
+ * separately by the caller): override ?? default_outlet_enabled ?? TRUE.
+ */
+function _outletResolved(entry, cardKey, outletId) {
+  const k = `${outletId}:${cardKey}`;
+  const ov = entry.outletOverrides.has(k) ? entry.outletOverrides.get(k) : null;
+  if (ov !== null) return ov;
+  return entry.moduleDefaults.has(cardKey) ? entry.moduleDefaults.get(cardKey) : true;
+}
+
+/** The outlet-scoped card owning a flag key (or null). Exported for surfaces. */
+function outletCardForFlag(flagKey) {
+  return OUTLET_FLAG_TO_CARD.get(flagKey) || null;
+}
+
+/**
+ * Flags map with the per-outlet overlay applied: any flag mapping to an
+ * outlet-scoped card that is OFF at `outletId` reads false. Null/absent
+ * outletId returns the plain company-level map. Used by GET /api/feature-flags
+ * (`effective` field), the context bootstrap, and outlet-bound public surfaces.
+ */
+async function getEffectiveFlagsMap(tenantId, outletId) {
+  const entry = await _getBundle(tenantId);
+  const flags = { ...entry.flags };
+  if (outletId) {
+    for (const [flag, cardKey] of OUTLET_FLAG_TO_CARD) {
+      if (flags[flag] === true && !_outletResolved(entry, cardKey, outletId)) {
+        flags[flag] = false;
+      }
+    }
+  }
+  return flags;
+}
+
+/**
+ * Pure outlet-level resolution for one card at one outlet (override ??
+ * default_outlet_enabled ?? TRUE) — company state deliberately NOT composed.
+ * For outlet-bound public surfaces (QR kiosk) that must go dark when the
+ * outlet is switched off but whose company-level gating is a separate,
+ * pre-existing concern.
+ */
+async function isModuleOffAtOutlet(tenantId, cardKey, outletId) {
+  if (!outletId || !BUSINESS_MODULES[cardKey] || BUSINESS_MODULES[cardKey].scope !== "outlet") {
+    return false;
+  }
+  const entry = await _getBundle(tenantId);
+  return !_outletResolved(entry, cardKey, outletId);
+}
+
+/**
+ * Modes map with the same per-outlet overlay for the outlet-scoped Bucket A
+ * modes (restaurant, appointments, rentals, room_management, treatment_plans,
+ * workflow_tickets, service_projects).
+ */
+async function getEffectiveModesMap(tenantId, outletId) {
+  const modes = await getModesMap(tenantId);
+  if (!outletId) return modes;
+  const entry = await _getBundle(tenantId);
+  for (const [mode, cardKey] of OUTLET_MODE_TO_CARD) {
+    if (modes[mode] === true && !_outletResolved(entry, cardKey, outletId)) {
+      modes[mode] = false;
+    }
+  }
+  return modes;
 }
 
 function invalidateFeatureFlagCache(tenantId) {
@@ -233,11 +378,56 @@ function invalidateFeatureFlagCache(tenantId) {
   }
 }
 
-function requireFeature(flagKey) {
+/**
+ * Per-outlet gate layer (D1c) shared by requireFeature and requireMode.
+ * Returns null to pass, or an { status, body } refusal. Rules (owner-ratified
+ * at the Step 9 pause):
+ *  - req.outletContext undefined ⇒ the shared resolver isn't mounted on this
+ *    chain (portal/public routes, standalone test harnesses) ⇒ company-level,
+ *    exactly the pre-Step-9 behavior.
+ *  - outlet resolved ⇒ evaluate Step 8 effective state for that outlet.
+ *  - no outlet resolved ⇒ all_access falls back to company-level (Ruling 1 —
+ *    the fail-closed rule targets staff escaping an outlet-level OFF via an
+ *    oid:null re-mint; admins can toggle modules anyway); everyone else gets
+ *    403 OUTLET_CONTEXT_REQUIRED.
+ */
+function _outletGate(req, entry, cardKey, refusalBase) {
+  const oc = req.outletContext;
+  if (oc === undefined) return null;
+  if (oc.outletId) {
+    if (!_outletResolved(entry, cardKey, oc.outletId)) {
+      return {
+        status: 403,
+        body: { ...refusalBase, outlet_scoped: true, outlet_id: oc.outletId },
+      };
+    }
+    return null;
+  }
+  const perms = req.employeePerms || [];
+  if (perms.includes("all_access")) return null;
+  return {
+    status: 403,
+    body: {
+      error: "Outlet context required for this feature",
+      code: "OUTLET_CONTEXT_REQUIRED",
+      ...(refusalBase.flag ? { flag: refusalBase.flag } : {}),
+      ...(refusalBase.mode ? { mode: refusalBase.mode } : {}),
+    },
+  };
+}
+
+/**
+ * opts.companyLevel: explicit allowlist marker (Step 9 Ruling 2) — the call
+ * site always evaluates company-level state, even when an outlet resolves.
+ * Reserved for settings/config surfaces and cross-outlet reports; every use
+ * carries a justification comment at the call site.
+ */
+function requireFeature(flagKey, opts = {}) {
+  const outletCard = opts.companyLevel ? null : (OUTLET_FLAG_TO_CARD.get(flagKey) || null);
   return async (req, res, next) => {
     try {
-      const flags = await getFeatureFlagsMap(req.tenantId);
-      if (!flags[flagKey]) {
+      const entry = await _getBundle(req.tenantId);
+      if (!entry.flags[flagKey]) {
         // M29 (Phase 3.14): "feature off" is a permission-style refusal,
         // not a service-availability error. 503 was wrong because it
         // implies "try again later" and triggers Sentry alerts on the
@@ -246,6 +436,13 @@ function requireFeature(flagKey) {
           error: `Feature disabled: ${flagKey}`,
           flag: flagKey,
         });
+      }
+      if (outletCard) {
+        const refusal = _outletGate(req, entry, outletCard, {
+          error: `Feature disabled: ${flagKey}`,
+          flag: flagKey,
+        });
+        if (refusal) return res.status(refusal.status).json(refusal.body);
       }
       next();
     } catch (err) {
@@ -325,24 +522,36 @@ function reportEmptyModes(modeName, tenantId) {
   } catch { /* logger unavailable — no-op */ }
 }
 
-function requireMode(modeName) {
+function requireMode(modeName, opts = {}) {
+  const outletCard = opts.companyLevel ? null : (OUTLET_MODE_TO_CARD.get(modeName) || null);
   return async (req, res, next) => {
     try {
       const modes = await getModesMap(req.tenantId);
       // Empty map = failed migration or unseeded provisioning path (should be
       // impossible post-v135). Warn-and-pass for one release: fall through so
       // feature flags remain the sole gate rather than 403-storming a tenant.
+      // The per-outlet layer below still applies — outlet-level OFF must hold
+      // even while the company-level mode gate is in its back-compat posture.
       if (Object.keys(modes).length === 0) {
         reportEmptyModes(modeName, req.tenantId);
-        return next();
-      }
-      if (!modes[modeName]) {
+      } else if (!modes[modeName]) {
         // M29 (Phase 3.14): align with requireFeature — "mode off" is a
         // permission-style refusal, not a service-availability error.
         return res.status(403).json({
           error: `Mode not enabled: ${modeName}`,
           mode: modeName,
         });
+      }
+      // Only fetch the gating bundle when the shared resolver actually ran —
+      // chains without it (portal/public routes, legacy harnesses) keep the
+      // exact pre-Step-9 query profile.
+      if (outletCard && req.outletContext !== undefined) {
+        const entry = await _getBundle(req.tenantId);
+        const refusal = _outletGate(req, entry, outletCard, {
+          error: `Mode not enabled: ${modeName}`,
+          mode: modeName,
+        });
+        if (refusal) return res.status(refusal.status).json(refusal.body);
       }
       next();
     } catch (err) {
@@ -407,6 +616,10 @@ module.exports = {
   DEFAULT_FEATURE_FLAGS,
   getFeatureFlagsMap,
   getModesMap,
+  getEffectiveFlagsMap,
+  getEffectiveModesMap,
+  isModuleOffAtOutlet,
+  outletCardForFlag,
   invalidateFeatureFlagCache,
   invalidateModeCache,
   requireFeature,

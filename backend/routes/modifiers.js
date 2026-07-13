@@ -19,8 +19,11 @@ module.exports = function registerModifierRoutes(app, deps) {
 
   // P2 fix: defense-in-depth — gate on restaurant mode in addition to flag.
   // requireMode falls through with empty modes map (back-compat for pre-M1 tenants).
-  const readGate = [requireMode("restaurant"), requireFeature("phase4_restaurant"), requireAnyPerm(["manage_restaurant", "manage_inventory"])];
-  const writeGate = [requireMode("restaurant"), requireFeature("phase4_restaurant"), requirePerm("manage_restaurant")];
+  // companyLevel: modifier groups are tenant menu catalog config — back-office
+  // editing must not depend on standing in an enabled outlet; POS consumption
+  // is still outlet-gated via the flags overlay (Step 9 allowlist).
+  const readGate = [requireMode("restaurant", { companyLevel: true }), requireFeature("phase4_restaurant", { companyLevel: true }), requireAnyPerm(["manage_restaurant", "manage_inventory"])];
+  const writeGate = [requireMode("restaurant", { companyLevel: true }), requireFeature("phase4_restaurant", { companyLevel: true }), requirePerm("manage_restaurant")];
 
   // ── Groups ──────────────────────────────────────────────────
 

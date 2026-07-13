@@ -1419,7 +1419,7 @@ async function getOverduePlans(db) {
 async function getUpcomingSessionsNeedingReminder(db) {
   const { rows } = await db.query(
     `SELECT s.*,
-       p.plan_number, p.customer_id,
+       p.plan_number, p.customer_id, p.outlet_id,
        c.name AS customer_name, c.email AS customer_email,
        e.name AS provider_name
      FROM treatment_sessions s

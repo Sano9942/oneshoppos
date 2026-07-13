@@ -27,7 +27,8 @@ const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 module.exports = function registerRecipeCostingReports(app, deps) {
   const { requireFeature, requirePerm } = deps;
 
-  const gate = [requireFeature("kit_bom_engine"), requirePerm("view_financial_reports")];
+  // companyLevel: cross-outlet report — recipe costing spans outlets (Step 9).
+  const gate = [requireFeature("kit_bom_engine", { companyLevel: true }), requirePerm("view_financial_reports")];
 
   function dateFilters(req) {
     const tz = req.company?.timezone || "UTC";

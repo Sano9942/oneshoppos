@@ -16,8 +16,10 @@ module.exports = function registerRestaurantKioskRoutes(app, deps) {
   const { requirePerm } = require("../middleware/permissions");
 
   const gate = [
-    requireMode("restaurant"),
-    requireFeature("phase4_restaurant_qr"),
+    // companyLevel: config surface (manage_restaurant-gated QR token
+    // issuance), not outlet-operational (Step 9 allowlist).
+    requireMode("restaurant", { companyLevel: true }),
+    requireFeature("phase4_restaurant_qr", { companyLevel: true }),
     requirePerm("manage_restaurant"),
   ];
 

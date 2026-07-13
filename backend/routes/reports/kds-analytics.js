@@ -15,8 +15,10 @@ module.exports = function registerKdsAnalyticsRoutes(app, deps /* , helpers */) 
   const { requirePerm } = require("../../middleware/permissions");
 
   const gate = [
-    requireMode("restaurant"),
-    requireFeature("phase4_restaurant_kds_analytics"),
+    // companyLevel: cross-outlet report — KDS history stays visible even
+    // where the restaurant module is off at the viewer's outlet (Step 9).
+    requireMode("restaurant", { companyLevel: true }),
+    requireFeature("phase4_restaurant_kds_analytics", { companyLevel: true }),
     requirePerm("view_sales_reports"),
   ];
 
