@@ -325,6 +325,76 @@ async function loadCompanyProfile(req, res, next) {
   next();
 }
 
+/**
+ * Per-outlet role resolution (PLAN-V2 Step 13, D2a). Mounts AFTER
+ * resolveOutletContext (needs the resolved outlet's overrideRoleId) and
+ * BEFORE resolveContext (whose isAdmin check must see effective perms).
+ *
+ * Contract:
+ *  - req.baseEmployeePerms is ALWAYS preserved for authenticated requests —
+ *    assignment-scope decisions (outlet-context.js) key on it, so an override
+ *    can grant capability at an outlet but never widen outlet reach.
+ *  - req.employee.base_role_id / effective_role_id are set when req.employee
+ *    exists (JWT path). No resolvable outlet, or a NULL/base-equal override
+ *    → effective = base, zero extra queries.
+ *  - An override role is scoping, not a demotion: omitting outlet context
+ *    yields the base role by design; the Step 9 fail-closed gates are what
+ *    stop header-omission games on operational outlet-scoped routes.
+ *  - Permissions are re-read per request (there is no perm cache anywhere in
+ *    this chain), so removing an override reverts on the very next request.
+ */
+async function resolveEffectiveRole(req, res, next) {
+  const perms = req.employeePerms;
+  if (!Array.isArray(perms)) return next();
+  req.baseEmployeePerms = perms;
+
+  const baseRoleId = req.employee ? Number(req.employee.role_id) || null : null;
+  if (req.employee) {
+    req.employee.base_role_id = baseRoleId;
+    req.employee.effective_role_id = baseRoleId;
+  }
+
+  const overrideRoleId = Number(req.outletContext?.overrideRoleId) || null;
+  if (!overrideRoleId || overrideRoleId === baseRoleId) return next();
+
+  const loadRolePerms = async () => {
+    const { rows } = await _getCompanyDb(req).query(
+      "SELECT permission FROM role_permissions WHERE role_id = $1",
+      [overrideRoleId]
+    );
+    return rows.map((r) => r.permission);
+  };
+
+  try {
+    let effectivePerms;
+    try {
+      effectivePerms = await loadRolePerms();
+    } catch {
+      // Same posture as loadTenantAndPerms: one retry, then 503 — a silent
+      // empty-perms fallback here would demote an overridden Manager to
+      // nothing and surface as a misleading 403.
+      await new Promise((r) => setTimeout(r, 100));
+      effectivePerms = await loadRolePerms();
+    }
+    req.employeePerms = effectivePerms;
+    // req-level signal (independent of req.employee, which the header-based
+    // ST auth path never sets): "an override role is in effect this request".
+    req.effectiveOverrideRoleId = overrideRoleId;
+    if (req.employee) req.employee.effective_role_id = overrideRoleId;
+    next();
+  } catch (err) {
+    const log = req.log || console;
+    log.error && log.error(
+      { err: err.message, overrideRoleId, path: req.path },
+      "resolveEffectiveRole: override permission load failed"
+    );
+    return res.status(503).json({
+      error: "Service temporarily unavailable — please retry",
+      code: "PERM_LOAD_FAILED",
+    });
+  }
+}
+
 function resolveContext(req, res, next) {
   req.context = { companyId: null, outletId: null, scopeMode: null };
   const companyId = req.headers["x-company-id"];
@@ -448,6 +518,7 @@ module.exports = {
   loadTenantAndPerms,
   resolveTenant,
   loadCompanyProfile,
+  resolveEffectiveRole,
   resolveContext,
   invalidateCompanyProfileCache,
 };

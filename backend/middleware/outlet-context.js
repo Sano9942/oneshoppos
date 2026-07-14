@@ -72,18 +72,40 @@ function invalidateOutletCache(tenantId) {
   if (!IS_MULTI_TENANT) _outletCache.delete("_default");
 }
 
+// Returns the assignment row ({ role_id }) or null. Pre-v137 schemas have no
+// role_id column — degrade to the old existence check with a null override.
+async function _getAssignment(dbHandle, employeeId, outletId) {
+  try {
+    const { rows } = await dbHandle.query(
+      "SELECT role_id FROM employee_outlets WHERE employee_id = $1 AND outlet_id = $2 LIMIT 1",
+      [employeeId, outletId],
+    );
+    return rows[0] || null;
+  } catch (err) {
+    if (err.code === "42703") {
+      const { rows } = await dbHandle.query(
+        "SELECT 1 FROM employee_outlets WHERE employee_id = $1 AND outlet_id = $2 LIMIT 1",
+        [employeeId, outletId],
+      );
+      return rows[0] ? { role_id: null } : null;
+    }
+    throw err;
+  }
+}
+
 async function _isAssigned(dbHandle, employeeId, outletId) {
-  const { rows } = await dbHandle.query(
-    "SELECT 1 FROM employee_outlets WHERE employee_id = $1 AND outlet_id = $2 LIMIT 1",
-    [employeeId, outletId],
-  );
-  return !!rows[0];
+  return !!(await _getAssignment(dbHandle, employeeId, outletId));
 }
 
 /**
  * Pure resolver — no req/res. Throws OutletContextError on invalid explicit
  * header input; stale JWT oids degrade to { outletId: null, source: "none" }.
- * skipAssignment: pass true for all_access / execute_field_sales principals.
+ * skipAssignment: pass true for all_access / execute_field_sales principals —
+ * NOTE (Step 13): callers must key this on BASE perms, never effective perms,
+ * so a per-outlet override can never widen which outlets a principal reaches.
+ * overrideRoleId (Step 13): the employee_outlets.role_id for the resolved
+ * outlet, or null (= inherit base role). Populated for skipAssignment
+ * principals too — an override applies wherever the assignment row exists.
  */
 async function resolveRequestedOutlet({ db: dbHandle, cacheKey, headerValue, jwtOid, employeeId, skipAssignment }) {
   const raw = headerValue == null ? "" : String(headerValue).trim();
@@ -99,24 +121,28 @@ async function resolveRequestedOutlet({ db: dbHandle, cacheKey, headerValue, jwt
     if (!outlets.has(id)) {
       throw new OutletContextError(403, "INVALID_OUTLET_CONTEXT", "Invalid outlet context");
     }
-    if (!skipAssignment && !(await _isAssigned(dbHandle, employeeId, id))) {
+    const assignment = await _getAssignment(dbHandle, employeeId, id);
+    if (!skipAssignment && !assignment) {
       throw new OutletContextError(
         403,
         "OUTLET_NOT_ASSIGNED",
         "Forbidden: outlet is not assigned to this employee account.",
       );
     }
-    return { outletId: id, source: "header" };
+    return { outletId: id, source: "header", overrideRoleId: assignment?.role_id || null };
   }
 
   const oid = Number(jwtOid || 0);
   if (Number.isSafeInteger(oid) && oid > 0) {
     const outlets = await _loadOutletsMap(dbHandle, cacheKey);
-    if (outlets.has(oid) && (skipAssignment || (await _isAssigned(dbHandle, employeeId, oid)))) {
-      return { outletId: oid, source: "jwt" };
+    if (outlets.has(oid)) {
+      const assignment = await _getAssignment(dbHandle, employeeId, oid);
+      if (skipAssignment || assignment) {
+        return { outletId: oid, source: "jwt", overrideRoleId: assignment?.role_id || null };
+      }
     }
   }
-  return { outletId: null, source: "none" };
+  return { outletId: null, source: "none", overrideRoleId: null };
 }
 
 /**
@@ -127,7 +153,7 @@ async function resolveRequestedOutlet({ db: dbHandle, cacheKey, headerValue, jwt
  */
 function resolveOutletContext() {
   return async (req, res, next) => {
-    req.outletContext = { outletId: null, source: "none" };
+    req.outletContext = { outletId: null, source: "none", overrideRoleId: null };
     if (!req.path.startsWith("/api/")) return next();
     // MT mode without a JWT-derived tenant scope = a public ?tenant= path
     // (auth, kiosk pin-checkin, anonymous feature-flags bootstrap…) — there
@@ -135,6 +161,8 @@ function resolveOutletContext() {
     if (IS_MULTI_TENANT && !req.tenantId) return next();
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return next();
+    // Base perms by construction — resolveEffectiveRole (Step 13) hasn't run
+    // yet, so an override role can never influence outlet reachability here.
     const perms = req.employeePerms || [];
     try {
       req.outletContext = await resolveRequestedOutlet({
@@ -170,7 +198,11 @@ function enforceOutletAssignment() {
     if (req.path.startsWith("/api/attendance/pin-")) return next();
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return next();
-    const perms = req.employeePerms || [];
+    // Step 13: assignment scope is an IDENTITY decision — key the skips on
+    // BASE perms (preserved by resolveEffectiveRole), not the outlet-effective
+    // set, so a per-outlet override granting all_access at outlet B can't let
+    // the request smuggle a foreign outlet_id in query/body past enforcement.
+    const perms = req.baseEmployeePerms || req.employeePerms || [];
     if (perms.includes("all_access")) return next();
     // Tier 1.2 wholesale: field reps are tenant-scoped, not outlet-scoped.
     // They never have employee_outlets rows, so this enforcement would

@@ -52,6 +52,9 @@ Orchestrator. Key responsibilities:
 14b. resolveOutletContext — (middleware/outlet-context.js, Step 9 D1c) the ONLY interpreter of outlet
      context: validated x-outlet-id header → JWT oid → none → req.outletContext. Malformed → 400
      INVALID_OUTLET_CONTEXT; foreign/inactive → 403; unassigned non-all_access → 403 OUTLET_NOT_ASSIGNED
+14c. resolveEffectiveRole — (middleware/tenant-auth.js, Step 13 D2a) per-outlet role override:
+     employee_outlets.role_id at the resolved outlet (v137) swaps req.employeePerms to that role's
+     set; req.baseEmployeePerms preserved (assignment-scope checks key on base; capability on effective)
 15. resolveContext       — consumes req.outletContext (+ x-company-id/x-scope-mode headers) → req.context
 
 --- all tenant routes mount here ---

@@ -27,7 +27,7 @@ Only `tenant-auth.js` and `feature-flags.js` expose `init(deps)` — every other
 
 ## tenant-auth.js
 
-**Exports:** `init(deps)`, `loadEmployeePerms`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`, `invalidateCompanyProfileCache`
+**Exports:** `init(deps)`, `loadEmployeePerms`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveEffectiveRole`, `resolveContext`, `invalidateCompanyProfileCache`
 
 `init(deps)` requires `{ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore }`. It also calls an internal `_warmCaches()` for single-tenant mode — eagerly loads the company profile and the `context_header_enforced` flag at boot, and prints a `SETUP URL` console banner if setup isn't complete yet.
 
@@ -72,6 +72,9 @@ No-op in single-tenant mode. In MT mode:
 - If the loaded (non-placeholder) profile has a falsy `setup_complete`, and the path isn't `/api/setup*` or `/api/health*`, and (in MT mode) `req.tenantId` is set → 503 `{ code: "SETUP_REQUIRED" }`.
 - `invalidateCompanyProfileCache(tenantIdOrSlug)` — call after setup-complete or profile edits so the next request re-reads instead of serving a stale cached row. Pass nothing/`null` to clear the entire cache.
 
+### `resolveEffectiveRole(req, res, next)` (PLAN-V2 Step 13, D2a)
+Per-outlet role resolution. Mounts AFTER `resolveOutletContext` (consumes its `overrideRoleId` — the `employee_outlets.role_id` for the resolved outlet, v137) and BEFORE `resolveContext`. Preserves `req.baseEmployeePerms` on every authenticated request, then — only when a non-null override differs from the base role — loads that role's `role_permissions` (same one-retry/503 `PERM_LOAD_FAILED` posture as `loadTenantAndPerms`) and swaps `req.employeePerms`. Sets `req.effectiveOverrideRoleId` (req-level, works in the header-based ST path where `req.employee` is never set) and `req.employee.base_role_id`/`effective_role_id` when `req.employee` exists. **Invariant**: assignment-scope decisions (`resolveOutletContext.skipAssignment`, `enforceOutletAssignment`'s `all_access` skip) key on BASE perms; route capability (`requirePerm`, `PERMISSION_RULES`, `resolveContext.isAdmin`) reads effective perms — an override grants capability at an outlet but never widens outlet reach. No resolvable outlet → base role by design (an override is scoping, not a demotion; the Step 9 fail-closed gates stop header-omission games on operational routes). Permissions are per-request loads (there is NO perm cache), so override add/remove takes effect on the next request with nothing to invalidate; role deletion degrades overrides to inherit via `ON DELETE SET NULL`.
+
 ### `resolveContext(req, res, next)`
 - Reads `x-company-id`/`x-scope-mode` headers; `outletId` comes from `req.outletContext` (the shared validated resolver in `outlet-context.js`, mounted just before this middleware) into `req.context = { companyId, outletId, scopeMode }`. Falls back to the legacy raw `x-outlet-id` header read only when the resolver isn't mounted (standalone/unit-test usage).
 - Checks the `context_header_enforced` feature flag using its own small cache (`CONTEXT_FLAG_CACHE_MS`, 30s — independent of `feature-flags.js`'s cache).
@@ -81,7 +84,7 @@ No-op in single-tenant mode. In MT mode:
 
 **Env vars:** `JWT_SECRET`, `MULTI_TENANT` (via `IS_MULTI_TENANT` passed into `init`)
 
-**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveOutletContext` (outlet-context.js) → `resolveContext`. Every tenant-scoped route mounts after this chain completes.
+**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveOutletContext` (outlet-context.js) → `resolveEffectiveRole` → `resolveContext`. Every tenant-scoped route mounts after this chain completes.
 
 ---
 
@@ -339,7 +342,8 @@ enrichReqLog                       ← (request-id.js) re-binds req.log with ten
 resolveTenant                      ← req.tenantSlug, asyncStore context wired, deps.db proxy now live
 [tenant /uploads static]
 loadCompanyProfile                 ← req.company (needs resolveTenant's tenant context in MT)
-resolveOutletContext               ← (outlet-context.js) validated x-outlet-id → JWT oid → none; req.outletContext
+resolveOutletContext               ← (outlet-context.js) validated x-outlet-id → JWT oid → none; req.outletContext (+overrideRoleId)
+resolveEffectiveRole               ← (tenant-auth.js, Step 13) per-outlet role override → swaps req.employeePerms; req.baseEmployeePerms preserved
 resolveContext                     ← req.context (consumes req.outletContext + x-company-id/x-scope-mode + context_header_enforced flag)
 
 [all tenant business routes mount here]

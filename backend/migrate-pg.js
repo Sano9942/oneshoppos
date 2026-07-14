@@ -9969,6 +9969,30 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 137,
+    description:
+      "D2a per-outlet roles (PLAN-V2 Step 13) — employee_outlets gains role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL. NULL (the value every existing row keeps) = inherit employees.role_id; a non-null value is a per-outlet role override resolved by resolveEffectiveRole after the Step 9 outlet resolver. ON DELETE SET NULL is deliberate (amendment h): deleting a role degrades its overrides to inherit instead of making the role undeletable or cascading assignment rows away. Tenant-only (public has no employee_outlets); guarded on the table existing (v133/v135 idiom). Idempotent via ADD COLUMN IF NOT EXISTS. Inert until a PUT /api/employees/:id/outlets writes an outlet_roles entry.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'employee_outlets'`
+      );
+      if (!hasTable.length) {
+        console.log(
+          `[migrate-pg v137] ${schema}: no employee_outlets table — skipped`
+        );
+        return;
+      }
+      await client.query(`
+        ALTER TABLE employee_outlets
+          ADD COLUMN IF NOT EXISTS role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL
+      `);
+    },
+  },
 ];
 
 /**

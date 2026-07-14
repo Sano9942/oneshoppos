@@ -169,28 +169,36 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
   // --- Employee-outlet assignments ---
 
-  // Get assigned outlets for an employee
+  // Get assigned outlets for an employee (role_id/role_name per row are the
+  // Step 13 per-outlet overrides; null = inherit base_role_id)
   app.get("/api/employees/:id/outlets", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
     try {
+      const { rows: [emp] } = await db.query(
+        "SELECT role_id FROM employees WHERE id = $1", [id],
+      );
       const { rows } = await db.query(
-        `SELECT eo.outlet_id, o.name, o.branch_code, o.company_id, eo.is_primary
+        `SELECT eo.outlet_id, o.name, o.branch_code, o.company_id, eo.is_primary,
+                eo.role_id, r.name AS role_name
          FROM employee_outlets eo
          JOIN outlets o ON o.id = eo.outlet_id
+         LEFT JOIN roles r ON r.id = eo.role_id
          WHERE eo.employee_id = $1
          ORDER BY o.name`,
         [id],
       );
-      res.json({ outlets: rows || [] });
+      res.json({ outlets: rows || [], base_role_id: emp ? emp.role_id : null });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Bulk-replace outlet assignments for an employee
+  // Bulk-replace outlet assignments for an employee. Optional outlet_roles
+  // map (outlet_id → role_id) sets per-outlet role overrides (Step 13);
+  // null/omitted entries inherit the employee's base role.
   app.put("/api/employees/:id/outlets", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
-    const { outlet_ids, primary_outlet_id } = req.body || {};
+    const { outlet_ids, primary_outlet_id, outlet_roles } = req.body || {};
 
     if (!Array.isArray(outlet_ids) || outlet_ids.length === 0) {
       return res.status(400).json({ error: "outlet_ids must be a non-empty array" });
@@ -199,6 +207,26 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     const numericIds = outlet_ids.map(Number).filter((n) => n > 0);
     if (numericIds.length === 0) {
       return res.status(400).json({ error: "No valid outlet IDs provided" });
+    }
+
+    // Normalize + validate the override map before touching the DB.
+    const roleByOutlet = new Map();
+    if (outlet_roles != null) {
+      if (typeof outlet_roles !== "object" || Array.isArray(outlet_roles)) {
+        return res.status(400).json({ error: "outlet_roles must be an object map of outlet_id to role_id" });
+      }
+      for (const [key, value] of Object.entries(outlet_roles)) {
+        const outletId = Number(key);
+        if (!numericIds.includes(outletId)) {
+          return res.status(400).json({ error: "outlet_roles references an unassigned outlet" });
+        }
+        if (value == null) continue; // explicit null = inherit
+        const roleId = Number(value);
+        if (!Number.isSafeInteger(roleId) || roleId <= 0) {
+          return res.status(400).json({ error: "Unknown role_id" });
+        }
+        roleByOutlet.set(outletId, roleId);
+      }
     }
 
     const primaryId = primary_outlet_id ? Number(primary_outlet_id) : numericIds[0];
@@ -211,19 +239,31 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       if (!empRows.length)
         return res.status(404).json({ error: "Employee not found" });
 
-      // Manager/Cashier are branch-fixed by policy: exactly one outlet.
-      if ([2, 3].includes(Number(empRows[0].role_id)) && numericIds.length !== 1) {
-        return res.status(400).json({
-          error: "Manager/Cashier employees must be assigned to exactly one outlet.",
-        });
+      // Multi-outlet assignment is legal for every role (PLAN-V2 Step 13).
+      // The old "Manager/Cashier = exactly one outlet" rule existed to stop a
+      // branch-fixed role from acting in other branches; that intent is now
+      // enforced properly by outlet-assignment enforcement (outlet-context.js)
+      // — a non-all_access employee can only act in outlets they're assigned
+      // to, and acts there under that outlet's effective role (override or
+      // inherited base). A per-outlet override is scoping, not a demotion; to
+      // hard-demote an employee everywhere, change the base role.
+
+      if (roleByOutlet.size > 0) {
+        const roleIds = [...new Set(roleByOutlet.values())];
+        const { rows: roleRows } = await db.query(
+          "SELECT id FROM roles WHERE id = ANY($1::int[])", [roleIds],
+        );
+        if (roleRows.length !== roleIds.length) {
+          return res.status(400).json({ error: "Unknown role_id" });
+        }
       }
 
       await db.transaction(async (client) => {
         await client.query("DELETE FROM employee_outlets WHERE employee_id = $1", [id]);
         for (const outletId of numericIds) {
           await client.query(
-            "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES ($1, $2, $3)",
-            [id, outletId, outletId === primaryId],
+            "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary, role_id) VALUES ($1, $2, $3, $4)",
+            [id, outletId, outletId === primaryId, roleByOutlet.get(outletId) ?? null],
           );
         }
       });
@@ -232,6 +272,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         message: "Outlet assignments updated",
         outlet_ids: numericIds,
         primary_outlet_id: primaryId,
+        outlet_roles: Object.fromEntries(roleByOutlet),
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
