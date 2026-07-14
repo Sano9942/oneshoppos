@@ -73,7 +73,7 @@
 | 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ☑ done (committed `8bf95eb2`; pushed, NOT deployed) — location summary + matrix Drawer + defaults control + delegation perm wired end-to-end; browser-verified on a seeded 3-outlet golv_restaurant + single-outlet golv_salon + a manage_outlet_modules-only role; frontend units 185/185. See Step 10 as-built | — |
 | 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☑ done (verified) — `c6557946` | — |
 | 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☑ done (verified) — Phase 1 `3e0b101a`, ruling + Gate-2 prompt `b061363d`, 5-table follow-up `ae897d25`. **Pause CLEARED 2026-07-14** (all 11 tables ruled; see the as-built ruling table) | **PAUSE mid-step** — ✅ cleared (owner ruled table-by-table; 5 COPY / 7 NEVER / approval_policies→after-D2 / modifier_groups→E6) |
-| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ◐ gate steps 1–4 DONE 2026-07-15, **awaiting owner go** — ledger reconciled (E9 added + the "identical to v1" post-deploy correction); `/code-review high` = 1 finding (scopeImpactSql OR-precedence), fixed; slice subset 131/131, FE units 191/191, browser single-outlet + 3-outlet round-trip + POS green; **full suite 65 files/31 tests failed vs clean-main 31 tests on the same files — zero real regressions** (see the verification record below the GATE 2 section) | **PAUSE — owner-gated merge/deploy/watch** |
+| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ☑ done — **merged `a7b7d0bc` + DEPLOYED 2026-07-15** (owner go given). Railway: 30/30 schemas v135→**v136**, 0 migration failures, 0 boot errors, 0 empty-modes warns; Vercel production READY same SHA. Post-deploy read-only: 29/29 carry both v136 objects, **0 override rows (migration inert as designed)**, `golv_general_retail` payload byte-identical to v1, `golv_restaurant`/`golv_hotel` correctly `attention_required` via D6 (see the correction note in the GATE 2 section — this is NOT a regression). Gate steps 1–4 evidence in the verification record below | **PAUSE — cleared (owner go given)** |
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☐ not started | **PAUSE mid-step** (auth-model design sign-off after Phase 1 findings) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☐ not started | — |
 | 15 | End-to-end verification (fresh-context verifier + full v1+v2 regression + prod read-only + audit-disposition sweep) | ☐ not started | **PAUSE after** (owner reviews VERIFICATION-V2.md) |
@@ -841,6 +841,33 @@ full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awai
 >    multi-outlet tenant is `livetest1` ("Live Test 1"), a test tenant. So **no real customer sees
 >    any per-outlet UI on deploy day**; the only real-tenant-visible change is the D6 checklist on
 >    vertical tenants.
+>
+> ### Deploy outcome (2026-07-15, merge `a7b7d0bc`)
+>
+> - **Railway**: `[migrate-pg] Current version: 135, applying 1 migration(s)… Migration complete.
+>   Schema version: 136` ×**30** (29 tenants + public — the expected count), **0** migration
+>   failures, **0** boot errors, server up. **0** "empty tenant_modes" warns — the D5 telemetry
+>   stays clean, which is a precondition input for the queued fail-closed flip.
+> - **Vercel**: production READY on the same SHA.
+> - **Post-deploy read-only**: 29/29 carry `outlet_business_modules` + `default_outlet_enabled`,
+>   all at v136, and **`SUM(outlet_business_modules) = 0` across prod — the migration is inert
+>   exactly as designed** (nothing resolves differently until someone writes an override).
+> - **Live payload check** (the corrected expectation, and it earned its keep):
+>   `golv_general_retail` = byte-identical to v1 (`industry_type,modules,outlet_count`, no
+>   `outlets[]`, no `checklist`). `golv_restaurant` AND `golv_hotel` = no `outlets[]` (D1 correctly
+>   invisible at 1 outlet) but **`attention_required`** via the D6 checklist — prod has no floor
+>   plan / no rooms+rates, so the cards honestly report incomplete setup. On LOCAL, `golv_restaurant`
+>   read `on` because its required items were done. Under the ORIGINAL "single-outlet must be
+>   identical to v1" instruction, both prod tenants would have looked like a Gate 2 regression and
+>   invited a rollback. They are not.
+> - **Override round-trip on prod: SKIPPED (owner decision).** The only multi-outlet prod tenant is
+>   `livetest1` and its credentials aren't recorded; `livetestauto` is Pro/`max_outlets:1`, so
+>   adding an outlet there would need a plan-cap write. Accepted because the round-trip's
+>   prod-specific risk is schema, and schema is verified on 29/29 with 0 override rows — while the
+>   identical code was browser-verified locally (Override→Inherited, summary 1/3→2/3 in place) and
+>   is covered by the 131-test slice subset. **Not yet exercised in prod**: the per-outlet WRITE
+>   path. First real multi-outlet tenant to use it is the de-facto first prod exercise — worth a
+>   look when it happens.
 
 ---
 
