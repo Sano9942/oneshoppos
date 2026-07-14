@@ -195,6 +195,12 @@ async function loadTenantAndPerms(req, res, next) {
     }
     req.employee.name = result.emp.name;
     req.employee.email = result.emp.email || null;
+    // DB-fresh role wins over the token's rid — perms were just loaded from
+    // it, and Step 13's override-equals-base short-circuit must compare
+    // against the CURRENT base role: with a stale rid, a restricting
+    // per-outlet override equal to the old role would be skipped and the
+    // request would run on full fresh-DB base perms for up to the token TTL.
+    if (result.emp.role_id != null) req.employee.role_id = result.emp.role_id;
     if (req.isImpersonating) {
       req.employee.name = (result.emp.name || "Admin") + " (impersonated by Super-Admin)";
     }
