@@ -262,7 +262,7 @@ export const appRoutes = [
     {/* Phase 2B — Catalog Depth */}
     <Route path="/smart-collections" element={perm("all_access", <SmartCollectionsRoute />)} />
     <Route path="/settings/outlet-tax-profiles" element={perm("all_access", <OutletTaxProfilesRoute />)} />
-    <Route path="/settings/business-modules" element={perm("all_access", <BusinessModulesRoute />)} />
+    <Route path="/settings/business-modules" element={perm(["manage_business_modules", "manage_outlet_modules"], <BusinessModulesRoute />)} />
     <Route path="/scheduled-changes" element={perm("all_access", <ScheduledChangesRoute />)} />
     {/* Phase 3 — Marketing, Engagement & Financial Tools */}
     <Route path="/marketing/campaigns" element={perm("all_access", <MarketingCampaignsRoute />)} />

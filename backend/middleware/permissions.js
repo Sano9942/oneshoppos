@@ -351,11 +351,15 @@ const PERMISSION_RULES = [
   },
   // Business Modules self-service page (PLAN.md Step 7) — delegable without
   // full admin; granted to no default role (Administrators pass via
-  // all_access).
+  // all_access). PLAN-V2 Step 10 wires manage_outlet_modules: this blanket
+  // rule is the gateway for the WHOLE /api/business-modules prefix, so it must
+  // admit both delegation perms. The per-route guards then enforce the finer
+  // split — the read path + per-outlet toggle accept either perm, while the
+  // company-level POST /:key/toggle stays manage_business_modules-only.
   {
     methods: ["GET", "POST"],
     path: /^\/api\/business-modules(\/|$)/,
-    anyPerms: ["manage_business_modules"],
+    anyPerms: ["manage_business_modules", "manage_outlet_modules"],
   },
 ];
 

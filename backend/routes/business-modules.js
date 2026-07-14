@@ -102,7 +102,11 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
 
   app.get(
     "/api/business-modules",
-    requirePerm("manage_business_modules"),
+    // Read path is delegable to manage_outlet_modules too (PLAN-V2 Step 10 —
+    // Step 2 reserved the perm "no route consumes it yet; Step 10 wires it").
+    // A manage_outlet_modules-only role must load the page to drive the
+    // per-outlet matrix; company writes stay gated to manage_business_modules.
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
     async (req, res) => {
       try {
         const [flags, modes, lockedKeys, roleAccess] = await Promise.all([
@@ -200,9 +204,11 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
   );
 
   // Change preview for the enable/disable confirm dialogs (PLAN Step 6).
+  // Also feeds the per-outlet disable confirm (?outlet_id=), so it is delegable
+  // to manage_outlet_modules too — matching the read-path guard above.
   app.get(
     "/api/business-modules/:key/impact",
-    requirePerm("manage_business_modules"),
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
     async (req, res) => {
       try {
         const direction = req.query.direction === "enable" ? "enable" : "disable";

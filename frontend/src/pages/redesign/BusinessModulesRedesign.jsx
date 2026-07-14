@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../../contexts/ToastContext";
 import { usePreset } from "../../contexts/PresetContext";
+import { useAuth } from "../../auth/AuthProvider";
 import { refreshFeatureFlags } from "../../hooks/useFeatureFlags";
-import { PageShell, SectionCard, Badge, Button, Toggle, Tooltip, ConfirmDialog, EmptyState } from "../../ui/primitives";
-import { Lock, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
+import { PageShell, SectionCard, Badge, Button, Toggle, Tooltip, Drawer, ConfirmDialog, EmptyState } from "../../ui/primitives";
+import { Lock, Sparkles, ChevronDown, ChevronRight, MapPin } from "lucide-react";
 import { api } from "../../api";
+import { showOutletControls, locationSummaryLabel, isOutletOverridden } from "./businessModules";
 
 const STATE_BADGE = {
   on: { label: "On", tone: "success" },
@@ -32,11 +34,114 @@ function StateBadge({ module: m }) {
   );
 }
 
-function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onSetup }) {
+// The per-outlet location matrix (PLAN-V2 Step 10). Rendered once at the page
+// level, driven by the module whose "Manage locations" button was clicked.
+// Presentational — every write goes back up to the page via the handlers so
+// the v1 confirm flows are reused, never forked.
+function OutletLocationsDrawer({
+  module: m,
+  open,
+  onClose,
+  canWrite,
+  busy,
+  onOutletToggle,
+  onOutletReset,
+  onSetDefault,
+}) {
+  if (!m) return null;
+  const outlets = m.outlets || [];
+  // default_outlet_enabled defaults TRUE when the card has no tenant row yet.
+  const defaultOn = m.default_outlet_enabled !== false;
+
+  return (
+    <Drawer open={open} onClose={onClose} title={`${m.title} — locations`} size="md">
+      <p className="text-sm text-(--ui-muted) mb-4">
+        Turn {m.title} on or off for each location. A location left on “Inherited”
+        follows the default below.
+      </p>
+
+      {/* New-locations default (amendment e) — sets the card's default for
+          unlisted / future outlets and every location still inheriting. */}
+      <div className="flex items-start justify-between gap-3 border border-(--ui-border) rounded-lg p-3 mb-4">
+        <div className="min-w-0">
+          <span className="text-sm font-medium text-(--ui-text)">New locations</span>
+          <p className="text-xs text-(--ui-muted)">
+            When you add a location, {m.title} starts{" "}
+            <span className="font-medium">{defaultOn ? "On" : "Off"}</span> there.
+          </p>
+        </div>
+        <div className="shrink-0 pt-0.5">
+          {canWrite ? (
+            <Toggle
+              checked={defaultOn}
+              disabled={busy === "default"}
+              onChange={() => onSetDefault(m, !defaultOn)}
+              aria-label="New locations start on"
+            />
+          ) : (
+            <Tooltip label="You don't have permission to change this">
+              <Toggle checked={defaultOn} disabled aria-label="New locations start on" />
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      <h4 className="text-xs font-semibold text-(--ui-muted) uppercase tracking-wide mb-2">
+        Locations
+      </h4>
+      <div className="space-y-3">
+        {outlets.map((o) => {
+          const overridden = isOutletOverridden(o);
+          return (
+            <div key={o.outlet_id} className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-sm text-(--ui-text) truncate block">{o.name}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge tone={overridden ? "warning" : "default"}>
+                    {overridden ? "Override" : "Inherited"}
+                  </Badge>
+                  {overridden && canWrite && (
+                    <Button
+                      tone="link"
+                      size="sm"
+                      onClick={() => onOutletReset(m, o)}
+                      disabled={busy === o.outlet_id}
+                    >
+                      Reset to default
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 pt-0.5">
+                {canWrite ? (
+                  <Toggle
+                    checked={o.effective}
+                    disabled={busy === o.outlet_id}
+                    onChange={() => onOutletToggle(m, o)}
+                    aria-label={`Toggle ${m.title} at ${o.name}`}
+                  />
+                ) : (
+                  <Tooltip label="You don't have permission to change this">
+                    <Toggle checked={o.effective} disabled aria-label={`Toggle ${m.title} at ${o.name}`} />
+                  </Tooltip>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Drawer>
+  );
+}
+
+function ModuleCard({ module: m, titleByKey, busyKey, canCompany, onToggle, onSubToggle, onSetup, onManageLocations }) {
   const requires = (m.depends_on || []).map((k) => titleByKey[k] || k);
   const isOn = m.state === "on";
   const busy = busyKey === m.key;
-  const subsEnabled = isOn && !busy;
+  // Sub-toggles are usable only once the parent module is on AND the viewer can
+  // manage company-level state (a manage_outlet_modules-only delegate can drive
+  // the location matrix but not company flags).
+  const subsEnabled = isOn && !busy && canCompany;
   // Sub-toggles are only usable once the parent module is on. When it's off we
   // still render them (so the merchant sees what's inside) but disabled with a
   // tooltip. Bucket C sub-toggles are read-only badges, so they never gate here.
@@ -44,6 +149,7 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
   const subs = m.sub_toggles || [];
   const useExpander = subs.length > 3;
   const [showCustomize, setShowCustomize] = useState(false);
+  const showLocations = showOutletControls(m);
 
   return (
     <div className="border border-(--ui-border) rounded-lg p-4 flex flex-col gap-2">
@@ -55,16 +161,25 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
           )}
           <StateBadge module={m} />
           {m.bucket === "C" ? (
-            <Button size="sm" tone={m.connected ? "default" : "primary"} disabled={m.state === "locked"} onClick={() => onSetup(m)}>
+            <Button
+              size="sm"
+              tone={m.connected ? "default" : "primary"}
+              disabled={m.state === "locked" || !canCompany}
+              onClick={() => onSetup(m)}
+            >
               {m.connected ? "Manage" : "Set up"}
             </Button>
-          ) : (
+          ) : canCompany ? (
             <Toggle
               checked={isOn}
               disabled={m.state === "locked" || busy}
               onChange={() => onToggle(m)}
               aria-label={`Toggle ${m.title}`}
             />
+          ) : (
+            <Tooltip label="You can manage locations only">
+              <Toggle checked={isOn} disabled aria-label={`Toggle ${m.title}`} />
+            </Tooltip>
           )}
         </div>
       </div>
@@ -81,6 +196,20 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
 
       {m.state === "locked" && (
         <p className="text-xs text-(--ui-muted)">This module is locked for your account. Contact support to enable it.</p>
+      )}
+
+      {/* Per-outlet summary + entry to the location matrix (multi-outlet
+          tenants only; backend omits outlets[] otherwise). */}
+      {showLocations && (
+        <div className="mt-1 border-t border-(--ui-border) pt-2 flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs text-(--ui-muted)">
+            <MapPin size={12} />
+            {locationSummaryLabel(m)}
+          </span>
+          <Button tone="link" size="sm" onClick={() => onManageLocations(m)}>
+            Manage locations
+          </Button>
+        </div>
       )}
 
       {subs.length > 0 && (
@@ -107,6 +236,12 @@ function ModuleCard({ module: m, titleByKey, busyKey, onToggle, onSubToggle, onS
                 } else if (parentOff) {
                   control = (
                     <Tooltip label={`Enable ${m.title} first`}>
+                      <Toggle checked={s.enabled} disabled aria-label={`Toggle ${s.title}`} />
+                    </Tooltip>
+                  );
+                } else if (!canCompany) {
+                  control = (
+                    <Tooltip label="You can manage locations only">
                       <Toggle checked={s.enabled} disabled aria-label={`Toggle ${s.title}`} />
                     </Tooltip>
                   );
@@ -148,12 +283,26 @@ export default function BusinessModulesRedesign() {
   const toast = useToast();
   const navigate = useNavigate();
   const { refreshPreset } = usePreset();
+  const { hasPerm } = useAuth();
+  // Company-level controls (module on/off, sub-toggles, Bucket C setup) need
+  // manage_business_modules (all_access bypasses). A manage_outlet_modules-only
+  // delegate reaches the page (route relaxed) but drives only the location
+  // matrix + defaults.
+  const canCompany = hasPerm("manage_business_modules");
+  const canOutlet = hasPerm(["manage_business_modules", "manage_outlet_modules"]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState(null);
-  // { key, title, direction: "enable"|"disable", impact, rolesBeyondAdmin }
+  // { key, title, direction: "enable"|"disable", impact, rolesBeyondAdmin,
+  //   scope?: "outlet", outletId?, outletName? }
   const [confirm, setConfirm] = useState(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  // Which card's location Drawer is open (null = closed). We look the module up
+  // from `data` by key so the Drawer always renders the freshest per-outlet
+  // state after an in-place patch.
+  const [locationsKey, setLocationsKey] = useState(null);
+  // outlet_id | "default" — the per-row write currently in flight in the Drawer.
+  const [outletBusy, setOutletBusy] = useState(null);
 
   const reload = useCallback(async () => {
     const next = await api.get("/api/business-modules");
@@ -183,6 +332,7 @@ export default function BusinessModulesRedesign() {
     return map;
   }, [modules]);
   const recommended = modules.filter((m) => m.preset_recommended);
+  const locationsModule = locationsKey ? modules.find((m) => m.key === locationsKey) : null;
 
   const doToggle = async (key, enabled, cascade) => {
     setBusyKey(key);
@@ -297,6 +447,118 @@ export default function BusinessModulesRedesign() {
     if (m.setup_route) navigate(m.setup_route);
   };
 
+  // ── Per-outlet write path (PLAN-V2 Step 10) ──────────────────────────────
+  // Patch just this card's outlet fields from the toggle echo so the summary
+  // + Drawer update in place (no full-page reload, no flicker).
+  const patchCardOutlets = useCallback((key, echo) => {
+    setData((d) => {
+      if (!d) return d;
+      return {
+        ...d,
+        modules: d.modules.map((m) =>
+          m.key === key
+            ? {
+                ...m,
+                outlets: echo.outlets,
+                outlet_count: echo.outlet_count,
+                enabled_outlet_count: echo.enabled_outlet_count,
+                default_outlet_enabled: echo.default_outlet_enabled,
+              }
+            : m
+        ),
+      };
+    });
+  }, []);
+
+  const writeOutlet = useCallback(
+    async (key, body) => {
+      const echo = await api.post(`/api/business-modules/${key}/outlet-toggle`, body);
+      patchCardOutlets(key, echo);
+      // If the toggled outlet is the current session's active outlet, its own
+      // nav/mode gates just changed — refresh both client caches in place.
+      refreshFeatureFlags();
+      refreshPreset();
+      return echo;
+    },
+    [patchCardOutlets, refreshPreset]
+  );
+
+  const openLocations = (m) => setLocationsKey(m.key);
+  const closeLocations = () => setLocationsKey(null);
+
+  const handleOutletToggle = async (m, outlet) => {
+    const next = !outlet.effective;
+    setOutletBusy(outlet.outlet_id);
+    try {
+      if (!next) {
+        // Disabling at one outlet — show the outlet-scoped impact confirm when
+        // there's data to lose (reuses the v1 ConfirmDialog).
+        const impact = await api.get(`/api/business-modules/${m.key}/impact`, { outlet_id: outlet.outlet_id });
+        const hasData = (impact.counts || []).some((c) => c.count !== null && c.count > 0);
+        if (hasData) {
+          setConfirm({
+            key: m.key,
+            title: m.title,
+            direction: "disable",
+            scope: "outlet",
+            outletId: outlet.outlet_id,
+            outletName: outlet.name,
+            impact,
+          });
+          return;
+        }
+        await writeOutlet(m.key, { outlet_id: outlet.outlet_id, enabled: false });
+        toast.success(`${m.title} turned off at ${outlet.name}`);
+      } else {
+        // Enabling never has side effects — write directly.
+        await writeOutlet(m.key, { outlet_id: outlet.outlet_id, enabled: true });
+        toast.success(`${m.title} turned on at ${outlet.name}`);
+      }
+    } catch (err) {
+      toast.error(err.message || "Could not update location");
+    } finally {
+      setOutletBusy((b) => (b === outlet.outlet_id ? null : b));
+    }
+  };
+
+  const handleOutletReset = async (m, outlet) => {
+    setOutletBusy(outlet.outlet_id);
+    try {
+      await writeOutlet(m.key, { outlet_id: outlet.outlet_id, enabled: null });
+      toast.success(`${outlet.name} reset to default for ${m.title}`);
+    } catch (err) {
+      toast.error(err.message || "Could not reset location");
+    } finally {
+      setOutletBusy((b) => (b === outlet.outlet_id ? null : b));
+    }
+  };
+
+  const handleSetDefault = async (m, nextEnabled) => {
+    setOutletBusy("default");
+    try {
+      await writeOutlet(m.key, { default_outlet_enabled: nextEnabled });
+      toast.success(`New locations will start ${nextEnabled ? "on" : "off"} for ${m.title}`);
+    } catch (err) {
+      toast.error(err.message || "Could not update default");
+    } finally {
+      setOutletBusy((b) => (b === "default" ? null : b));
+    }
+  };
+
+  const doOutletDisable = async () => {
+    if (!confirm) return;
+    setConfirmBusy(true);
+    try {
+      await writeOutlet(confirm.key, { outlet_id: confirm.outletId, enabled: false });
+      toast.success(`${confirm.title} turned off at ${confirm.outletName}`);
+      setConfirm(null);
+    } catch (err) {
+      toast.error(err.message || "Could not update location");
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
   // Bucket C dependents are NOT cascaded off on disable — the backend leaves
   // them connected (their lifecycle belongs to their setup flow), so the
   // confirm copy must not claim they'll turn off.
@@ -324,6 +586,21 @@ export default function BusinessModulesRedesign() {
             </span>
           )}
           <span className="block">You can turn this off again at any time.</span>
+        </>
+      ) : confirm.scope === "outlet" ? (
+        <>
+          {(confirm.impact.counts || [])
+            .filter((c) => c.count !== null && c.count > 0)
+            .map((c) => (
+              <span key={c.key} className="block mb-1 text-(--ui-text)">
+                {c.label}: <span className="font-medium">{c.count}</span>
+                {c.tenant_wide ? " (across all locations)" : ""}
+              </span>
+            ))}
+          <span className="block">
+            This only turns {confirm.title} off at {confirm.outletName} — your data is kept and
+            comes back if you turn it on there again.
+          </span>
         </>
       ) : (
         <>
@@ -354,6 +631,37 @@ export default function BusinessModulesRedesign() {
     </>
   );
 
+  const confirmTitle = confirm
+    ? confirm.direction === "enable"
+      ? `Turn on ${confirm.title}?`
+      : confirm.scope === "outlet"
+        ? `Turn off ${confirm.title} at ${confirm.outletName}?`
+        : `Turn off ${confirm.title}?`
+    : "";
+
+  const onConfirm = () => {
+    if (!confirm) return;
+    if (confirm.scope === "outlet") {
+      doOutletDisable();
+      return;
+    }
+    doToggle(
+      confirm.key,
+      confirm.direction === "enable",
+      confirm.direction === "disable" && (confirm.impact.dependents || []).length > 0
+    );
+  };
+
+  const cardProps = {
+    titleByKey,
+    busyKey,
+    canCompany,
+    onToggle,
+    onSubToggle,
+    onSetup,
+    onManageLocations: openLocations,
+  };
+
   return (
     <PageShell
       title="Business Modules"
@@ -382,8 +690,7 @@ export default function BusinessModulesRedesign() {
               <SectionCard>
                 <div className="grid gap-3 md:grid-cols-2">
                   {recommended.map((m) => (
-                    <ModuleCard key={m.key} module={m} titleByKey={titleByKey} busyKey={busyKey}
-                      onToggle={onToggle} onSubToggle={onSubToggle} onSetup={onSetup} />
+                    <ModuleCard key={m.key} module={m} {...cardProps} />
                   ))}
                 </div>
               </SectionCard>
@@ -400,8 +707,7 @@ export default function BusinessModulesRedesign() {
                 <SectionCard>
                   <div className="grid gap-3 md:grid-cols-2">
                     {cards.map((m) => (
-                      <ModuleCard key={m.key} module={m} titleByKey={titleByKey} busyKey={busyKey}
-                        onToggle={onToggle} onSubToggle={onSubToggle} onSetup={onSetup} />
+                      <ModuleCard key={m.key} module={m} {...cardProps} />
                     ))}
                   </div>
                 </SectionCard>
@@ -411,27 +717,27 @@ export default function BusinessModulesRedesign() {
         </div>
       )}
 
+      {/* Location matrix Drawer — rendered before the ConfirmDialog so the
+          outlet-scoped disable confirm stacks on top of it. */}
+      <OutletLocationsDrawer
+        module={locationsModule}
+        open={!!locationsModule}
+        onClose={closeLocations}
+        canWrite={canOutlet}
+        busy={outletBusy}
+        onOutletToggle={handleOutletToggle}
+        onOutletReset={handleOutletReset}
+        onSetDefault={handleSetDefault}
+      />
+
       <ConfirmDialog
         open={!!confirm}
-        title={
-          confirm
-            ? confirm.direction === "enable"
-              ? `Turn on ${confirm.title}?`
-              : `Turn off ${confirm.title}?`
-            : ""
-        }
+        title={confirmTitle}
         body={confirmBody}
         confirmLabel={confirm?.direction === "enable" ? "Turn on" : "Turn off"}
         destructive={confirm?.direction === "disable"}
         busy={confirmBusy}
-        onConfirm={() =>
-          confirm &&
-          doToggle(
-            confirm.key,
-            confirm.direction === "enable",
-            confirm.direction === "disable" && (confirm.impact.dependents || []).length > 0
-          )
-        }
+        onConfirm={onConfirm}
         onCancel={() => setConfirm(null)}
       />
     </PageShell>

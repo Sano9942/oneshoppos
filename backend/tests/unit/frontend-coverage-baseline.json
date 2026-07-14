@@ -1,8 +1,8 @@
 {
-  "_comment": "FROZEN baseline for frontend-coverage-drift.test.js (PLAN-V2 Step 6b). Raw dead-route candidates from scan.cjs (backend routes with no detectable frontend caller). The test fails only on NEW identities not listed here; removals (E7 burn-down) are always allowed. Curated breakdown of the real gaps (~78 after removing Tier-2 headless-by-design + false positives) lives in docs/fable5/frontend-coverage-audit/REPORT.md — that is E7 burn-down input, NOT this test problem. NOTE (Step 9): \"POST /api/business-modules/:key/outlet-toggle\" is TEMPORARY — its UI lands in PLAN-V2 Step 10 (same Gate 2 slice); remove it from this baseline in that step.",
+  "_comment": "FROZEN baseline for frontend-coverage-drift.test.js (PLAN-V2 Step 6b). Raw dead-route candidates from scan.cjs (backend routes with no detectable frontend caller). The test fails only on NEW identities not listed here; removals (E7 burn-down) are always allowed. Curated breakdown of the real gaps (~78 after removing Tier-2 headless-by-design + false positives) lives in docs/fable5/frontend-coverage-audit/REPORT.md — that is E7 burn-down input, NOT this test problem. NOTE (Step 10): the Step 9 temporary \"POST /api/business-modules/:key/outlet-toggle\" entry was REMOVED here — its UI shipped in Step 10 (BusinessModulesRedesign location matrix), so the endpoint now has a real frontend caller.",
   "engine": "docs/fable5/frontend-coverage-audit/scan.cjs (runScan)",
   "frozenAt": "2026-07-12",
-  "count": 145,
+  "count": 144,
   "deadRoutes": [
     "DELETE /api/approval-policies/:id",
     "DELETE /api/clinical-documents/:id",
@@ -57,7 +57,6 @@
     "POST /api/approvals/evaluate",
     "POST /api/attendance/:id/checkout",
     "POST /api/auth/kiosk-login",
-    "POST /api/business-modules/:key/outlet-toggle",
     "POST /api/couriers/:id/test-booking",
     "POST /api/customer-invoices/:id/attach-to-project",
     "POST /api/customers/:id/packages",
