@@ -653,13 +653,103 @@ rather than data. Three findings that change the spec's own assumptions:
   capability token). No outlet-keyed table holds credentials — `integration_settings` and
   `courier_integrations` are tenant-wide.
 
-Owner ruling pending per table (see the report). Approved tables → follow-up commit; the rest → E6.
+**OWNER RULING 2026-07-14 (the record — asked table-by-table, all 11 answers matched the
+recommendation):**
+
+| Table | Ruling | Reason given at the pause |
+|---|---|---|
+| `pos_layouts` (scope='outlet') | **COPY** | One row per outlet, pure UI preference; no money/tax/auth effect |
+| `outlet_product_visibility` | **COPY** | Absent row = visible, so "fresh" exposes SKUs the source deliberately hides — copying is the safer default |
+| `price_list_assignments` (scope='outlet') | **COPY** | Pricing consistency is the common case; accepted caveat: time-boxed promo lists follow |
+| `tip_pool_distribution_rules` | **COPY** | House policy; partial unique (one default/outlet) satisfied since the target starts empty |
+| `kds_stations` | **COPY** | Sane starting point; it's an OPTIONAL checklist item, so pre-filling never marks a REQUIRED step done |
+| `outlet_tax_profiles` (+`_lines`) | **NEVER** | The table exists BECAUSE outlets differ on tax — copying defeats its purpose. Absent profile = normal tenant-wide cascade (a sane default). A wrong inherited profile mis-charges tax silently, with FBR exposure |
+| `menu_schedules` | **NEVER** | Schedules are RESTRICTIONS (no rows = always available), so copying can silently make items unavailable; hours differ per location |
+| `booking_services`, `booking_resources`, `room_types`, `rental_items` | **NEVER** | These ARE the Step 11 REQUIRED checklist items — copying marks a new outlet "set up" without a human confirming it offers those services/rooms at those prices; no unique constraints ⇒ duplicates |
+| `restaurant_floor_plans` | **NEVER** | `layout_json` describes a different physical room |
+| `booking_availability_rules` | **NEVER** | References `employee_id` — would copy STAFF schedules, breaking "employee data never copies" |
+| `shopify_location_map` | **NEVER** | Would sync the new outlet's stock to the SOURCE's physical Shopify location |
+| `restaurant_kiosk_slots` | **NEVER** | Clones a live capability token (`slot_token`) — the one outlet-keyed secret |
+| `pos_device_registry` | **NEVER** | `device_uuid` = physical hardware, exists in one place |
+| `approval_policies` | **DEFER → revisit after D2** | Authorization keyed by (outlet, role) — exactly what Steps 13–14 rewire. Ruling now would encode a posture about to change; meanwhile the tenant-wide default still applies, so nothing is unguarded |
+| `modifier_groups` | **DEFER → E6** | Needs a deep copy (groups → options → product links) with no unique constraint against duplicates — a multi-table graph clone, beyond v2's one-table scope |
+
+**Durable rule from this ruling** (applies to any future copy candidate): a table whose *existence
+is justified by per-outlet divergence* (tax profiles) or that *represents physical/personal
+reality* (floor plans, devices, staff schedules, kiosk tokens, channel identity) is never
+copyable — and copying must never silently satisfy a REQUIRED Step 11 setup-checklist item.
+
+The 5 COPY tables are implemented in the Step 12 follow-up commit; `approval_policies` is
+revisited after Gate 3, `modifier_groups` → E6.
 
 ---
 
 ## GATE 2 — Merge + deploy the per-outlet slice (D1 + D6 + D8)
 
 Follow the Gate protocol. Slice verification subset: Steps 7–12 verify lists + the single-outlet zero-change regression (the whole suite) + POS browser spot-check. Deploy-day: the D1 schema migration is inert until outlet toggles are used; post-deploy live check = Business Modules page on a golv_* tenant (single-outlet: identical to v1; then add a second outlet on a test tenant and drive one override round-trip), plus read-only confirmation that no real tenant's payload changed shape unexpectedly. Owner go required before push/merge.
+
+**Prompt:**
+```
+Effort: high.
+
+Why: GATE 2 merges + deploys the per-outlet slice (D1 + D6 + D8 — Steps 7–12). This is the
+second of three owner-gated releases; the whole point of the three-gate split is that
+request-wide gating changes never ship in one giant release. Steps 7–12 are COMMITTED and
+PUSHED on `feat/business-modules-v2` but have NEVER run in production.
+
+Read FIRST (do not skip, do not trust this prompt over source): docs/fable5/business-modules/
+PLAN-V2.md — the "Gate protocol" paragraph (top of file), the Steps 7–12 as-built notes, and
+the GATE 2 section. Then verify state against git/source, not against docs.
+
+State at hand-off (verify, don't assume):
+- Branch `feat/business-modules-v2`, pushed, in sync with origin. Contains 100% of main
+  (`git log HEAD..origin/main` is empty). main is at Gate 1 + kiosk-removal.
+- Slice commits: b0cffda4 (Step 7, migration v136) · da56dd45 (8) · 013f83f3 (9) · 8bf95eb2 (10)
+  · c6557946 (11) · 3e0b101a (12 Phase 1) · + Step 12's 5-table copy follow-up.
+- Migration head = v136 (D1 schema; inert until outlet toggles are used).
+
+Do, in this order:
+1. LEDGER RECONCILIATION (cheap, do it first — this drifts silently and already drifted once:
+   Step 11 shipped with its tracker row still reading "not started"). Walk the PLAN-V2 tracker
+   rows for Steps 7–12 against `git log` reality; confirm every deferred item has a home (E5/E6/
+   E7/E8, the queued requireMode fail-closed flip, approval_policies→after-D2, the Gate-1
+   COD-approve revert). Fix drift in PLAN-V2.md.
+2. Gate protocol (1): /code-review on the slice diff vs main (`git diff origin/main...HEAD`) —
+   fix or justify every finding.
+3. Gate protocol (2): the slice verification subset — Steps 7–12 verify lists + the
+   single-outlet zero-change regression + POS browser spot-check. Then the FULL backend suite,
+   diffed against the ~57-failing-file / ~32-failing-test baseline (run `--no-file-parallelism`;
+   parallel runs deadlock in seedSchema — infra artifact, not a regression). Known-pre-existing,
+   do NOT chase: crud_settings/attendance/context-enforcement/crud_employees (dead files
+   requiring the deleted SQLite `../helpers/createTestApp`), routes-admin-worker-status ×2,
+   services payment-gateway isEnabled. Backend tests run from `backend/` cwd or Vitest throws
+   "describe is not defined".
+4. Gate protocol (3): CLAUDE.md slice sweep — root CLAUDE.md still says migration head v130
+   (actual v136) and does not mention outlet_business_modules, the per-outlet endpoints, the D8
+   copy param, or the setup checklists. Verify every sentence you write against source. (The
+   FULL docs sweep is Step 16 — keep this to the slice.)
+5. Gate protocol (4): STOP. Report and get the owner's explicit go. Do NOT push to main or
+   merge before that word.
+6. Gate protocol (5): merge to main (no PR — git-workflow rule), watch Railway + Vercel, then
+   the post-deploy live check: Business Modules page on a golv_* tenant (single-outlet payload
+   must be IDENTICAL to v1); then add a second outlet on a TEST tenant and drive one override
+   round-trip; plus read-only Supabase confirmation that no real tenant's payload shape changed.
+   Real tenants are READ-ONLY, always.
+
+Standing rules: local Postgres only (backend/.env.test / sanopos_dev) for tests + migrations —
+NEVER run migrations against prod; Supabase read-only; all UI via ui/primitives + --ui-* tokens.
+Local `golv_cafe` was mutated during Step 12 verification and NOT reverted (outlets "Downtown"
++ "Airport", a restaurant override at Main+Airport, multi-outlet flags seeded, max_outlets 1→4)
+— it is local-only and disposable; prefer a different golv_* tenant for a clean single-outlet check.
+
+Out of scope: the requireMode fail-closed flip (deliberately NOT in this gate — it touches the
+same requireMode function Step 9 rewired; it ships as its own release AFTER Gate 2 stabilizes,
+and is blocked on two things: seeding tenant_modes in createTestApp, and proving the v135
+provisioning seeders in prod — no tenant has been provisioned since 2026-07-07). Steps 13–14 (D2).
+
+Report: outcome first — ledger drift found/fixed, review verdict, verification subset results,
+full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awaiting go" statement.
+```
 
 ---
 
@@ -791,7 +881,7 @@ Report: outcome first — review verdict, docs touched, memory files added; then
 | E3 | Kiosk/portal-scope awareness of per-outlet roles | Step 13 scope rule |
 | E4 | Hybrid-card contract: tenant-wide credentials + per-outlet operational enablement (FBR/Shopify/Woo/couriers/payments/channels) | Second-opinion amendment (d) |
 | E5 | Setup checklists for the remaining Bucket A verticals (Step 11 covers Restaurant/Rooms/Rentals/Appointments only). Un-covered Bucket A cards awaiting checklists: `subscriptions_memberships`, `clinical`, `service_tickets`, `projects_contracts`, `commissions`, `wholesale_credit`, `field_sales`. (The dashboard `membership` onboarding step was a permanent `done:false` proxy and was **removed** in Step 11 — memberships get their real checklist here.) | Second-opinion amendment (g) |
-| E6 | D8 extended copy allowlist tables not approved at the Step 12 pause | Second-opinion amendment (g) |
+| E6 | D8 extended copy allowlist: **`modifier_groups` only** (deferred at the Step 12 ruling — needs a groups→options→product-links deep copy). The other 12 candidates were RULED at the Step 12 pause 2026-07-14 (5 COPY → shipped in Step 12's follow-up commit; 7 NEVER — see the Step 12 as-built ruling table). **`approval_policies` is NOT an E6 item — it is explicitly parked for re-decision AFTER D2 lands (post-Gate 3), because Steps 13–14 rewire the (outlet, role) grain it is keyed on.** | Second-opinion amendment (g) + owner ruling 2026-07-14 |
 | E7 | **Frontend coverage clusters — separate remediation plan** (NOT v2 scope): the 78 orphaned endpoints (clinical/treatment 11, Shopify ops console 8, rentals asset layer 7, packages/prepaid 6, rooms group-booking 5, approvals 4 + dead `POSApprovalModal.jsx`, courier tracking 4, van reconciliation 2, workflow dead-ends incl. cycle-count completion) + public rental booking page + recipe-costing report tab. Step 6b freezes them as the registry-test baseline; the separate plan burns them down per-cluster, owner-prioritized. | AUDIT-FINDINGS §2 + §3 |
 | E8 | Preset-specific operator roles (Restaurant Server, Receptionist, Clinician, Technician, Rental Agent, Front Desk) — the permission-wave roadmap item, not a defect | AUDIT-FINDINGS §4C |
 
