@@ -20,7 +20,7 @@ const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
 describe("D8 copy-settings on outlet creation (Postgres)", () => {
-  let app, db, deps, cleanup;
+  let app, db, deps, cleanup, priceListId;
 
   // Unique per run — outlets.name is UNIQUE, and this file creates several.
   const N = (label) => `Step12 ${label} ${Math.random().toString(16).slice(2, 8)}`;
@@ -47,6 +47,46 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
       `INSERT INTO outlet_business_modules (outlet_id, module_key, enabled, updated_by)
        VALUES (1, 'restaurant', true, 'seed'), (1, 'appointments', false, 'seed')
        ON CONFLICT (outlet_id, module_key) DO UPDATE SET enabled = EXCLUDED.enabled`
+    );
+
+    // The four other ruled-copyable tables, seeded on outlet 1. kds_stations
+    // deliberately carries a printer binding + runtime state so the test can
+    // prove they are NOT carried over.
+    await db.query(
+      `INSERT INTO pos_layouts (name, scope_type, scope_id, layout_json, is_active, created_by)
+       VALUES ('Main grid', 'outlet', 1, '[{"sku":"A"}]', true, 1)
+       ON CONFLICT (scope_type, scope_id) DO NOTHING`
+    );
+    await db.query(
+      `INSERT INTO outlet_product_visibility (outlet_id, product_id, is_visible)
+       VALUES (1, 1, false), (1, 2, true)
+       ON CONFLICT (outlet_id, product_id) DO UPDATE SET is_visible = EXCLUDED.is_visible`
+    );
+    await db.query(
+      `INSERT INTO price_lists (name) VALUES ('Step12 List') ON CONFLICT DO NOTHING`
+    ).catch(() => {});
+    const { rows: plRows } = await db.query("SELECT id FROM price_lists ORDER BY id LIMIT 1");
+    priceListId = plRows[0]?.id;
+    if (priceListId) {
+      await db.query(
+        `INSERT INTO price_list_assignments (price_list_id, scope_type, scope_id, priority, is_active)
+         VALUES ($1, 'outlet', 1, 7, true)
+         ON CONFLICT (price_list_id, scope_type, scope_id) DO NOTHING`,
+        [priceListId]
+      );
+    }
+    await db.query(
+      `INSERT INTO tip_pool_distribution_rules (outlet_id, name, strategy, config_jsonb, is_default, is_active)
+       VALUES (1, 'House split', 'hours_weighted', '{"w":2}'::jsonb, true, true)`
+    );
+    await db.query(
+      `INSERT INTO printer_config (connection_type, host) VALUES ('network', '10.0.0.9') RETURNING id`
+    );
+    const { rows: prRows } = await db.query("SELECT id FROM printer_config ORDER BY id DESC LIMIT 1");
+    await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role, is_active, balance_strategy, target_prep_seconds, printer_id, last_assigned_at)
+       VALUES (1, 'Grill', 'prep', true, 'least_loaded', 300, $1, NOW())`,
+      [prRows[0].id]
     );
   }, 60000);
 
@@ -75,10 +115,81 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
         [`%to new outlet ${res.body.id}%`]
       );
       expect(audit).toHaveLength(1);
-      expect(audit[0].description).toContain("Copied 2 business-module override(s) from outlet 1");
+      expect(audit[0].description).toContain("outlet_business_modules 2");
+      expect(audit[0].description).toContain("from outlet 1");
     });
 
-    it("copies module overrides ONLY — no stock, employee or sales rows follow", async () => {
+    it("copies the four other ruled tables, values intact", async () => {
+      const res = await post({ name: N("FullCopy"), copy_from_outlet_id: 1 });
+      expect(res.status).toBe(200);
+      const id = res.body.id;
+
+      const layout = await db.query(
+        "SELECT name, layout_json, is_active, created_by FROM pos_layouts WHERE scope_type = 'outlet' AND scope_id = $1",
+        [id]
+      );
+      expect(layout.rows).toEqual([
+        { name: "Main grid", layout_json: '[{"sku":"A"}]', is_active: true, created_by: 1 },
+      ]);
+
+      const vis = await db.query(
+        "SELECT product_id, is_visible FROM outlet_product_visibility WHERE outlet_id = $1 ORDER BY product_id",
+        [id]
+      );
+      // The FALSE row is the one that matters — a new outlet must inherit what
+      // the source hides, not silently expose it.
+      expect(vis.rows).toEqual([
+        { product_id: 1, is_visible: false },
+        { product_id: 2, is_visible: true },
+      ]);
+
+      if (priceListId) {
+        const pla = await db.query(
+          "SELECT price_list_id, priority, is_active FROM price_list_assignments WHERE scope_type = 'outlet' AND scope_id = $1",
+          [id]
+        );
+        expect(pla.rows).toEqual([{ price_list_id: priceListId, priority: 7, is_active: true }]);
+      }
+
+      const tip = await db.query(
+        "SELECT name, strategy, config_jsonb, is_default FROM tip_pool_distribution_rules WHERE outlet_id = $1",
+        [id]
+      );
+      expect(tip.rows).toEqual([
+        { name: "House split", strategy: "hours_weighted", config_jsonb: { w: 2 }, is_default: true },
+      ]);
+    });
+
+    it("copies a KDS station's config but NOT its printer binding or runtime state", async () => {
+      const res = await post({ name: N("KdsCopy"), copy_from_outlet_id: 1 });
+      const { rows } = await db.query(
+        "SELECT name, station_role, balance_strategy, target_prep_seconds, printer_id, last_assigned_at FROM kds_stations WHERE outlet_id = $1",
+        [res.body.id]
+      );
+      expect(rows).toHaveLength(1);
+      // Config carries over…
+      expect(rows[0].name).toBe("Grill");
+      expect(rows[0].balance_strategy).toBe("least_loaded");
+      expect(rows[0].target_prep_seconds).toBe(300);
+      // …but the printer stands in the SOURCE outlet, and last_assigned_at is
+      // the source's load-balancing state. Both must be absent.
+      expect(rows[0].printer_id).toBeNull();
+      expect(rows[0].last_assigned_at).toBeNull();
+    });
+
+    it("the audit row names every table it copied", async () => {
+      const res = await post({ name: N("AuditDetail"), copy_from_outlet_id: 1 });
+      const { rows } = await db.query(
+        `SELECT description FROM action_history
+          WHERE action_type = 'outlet_settings_copied' AND description LIKE $1`,
+        [`%to new outlet ${res.body.id}%`]
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].description).toContain("outlet_business_modules 2");
+      expect(rows[0].description).toContain("kds_stations 1");
+    });
+
+    it("copies settings ONLY — no stock, employee or sales rows follow", async () => {
       const res = await post({ name: N("ScopeCheck"), copy_from_outlet_id: 1 });
       expect(res.status).toBe(200);
       const id = res.body.id;
@@ -98,6 +209,49 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
       expect(res.status).toBe(200);
       expect(res.body.copied_module_overrides).toBe(0);
       expect(await overridesFor(res.body.id)).toEqual([]);
+    });
+  });
+
+  describe("the NEVER-copy ruling holds (owner ruling 2026-07-14)", () => {
+    it("never copies tax profiles, floor plans, staff schedules, channel identity or kiosk tokens", async () => {
+      // Seed the source with one row in each ruled-NEVER table, then copy.
+      await db.query(
+        "INSERT INTO outlet_tax_profiles (outlet_id, name) VALUES (1, 'Punjab GST') ON CONFLICT (outlet_id) DO NOTHING"
+      );
+      await db.query(
+        "INSERT INTO restaurant_floor_plans (outlet_id, name) VALUES (1, 'Ground floor')"
+      );
+      await db.query(
+        "INSERT INTO booking_availability_rules (employee_id, outlet_id, day_of_week, start_time, end_time) VALUES (1, 1, 1, '09:00', '17:00')"
+      );
+      await db.query(
+        "INSERT INTO shopify_location_map (outlet_id, shopify_location_id) VALUES (1, 'gid://loc/1') ON CONFLICT DO NOTHING"
+      );
+      await db.query(
+        "INSERT INTO restaurant_kiosk_slots (outlet_id, slot_token, label) VALUES (1, 'tok-step12-secret', 'Kiosk 1')"
+      );
+      await db.query(
+        "INSERT INTO menu_schedules (name, outlet_id, day_of_week, start_time, end_time) VALUES ('Breakfast', 1, 1, '07:00', '11:00')"
+      );
+
+      const res = await post({ name: N("NeverCopy"), copy_from_outlet_id: 1 });
+      expect(res.status).toBe(200);
+      const id = res.body.id;
+
+      for (const table of [
+        "outlet_tax_profiles",
+        "restaurant_floor_plans",
+        "booking_availability_rules",
+        "shopify_location_map",
+        "restaurant_kiosk_slots",
+        "menu_schedules",
+      ]) {
+        const { rows } = await db.query(
+          `SELECT COUNT(*)::int AS c FROM ${table} WHERE outlet_id = $1`,
+          [id]
+        );
+        expect({ table, copied: rows[0].c }).toEqual({ table, copied: 0 });
+      }
     });
   });
 

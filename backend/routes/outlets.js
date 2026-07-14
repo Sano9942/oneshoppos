@@ -1,6 +1,7 @@
 module.exports = function registerOutletRoutes(app, deps) {
   const { db, requirePerm, requirePlanLimit } = deps;
   const { seedMultiOutletFlags } = require("../services/retail-flag-preset");
+  const { copyOutletSettings, describeCopy } = require("../services/outlet-copy");
 
   // Get all outlets
   app.get("/api/outlets", async (req, res) => {
@@ -107,6 +108,10 @@ module.exports = function registerOutletRoutes(app, deps) {
       const actor =
         req.employee?.name ||
         (req.headers["x-employee-id"] ? `employee:${req.headers["x-employee-id"]}` : "unknown");
+      // pos_layouts.created_by is a real FK to employees(id) — attribute the
+      // copied layout to whoever created the outlet, not the source's author.
+      const employeeId =
+        Number(req.employee?.id || req.headers["x-employee-id"]) || null;
 
       const result = await db.transaction(async (client) => {
         // Validate the copy source INSIDE the creation transaction: a source
@@ -135,27 +140,26 @@ module.exports = function registerOutletRoutes(app, deps) {
           [name, address, phone, isVan ? "van" : "store", isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null]
         );
 
-        // Clone the source's module overrides in the same transaction. Set-based
-        // (one statement, no per-card loop) and re-stamped with this actor —
-        // the copy is a new decision by this employee, not the source's history.
-        // A source with no overrides copies 0 rows: the new outlet inherits the
-        // card defaults, which is the same state the source itself resolves to.
-        let copiedModules = 0;
+        // Clone the source's copyable settings in the same transaction. WHAT is
+        // copyable lives in services/outlet-copy.js (owner ruling 2026-07-14) —
+        // never widen the list here. Every statement is set-based and re-stamped
+        // with this actor: the copy is a new decision by this employee, not the
+        // source's history. A source with nothing configured copies 0 rows and
+        // the new outlet simply inherits the defaults.
+        let copied = { total: 0, perTable: {} };
         if (copyFromId !== null) {
-          const { rowCount } = await client.query(
-            `INSERT INTO outlet_business_modules (outlet_id, module_key, enabled, updated_by, updated_at)
-             SELECT $1, module_key, enabled, $2, NOW()
-             FROM outlet_business_modules
-             WHERE outlet_id = $3`,
-            [outletId, actor, copyFromId]
-          );
-          copiedModules = rowCount || 0;
+          copied = await copyOutletSettings(client, {
+            sourceOutletId: copyFromId,
+            targetOutletId: outletId,
+            actor,
+            employeeId,
+          });
           await client.query(
             `INSERT INTO action_history (user_name, action_type, description) VALUES ($1, $2, $3)`,
             [
               actor,
               "outlet_settings_copied",
-              `Copied ${copiedModules} business-module override(s) from outlet ${copyFromId} to new outlet ${outletId} ('${name}')`,
+              `Copied ${describeCopy(copied)} setting row(s) from outlet ${copyFromId} to new outlet ${outletId} ('${name}')`,
             ]
           );
         }
@@ -180,7 +184,7 @@ module.exports = function registerOutletRoutes(app, deps) {
           multiOutletSeeded = true;
         }
 
-        return { id: outletId, multiOutletSeeded, copiedModules };
+        return { id: outletId, multiOutletSeeded, copied };
       });
 
       // Step 9: the outlet-context resolver caches the tenant's outlet list.
@@ -195,7 +199,11 @@ module.exports = function registerOutletRoutes(app, deps) {
         van_rep_employee_id: isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null,
         multi_outlet_flags_seeded: result.multiOutletSeeded,
         copied_from_outlet_id: copyFromId,
-        copied_module_overrides: result.copiedModules,
+        // Kept for the Step 12 Phase 1 contract; `copied_settings` is the
+        // per-table breakdown added when the ruling widened the copy.
+        copied_module_overrides: result.copied.perTable.outlet_business_modules || 0,
+        copied_settings: result.copied.perTable,
+        copied_settings_total: result.copied.total,
       });
     } catch (err) {
       // Typed errors thrown inside the transaction (copy-source validation)
