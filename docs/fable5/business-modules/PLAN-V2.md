@@ -63,7 +63,7 @@
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
 | 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ✅ DONE (local, committed) — migration v134 idempotent + both postures verified on `sanopos_dev` (47 pristine / 95 grandfathered / 0 residual `view_reports`), drift green, 13/13 focused split+S5 test | **PAUSE before deploy** (Gate 1 still ahead) — migration + guard changes verified locally, not deployed |
-| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ row materialization done (committed a8d7a084, migration v135). **The fail-closed flip is BUILT on `chore/require-mode-fail-closed`** (harness seeds modes; fall-through removed; refusal code `MODES_NOT_SEEDED`) — **not merged**: precondition 2 (proving the v135 provisioning seeders in prod) is still open and needs an OWNER-run provision, because both prod paths are agent-blocked (signup is Turnstile-gated; `POST /api/admin/tenants` needs super-admin login). Spec → **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section) | **PAUSE before** — ✅ cleared (owner picked warn-and-pass); flip now awaiting prod-provisioning proof + owner go |
+| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ row materialization done (committed a8d7a084, migration v135). **Fail-closed flip BUILT + all preconditions cleared** on `chore/require-mode-fail-closed` (harness seeds modes; fall-through removed; refusal code `MODES_NOT_SEEDED`; suite = baseline, zero regressions). **Precondition 2 DISCHARGED 2026-07-15** — throwaway tenant went 0 → 10 mode rows through the real wizard on prod, then fully cleaned up. **Awaiting owner go to merge/deploy only.** Spec + as-built → **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section) | **PAUSE before** — ✅ cleared (owner picked warn-and-pass); flip ready, awaiting merge go |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
 | — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☑ done — merged `31bdc884` + DEPLOYED 2026-07-12 (Railway + Vercel READY; migrations v133/v134/v135 applied to all 29 prod tenants → schema_version 135; post-deploy read-only checks green: Cashier splits, Field Rep execute_field_sales, modes 10/10, zero stale view_reports, health deep ok, no empty-modes warns) | **PAUSE — cleared (owner go given)** |
@@ -932,7 +932,7 @@ full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awai
   canary; `pg-mode-gates.test.js` green; one browser spot-check on a mode-gated page.
 - **Deploy**: own release, own deploy watch, Sentry watched for a 403 spike. Rollback = revert the
   one commit.
-- **Done when**: ☑ harness seeds modes; ☐ provisioning proven in prod; ☑ fall-through gone + refusal
+- **Done when**: ☑ harness seeds modes; ☑ **provisioning proven in prod**; ☑ fall-through gone + refusal
   code decided; ☑ full suite ≤ baseline; ☐ deployed with zero 403 spike; ☑ Step 5's tracker row +
   as-built + `backend/CLAUDE.md` + `backend/middleware/CLAUDE.md` updated to drop "warn-and-pass".
 
@@ -944,19 +944,48 @@ full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awai
    listing schemas that already have the table — the registry half is what proves no active tenant
    LACKS it. The empty-map branch is provably unreachable in prod today, so this flip still closes no
    live hole; its value remains guarding future drift.
-2. ❌ **STILL THE BLOCKER — and it is agent-blocked, not just unproven.** The premise re-confirms
-   (newest tenant `2026-07-07`; v135 shipped `2026-07-12`), but **both** prod provisioning paths are
-   closed to an agent, which this spec did not anticipate:
-   - `POST /api/auth/signup` is **Turnstile-gated** in prod (`TURNSTILE_SECRET_KEY` is set on Railway;
-     `routes/auth.js` hard-rejects without a valid token). Completing CAPTCHAs is out of scope for the
-     agent — and this was already known internally: `frontend/tests/sweep/functional-sweep.spec.js:40`
-     records that the sweep tenant is *"manually provisioned outside the sweep (Cloudflare Turnstile…)"*.
-   - `POST /api/admin/tenants` bypasses signup but sits behind `requireAllowedIp` + `requireSuperAdmin`
-     → needs a super-admin password + TOTP.
-   ⇒ **This precondition requires an OWNER-run provision.** Owner provisions one throwaway tenant on
-   prod (signup in a browser, or `/admin`), agent verifies 10/10 read-only, owner deletes it.
-   Cleanup is clean: `DELETE /api/admin/tenants/:id` does `DROP SCHEMA … CASCADE`
-   (`routes/admin/tenants.js:306`), so no orphan schema is left behind.
+2. ✅ **DISCHARGED 2026-07-15 — the v135 provisioning seeders now have production evidence.**
+   The premise was real (newest tenant `2026-07-07`; v135 shipped `2026-07-12` — the wizard seeder had
+   never run in prod). **Measured result: a throwaway tenant went 0 → 10 mode rows through the REAL
+   wizard on prod.** `restaurant` preset ⇒ exactly 1 enabled (`restaurant`), 9 explicitly disabled
+   (appointments, commissions, rentals, room_management, service_projects, subscriptions,
+   treatment_plans, wholesale, workflow_tickets), `setup_complete=true`. That is `fullModeRows(preset.modes)`
+   behaving exactly as specified. **The flip is now safe to ship.**
+
+   **Method — the spec's "signup → wizard" is NOT agent-runnable; this route is.** Both paths the spec
+   assumed are closed to an agent:
+   - `POST /api/auth/signup` is **Turnstile-gated** in prod (`TURNSTILE_SECRET_KEY` set on Railway;
+     `routes/auth.js` hard-rejects without a token). Already known internally —
+     `frontend/tests/sweep/functional-sweep.spec.js:40` records the sweep tenant as *"manually
+     provisioned outside the sweep (Cloudflare Turnstile…)"*.
+   - `POST /api/admin/tenants` needs `requireAllowedIp` + super-admin password + TOTP.
+
+   **What works instead** (no CAPTCHA, no super-admin login — uses the owner's authenticated Railway
+   CLI, the same access `CLAUDE.md` documents for `seed-admin-pg.js`):
+   1. `railway run --service oneshoppos node backend/tenant-provisioner-pg.js --slug <s> --name <n>
+      --email <e> --pin <p>` — `provision()` is the *same* internal function signup calls, and it sends
+      NO email (the welcome mail is the signup route's, not the provisioner's).
+   2. Read `setup_token` from `tenant_<slug>.company_profile` (the CLI doesn't print it).
+   3. `POST https://api.sanopos.com/api/setup/complete?tenant=<slug>` with that token — `/api/setup/*`
+      is on `PUBLIC_TENANT_PARAM_PATHS` and gated only by the setup token, so it needs no auth. **This
+      is the real wizard, and it is the thing under test** — signup itself never seeds modes.
+   4. Verify, then clean up.
+
+   **Findings worth keeping:**
+   - **A freshly provisioned tenant has ZERO mode rows** (measured before the wizard). So the wizard is
+     the *only* thing that seeds them — which is exactly why this precondition mattered and why
+     `preset-apply.js` matters for the preset-switch path.
+   - **The wizard has an `EMAIL_NOT_VERIFIED` (403) gate** the spec never mentions: `setup/complete`
+     checks `tenants.email_verified_at`, which `provision()` leaves NULL (only the signup route issues a
+     verification token). A CLI-provisioned tenant must have `email_verified_at` set before the wizard
+     will run.
+   - New tenant schemas provision straight to **v136** — no migration lag.
+   - `setup_complete=false` pre-wizard confirms the `SETUP_REQUIRED` gate really does cover the modeless
+     window, so the flip cannot 403-storm a half-onboarded tenant.
+
+   **Cleanup verified**: schema dropped + row soft-deleted (replicating `routes/admin/tenants.js:302-306`
+   exactly). Post-check: throwaway schema **0 remaining**, active tenants back to **29**, 29 schemas with
+   `tenant_modes`, and `outlet_business_modules` still **0 rows** — Gate 2's migration remains inert.
 3. ✅ Gate 2 deployed + stable; branch cut off the fresh `main` @ `4fc5f442`.
 
 **Local proof stands in for the code half of precondition 2**: `pg-preset-engine.test.js` already
