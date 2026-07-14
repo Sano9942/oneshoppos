@@ -356,6 +356,23 @@ async function seedData(db) {
     );
   }
 
+  // tenant_modes — requireMode is fail-closed (PLAN-V2 "Post-Gate-2 D5
+  // follow-up"): an empty map now means "modes were never seeded" and 403s
+  // rather than falling through to feature flags. The suites that call
+  // featureFlags.init({ db }) resolve modes against this table, so a modeless
+  // schema would 403 every mode-gated route. Seed the FULL registry set
+  // all-enabled — that reproduces the old fall-through behaviour for tests
+  // that don't care about modes, while a test wanting a mode OFF writes its
+  // own row (see pg-mode-gates.test.js).
+  const { VALID_MODES, fullModeRows } = require("../../config/mode-registry");
+  for (const { mode, enabled } of fullModeRows(VALID_MODES)) {
+    await db.query(
+      `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (mode) DO UPDATE SET enabled = EXCLUDED.enabled`,
+      [mode, enabled]
+    );
+  }
+
   // Company profile (ON CONFLICT because schema-pg.sql seeds this row)
   await db.query(
     `INSERT INTO company_profile (id, company_name) VALUES (1, 'Test Store') ON CONFLICT (id) DO UPDATE SET company_name = EXCLUDED.company_name`
@@ -388,6 +405,17 @@ async function createTestApp(options = {}) {
   if (options.seed !== false) {
     await seedData(db);
   }
+
+  // feature-flags.js caches modes/flags at module scope keyed "_default" in
+  // tests, so a previous test file sharing this worker can leave a stale — and
+  // possibly empty — map behind. Under fail-closed requireMode a stale empty
+  // map is a 403, not a fall-through, so drop both caches and let this app
+  // resolve against its own freshly seeded schema.
+  try {
+    const ff = require("../../middleware/feature-flags");
+    ff.invalidateModeCache();
+    ff.invalidateFeatureFlagCache();
+  } catch { /* module never loaded — nothing to invalidate */ }
 
   const app = express();
   app.use(express.json({ limit: "10mb" }));

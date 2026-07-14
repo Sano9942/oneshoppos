@@ -63,7 +63,7 @@
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
 | 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ✅ DONE (local, committed) — migration v134 idempotent + both postures verified on `sanopos_dev` (47 pristine / 95 grandfathered / 0 residual `view_reports`), drift green, 13/13 focused split+S5 test | **PAUSE before deploy** (Gate 1 still ahead) — migration + guard changes verified locally, not deployed |
-| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ done (committed a8d7a084, migration v135) — **warn-and-pass posture shipped**; the hard-fail-closed flip is a SEPARATE release with its own spec + prompt → see **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section). Evidence-gated, not calendar-gated; blocker = proving the v135 provisioning seeders in prod | **PAUSE before** — ✅ cleared (owner picked warn-and-pass) |
+| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ row materialization done (committed a8d7a084, migration v135). **Fail-closed flip BUILT + all preconditions cleared** on `chore/require-mode-fail-closed` (harness seeds modes; fall-through removed; refusal code `MODES_NOT_SEEDED`; suite = baseline, zero regressions). **Precondition 2 DISCHARGED 2026-07-15** — throwaway tenant went 0 → 10 mode rows through the real wizard on prod, then fully cleaned up. **Awaiting owner go to merge/deploy only.** Spec + as-built → **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section) | **PAUSE before** — ✅ cleared (owner picked warn-and-pass); flip ready, awaiting merge go |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
 | — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☑ done — merged `31bdc884` + DEPLOYED 2026-07-12 (Railway + Vercel READY; migrations v133/v134/v135 applied to all 29 prod tenants → schema_version 135; post-deploy read-only checks green: Cashier splits, Field Rep execute_field_sales, modes 10/10, zero stale view_reports, health deep ok, no empty-modes warns) | **PAUSE — cleared (owner go given)** |
@@ -932,9 +932,131 @@ full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awai
   canary; `pg-mode-gates.test.js` green; one browser spot-check on a mode-gated page.
 - **Deploy**: own release, own deploy watch, Sentry watched for a 403 spike. Rollback = revert the
   one commit.
-- **Done when**: ☐ harness seeds modes; ☐ provisioning proven in prod; ☐ fall-through gone + refusal
-  code decided; ☐ full suite ≤ baseline; ☐ deployed with zero 403 spike; ☐ Step 5's tracker row +
+- **Done when**: ☑ harness seeds modes; ☑ **provisioning proven in prod**; ☑ fall-through gone + refusal
+  code decided; ☑ full suite ≤ baseline; ☐ deployed with zero 403 spike; ☑ Step 5's tracker row +
   as-built + `backend/CLAUDE.md` + `backend/middleware/CLAUDE.md` updated to drop "warn-and-pass".
+
+### As-built (branch `chore/require-mode-fail-closed`, off `main` @ `4fc5f442`) — NOT merged
+
+**Preconditions as measured 2026-07-15:**
+1. ✅ **Re-verified.** All 29 active tenants: `tenant_modes` present, 10/10 rows, zero schemas missing
+   the table. Cross-checked against the `public.tenants` registry (`status='active'`) rather than only
+   listing schemas that already have the table — the registry half is what proves no active tenant
+   LACKS it. The empty-map branch is provably unreachable in prod today, so this flip still closes no
+   live hole; its value remains guarding future drift.
+2. ✅ **DISCHARGED 2026-07-15 — the v135 provisioning seeders now have production evidence.**
+   The premise was real (newest tenant `2026-07-07`; v135 shipped `2026-07-12` — the wizard seeder had
+   never run in prod). **Measured result: a throwaway tenant went 0 → 10 mode rows through the REAL
+   wizard on prod.** `restaurant` preset ⇒ exactly 1 enabled (`restaurant`), 9 explicitly disabled
+   (appointments, commissions, rentals, room_management, service_projects, subscriptions,
+   treatment_plans, wholesale, workflow_tickets), `setup_complete=true`. That is `fullModeRows(preset.modes)`
+   behaving exactly as specified. **The flip is now safe to ship.**
+
+   **Method — the spec's "signup → wizard" is NOT agent-runnable; this route is.** Both paths the spec
+   assumed are closed to an agent:
+   - `POST /api/auth/signup` is **Turnstile-gated** in prod (`TURNSTILE_SECRET_KEY` set on Railway;
+     `routes/auth.js` hard-rejects without a token). Already known internally —
+     `frontend/tests/sweep/functional-sweep.spec.js:40` records the sweep tenant as *"manually
+     provisioned outside the sweep (Cloudflare Turnstile…)"*.
+   - `POST /api/admin/tenants` needs `requireAllowedIp` + super-admin password + TOTP.
+
+   **What works instead** (no CAPTCHA, no super-admin login — uses the owner's authenticated Railway
+   CLI, the same access `CLAUDE.md` documents for `seed-admin-pg.js`):
+   1. `railway run --service oneshoppos node backend/tenant-provisioner-pg.js --slug <s> --name <n>
+      --email <e> --pin <p>` — `provision()` is the *same* internal function signup calls, and it sends
+      NO email (the welcome mail is the signup route's, not the provisioner's).
+   2. Read `setup_token` from `tenant_<slug>.company_profile` (the CLI doesn't print it).
+   3. `POST https://api.sanopos.com/api/setup/complete?tenant=<slug>` with that token — `/api/setup/*`
+      is on `PUBLIC_TENANT_PARAM_PATHS` and gated only by the setup token, so it needs no auth. **This
+      is the real wizard, and it is the thing under test** — signup itself never seeds modes.
+   4. Verify, then clean up.
+
+   **Findings worth keeping:**
+   - **A freshly provisioned tenant has ZERO mode rows** (measured before the wizard). So the wizard is
+     the *only* thing that seeds them — which is exactly why this precondition mattered and why
+     `preset-apply.js` matters for the preset-switch path.
+   - **The wizard has an `EMAIL_NOT_VERIFIED` (403) gate** the spec never mentions: `setup/complete`
+     checks `tenants.email_verified_at`, which `provision()` leaves NULL (only the signup route issues a
+     verification token). A CLI-provisioned tenant must have `email_verified_at` set before the wizard
+     will run.
+   - New tenant schemas provision straight to **v136** — no migration lag.
+   - `setup_complete=false` pre-wizard confirms the `SETUP_REQUIRED` gate really does cover the modeless
+     window, so the flip cannot 403-storm a half-onboarded tenant.
+
+   **Cleanup verified**: schema dropped + row soft-deleted (replicating `routes/admin/tenants.js:302-306`
+   exactly). Post-check: throwaway schema **0 remaining**, active tenants back to **29**, 29 schemas with
+   `tenant_modes`, and `outlet_business_modules` still **0 rows** — Gate 2's migration remains inert.
+3. ✅ Gate 2 deployed + stable; branch cut off the fresh `main` @ `4fc5f442`.
+
+**Local proof stands in for the code half of precondition 2**: `pg-preset-engine.test.js` already
+mounts the REAL setup router and asserts `modes.length === VALID_MODES.length` across four presets —
+it passes (8/8). So the wizard seeder's *logic* is proven; what the owner's prod run adds is
+*environment* evidence. Reading the seeder confirms the narrow residual risk: `setup.js:246` loops
+`fullModeRows(preset.modes)` **inside the wizard transaction** that also sets `setup_complete`, so a
+throw fails onboarding loudly rather than silently leaving a partial map, and `fullModeRows` already
+defends against an undefined `preset.modes`. Combined with the `SETUP_REQUIRED` gate covering the
+pre-setup window, a broken seeder cannot produce the "brand-new customer 403-storms" scenario silently.
+
+**The harness gap was deeper than "seed the rows"** (correction to work-item 1 above): routes import
+`requireMode` **directly** from `middleware/feature-flags` (e.g. `routes/rentals.js:2`), not via `deps`
+— so the REAL middleware runs in tests. `createTestApp-pg.js` never calls `featureFlags.init()`;
+instead **~60 integration files call `init({ db })` themselves** (see the explicit comment at
+`pg-rental-contracts.test.js:18-22`: *"the test helper never calls init, so we do it here"*). That
+splits the harness into two populations:
+- **Files that DO init** → `getModesMap` really queries `tenant_modes`; the table exists but was
+  empty, so the empty map came from **zero rows**. Seeding fixes these. ✅
+- **Files that DON'T init** → `getModesMap` short-circuits at `if (!modeDb) return {}` **before ever
+  querying**, so seeding rows does nothing for them. Mostly harmless: the real `requireFeature` also
+  falls back to `DEFAULT_FEATURE_FLAGS` there and every vertical flag defaults `false`, so such a suite
+  already 403s on the FEATURE gate and never reached the mode gate.
+  **…except when a route mixes the two sources — which one does.** `routes/tips.js:20-21` takes
+  `requireFeature` from **`deps`** (the harness STUB, which reads the seeded `feature_flags` table and
+  passes) but imports the **real** `requireMode` directly. So the feature gate opened and the mode gate
+  got an uninitialised `{}` → 403. `pg-phase21c-tips.test.js` (which never called `init`) was the one
+  real regression the flip produced, and it is exactly the case the fall-through was silently
+  protecting. Fixed by adding `init({ db })` to that suite, matching the established pattern.
+  An audit for the mixed pattern (`deps.requireFeature` + directly-imported `requireMode`) across all
+  31 `requireMode` route files returns **`routes/tips.js` only** — no other route can reproduce it.
+  Its stale `// requireMode falls through with empty modes map` comment was corrected too.
+
+`init()` was deliberately NOT added to `createTestApp`: it would repoint the module-level `db` at the
+newest app, cross-wiring any file that builds two apps.
+
+**Two suites owned mode state implicitly and had to be made explicit** (all-enabled seeding changed
+their *starting* fixture, not their logic):
+- `pg-business-modules-toggle.test.js` — case (a) asserts `COUNT(*) FROM tenant_modes = 0`, because it
+  tests the modeless → first-mode-row backfill (the empty→enforcing transition trap). It now clears
+  `tenant_modes` in its own `beforeAll`. Cases (i)/(h) cascaded off (a) and recovered with it.
+- `pg-business-modules-checklist.test.js` — a Bucket A card's state derives from its **mode** as well
+  as its flag, so `rooms_lodging` (flag off, mode now seeded on) computed as enabled and grew a
+  `checklist`. It now turns the `room_management` mode row off alongside the flag.
+
+**What shipped:**
+- `tests/helpers/createTestApp-pg.js` — seeds the full registry row set **all-enabled** via
+  `config/mode-registry.js:fullModeRows(VALID_MODES)` (uses the predicate, never reimplements it);
+  all-enabled preserves today's behavior for suites that don't care about modes, while a suite wanting
+  a mode OFF writes its own row. Also drops the module-level mode/flag caches after seeding — they're
+  keyed `"_default"` in tests, so a prior file in the same worker can leave a stale **empty** map, and
+  under fail-closed a stale empty map is a 403 rather than a harmless fall-through.
+- `middleware/feature-flags.js` — fall-through removed; empty map → **403 `code: "MODES_NOT_SEEDED"`**.
+- `tests/integration/pg-mode-gates.test.js` — case (a) **encoded the warn-and-pass posture** ("empty
+  tenant_modes … does NOT return a mode error") and was rewritten to pin fail-closed; added case (a2)
+  proving an unseeded tenant is distinguishable from a mode that is simply off (both 403; only `code`
+  separates them — which is the entire reason for the distinct code).
+
+**Refusal-code decision**: `MODES_NOT_SEEDED` (recommended shape adopted). A plain `Mode not enabled`
+would make a seeding failure indistinguishable from a legitimate refusal; ops responses differ
+(investigate migration vs. none).
+
+**The two silently-protected cases — stated, not discovered in prod:**
+- **(a) `init()` never called → `{}`**: production-safe by construction (`index.js` always calls
+  `featureFlags.init(mtDeps)` at boot), so this is reachable only in a bare harness. `reportEmptyModes`
+  therefore KEEPS its `NODE_ENV==='test'` gate (work-item 5 says drop it only if the harness can no
+  longer produce an empty map — it still can, via a non-initing suite or `createTestApp({ seed: false })`).
+- **(b) missing `tenant_modes` table → `{}`**: `getModesMap` swallows the "does not exist" error, so
+  `requireMode`'s own catch never sees it. Post-flip this 403s. **Deliberate**: a failed per-tenant
+  migration on a LIVE tenant now 403-storms — that is fail-closed working as intended. The pre-setup
+  window stays covered by `loadCompanyProfile`'s `SETUP_REQUIRED` gate.
 
 **Prompt:**
 ```

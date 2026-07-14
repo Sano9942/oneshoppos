@@ -2,9 +2,12 @@
  * pg-mode-gates.test.js — Verifies the 3-stage gate (mode → feature → perm)
  * added to rentals + rooms routes in wave-b. requireMode returns 403 (M29:
  * "mode off" is a permission-style refusal) with body.mode when a mode row is
- * disabled. Empty tenant_modes still falls through to feature-flag + perm gates
- * (D5 / PLAN-V2 Step 5 warn-and-pass posture — no longer expected for a live
- * tenant, but retained for one release).
+ * disabled.
+ *
+ * requireMode is fail-closed (PLAN-V2 "Post-Gate-2 D5 follow-up"): an empty
+ * tenant_modes map no longer falls through to the feature-flag + perm gates —
+ * it refuses with 403 `code: "MODES_NOT_SEEDED"`, distinct from the plain
+ * "mode is off" refusal so ops can tell a seeding failure from a normal one.
  */
 
 require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
@@ -49,15 +52,28 @@ describe("wave-b mode gates — rentals + rooms", () => {
     featureFlags.invalidateModeCache();
   }
 
-  it("a) backward compat — empty tenant_modes → /api/rental-items does NOT return 503 mode error", async () => {
+  it("a) fail-closed — empty tenant_modes → /api/rental-items returns 403 MODES_NOT_SEEDED", async () => {
     await clearModes();
     const res = await request(app).get("/api/rental-items").set(authHeaders);
-    // Must not be the 503-with-mode-error shape (either 200, or a different error)
-    if (res.status === 503) {
-      expect(res.body.mode).toBeUndefined();
-    } else {
-      expect(res.status).toBe(200);
-    }
+    // Retires the D5 warn-and-pass fall-through: an unseeded tenant must refuse
+    // rather than silently leave feature flags as the sole gate.
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MODES_NOT_SEEDED");
+    expect(res.body.mode).toBe("rentals");
+  });
+
+  it("a2) an unseeded tenant is distinguishable from a mode that is simply off", async () => {
+    // The whole point of the distinct code: ops must be able to tell a seeding
+    // failure from a legitimate refusal. Both are 403 — only `code` separates them.
+    await clearModes();
+    const unseeded = await request(app).get("/api/rental-items").set(authHeaders);
+
+    await setMode("rentals", false);
+    const modeOff = await request(app).get("/api/rental-items").set(authHeaders);
+
+    expect(unseeded.status).toBe(modeOff.status);
+    expect(unseeded.body.code).toBe("MODES_NOT_SEEDED");
+    expect(modeOff.body.code).toBeUndefined();
   });
 
   it("b) mode disabled — rentals=false → /api/rental-items returns 403 with body.mode=rentals", async () => {

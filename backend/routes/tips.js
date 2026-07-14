@@ -20,7 +20,8 @@ module.exports = function registerTipsRoutes(app, deps) {
   const { db, requirePerm, requireFeature } = deps;
   const { requireMode } = require("../middleware/feature-flags");
   // P2 fix: defense-in-depth — gate on restaurant mode in addition to flag.
-  // requireMode falls through with empty modes map (back-compat for pre-M1 tenants).
+  // requireMode is fail-closed: an empty modes map refuses with
+  // MODES_NOT_SEEDED rather than falling through to the feature gate below.
   const mode = requireMode("restaurant");
   const feat = requireFeature("phase4_restaurant");
   const guard = requirePerm("manage_tips");

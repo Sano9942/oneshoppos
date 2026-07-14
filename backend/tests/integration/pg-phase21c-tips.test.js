@@ -23,6 +23,13 @@ describe("Phase 2.1 C — Tip capture + pooling (Postgres)", () => {
   beforeAll(async () => {
     ({ app, db, deps, cleanup } = await createTestApp());
 
+    // routes/tips.js takes requireFeature from deps (stubbed by the harness)
+    // but imports the REAL requireMode from middleware/feature-flags. That
+    // middleware resolves modes against its own init'd db handle, and the test
+    // helper never calls init — so without this, getModesMap has no handle,
+    // returns {}, and fail-closed requireMode 403s every tips route.
+    require("../../middleware/feature-flags").init({ db });
+
     require("../../routes/tips")(app, deps);
 
     tipsService = require("../../services/tips");

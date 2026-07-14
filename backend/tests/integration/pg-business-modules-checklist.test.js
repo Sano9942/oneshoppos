@@ -41,11 +41,16 @@ describe("business modules setup checklists (Postgres)", () => {
        ON CONFLICT (key) DO UPDATE SET enabled = true`
     );
     // Rooms is a covered vertical too — keep it OFF for the "no checklist on a
-    // disabled card" assertion.
+    // disabled card" assertion. The harness seeds every registry mode enabled
+    // (fail-closed requireMode needs a non-empty map), and a Bucket A card's
+    // state derives from its mode as well as its flag — so rooms_lodging is
+    // only genuinely off once its mode row is off too. Otherwise the card reads
+    // enabled and grows a checklist.
     await db.query(
       `INSERT INTO feature_flags (key, enabled) VALUES ('phase4_room_management', false)
        ON CONFLICT (key) DO UPDATE SET enabled = false`
     );
+    await db.query(`UPDATE tenant_modes SET enabled = false WHERE mode = 'room_management'`);
     // Clean floor plans so the first read sees an un-done required item.
     await db.query(`DELETE FROM restaurant_floor_plans`);
   }, 30000);
