@@ -73,7 +73,7 @@
 | 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ☑ done (committed `8bf95eb2`; pushed, NOT deployed) — location summary + matrix Drawer + defaults control + delegation perm wired end-to-end; browser-verified on a seeded 3-outlet golv_restaurant + single-outlet golv_salon + a manage_outlet_modules-only role; frontend units 185/185. See Step 10 as-built | — |
 | 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☑ done (verified) — `c6557946` | — |
 | 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☑ done (verified) — Phase 1 `3e0b101a`, ruling + Gate-2 prompt `b061363d`, 5-table follow-up `ae897d25`. **Pause CLEARED 2026-07-14** (all 11 tables ruled; see the as-built ruling table) | **PAUSE mid-step** — ✅ cleared (owner ruled table-by-table; 5 COPY / 7 NEVER / approval_policies→after-D2 / modifier_groups→E6) |
-| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ◐ in progress (2026-07-14) — ledger reconciled (4 drifts fixed, E9 added), code-review + verification subset running | **PAUSE — owner-gated merge/deploy/watch** |
+| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ◐ gate steps 1–4 DONE 2026-07-15, **awaiting owner go** — ledger reconciled (E9 added + the "identical to v1" post-deploy correction); `/code-review high` = 1 finding (scopeImpactSql OR-precedence), fixed; slice subset 131/131, FE units 191/191, browser single-outlet + 3-outlet round-trip + POS green; **full suite 65 files/31 tests failed vs clean-main 31 tests on the same files — zero real regressions** (see the verification record below the GATE 2 section) | **PAUSE — owner-gated merge/deploy/watch** |
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☐ not started | **PAUSE mid-step** (auth-model design sign-off after Phase 1 findings) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☐ not started | — |
 | 15 | End-to-end verification (fresh-context verifier + full v1+v2 regression + prod read-only + audit-disposition sweep) | ☐ not started | **PAUSE after** (owner reviews VERIFICATION-V2.md) |
@@ -798,6 +798,49 @@ provisioning seeders in prod — no tenant has been provisioned since 2026-07-07
 Report: outcome first — ledger drift found/fixed, review verdict, verification subset results,
 full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awaiting go" statement.
 ```
+
+> ### GATE 2 verification record (2026-07-15, gate steps 1–4; branch `2ffe56b9`, NOT merged)
+>
+> 1. **Ledger**: 3 stale tracker rows (Steps 7/9/10 said "local only" — the branch is pushed);
+>    Step 5's as-built still named Sentry silence as the fail-closed trigger after that instrument
+>    was retired; **E9 added** (public QR/kiosk restaurant surface has no COMPANY-level module
+>    gate — Step 9 shipped only the outlet half; named as a follow-up with no home until now; NOT
+>    a regression, pre-slice main had no module gate there at all); **the "single-outlet = identical
+>    to v1" post-deploy check corrected** (true of D1 only — D6 checklists deliberately change a
+>    vertical tenant's payload). Every deferred item now has a home: E1–E9, the D5 flip (own
+>    section), `approval_policies`→after-D2 (E6 note), the Gate-1 COD revert (REPORT-PERMS §9 #8 +
+>    an explanatory comment at `fulfillment.js`, guard verified `all_access` in source).
+> 2. **`/code-review high`** on `git diff origin/main...HEAD` (60 files, +4666/−227): **one
+>    finding** — `scopeImpactSql` blocked join/group-by/having/union but not a top-level `OR`;
+>    since AND binds tighter, appending `AND outlet_id = $1` to `WHERE a OR b` gives
+>    `a OR (b AND outlet_id = $1)`, silently counting other outlets. 0 of 11 current outlet-scoped
+>    impact queries contain `OR` ⇒ nothing was broken; `or` joined the blocklist (falls back to the
+>    tenant-wide count, as every other unsafe shape already does). Verified behavior-preserving
+>    across all 11 (`orders`/`ORDER BY` don't false-positive on `\bor\b`). Resolver, copy engine,
+>    toggle write path, and Zod shapes reviewed clean.
+> 3. **Verification**: slice subset **131/131** (10 files) · frontend units **191/191** ·
+>    browser: single-outlet `golv_general_retail` = zero location UI/checklist, no console errors;
+>    3-outlet `golv_cafe` Drawer round-trip (Airport Override→Inherited, summary 1/3→2/3 **in
+>    place**, tenant restored exactly); POS loads + survives an outlet switch.
+>    **Full-suite diff — the honest version**: branch = 65 failed files / 31 failed tests / 2330
+>    passed. **41 of the 65 are IMPORT failures** (the dead SQLite-`../helpers/createTestApp`
+>    class), leaving 24 files with real failures. Ran those same 24 on clean `origin/main`
+>    (detached): **31 failed tests — the identical set**. File-level diff surfaced 2 files failing
+>    on branch but not main (`p22-report-tz-buckets`, `pg-v09-rentals-depth`); **both pass in
+>    isolation on the branch and pass together on 2/2 re-runs**, neither is touched by the slice,
+>    and both failed at hook/teardown level with every test passing ⇒ the documented nondeterministic
+>    cross-file contention, not a regression. **Net: zero real regressions.**
+> 4. **Docs (slice only)**: root CLAUDE.md (head v130→v136 + the v133–v136 wave, 14b
+>    resolveOutletContext, outlet-context.js, outlet-copy.js, the outlet-toggle endpoint +
+>    `manage_outlet_modules` incl. the blanket-rule ordering trap, D8 copy param,
+>    feature-flags `effective` vs `enabled`); backend/ (requireMode outlet-aware + evidence-gated
+>    follow-up); routes/ (the four endpoints + real guards); services/ (the per-outlet rules a
+>    future editor can't infer from code).
+> 5. **Prod blast radius (read-only)**: 29/29 schemas uniformly at v135; **0 carry the v136 objects**
+>    (migration provably never ran); **28 of 29 tenants have exactly 1 store outlet** — the only
+>    multi-outlet tenant is `livetest1` ("Live Test 1"), a test tenant. So **no real customer sees
+>    any per-outlet UI on deploy day**; the only real-tenant-visible change is the D6 checklist on
+>    vertical tenants.
 
 ---
 
