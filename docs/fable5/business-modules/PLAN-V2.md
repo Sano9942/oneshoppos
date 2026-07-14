@@ -704,7 +704,37 @@ NEVER tables stay empty after a copy — the ruling is enforced, not just docume
 
 ## GATE 2 — Merge + deploy the per-outlet slice (D1 + D6 + D8)
 
-Follow the Gate protocol. Slice verification subset: Steps 7–12 verify lists + the single-outlet zero-change regression (the whole suite) + POS browser spot-check. Deploy-day: the D1 schema migration is inert until outlet toggles are used; post-deploy live check = Business Modules page on a golv_* tenant (single-outlet: identical to v1; then add a second outlet on a test tenant and drive one override round-trip), plus read-only confirmation that no real tenant's payload changed shape unexpectedly. Owner go required before push/merge.
+Follow the Gate protocol. Slice verification subset: Steps 7–12 verify lists + the single-outlet zero-change regression (the whole suite) + POS browser spot-check. Deploy-day: the D1 schema migration is inert until outlet toggles are used; post-deploy live check = Business Modules page on a golv_* tenant, then add a second outlet on a test tenant and drive one override round-trip, plus read-only confirmation that no real tenant's payload changed shape unexpectedly. Owner go required before push/merge.
+
+> **⚠️ Correction to the "single-outlet: identical to v1" check (Gate 2 ledger walk, 2026-07-14).**
+> "Identical to v1" is true of **D1 only**, and only that part is outlet-count-gated:
+> `outletStates` is computed solely when `activeOutlets.length > 1`
+> (`routes/business-modules.js`), so a single-outlet tenant gets no
+> `outlets[]`/`enabled_outlet_count`/`default_outlet_enabled` — asserted by the
+> byte-compat test in `pg-business-modules-outlet.test.js`.
+> **D6 is NOT outlet-gated and deliberately changes the single-outlet payload**: any
+> tenant with an ENABLED covered vertical (restaurant / rooms_lodging / rentals /
+> appointments) gains a `checklist` field and reads `attention_required` while a
+> required item is un-done. Step 11 browser-verified exactly this on the
+> then-single-outlet `golv_cafe` ("Attention" + "Get started — 2 of 3 done").
+> So: run the "identical to v1" check on a single-outlet tenant with **no covered
+> vertical enabled** (`golv_general_retail`, `golv_grocery`, `golv_textile`,
+> `golv_butcher`, `golv_sweet_shop`, `golv_wholesale`). On `golv_restaurant` /
+> `golv_hotel` / a clinic preset, a "Get started" line and an Attention chip are the
+> CORRECT post-deploy result — not a regression, and not a reason to roll back.
+>
+> Measured on the local v136 DB at the Gate 2 walk (live `GET /api/business-modules`):
+>
+> | Tenant | Store outlets | Top-level keys | cards w/ `outlets[]` | cards w/ `checklist` | `attention_required` |
+> |---|---|---|---|---|---|
+> | `golv_general_retail` | 1 | `industry_type,modules,outlet_count` | 0 | 0 | none |
+> | `golv_restaurant` | 1 | *(same v1 shape)* | 0 | 1 (`restaurant`) | none — its required items are already done |
+> | `golv_cafe` | 3 | *(same v1 shape)* | 13 | 1 (`restaurant`) | `restaurant` |
+>
+> Note the top-level shape never changes (the v2 fields are per-CARD), the 13 cards
+> match the catalog's 13 `scope:"outlet"` entries exactly, and `attention_required`
+> depends on the DATA (un-done required item), not on the tenant being multi-outlet —
+> `golv_restaurant` carries a checklist yet still reads `on`.
 
 **Prompt:**
 ```
