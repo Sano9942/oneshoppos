@@ -45,9 +45,17 @@ module.exports = function registerOutletRoutes(app, deps) {
   // default. Guarded by company_profile.multi_outlet_flags_seeded so deleting
   // and recreating an outlet doesn't re-seed.
   // Note: kiosk_context_locked is NOT in the seed list — merchant opt-in.
+  //
+  // D8 (PLAN-V2 Step 12) — optional `copy_from_outlet_id` seeds the new outlet
+  // from an existing one. v2 copies ONE thing: the source's
+  // outlet_business_modules override rows. Stock, employees, and sales NEVER
+  // copy. Omitting the param keeps the D1 inherit-by-default model exactly as
+  // it is — no override rows, so every module resolves to its card
+  // `default_outlet_enabled`. Every other outlet-keyed config table is a
+  // Phase 2 owner ruling (E6), deliberately not implemented here.
   app.post("/api/outlets", requirePerm("all_access"), requirePlanLimit("outlets"), async (req, res) => {
     try {
-      const { name, address, phone, outlet_type, van_rep_employee_id } = req.body;
+      const { name, address, phone, outlet_type, van_rep_employee_id, copy_from_outlet_id } = req.body;
 
       // V02 wholesale van sales — a van IS an outlet, so all stock machinery
       // works unmodified. Creating one requires the wholesale_van_sales flag;
@@ -75,12 +83,82 @@ module.exports = function registerOutletRoutes(app, deps) {
         }
       }
 
+      // D8 source normalisation. "" / null / undefined all mean "start fresh"
+      // (the frontend Select's empty option), so only a real value is parsed.
+      let copyFromId = null;
+      if (copy_from_outlet_id !== undefined && copy_from_outlet_id !== null && copy_from_outlet_id !== "") {
+        copyFromId = Number(copy_from_outlet_id);
+        if (!Number.isInteger(copyFromId) || copyFromId <= 0) {
+          return res.status(400).json({
+            code: "INVALID_COPY_SOURCE",
+            error: "copy_from_outlet_id must be a positive integer outlet id",
+          });
+        }
+        // A van carries no per-outlet module state (the D1 resolver only walks
+        // non-van outlets), so copying INTO one would write rows nothing reads.
+        if (isVan) {
+          return res.status(400).json({
+            code: "COPY_SOURCE_NOT_SUPPORTED_FOR_VAN",
+            error: "Vans do not carry per-outlet module settings — omit copy_from_outlet_id.",
+          });
+        }
+      }
+
+      const actor =
+        req.employee?.name ||
+        (req.headers["x-employee-id"] ? `employee:${req.headers["x-employee-id"]}` : "unknown");
+
       const result = await db.transaction(async (client) => {
+        // Validate the copy source INSIDE the creation transaction: a source
+        // that vanishes mid-flight must fail the whole create, never silently
+        // yield an outlet with zero copied overrides. Foreign outlets can't
+        // match — search_path already scopes this to the tenant's schema.
+        // "Valid source" is the SAME non-van predicate the D1 resolver uses for
+        // its outlet set (services/business-modules.js:loadActiveOutlets), not
+        // a third interpretation of "active outlet".
+        if (copyFromId !== null) {
+          const { rows: srcRows } = await client.query(
+            "SELECT id FROM outlets WHERE id = $1 AND COALESCE(outlet_type, 'store') <> 'van'",
+            [copyFromId]
+          );
+          if (!srcRows.length) {
+            const err = new Error(`Outlet ${copyFromId} not found or not a valid store outlet.`);
+            err.statusCode = 404;
+            err.code = "COPY_SOURCE_NOT_FOUND";
+            throw err;
+          }
+        }
+
         const { rows: [{ id: outletId }] } = await client.query(
           `INSERT INTO outlets (name, address, phone, outlet_type, van_rep_employee_id)
            VALUES ($1, $2, $3, $4, $5) RETURNING id`,
           [name, address, phone, isVan ? "van" : "store", isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null]
         );
+
+        // Clone the source's module overrides in the same transaction. Set-based
+        // (one statement, no per-card loop) and re-stamped with this actor —
+        // the copy is a new decision by this employee, not the source's history.
+        // A source with no overrides copies 0 rows: the new outlet inherits the
+        // card defaults, which is the same state the source itself resolves to.
+        let copiedModules = 0;
+        if (copyFromId !== null) {
+          const { rowCount } = await client.query(
+            `INSERT INTO outlet_business_modules (outlet_id, module_key, enabled, updated_by, updated_at)
+             SELECT $1, module_key, enabled, $2, NOW()
+             FROM outlet_business_modules
+             WHERE outlet_id = $3`,
+            [outletId, actor, copyFromId]
+          );
+          copiedModules = rowCount || 0;
+          await client.query(
+            `INSERT INTO action_history (user_name, action_type, description) VALUES ($1, $2, $3)`,
+            [
+              actor,
+              "outlet_settings_copied",
+              `Copied ${copiedModules} business-module override(s) from outlet ${copyFromId} to new outlet ${outletId} ('${name}')`,
+            ]
+          );
+        }
 
         // Read the resulting STORE count + the seed-once flag in one
         // round-trip (vans never trigger multi-outlet seeding).
@@ -102,7 +180,7 @@ module.exports = function registerOutletRoutes(app, deps) {
           multiOutletSeeded = true;
         }
 
-        return { id: outletId, multiOutletSeeded };
+        return { id: outletId, multiOutletSeeded, copiedModules };
       });
 
       // Step 9: the outlet-context resolver caches the tenant's outlet list.
@@ -116,8 +194,15 @@ module.exports = function registerOutletRoutes(app, deps) {
         outlet_type: isVan ? "van" : "store",
         van_rep_employee_id: isVan && van_rep_employee_id ? Number(van_rep_employee_id) : null,
         multi_outlet_flags_seeded: result.multiOutletSeeded,
+        copied_from_outlet_id: copyFromId,
+        copied_module_overrides: result.copiedModules,
       });
     } catch (err) {
+      // Typed errors thrown inside the transaction (copy-source validation)
+      // surface as themselves; everything else stays a 500.
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ code: err.code, error: err.message });
+      }
       res.status(500).json({ error: err.message });
     }
   });
