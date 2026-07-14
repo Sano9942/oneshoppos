@@ -469,9 +469,14 @@ async function getModesMap(tenantId) {
   }
   // If init() was never called (e.g. integration tests that build their own
   // app via createTestApp-pg.js without calling featureFlags.init), modeDb is
-  // undefined. Treat this the same as "tenant_modes table absent" so
-  // requireMode() falls through to its back-compat empty-map branch instead
-  // of 500-ing on .query() of undefined.
+  // undefined. Return {} rather than 500-ing on .query() of undefined.
+  //
+  // requireMode is fail-closed, so {} now means a 403 MODES_NOT_SEEDED rather
+  // than a fall-through. In production that is correct and intended: index.js
+  // always calls init() at boot, so an empty map there is a genuine seeding
+  // failure. It is only in a bare harness that this branch is reachable
+  // without a real defect — such suites must call init({ db }) to resolve
+  // modes against their own schema.
   if (!modeDb) return {};
 
   try {
@@ -496,20 +501,25 @@ function invalidateModeCache(tenantId) {
 }
 
 /**
- * D5 (PLAN-V2 Step 5) empty-map telemetry. After migration v135 + the
- * provisioning seeders, EVERY live tenant has a full tenant_modes row set, so
- * reaching requireMode with an empty map means a failed per-tenant migration
- * or an unseeded provisioning path — surface it loudly. Owner-chosen posture
- * for this release is warn-and-pass (keep falling through so a gap degrades to
- * "flags are the sole gate" instead of a 403 storm); flip to fail-closed next
- * release once prod telemetry reads zero. Skipped under NODE_ENV=test so the
- * integration harness (which never seeds tenant_modes) stays quiet.
+ * D5 empty-map telemetry. After migration v135 + the provisioning seeders,
+ * EVERY live tenant has a full tenant_modes row set, so reaching requireMode
+ * with an empty map means a failed per-tenant migration, an unseeded
+ * provisioning path, or a missing tenant_modes table — surface it loudly.
+ *
+ * requireMode is now fail-closed (PLAN-V2 "Post-Gate-2 D5 follow-up"): the
+ * caller 403s MODES_NOT_SEEDED instead of falling through. This still fires —
+ * the refusal alone doesn't tell ops WHICH tenant lost its rows.
+ *
+ * Still skipped under NODE_ENV=test: the harness seeds tenant_modes now, but it
+ * can still legitimately produce an empty map — a suite that never calls
+ * init({ db }) leaves getModesMap without a handle, and createTestApp({ seed:
+ * false }) builds a DDL-only schema. Neither is a defect worth Sentry noise.
  */
 function reportEmptyModes(modeName, tenantId) {
   if (process.env.NODE_ENV === "test") return;
   try {
     const Sentry = require("@sentry/node");
-    Sentry.captureMessage("requireMode: empty tenant_modes map (D5 warn-and-pass)", {
+    Sentry.captureMessage("requireMode: empty tenant_modes map (MODES_NOT_SEEDED)", {
       level: "warning",
       tags: { mode: modeName, tenantId: tenantId != null ? String(tenantId) : "unknown" },
     });
@@ -517,7 +527,7 @@ function reportEmptyModes(modeName, tenantId) {
   try {
     require("../services/logger").warn(
       { mode: modeName, tenantId },
-      "requireMode: tenant has an empty tenant_modes map — feature flags are the sole gate. Expected 0 occurrences after migrate v135; investigate this tenant's migration/provisioning."
+      "requireMode: tenant has an empty tenant_modes map — every mode-gated route is now refusing with MODES_NOT_SEEDED. Expected 0 occurrences after migrate v135; investigate this tenant's migration/provisioning."
     );
   } catch { /* logger unavailable — no-op */ }
 }
@@ -527,14 +537,22 @@ function requireMode(modeName, opts = {}) {
   return async (req, res, next) => {
     try {
       const modes = await getModesMap(req.tenantId);
-      // Empty map = failed migration or unseeded provisioning path (should be
-      // impossible post-v135). Warn-and-pass for one release: fall through so
-      // feature flags remain the sole gate rather than 403-storming a tenant.
-      // The per-outlet layer below still applies — outlet-level OFF must hold
-      // even while the company-level mode gate is in its back-compat posture.
+      // Empty map = failed migration, an unseeded provisioning path, or a
+      // missing tenant_modes table (getModesMap swallows that into {}, so the
+      // catch below never sees it). Post-v135 every live tenant has a full row
+      // set, so this is a seeding failure — refuse rather than silently leaving
+      // feature flags as the sole gate. Distinct code: an empty map returning
+      // the plain "Mode not enabled" would be indistinguishable from a mode
+      // that is legitimately off, and the two need different ops responses.
       if (Object.keys(modes).length === 0) {
         reportEmptyModes(modeName, req.tenantId);
-      } else if (!modes[modeName]) {
+        return res.status(403).json({
+          error: `Modes not seeded for this tenant (mode: ${modeName})`,
+          code: "MODES_NOT_SEEDED",
+          mode: modeName,
+        });
+      }
+      if (!modes[modeName]) {
         // M29 (Phase 3.14): align with requireFeature — "mode off" is a
         // permission-style refusal, not a service-availability error.
         return res.status(403).json({
@@ -555,6 +573,11 @@ function requireMode(modeName, opts = {}) {
       }
       next();
     } catch (err) {
+      // Vestigial w.r.t. tenant_modes: getModesMap swallows a missing table into
+      // {}, which the fail-closed branch above now turns into MODES_NOT_SEEDED,
+      // so this never fires for an absent tenant_modes. It only remains reachable
+      // via the Step 9 outlet bundle (_getBundle) on a partially-migrated schema.
+      // Left as-is deliberately — narrowing it is a separate change.
       if (String(err.message || "").includes("does not exist")) {
         return next();
       }

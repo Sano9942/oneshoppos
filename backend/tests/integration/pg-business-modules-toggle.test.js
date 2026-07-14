@@ -94,6 +94,15 @@ describe("business modules toggle API (Postgres)", () => {
       `DELETE FROM public.platform_module_locks WHERE locked_by = 'toggle-test' OR module_key = ANY($1)`,
       [LOCK_MODULES]
     ).catch(() => {});
+
+    // This suite exercises the modeless → first-mode-row backfill path (the
+    // empty→enforcing transition trap), so it needs a genuinely MODELESS
+    // tenant: case (a) asserts COUNT(*) FROM tenant_modes = 0 as its
+    // precondition. createTestApp now seeds the full registry row set for the
+    // fail-closed requireMode, so clear it back out here — this suite owns its
+    // mode state rather than inheriting the harness default.
+    await db.query("DELETE FROM tenant_modes");
+    featureFlags.invalidateModeCache();
   }, 60000);
 
   afterAll(async () => {
