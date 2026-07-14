@@ -63,7 +63,7 @@
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
 | 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ✅ DONE (local, committed) — migration v134 idempotent + both postures verified on `sanopos_dev` (47 pristine / 95 grandfathered / 0 residual `view_reports`), drift green, 13/13 focused split+S5 test | **PAUSE before deploy** (Gate 1 still ahead) — migration + guard changes verified locally, not deployed |
-| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ row materialization done (committed a8d7a084, migration v135). **Fail-closed flip BUILT + all preconditions cleared** on `chore/require-mode-fail-closed` (harness seeds modes; fall-through removed; refusal code `MODES_NOT_SEEDED`; suite = baseline, zero regressions). **Precondition 2 DISCHARGED 2026-07-15** — throwaway tenant went 0 → 10 mode rows through the real wizard on prod, then fully cleaned up. **Awaiting owner go to merge/deploy only.** Spec + as-built → **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section) | **PAUSE before** — ✅ cleared (owner picked warn-and-pass); flip ready, awaiting merge go |
+| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ✅ **COMPLETE.** Row materialization a8d7a084 (v135); **fail-closed flip merged `7d5030f2` + DEPLOYED 2026-07-15** as its own release. Warn-and-pass retired — empty map now 403s `MODES_NOT_SEEDED` (distinct from "mode is off"). Precondition 2 discharged by proving the wizard seeder in prod (0 → 10 mode rows, then cleaned up). Post-deploy: 0/29 active tenants can 403, Sentry clean, health ok. Spec + as-built + deploy record → **"Post-Gate-2 release — D5 follow-up"** | **PAUSE before** — ✅ cleared; shipped |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
 | — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☑ done — merged `31bdc884` + DEPLOYED 2026-07-12 (Railway + Vercel READY; migrations v133/v134/v135 applied to all 29 prod tenants → schema_version 135; post-deploy read-only checks green: Cashier splits, Field Rep execute_field_sales, modes 10/10, zero stale view_reports, health deep ok, no empty-modes warns) | **PAUSE — cleared (owner go given)** |
@@ -933,8 +933,27 @@ full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awai
 - **Deploy**: own release, own deploy watch, Sentry watched for a 403 spike. Rollback = revert the
   one commit.
 - **Done when**: ☑ harness seeds modes; ☑ **provisioning proven in prod**; ☑ fall-through gone + refusal
-  code decided; ☑ full suite ≤ baseline; ☐ deployed with zero 403 spike; ☑ Step 5's tracker row +
+  code decided; ☑ full suite ≤ baseline; ☑ **deployed with zero 403 spike**; ☑ Step 5's tracker row +
   as-built + `backend/CLAUDE.md` + `backend/middleware/CLAUDE.md` updated to drop "warn-and-pass".
+  **✅ COMPLETE — merged `7d5030f2` + DEPLOYED 2026-07-15.**
+
+### Deploy record (2026-07-15)
+
+Merged `chore/require-mode-fail-closed` → `main` as `7d5030f2` (`4fc5f442..7d5030f2`), own release as
+specified — not bundled with Gate 3.
+
+- **Railway**: deployment `0951a3dc` SUCCESS; container rolled (`52a8b0ecd680` → `a849a5b565d2`).
+- **Health**: `/api/health?deep=true` → `status: ok` (database 17ms, resend 400ms). `sanopos.com` 200.
+- **Sentry**: zero unresolved issues; zero `MODES_NOT_SEEDED`, zero 403s, zero errors in deploy logs.
+- **Blast radius — measured, not assumed**: post-deploy cross-schema check says **0 of 29 active tenants
+  could 403 `MODES_NOT_SEEDED`** (29/29 have the table, 29/29 at 10 rows, min 10). The fail-closed gate
+  refuses nobody. This is the positive-evidence check the spec insisted on — Sentry silence alone can't
+  distinguish "no problem" from "nobody hit the path".
+- **Rollback**: `git revert 7d5030f2` (one commit).
+
+The flip is now inert-but-armed: it changes no live behavior today and exists to catch FUTURE drift (a
+failed per-tenant migration or an unseeded provisioning path) instead of silently degrading to
+"feature flags are the sole gate".
 
 ### As-built (branch `chore/require-mode-fail-closed`, off `main` @ `4fc5f442`) — NOT merged
 
