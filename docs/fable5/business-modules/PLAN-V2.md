@@ -63,17 +63,17 @@
 | 2 | D7 + S3 — Delegation permissions (`manage_integrations`, `manage_roles`, reserve `manage_outlet_modules`) + Field Rep split (`execute_field_sales`) | ☑ done (committed f691a4b4, migration v133) | **PAUSE before** (auth-guard changes) |
 | 3 | D4a — Report-permission taxonomy + data-level classification + mapping table + audit-rulings batch (C2, C6, unguarded trio) | ☑ done — **RATIFIED by owner 2026-07-12, all recommendations as written** ([REPORT-PERMS.md](REPORT-PERMS.md) header block) | **PAUSE after** (owner ratifies taxonomy + mapping + pristine-Cashier detection + audit rulings) — ✅ cleared |
 | 4 | D4b — Split-posture migration + guard sweep (34 route files) + frontend perms + ratified audit rulings (C2/C6/S5, C4 rule) | ✅ DONE (local, committed) — migration v134 idempotent + both postures verified on `sanopos_dev` (47 pristine / 95 grandfathered / 0 residual `view_reports`), drift green, 13/13 focused split+S5 test | **PAUSE before deploy** (Gate 1 still ahead) — migration + guard changes verified locally, not deployed |
-| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ done (committed a8d7a084, migration v135) — **warn-and-pass posture shipped**; hard-fail-closed flip DEFERRED to a post-Gate-1 next-release commit (gated on zero prod "empty tenant_modes" Sentry warns) — see Step 5 as-built | **PAUSE before** — ✅ cleared (owner picked warn-and-pass) |
+| 5 | D5 — Full mode normalization (materialize rows, `requireMode` fail-closed) | ☑ done (committed a8d7a084, migration v135) — **warn-and-pass posture shipped**; the hard-fail-closed flip is a SEPARATE release with its own spec + prompt → see **"Post-Gate-2 release — D5 follow-up"** (after the GATE 2 section). Evidence-gated, not calendar-gated; blocker = proving the v135 provisioning seeders in prod | **PAUSE before** — ✅ cleared (owner picked warn-and-pass) |
 | 6 | D3 — Sub-toggle "Customize" polish (descriptions, collapse, parent-off states) | ☑ done (committed f755525d) | — |
 | 6b | Capability-registry drift tests + truthless-flag disposition | ☑ done (committed d2454f9b + 2ddbd8d7) — drift tests + truthless-flag ruling executed | **PAUSE mid-step** — ✅ cleared (wire-vs-retire ruled + executed) |
-| — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
-| 7 | D1a — Per-outlet schema + catalog groundwork (migration, hybrid rule, sparse-row rule) | ☐ not started | **PAUSE before** (schema/migration) |
-| 8 | D1b — Backend per-outlet read + toggle paths (resolution service, default write path, query budget) | ☐ not started | **PAUSE before** (new tenant write path) |
-| 9 | D1c — Shared outlet resolver + outlet-aware enforcement (fail-closed, workers, surface audit) | ☐ not started | **PAUSE before** (touches every gated request) |
-| 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ☐ not started | — |
-| 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☐ not started | — |
-| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☐ not started | **PAUSE mid-step** (allowlist expansion owner-gated) |
-| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
+| — | **GATE 1: merge + deploy governance slice (D7+S3+D4+D5+D3+6b)** | ☑ done — merged `31bdc884` + DEPLOYED 2026-07-12 (Railway + Vercel READY; migrations v133/v134/v135 applied to all 29 prod tenants → schema_version 135; post-deploy read-only checks green: Cashier splits, Field Rep execute_field_sales, modes 10/10, zero stale view_reports, health deep ok, no empty-modes warns) | **PAUSE — cleared (owner go given)** |
+| 7 | D1a — Per-outlet schema + catalog groundwork (migration, hybrid rule, sparse-row rule) | ☑ done (committed b0cffda4, migration v136; pushed, NOT deployed — Gate 2 ahead) | **PAUSE before** — ✅ treated pre-approved (prompt froze the DDL + rules verbatim) |
+| 8 | D1b — Backend per-outlet read + toggle paths (resolution service, default write path, query budget) | ☑ done (committed da56dd45; 18/18 new tests, v1 suites byte-compat) | **PAUSE before** — ✅ cleared (clear=lock-exempt; column-scoped default upsert) |
+| 9 | D1c — Shared outlet resolver + outlet-aware enforcement (fail-closed, workers, surface audit) | ☑ done (committed `013f83f3`; pushed, NOT deployed) — resolver + outlet-aware gates + 9-site allowlist + 8 workers filtered + surfaces; 22/22 new tests; full-suite 63/27 vs baseline 65/31 (strictly fewer); see Step 9 as-built | **PAUSE before** — ✅ cleared (owner approved design + Rulings 1–3 as recommended) |
+| 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ☑ done (committed `8bf95eb2`; pushed, NOT deployed) — location summary + matrix Drawer + defaults control + delegation perm wired end-to-end; browser-verified on a seeded 3-outlet golv_restaurant + single-outlet golv_salon + a manage_outlet_modules-only role; frontend units 185/185. See Step 10 as-built | — |
+| 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☑ done (verified) — `c6557946` | — |
+| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☑ done (verified) — Phase 1 `3e0b101a`, ruling + Gate-2 prompt `b061363d`, 5-table follow-up `ae897d25`. **Pause CLEARED 2026-07-14** (all 11 tables ruled; see the as-built ruling table) | **PAUSE mid-step** — ✅ cleared (owner ruled table-by-table; 5 COPY / 7 NEVER / approval_policies→after-D2 / modifier_groups→E6) |
+| — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ◐ gate steps 1–4 DONE 2026-07-15, **awaiting owner go** — ledger reconciled (E9 added + the "identical to v1" post-deploy correction); `/code-review high` = 1 finding (scopeImpactSql OR-precedence), fixed; slice subset 131/131, FE units 191/191, browser single-outlet + 3-outlet round-trip + POS green; **full suite 65 files/31 tests failed vs clean-main 31 tests on the same files — zero real regressions** (see the verification record below the GATE 2 section) | **PAUSE — owner-gated merge/deploy/watch** |
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☐ not started | **PAUSE mid-step** (auth-model design sign-off after Phase 1 findings) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☐ not started | — |
 | 15 | End-to-end verification (fresh-context verifier + full v1+v2 regression + prod read-only + audit-disposition sweep) | ☐ not started | **PAUSE after** (owner reviews VERIFICATION-V2.md) |
@@ -313,7 +313,7 @@ Report: outcome first — migration version, classification-log sample, files-sw
 - **Done when**: ☐ every tenant fully materialized; ☐ `requireMode` fail-closed (or owner-chosen variant); ☐ all provisioning paths seed modes; ☐ toggle round-trip green.
 
 > ### As-built (2026-07-12, feat/business-modules-v2, local + committed — NOT deployed)
-> - **Posture (the pause decision)**: owner delegated the choice; executor recommendation adopted = **warn-and-pass for one release**, not hard fail-closed. `requireMode`'s empty-map branch now emits a Sentry-tagged `warning` (+ logger.warn) via `reportEmptyModes()` then still `next()`s — a failed per-tenant migration or an unseeded path degrades to "flags are the sole gate" instead of a 403 storm. Gated `NODE_ENV==='test'` so the integration harness (which never seeds `tenant_modes`) stays quiet and Sentry no-ops without a DSN. **Queued Step-5 follow-up**: flip to hard fail-closed next release once prod Sentry telemetry reads zero "empty tenant_modes" warns (at which point the test harness must auto-seed modes + this back-compat branch is removed).
+> - **Posture (the pause decision)**: owner delegated the choice; executor recommendation adopted = **warn-and-pass for one release**, not hard fail-closed. `requireMode`'s empty-map branch now emits a Sentry-tagged `warning` (+ logger.warn) via `reportEmptyModes()` then still `next()`s — a failed per-tenant migration or an unseeded path degrades to "flags are the sole gate" instead of a 403 storm. Gated `NODE_ENV==='test'` so the integration harness (which never seeds `tenant_modes`) stays quiet and Sentry no-ops without a DSN. **Queued Step-5 follow-up → now has its own spec + prompt: see "Post-Gate-2 release — D5 follow-up" (after the GATE 2 section).** ⚠️ This note originally said "flip once prod Sentry reads zero warns" — **that instrument was SUPERSEDED 2026-07-14** (`c8714cda`): Sentry silence is absence of evidence and cannot distinguish "no problem" from "nobody hit the path". The flip is evidence-gated on POSITIVE proof (29/29 tenants at 10/10 mode rows — already met) and its real blocker is that the v135 provisioning seeders have never run in prod. Read the dedicated section, not this line.
 > - **Migration v135** (head was v134): full mode materialization. Ran on local `sanopos_dev` (48 active tenants) → **every tenant now 10/10 rows (`|VALID_MODES|`), modeless 10→0, not-full 48→0, 0 per-tenant failures**. Enabled counts preserved exactly (only `enabled=false` rows added); existing explicit rows preserved via `ON CONFLICT (mode) DO NOTHING` (e.g. `golv_restaurant` kept its 3, added 7; `squaretest` kept 5, added 5). Idempotent both ways: version-gate re-run = "up to date"; direct `up()` re-run on an already-materialized schema inserts 0. The local `public` schema happened to carry a `tenant_modes` table so it materialized too (harmless; `requireMode` only reads tenant schemas). `enabled=true` iff `modeActiveForFlags(mode, liveFlags)` where `liveFlags = DEFAULT_FEATURE_FLAGS ⊕ feature_flags rows` — same predicate as `backfillModesIfFirstRowTx`.
 > - **Shared predicate (no duplication)**: extracted `modeActiveForFlags(modeName, flags)` + `fullModeRows(enabledModeNames)` into `config/mode-registry.js`; `services/business-modules.js:backfillModesIfFirstRowTx` refactored to call `modeActiveForFlags` (behavior-preserving — `pg-business-modules-toggle` backfill assertions still green). The backfill helper stays in place as a dead-man safety net (item 4).
 > - **Provisioning**: `routes/setup.js` (1c) and `services/preset-apply.js` now seed the **full** row set via `fullModeRows(preset.modes)` (preset modes enabled, the rest disabled), so a fresh/reset tenant is never modeless. `tenant-provisioner-pg.js` left unchanged and **verified sufficient** — it doesn't seed modes, but `setup.js` seeds before `setup_complete=true` and `loadCompanyProfile`'s `SETUP_REQUIRED` gate blocks all mode-gated routes during the pre-setup window. `routes/auth.js` and `routes/admin/tenants.js` only *read*/per-mode-PUT `tenant_modes` (not bulk seeders), so no change needed there.
@@ -486,6 +486,18 @@ Autonomy: full matrix from PLAN-V2.md Step 9 verify list incl. the omitted/malfo
 Report: outcome first — the resolver consumer list, the fallback allowlist with justifications, the surface-audit table, worker filter list, regression diff.
 ```
 
+> ### Step 9 as-built notes (2026-07-14, feat/business-modules-v2, local + committed — NOT deployed; Gate 2 ahead)
+>
+> Owner approved the pause design with three rulings: **(1) all_access exemption** — the fail-closed rule applies to non-`all_access` principals only (`all_access` with no resolved outlet evaluates company-level; the bypass threat is staff escaping an outlet OFF via an `oid:null` re-mint, and admins can toggle modules anyway); **(2) allowlist semantics** — `companyLevel: true` call sites ALWAYS evaluate company state, even when an outlet resolves (a cross-outlet report must not 403 by viewer position); mechanism is a per-call-site option, not a central path-regex; **(3) public kiosk surfaces** — outlet-gate only where the token/session binds an outlet.
+>
+> 1. **Resolver** (`backend/middleware/outlet-context.js`): exports `resolveRequestedOutlet` (pure — Step 13 reuses it from loadTenantAndPerms), `resolveOutletContext()` middleware (mounted after `loadCompanyProfile`, before `resolveContext`), `enforceOutletAssignment()` (the registerAllRoutes inline enforcement, moved here to consume the resolver), `invalidateOutletCache` (wired into outlets.js CRUD). Precedence: validated `x-outlet-id` header → JWT `oid` → none → `req.outletContext = {outletId, source}`. Validation: non-integer → **400 INVALID_OUTLET_CONTEXT**; not tenant-owned/`is_active=false` → **403 INVALID_OUTLET_CONTEXT** (same code — no existence leak; 60s per-tenant outlets cache); unassigned non-all_access (execute_field_sales exempt, as in the old enforcement) → **403 OUTLET_NOT_ASSIGNED** (legacy message kept). Vans resolve (they can't hold override rows → follow the default). **Stale JWT oid degrades to none** (server-minted, not client input — hard-rejecting would brick sessions until re-login; fail-closed still catches gated routes; deliberate behavior delta from the old "403 everything on revoked-assignment oid"). Skips: non-/api, MT-without-tenant-scope (public ?tenant= paths), no employee. `loadTenantAndPerms` now sets `req.jwtOid` — the oid→header backfill is GONE; `resolveContext` consumes `req.outletContext` (legacy raw-header fallback only when the resolver isn't mounted — standalone/unit-test chains). Enforcement keeps checking explicit query/body `outlet_id` with the original precedence (context wins, exactly one id checked). Per-request query delta ≈ 0 (the enforcement's employee_outlets query moved into the resolver; outlets from cache). `products.js` + `import.js` raw header reads → `req.context.outletId`. **Grep proof**: outlet-context.js is the only x-outlet-id reader (+ the documented resolveContext fallback).
+> 2. **Gates** (`middleware/feature-flags.js`): cache entry grew to `{flags, outletOverrides, moduleDefaults}` — same 60s fill, +2 small queries per fill, zero per request; both Step 8 toggle shapes already invalidate it. `requireFeature`/`requireMode` map the key via static `OUTLET_FLAG_TO_CARD`/`OUTLET_MODE_TO_CARD` (card flags AND sub_toggle keys; 13 outlet-scoped cards, 7 outlet-scoped modes); outlet resolved → Step 8 effective rule; none resolved → all_access company-level, else `403 {code:"OUTLET_CONTEXT_REQUIRED"}`; outlet-disabled refusals carry `outlet_scoped:true` + `outlet_id`. Tenant/device/hybrid keys untouched. `req.outletContext === undefined` (portals/harnesses) ⇒ exact pre-Step-9 behavior — and `requireMode` only fetches the bundle when the resolver ran, so resolver-less chains keep the old query profile (this kept feature-flags-modes unit tests green untouched). New exports: `getEffectiveFlagsMap`, `getEffectiveModesMap`, `isModuleOffAtOutlet`, `outletCardForFlag`.
+> 3. **Allowlist** (`companyLevel: true` + justification comment at each site): reports/clinical, reports/kds-analytics, reports/menu-engineering, reports/recipe-costing (cross-outlet reports); treatment-plan-templates, modifiers (read+write), restaurant/menu-schedules, price-books (tenant catalog config); restaurant-kiosk token issuance (config surface). Everything else in the gated-route inventory = operational, outlet-evaluated + fail-closed.
+> 4. **Surfaces**: `GET /api/feature-flags` gains **`effective`** per row (outlet overlay only when a validated outlet resolved — anonymous ?tenant= bootstrap never reads the wrong source); `enabled` stays company truth for the admin editor. `useFeatureFlags` consumes `effective ?? enabled` → nav + page gates outlet-aware with zero per-page changes. `/api/context/bootstrap` filters `enabled_modes` by outlet-effective state → `hasMode()` nav gates. **ContextSwitcher** now fires `refreshFeatureFlags()` + `refreshPreset()` on outlet switch → nav flips in place without logout (browser-verified). Storefront/customer portal/field-rep PWA/attendance kiosk: tenant-level by design (pre-tenant chains or tenant-scoped cards). **public-restaurant QR routes** (menu/items/submit): gated by `isModuleOffAtOutlet(tenant,'restaurant',ctx.outletId)` — **outlet-level resolution ONLY**; company-level gating of stale kiosk tokens is a separate PRE-EXISTING gap (composing it would break tenants/tests that never touch per-outlet state) — noted as a follow-up. **member-kiosk**: NO outlet binding (check-ins write `outletId:null`) → tenant-level by design per Ruling 3. Customer display: rides the already-gated POS session.
+> 5. **Workers**: `services/business-modules.js:getDisabledOutletIds(db, cardKey)` deny-list helper (fast path `[]` ⇒ no filter at all; NULL-outlet items follow company state; composes with the v1 tenant flag gate). Filtered: rental-overdue + room-overdue-checkout + treatment-plan (JS filters on the service rows; `getUpcomingSessionsNeedingReminder` gained `p.outlet_id`), hold-expiry + kds-load-snapshot + reservation-reminder + booking-reminders (SQL filters), course-release (`releaseHeldCourses` gained `excludeOutletIds`, both MT+ST call sites). **Excluded with justification**: night-audit (`night_audit_snapshots` is ONE tenant-wide row per date — filtering would corrupt the aggregate), channel-sync (hybrid card, tenant-wide in v2), reservation-worker (stock releaser, deliberately ungated in v1).
+> 6. **Verification**: new `pg-step9-outlet-gating.test.js` **22/22** (full pause matrix: malformed `abc`/`-1`→400, foreign→403, unassigned→403 OUTLET_NOT_ASSIGNED, oid resolution NOT company fallback, `oid:null` fail-closed vs all_access fallback, stale-oid degrade, tenant flag never gated, companyLevel, BOTH Step 8 toggle shapes through the middleware cache, enforcement query/body preservation, `getDisabledOutletIds` matrix + hold-expiry/reservation-reminder/booking-reminders/rental-overdue two-outlet worker tests — the other filtered workers share the identical helper+deny-list mechanics). Targeted regressions across ~20 touched integration files: every encountered failure (6) **stash-proven identical on the clean tree**. Units 627/630 (3 documented pre-existing); two unit files updated to the new contract (middleware.test.js cache fill = 3 queries; services-booking-reminders.test.js +3 deny-list reads). **Full-suite diff: clean-tree baseline 65 failed files / 31 failed tests vs branch 63 / 27 — strictly fewer on both axes** (file-level subset diff in the Step 9 report). Frontend units 173/173. **Browser (local golv_restaurant + seeded 2nd outlet)**: Restaurant nav present at Main, disappears IN PLACE on switch to the disabled branch, gated API returns `403 {outlet_scoped:true, outlet_id:2, mode:"restaurant"}`, switch back restores — no logout, zero console errors; tenant restored after. **Prod read-only diagnostic (29 tenants)**: zero-outlet all_access = 0, zero-outlet non-admin = 1 (wholesalewalktest Field Rep — tenant-scoped surfaces only) ⇒ fail-closed blast radius ≈ 0.
+> 7. **Gotchas for later steps**: `frontend-coverage-baseline.json` carries a TEMPORARY entry for `POST /api/business-modules/:key/outlet-toggle` — **Step 10 must remove it** when the UI lands. The Step-8-endpoint orphan test only fired now because Step 8's run didn't include the drift suite. backend/CLAUDE.md + middleware/CLAUDE.md chain docs updated (14b resolveOutletContext).
+
 ---
 
 ## Step 10 — D1d: Frontend per-outlet UI
@@ -512,6 +524,16 @@ Scope: this page + route/nav perm wiring. No backend changes — the API shapes 
 Autonomy: browser-verify per PLAN-V2.md Step 10 verify list on a 3-outlet local tenant AND a single-outlet tenant; screenshots; frontend unit tests. Commit locally when verified.
 Report: outcome first + screenshots (summary line, Drawer, override badge, defaults control, reset action).
 ```
+
+> ### Step 10 as-built notes (2026-07-14, feat/business-modules-v2, local + committed — NOT deployed; Gate 2 ahead)
+>
+> 1. **UI** (`BusinessModulesRedesign.jsx` + new pure helper `redesign/businessModules.js`): outlet-scoped cards that are company-ON on a multi-outlet tenant render `On at {enabled_outlet_count} of {outlet_count} locations` + a **Manage locations** button opening a `ui/primitives` `Drawer`. The Drawer is rendered ONCE at page level (driven by `locationsKey`, module looked up fresh from `data` so it re-renders after an in-place patch), so only one is ever mounted. Rows: outlet name, **Inherited/Override** `Badge` (override = explicit true/false; null = inherited), an effective-state `Toggle`, and a **Reset to default** link on overridden rows. Top of the Drawer: the **New locations start On/Off** default control (amendment e). Gating helper `showOutletControls(m)` = `Array.isArray(m.outlets) && !m.locked && (state on|attention_required)` — so a company-OFF or locked card shows NO location UI (locked keeps its v1 treatment), and a single-outlet tenant (backend omits `outlets[]`) shows literally nothing new.
+> 2. **Reused the v1 confirm flow, didn't fork it**: the outlet disable-with-data path extends the SAME page-level `ConfirmDialog` + `confirm` state with `{scope:"outlet", outletId, outletName}`; `handleOutletToggle` fetches `GET /:key/impact?outlet_id=` and only opens the confirm when a count > 0 (enable + reset are direct writes, no confirm — enabling never has side effects). Each write patches just that card's outlet fields from the toggle echo (`{outlets, outlet_count, enabled_outlet_count, default_outlet_enabled}`) → summary + Drawer update in place, no reload; then fires `refreshFeatureFlags()` + `refreshPreset()` so the current session's nav flips if it toggled its own active outlet.
+> 3. **Delegation perm — wired END-TO-END, and it needed backend perm-wiring the "no backend changes" scope line didn't anticipate** (Step 2 explicitly deferred this perm: "no route consumes it yet; **Step 10 wires it**"). Three deliberate, additive, local-only backend edits: (a) `GET /api/business-modules` + (b) `GET /:key/impact` widened `requirePerm("manage_business_modules")` → `requireAnyPerm(["manage_business_modules","manage_outlet_modules"])`; (c) **THE load-bearing one** — the `PERMISSION_RULES` blanket rule (`permissions.js`, applied at `registerAllRoutes.js:278`) that gateways the WHOLE `/api/business-modules` prefix admitted only `manage_business_modules`, so a `manage_outlet_modules`-only role 403'd at the blanket layer BEFORE ever reaching a route's own guard (the recurring blanket-rule trap — see memory `feedback_blanket_rule_self_endpoint`/`feedback_parallel_paths`). Added `manage_outlet_modules` to the blanket `anyPerms`; the per-route guards keep the finer split (company `POST /:key/toggle` stays `requirePerm("manage_business_modules")`, so a delegate 403s there — defense in depth). Verified matrix (API + browser): delegate GET 200, impact?outlet_id 200, company toggle **403**, outlet-toggle/reset/default **200**; the page renders company `Toggle`s + Bucket C **Set up** disabled with a "You can manage locations only" tooltip, while the location matrix + default control are writable. Frontend `perm(...)`/`RequirePerm` + nav `requiredPerm` already accept an any-of array (Step 2 as-built), so those were one-line array swaps.
+> 4. **Diagnosis detour worth recording**: the delegate's perms loaded correctly (`req.employeePerms=["manage_outlet_modules"]` confirmed via a temp DEBUG log, since reverted) yet still 403'd — because the blanket `PERMISSION_RULES` middleware runs BEFORE the route guard and emits the identical `"Forbidden: insufficient permissions"` message. A local-dev red herring first suspected (legacy `public.role_permissions` has one stray `role_id 1 → execute_field_sales` row) was ruled out — `getDb` search_path is `<schema>, public` so the tenant schema wins, proven by reproducing the exact middleware perm-load.
+> 5. **Baseline cleanup (Step 9 hand-off done)**: removed the temporary `POST /api/business-modules/:key/outlet-toggle` entry from `backend/tests/unit/frontend-coverage-baseline.json` (+ updated the `_comment` NOTE + `count` 145→144). Verified the scanner now detects the new `api.post` template-literal caller (normalizes to `/api/business-modules/*/outlet-toggle`, matches the `:key` route) so it drops out of the orphan set; drift guard green.
+> 6. **Tests/verify**: new `frontend/tests/unit/business-modules-outlets.test.js` (11) covers the pure helpers (show/hide gating incl. single-outlet omission, summary label + pluralization, inherited-vs-override); full frontend unit suite **185/185**. Backend units affected by the perms change green (permissions-catalog + frontend-coverage-drift + middleware + feature-flags-modes = 105/105). Browser proof on a seeded 3-outlet `golv_restaurant`: summary 3/3; override Branch B → row Override + summary 2/3 in place; reset → Inherited + 3/3; default OFF → all inheriting outlets effective-off, summary 0/3, no overrides created; disable-with-data (seeded 1 open table session at Branch B) → outlet-scoped confirm "Open table sessions: 1" → confirm writes; company toggle opens the v1 confirm (tenant-wide count + "Delivery Aggregators stays connected"), Cancel = no side effect; single-outlet `golv_salon` shows zero location UI. All local seed data (2 extra outlets, the delegate role/employee, the restaurant floor/table/session) cleaned up — `golv_restaurant` restored to pristine single-outlet.
+> 7. **NOT screenshotted**: the browser pane's screenshot action timed out repeatedly with the Drawer scrim open (a pane limitation, no console errors) — verification is DOM-text + network-based instead, which is stronger than a pixel check for this.
 
 ---
 
@@ -546,6 +568,32 @@ Autonomy: integration tests incl. the two-outlet independence test; browser walk
 Report: outcome first — per-card checklist table (with required/scope flags) + the outlet-independence proof.
 ```
 
+> ### Step 11 as-built notes (2026-07-14, feat/business-modules-v2, local + committed — NOT deployed; Gate 2 ahead)
+>
+> **Per-card checklist (the four covered verticals, `config/business-modules.js`):**
+>
+> | Card | Item id | Required | Scope | Table (verified vs schema-pg.sql) | Deep-link (verified vs appRoutes.jsx) |
+> |------|---------|----------|-------|-----------------------------------|----------------------------------------|
+> | restaurant | floor_plan | ✅ req | outlet (`outlet_id`) | `restaurant_floor_plans` | `/restaurant/floor` |
+> | restaurant | menu_items | ✅ req | tenant | `products WHERE deleted_at IS NULL` | `/products/new` |
+> | restaurant | kds_station | optional | outlet (`outlet_id`) | `kds_stations` | `/kds` |
+> | appointments | services | ✅ req | outlet (`outlet_id`) | `booking_services WHERE is_active` | `/appointments/services` |
+> | appointments | staff | optional | tenant | `booking_staff_assignments` | `/appointments/services` |
+> | rentals | rental_items | ✅ req | outlet (`outlet_id`) | `rental_items WHERE is_active` | `/rentals/items` |
+> | rooms_lodging | rooms | ✅ req | outlet (`outlet_id`) | `rooms` | `/rooms` |
+> | rooms_lodging | rates | ✅ req | outlet (`outlet_id`) | `room_types WHERE base_rate > 0` | `/rooms/rates` |
+>
+> **Scope-table note (deviation worth recording):** the prompt's parenthetical said "Rentals (rental **assets** added)", but `rental_assets` has **no `outlet_id`** (it FKs `rental_item_id`), so it can't be outlet-scoped by a simple predicate — and it's not the meaningful "get started" step anyway (you rent from `rental_items`, which carries `outlet_id` + `total_quantity`). Used `rental_items`. Appointments "staff schedulable" = `booking_staff_assignments` which has no `outlet_id` either, so it's `scope:"tenant"` (a join would be needed to scope it; deferred). Mix by design: 6 outlet-scoped + 2 tenant-scoped, 6 required + 2 optional — enough to exercise every branch (the two optional items prove "optional never holds `attention_required`").
+>
+> 1. **Computation (`services/business-modules.js:computeChecklists`)**: a SINGLE batched `SELECT EXISTS(...) AS i0, EXISTS(...) AS i1, …` — one column per item across every ENABLED covered card, so it never scales with card OR outlet count. Zero queries when no covered card is enabled (the retail fast path → the Step 8 query-budget assertion stays green untouched, no budget bump needed). Missing-table fallback runs items individually (each failure = not-done) so one absent table can't blank the whole checklist. Outlet dimension: `scope:"outlet"` items get `AND <outlet_column> = $1` when a concrete `outletId` is passed; tenant items never do.
+> 2. **State rule (route)**: an ENABLED covered card with ANY required item un-done → `attention_required`; optional items never hold it. Locked still wins structurally — a locked card is off/setup, so its checklist never runs (LOCKED and ATTENTION can't co-occur). `checklist` is attached to the payload ONLY for enabled covered cards.
+> 3. **Route is tenant-wide (`outletId: null`)** — the settings page is Step-9 allowlisted outlet-less, so the "get started" roll-up is across all locations; outlet-scoped items are labelled "· all locations". The per-outlet dimension lives in the service and is proven by the integration suite (not the route) — matches "tenant-wide summary on the settings page, which is allowlisted outlet-less".
+> 4. **Two-outlet independence (the reason D6 moved after D1)** — proven at the service layer in `pg-business-modules-checklist.test.js`: a floor plan seeded ONLY at outlet 1 → `computeChecklists(outletId:1).floor_plan=true`, `outletId:2 → false`, `outletId:null → true`. Outlet A's floor plan can never complete outlet B's item.
+> 5. **UI (`BusinessModulesRedesign.jsx` + `businessModules.js` helpers `showChecklist`/`checklistProgress`)**: enabled covered cards with an incomplete required item show a "Get started — N of M done" expander → checklist rows with a done tick / open circle, `· optional` + `· all locations` scope labels, and a "Set up →" deep-link on incomplete rows only. `attention_required` is treated as an ON state everywhere (the toggle's `checked`, the sub-toggle gate, and — the load-bearing fix — the `onToggle` enabling test: clicking an attention card's toggle now DISABLES, does not re-enable). First-enable success flags the card (`highlightKey`) → auto-expands + `scrollIntoView` + a ring highlight for 2.6 s (no new modal).
+> 6. **Onboarding proxies REPLACED, not paralleled (AUDIT §3, `DashboardOnboarding.jsx`)**: the card now fetches `/api/business-modules` (admin-only surface — it renders only for `all_access`, who can load it) and sources the vertical SETUP steps' done-ness from `card.checklist` via `CHECKLIST_STEP_SOURCE` (`floor_plan`,`menu_item`,`room`,`rate`,`rental_item`). The three flagged proxies are gone: the room-count `rate` proxy → real `base_rate>0` checklist signal; the any-contract-row `checkout` step → **deleted**; the hardcoded `membership: done:false` step → **deleted** (E5 gives memberships a real checklist in v3). Grep-clean: no `roomCount`/`floorPlanCount`/`membership`-step/`checkout`-step done-ness computation survives (only removal comments). Non-covered/first-use steps (`contract`,`checkin`,`booking`,`ticket`,`chart`,`plan`) keep their genuine dashboard-data counts — those were never the flagged proxies.
+> 7. **Tests**: new `tests/unit/business-modules-checklist.test.js` (10 — catalog structure + computeChecklists: enablement/zero-query, single-batched-query budget, required-vs-optional state rule, tenant/outlet `$1` injection, missing-table fallback) + `tests/integration/pg-business-modules-checklist.test.js` (4 — attention_required 0/N, checklist absent for disabled/non-covered, the two-outlet independence proof, all-required-done → back to `on`). Updated `pg-business-modules-read.test.js` (restaurant now reads `attention_required` with no floor plan; rentals test seeds a rental item to stay `on`). Frontend `business-modules-outlets.test.js` +7 (`showChecklist`/`checklistProgress`). All green: backend affected units 46/46, frontend units 191/191, the outlet + toggle + read integration suites, and the Step-8 query-budget assertion.
+> 8. **Browser (local golv tenants, DOM-text + network verified; screenshot timed out with the same known browser-pane limitation as Step 10)**: `golv_cafe` (restaurant, floor plan missing) → card "Attention" + "Get started — 2 of 3 done"; expander rows correct (floor plan "· all locations" + Set up→ lands on `/restaurant/floor`; menu items done, no scope tag; KDS "· optional · all locations", done); Restaurant toggle → "Turn off Restaurant?" (attention treated as on). Dashboard onboarding on `golv_cafe`: "Add your first menu item" done (from checklist, overriding the deleted inline proxy). `golv_hotel` (rooms+rates set): dashboard onboarding "Add rooms and room types" + "Set your nightly rates" both done from the checklist — the audit-flagged room-count `rate` proxy demonstrably replaced. No console errors on any page. No tenant data mutated (all confirms cancelled).
+
 ---
 
 ## Step 12 — D8: "Copy settings from" flow on new-outlet creation
@@ -574,9 +622,345 @@ Report: outcome first — Phase 1 test results, then the Phase 2 proposal table.
 
 ---
 
+### Step 12 as-built (Phase 1 — `3e0b101a`; Phase 2 AWAITING OWNER RULING)
+
+**Phase 1 (shipped)**: `POST /api/outlets` takes optional `copy_from_outlet_id`; the source's
+`outlet_business_modules` rows clone inside the SAME transaction as the outlet INSERT (one
+set-based `INSERT … SELECT`, re-stamped with the acting employee), plus one `action_history`
+row (`action_type='outlet_settings_copied'`) naming source + row count. Response gains
+`copied_from_outlet_id` + `copied_module_overrides`. Frontend: "Copy settings from" Select on
+the add-outlet form, "Start fresh" default, store outlets only.
+
+Rulings taken inside Phase 1 (each defensible, each reversible):
+1. **"Valid source" = exists AND non-van** — the SAME predicate the D1 resolver uses for its
+   outlet set (`loadActiveOutlets`), NOT `outlets.is_active`. The spec said "active"; adopting
+   `is_active` would have created a THIRD interpretation of "active outlet" (amendment b's
+   whole point) and would reject sources the Step 10 matrix happily lists.
+2. **Source validation runs INSIDE the transaction** — a source deleted mid-flight fails the
+   whole create (404) rather than silently producing an outlet with zero copied overrides.
+3. **Copying INTO a van is rejected (400)** — vans carry no per-outlet module state, so the
+   rows would be dead data nothing reads.
+
+**Phase 2 investigation (filed, no code)**: 68 `outlet_id`-bearing tables; ~15 are configuration
+rather than data. Three findings that change the spec's own assumptions:
+- **`receipt_templates` has no `outlet_id`** — the "receipt-template assignment" the spec lists
+  as a copy candidate **does not exist**. Nothing to copy. (`printer_config` is likewise
+  tenant-wide — a separate multi-outlet gap, not D8's.)
+- **Two outlet-scoped tables are invisible to an `outlet_id` grep** — `pos_layouts` and
+  `price_list_assignments` scope via polymorphic `scope_type='outlet'` + `scope_id`. Any future
+  copy allowlist must name them explicitly.
+- **Exactly one outlet-keyed secret exists**: `restaurant_kiosk_slots.slot_token` (UNIQUE, a live
+  capability token). No outlet-keyed table holds credentials — `integration_settings` and
+  `courier_integrations` are tenant-wide.
+
+**OWNER RULING 2026-07-14 (the record — asked table-by-table, all 11 answers matched the
+recommendation):**
+
+| Table | Ruling | Reason given at the pause |
+|---|---|---|
+| `pos_layouts` (scope='outlet') | **COPY** | One row per outlet, pure UI preference; no money/tax/auth effect |
+| `outlet_product_visibility` | **COPY** | Absent row = visible, so "fresh" exposes SKUs the source deliberately hides — copying is the safer default |
+| `price_list_assignments` (scope='outlet') | **COPY** | Pricing consistency is the common case; accepted caveat: time-boxed promo lists follow |
+| `tip_pool_distribution_rules` | **COPY** | House policy; partial unique (one default/outlet) satisfied since the target starts empty |
+| `kds_stations` | **COPY** | Sane starting point; it's an OPTIONAL checklist item, so pre-filling never marks a REQUIRED step done |
+| `outlet_tax_profiles` (+`_lines`) | **NEVER** | The table exists BECAUSE outlets differ on tax — copying defeats its purpose. Absent profile = normal tenant-wide cascade (a sane default). A wrong inherited profile mis-charges tax silently, with FBR exposure |
+| `menu_schedules` | **NEVER** | Schedules are RESTRICTIONS (no rows = always available), so copying can silently make items unavailable; hours differ per location |
+| `booking_services`, `booking_resources`, `room_types`, `rental_items` | **NEVER** | These ARE the Step 11 REQUIRED checklist items — copying marks a new outlet "set up" without a human confirming it offers those services/rooms at those prices; no unique constraints ⇒ duplicates |
+| `restaurant_floor_plans` | **NEVER** | `layout_json` describes a different physical room |
+| `booking_availability_rules` | **NEVER** | References `employee_id` — would copy STAFF schedules, breaking "employee data never copies" |
+| `shopify_location_map` | **NEVER** | Would sync the new outlet's stock to the SOURCE's physical Shopify location |
+| `restaurant_kiosk_slots` | **NEVER** | Clones a live capability token (`slot_token`) — the one outlet-keyed secret |
+| `pos_device_registry` | **NEVER** | `device_uuid` = physical hardware, exists in one place |
+| `approval_policies` | **DEFER → revisit after D2** | Authorization keyed by (outlet, role) — exactly what Steps 13–14 rewire. Ruling now would encode a posture about to change; meanwhile the tenant-wide default still applies, so nothing is unguarded |
+| `modifier_groups` | **DEFER → E6** | Needs a deep copy (groups → options → product links) with no unique constraint against duplicates — a multi-table graph clone, beyond v2's one-table scope |
+
+**Durable rule from this ruling** (applies to any future copy candidate): a table whose *existence
+is justified by per-outlet divergence* (tax profiles) or that *represents physical/personal
+reality* (floor plans, devices, staff schedules, kiosk tokens, channel identity) is never
+copyable — and copying must never silently satisfy a REQUIRED Step 11 setup-checklist item.
+
+The 5 COPY tables are implemented in the Step 12 follow-up commit (`ae897d25`); `approval_policies`
+is revisited after Gate 3, `modifier_groups` → E6.
+
+**Follow-up as-built (`ae897d25`)**: WHAT is copyable now lives in `services/outlet-copy.js` —
+`COPY_SPECS` is the single allowlist AND a contract: every column of every copied table must be
+classified `scope`/`copy`/`stamp`/`skip`, enforced by `pg-step12-outlet-copy-drift.test.js`
+(negative-tested — dropping a column from a spec fails it with an actionable message). This is
+load-bearing: an explicit column list silently drops columns a later migration adds, and
+**`kds_stations` already carries four columns its `CREATE TABLE` doesn't show** (`printer_id`,
+`balance_strategy`, `target_prep_seconds`, `last_assigned_at`).
+
+Two exclusions decided INSIDE an approved table, applying the durable rule above:
+- `kds_stations.printer_id` — `printer_config` is TENANT-WIDE and holds a `host`/`port`, so
+  carrying it would point the new outlet's station at hardware standing in the source outlet.
+  FK is `ON DELETE SET NULL`, so NULL is an expected state; the merchant picks the printer on site.
+- `kds_stations.last_assigned_at` — runtime load-balancing state, not configuration.
+
+Response keeps `copied_module_overrides` (Phase 1 contract) and adds `copied_settings` (per-table
+map) + `copied_settings_total`; the audit row names each table and count. A test asserts the seven
+NEVER tables stay empty after a copy — the ruling is enforced, not just documented.
+
+---
+
 ## GATE 2 — Merge + deploy the per-outlet slice (D1 + D6 + D8)
 
-Follow the Gate protocol. Slice verification subset: Steps 7–12 verify lists + the single-outlet zero-change regression (the whole suite) + POS browser spot-check. Deploy-day: the D1 schema migration is inert until outlet toggles are used; post-deploy live check = Business Modules page on a golv_* tenant (single-outlet: identical to v1; then add a second outlet on a test tenant and drive one override round-trip), plus read-only confirmation that no real tenant's payload changed shape unexpectedly. Owner go required before push/merge.
+Follow the Gate protocol. Slice verification subset: Steps 7–12 verify lists + the single-outlet zero-change regression (the whole suite) + POS browser spot-check. Deploy-day: the D1 schema migration is inert until outlet toggles are used; post-deploy live check = Business Modules page on a golv_* tenant, then add a second outlet on a test tenant and drive one override round-trip, plus read-only confirmation that no real tenant's payload changed shape unexpectedly. Owner go required before push/merge.
+
+> **⚠️ Correction to the "single-outlet: identical to v1" check (Gate 2 ledger walk, 2026-07-14).**
+> "Identical to v1" is true of **D1 only**, and only that part is outlet-count-gated:
+> `outletStates` is computed solely when `activeOutlets.length > 1`
+> (`routes/business-modules.js`), so a single-outlet tenant gets no
+> `outlets[]`/`enabled_outlet_count`/`default_outlet_enabled` — asserted by the
+> byte-compat test in `pg-business-modules-outlet.test.js`.
+> **D6 is NOT outlet-gated and deliberately changes the single-outlet payload**: any
+> tenant with an ENABLED covered vertical (restaurant / rooms_lodging / rentals /
+> appointments) gains a `checklist` field and reads `attention_required` while a
+> required item is un-done. Step 11 browser-verified exactly this on the
+> then-single-outlet `golv_cafe` ("Attention" + "Get started — 2 of 3 done").
+> So: run the "identical to v1" check on a single-outlet tenant with **no covered
+> vertical enabled** (`golv_general_retail`, `golv_grocery`, `golv_textile`,
+> `golv_butcher`, `golv_sweet_shop`, `golv_wholesale`). On `golv_restaurant` /
+> `golv_hotel` / a clinic preset, a "Get started" line and an Attention chip are the
+> CORRECT post-deploy result — not a regression, and not a reason to roll back.
+>
+> Measured on the local v136 DB at the Gate 2 walk (live `GET /api/business-modules`):
+>
+> | Tenant | Store outlets | Top-level keys | cards w/ `outlets[]` | cards w/ `checklist` | `attention_required` |
+> |---|---|---|---|---|---|
+> | `golv_general_retail` | 1 | `industry_type,modules,outlet_count` | 0 | 0 | none |
+> | `golv_restaurant` | 1 | *(same v1 shape)* | 0 | 1 (`restaurant`) | none — its required items are already done |
+> | `golv_cafe` | 3 | *(same v1 shape)* | 13 | 1 (`restaurant`) | `restaurant` |
+>
+> Note the top-level shape never changes (the v2 fields are per-CARD), the 13 cards
+> match the catalog's 13 `scope:"outlet"` entries exactly, and `attention_required`
+> depends on the DATA (un-done required item), not on the tenant being multi-outlet —
+> `golv_restaurant` carries a checklist yet still reads `on`.
+
+**Prompt:**
+```
+Effort: high.
+
+Why: GATE 2 merges + deploys the per-outlet slice (D1 + D6 + D8 — Steps 7–12). This is the
+second of three owner-gated releases; the whole point of the three-gate split is that
+request-wide gating changes never ship in one giant release. Steps 7–12 are COMMITTED and
+PUSHED on `feat/business-modules-v2` but have NEVER run in production.
+
+Read FIRST (do not skip, do not trust this prompt over source): docs/fable5/business-modules/
+PLAN-V2.md — the "Gate protocol" paragraph (top of file), the Steps 7–12 as-built notes, and
+the GATE 2 section. Then verify state against git/source, not against docs.
+
+State at hand-off (verify, don't assume):
+- Branch `feat/business-modules-v2`, pushed, in sync with origin. Contains 100% of main
+  (`git log HEAD..origin/main` is empty). main is at Gate 1 + kiosk-removal.
+- Slice commits: b0cffda4 (Step 7, migration v136) · da56dd45 (8) · 013f83f3 (9) · 8bf95eb2 (10)
+  · c6557946 (11) · 3e0b101a (12 Phase 1) · + Step 12's 5-table copy follow-up.
+- Migration head = v136 (D1 schema; inert until outlet toggles are used).
+
+Do, in this order:
+1. LEDGER RECONCILIATION (cheap, do it first — this drifts silently and already drifted once:
+   Step 11 shipped with its tracker row still reading "not started"). Walk the PLAN-V2 tracker
+   rows for Steps 7–12 against `git log` reality; confirm every deferred item has a home (E5/E6/
+   E7/E8, the queued requireMode fail-closed flip, approval_policies→after-D2, the Gate-1
+   COD-approve revert). Fix drift in PLAN-V2.md.
+2. Gate protocol (1): /code-review on the slice diff vs main (`git diff origin/main...HEAD`) —
+   fix or justify every finding.
+3. Gate protocol (2): the slice verification subset — Steps 7–12 verify lists + the
+   single-outlet zero-change regression + POS browser spot-check. Then the FULL backend suite,
+   diffed against the ~57-failing-file / ~32-failing-test baseline (run `--no-file-parallelism`;
+   parallel runs deadlock in seedSchema — infra artifact, not a regression). Known-pre-existing,
+   do NOT chase: crud_settings/attendance/context-enforcement/crud_employees (dead files
+   requiring the deleted SQLite `../helpers/createTestApp`), routes-admin-worker-status ×2,
+   services payment-gateway isEnabled. Backend tests run from `backend/` cwd or Vitest throws
+   "describe is not defined".
+4. Gate protocol (3): CLAUDE.md slice sweep — root CLAUDE.md still says migration head v130
+   (actual v136) and does not mention outlet_business_modules, the per-outlet endpoints, the D8
+   copy param, or the setup checklists. Verify every sentence you write against source. (The
+   FULL docs sweep is Step 16 — keep this to the slice.)
+5. Gate protocol (4): STOP. Report and get the owner's explicit go. Do NOT push to main or
+   merge before that word.
+6. Gate protocol (5): merge to main (no PR — git-workflow rule), watch Railway + Vercel, then
+   the post-deploy live check: Business Modules page on a golv_* tenant (single-outlet payload
+   must be IDENTICAL to v1); then add a second outlet on a TEST tenant and drive one override
+   round-trip; plus read-only Supabase confirmation that no real tenant's payload shape changed.
+   Real tenants are READ-ONLY, always.
+
+Standing rules: local Postgres only (backend/.env.test / sanopos_dev) for tests + migrations —
+NEVER run migrations against prod; Supabase read-only; all UI via ui/primitives + --ui-* tokens.
+Local `golv_cafe` was mutated during Step 12 verification and NOT reverted (outlets "Downtown"
++ "Airport", a restaurant override at Main+Airport, multi-outlet flags seeded, max_outlets 1→4)
+— it is local-only and disposable; prefer a different golv_* tenant for a clean single-outlet check.
+
+Out of scope: the requireMode fail-closed flip (deliberately NOT in this gate — it touches the
+same requireMode function Step 9 rewired; it ships as its own release AFTER Gate 2 stabilizes,
+and is blocked on two things: seeding tenant_modes in createTestApp, and proving the v135
+provisioning seeders in prod — no tenant has been provisioned since 2026-07-07). Steps 13–14 (D2).
+
+Report: outcome first — ledger drift found/fixed, review verdict, verification subset results,
+full-suite diff vs baseline, docs touched; then the explicit "Gate 2 ready, awaiting go" statement.
+```
+
+> ### GATE 2 verification record (2026-07-15, gate steps 1–4; branch `2ffe56b9`, NOT merged)
+>
+> 1. **Ledger**: 3 stale tracker rows (Steps 7/9/10 said "local only" — the branch is pushed);
+>    Step 5's as-built still named Sentry silence as the fail-closed trigger after that instrument
+>    was retired; **E9 added** (public QR/kiosk restaurant surface has no COMPANY-level module
+>    gate — Step 9 shipped only the outlet half; named as a follow-up with no home until now; NOT
+>    a regression, pre-slice main had no module gate there at all); **the "single-outlet = identical
+>    to v1" post-deploy check corrected** (true of D1 only — D6 checklists deliberately change a
+>    vertical tenant's payload). Every deferred item now has a home: E1–E9, the D5 flip (own
+>    section), `approval_policies`→after-D2 (E6 note), the Gate-1 COD revert (REPORT-PERMS §9 #8 +
+>    an explanatory comment at `fulfillment.js`, guard verified `all_access` in source).
+> 2. **`/code-review high`** on `git diff origin/main...HEAD` (60 files, +4666/−227): **one
+>    finding** — `scopeImpactSql` blocked join/group-by/having/union but not a top-level `OR`;
+>    since AND binds tighter, appending `AND outlet_id = $1` to `WHERE a OR b` gives
+>    `a OR (b AND outlet_id = $1)`, silently counting other outlets. 0 of 11 current outlet-scoped
+>    impact queries contain `OR` ⇒ nothing was broken; `or` joined the blocklist (falls back to the
+>    tenant-wide count, as every other unsafe shape already does). Verified behavior-preserving
+>    across all 11 (`orders`/`ORDER BY` don't false-positive on `\bor\b`). Resolver, copy engine,
+>    toggle write path, and Zod shapes reviewed clean.
+> 3. **Verification**: slice subset **131/131** (10 files) · frontend units **191/191** ·
+>    browser: single-outlet `golv_general_retail` = zero location UI/checklist, no console errors;
+>    3-outlet `golv_cafe` Drawer round-trip (Airport Override→Inherited, summary 1/3→2/3 **in
+>    place**, tenant restored exactly); POS loads + survives an outlet switch.
+>    **Full-suite diff — the honest version**: branch = 65 failed files / 31 failed tests / 2330
+>    passed. **41 of the 65 are IMPORT failures** (the dead SQLite-`../helpers/createTestApp`
+>    class), leaving 24 files with real failures. Ran those same 24 on clean `origin/main`
+>    (detached): **31 failed tests — the identical set**. File-level diff surfaced 2 files failing
+>    on branch but not main (`p22-report-tz-buckets`, `pg-v09-rentals-depth`); **both pass in
+>    isolation on the branch and pass together on 2/2 re-runs**, neither is touched by the slice,
+>    and both failed at hook/teardown level with every test passing ⇒ the documented nondeterministic
+>    cross-file contention, not a regression. **Net: zero real regressions.**
+> 4. **Docs (slice only)**: root CLAUDE.md (head v130→v136 + the v133–v136 wave, 14b
+>    resolveOutletContext, outlet-context.js, outlet-copy.js, the outlet-toggle endpoint +
+>    `manage_outlet_modules` incl. the blanket-rule ordering trap, D8 copy param,
+>    feature-flags `effective` vs `enabled`); backend/ (requireMode outlet-aware + evidence-gated
+>    follow-up); routes/ (the four endpoints + real guards); services/ (the per-outlet rules a
+>    future editor can't infer from code).
+> 5. **Prod blast radius (read-only)**: 29/29 schemas uniformly at v135; **0 carry the v136 objects**
+>    (migration provably never ran); **28 of 29 tenants have exactly 1 store outlet** — the only
+>    multi-outlet tenant is `livetest1` ("Live Test 1"), a test tenant. So **no real customer sees
+>    any per-outlet UI on deploy day**; the only real-tenant-visible change is the D6 checklist on
+>    vertical tenants.
+
+---
+
+## Post-Gate-2 release — D5 follow-up: flip `requireMode` to hard fail-closed
+
+- **Goal**: retire the Step 5 "warn-and-pass for one release" posture. `requireMode`'s empty-map
+  branch currently warns (Sentry + logger) then **falls through**, leaving feature flags as the sole
+  gate; this makes it 403.
+- **Why its OWN release, not part of a gate**: Step 9 rewired the *same* `requireMode` function
+  (the outlet gate). Shipping both together makes a post-deploy 403 ambiguous — outlet resolver or
+  mode flip? — and costs surgical rollback. Do it **after Gate 2 has deployed and stabilised**, on
+  its own branch off the fresh `main` (NOT on `feat/business-modules-v2`, which continues to
+  Steps 13–14 → Gate 3; otherwise this rides Gate 3). Afterwards, merge `main` back into the v2
+  branch (the same "Merge main" the branch already did once after Gate 1).
+- **Recommended slot**: during the Gate 2 bake window, BEFORE Step 13 — if it waits behind
+  13 → 14 → Gate 3 it is buried for weeks, and this item has already been parked once.
+- **Not urgent, and not a one-liner**: it closes no live hole (see precondition 1 — the branch is
+  provably unreachable today); its value is guarding FUTURE drift.
+- **Preconditions — VERIFY, don't assume** (evidence-gated, not calendar-gated):
+  1. ✅ **Met as of 2026-07-14**: every active tenant has a full mode-row set. Positive proof beats
+     Sentry silence (absence of warns can't distinguish "no problem" from "nobody hit the path").
+     Re-run before flipping — read-only:
+     ```sql
+     SELECT t.table_schema,
+            (xpath('/row/cnt/text()', query_to_xml(format('SELECT COUNT(*) AS cnt FROM %I.tenant_modes', t.table_schema), false, true, '')))[1]::text::int AS mode_rows
+     FROM information_schema.tables t
+     WHERE t.table_name='tenant_modes' AND t.table_schema LIKE 'tenant_%' ORDER BY mode_rows ASC;
+     ```
+     Also confirm no active tenant's schema LACKS the table (that also yields an empty map). Result
+     2026-07-14: **29/29 active at 10/10 rows, 0 schemas missing the table**; Sentry: zero warns.
+  2. ❌ **THE BLOCKER — the provisioning path has never run in prod since v135.** Newest tenant =
+     **2026-07-07**; v135 shipped **2026-07-12**. Step 5 also changed `setup.js` + `preset-apply.js`
+     to seed `fullModeRows`, and that code has ZERO production evidence. No amount of waiting proves
+     it — only a real provision does. Provision one throwaway tenant on prod (signup → wizard),
+     confirm 10/10 rows, delete it from `/admin`. If the seeder is broken, the victim of the flip is
+     a brand-new customer 403-storming during onboarding.
+  3. ❌ **Harness gap** — `createTestApp` never seeds `tenant_modes` (verified 2026-07-14; Step 9 did
+     not add it) and **31 route files** use `requireMode`. Today the empty map falls through, which is
+     exactly why every vertical suite is green. Flip without seeding ⇒ they all 403 for the wrong reason.
+- **The work**:
+  1. **Harness first**: `tests/helpers/createTestApp-pg.js` seeds the full row set via
+     `config/mode-registry.js:fullModeRows` (don't reimplement). Seeding all-enabled preserves today's
+     behavior for any test that doesn't write its own rows; tests wanting a mode OFF write it (as
+     `pg-mode-gates.test.js` does). Watch for tests that wrote a PARTIAL row set — those already got a
+     403 for unlisted modes and will now pass instead.
+  2. **Then flip**: remove the fall-through in `requireMode`. Keep `reportEmptyModes()` firing — you
+     still want telemetry after the flip.
+  3. **Decide and state the refusal shape**: an empty map returning the plain
+     `Mode not enabled: <name>` is indistinguishable from a legitimately-off mode. Recommend a
+     DISTINCT code (e.g. `MODES_NOT_SEEDED`) so ops can tell a seeding failure from a normal refusal.
+  4. **Handle the two things the fall-through also silently protected** (name them, don't discover
+     them in prod): (a) `getModesMap` returns `{}` when `init()` was never called — some harnesses
+     build an app without feature-flags deps; (b) a MISSING `tenant_modes` table also yields `{}`
+     (`getModesMap` swallows it, so `requireMode`'s "does not exist" catch never sees it). The
+     pre-setup window is covered by the `SETUP_REQUIRED` gate, but a failed per-tenant migration on a
+     LIVE tenant now 403-storms — that IS fail-closed working as intended, but make it a deliberate,
+     stated decision.
+  5. Drop the `NODE_ENV==='test'` gate on the warn only if the harness genuinely can't produce an
+     empty map any more.
+- **Verify**: full backend suite diffed against the ~57-file baseline — the blast radius is every
+  mode-gated route, so the vertical suites (restaurant/bookings/rentals/rooms/treatment/gym) are the
+  canary; `pg-mode-gates.test.js` green; one browser spot-check on a mode-gated page.
+- **Deploy**: own release, own deploy watch, Sentry watched for a 403 spike. Rollback = revert the
+  one commit.
+- **Done when**: ☐ harness seeds modes; ☐ provisioning proven in prod; ☐ fall-through gone + refusal
+  code decided; ☐ full suite ≤ baseline; ☐ deployed with zero 403 spike; ☐ Step 5's tracker row +
+  as-built + `backend/CLAUDE.md` + `backend/middleware/CLAUDE.md` updated to drop "warn-and-pass".
+
+**Prompt:**
+```
+Effort: high.
+
+Why: D5 shipped a deliberate one-release posture — requireMode warns then FALLS THROUGH on an
+empty tenant_modes map, leaving feature flags as the sole gate. This retires it. It is NOT
+urgent (it closes no live hole — every active tenant provably has a full mode-row set) and it is
+NOT a one-liner: the fall-through is load-bearing for the test harness and silently protects two
+other cases. It ships as its OWN release because Step 9 rewired the same requireMode function —
+bundling makes a post-deploy 403 ambiguous and costs surgical rollback.
+
+Read FIRST (verify against source, not docs): docs/fable5/business-modules/PLAN-V2.md — the
+"Post-Gate-2 release — D5 follow-up" section (the spec, incl. the preconditions and the two
+silently-protected cases) + the Step 5 as-built; backend/middleware/feature-flags.js
+(requireMode + reportEmptyModes + getModesMap); backend/middleware/CLAUDE.md.
+
+PRECONDITIONS — verify all three and REPORT before writing the flip:
+1. Re-run the read-only cross-schema query in the spec: every active tenant has a full
+   tenant_modes row set AND no active tenant's schema lacks the table. (2026-07-14: 29/29 at
+   10/10, zero missing, zero Sentry warns.)
+2. THE BLOCKER: prove the provisioning path. No tenant has been provisioned in prod since
+   2026-07-07 and v135 shipped 2026-07-12, so setup.js + preset-apply.js fullModeRows seeding has
+   NEVER run in production. Provision ONE throwaway tenant on prod (signup → wizard), confirm
+   10/10 mode rows, then delete it from /admin. If this fails, STOP and report — do not flip.
+3. Confirm Gate 2 is deployed and stable, and that you are on a NEW branch off the CURRENT main
+   (e.g. chore/require-mode-fail-closed) — NOT feat/business-modules-v2, which continues to
+   Steps 13-14/Gate 3.
+
+THEN do the work in the spec's order: harness seeding FIRST (createTestApp-pg.js via
+config/mode-registry.js:fullModeRows — never reimplement the predicate), then the flip, then
+decide the refusal code (recommend a distinct MODES_NOT_SEEDED so ops can tell a seeding failure
+from a normal "mode is off"), and explicitly handle/state the two cases the fall-through also
+protected (uninitialised feature-flags deps; a missing tenant_modes table). Keep reportEmptyModes
+firing after the flip.
+
+Verify: full backend suite diffed against the ~57-failing-file baseline (run
+--no-file-parallelism, from backend/ cwd) — the vertical suites are the canary; pg-mode-gates
+green; one browser spot-check on a mode-gated page. Known-pre-existing, do NOT chase:
+crud_settings/attendance/context-enforcement/crud_employees (dead SQLite-helper imports),
+routes-admin-worker-status x2, payment-gateway isEnabled.
+
+Then update Step 5's tracker row + as-built, backend/CLAUDE.md and backend/middleware/CLAUDE.md
+to drop the "warn-and-pass" language, and the memory topic file.
+
+Standing rules: local Postgres only for tests/migrations — NEVER migrate prod; Supabase
+READ-ONLY on real tenants (the throwaway tenant you create is yours to delete). Owner go before
+push/merge to main. No PR.
+Autonomy: preconditions + report, then implement autonomously once precondition 2 passes; STOP
+for the owner's go before merge/deploy.
+Report: outcome first — the three precondition results (with the provisioning proof called out),
+what the flip changed, refusal-code decision, full-suite diff vs baseline; then "ready, awaiting go".
+```
 
 ---
 
@@ -707,10 +1091,11 @@ Report: outcome first — review verdict, docs touched, memory files added; then
 | E2 | Per-outlet activation for device-scoped cards (per-register modules) | Scope rule, Step 7 |
 | E3 | Kiosk/portal-scope awareness of per-outlet roles | Step 13 scope rule |
 | E4 | Hybrid-card contract: tenant-wide credentials + per-outlet operational enablement (FBR/Shopify/Woo/couriers/payments/channels) | Second-opinion amendment (d) |
-| E5 | Setup checklists for the remaining Bucket A verticals (Step 11 covers Restaurant/Rooms/Rentals/Appointments only) | Second-opinion amendment (g) |
-| E6 | D8 extended copy allowlist tables not approved at the Step 12 pause | Second-opinion amendment (g) |
+| E5 | Setup checklists for the remaining Bucket A verticals (Step 11 covers Restaurant/Rooms/Rentals/Appointments only). Un-covered Bucket A cards awaiting checklists: `subscriptions_memberships`, `clinical`, `service_tickets`, `projects_contracts`, `commissions`, `wholesale_credit`, `field_sales`. (The dashboard `membership` onboarding step was a permanent `done:false` proxy and was **removed** in Step 11 — memberships get their real checklist here.) | Second-opinion amendment (g) |
+| E6 | D8 extended copy allowlist: **`modifier_groups` only** (deferred at the Step 12 ruling — needs a groups→options→product-links deep copy). The other 12 candidates were RULED at the Step 12 pause 2026-07-14 (5 COPY → shipped in Step 12's follow-up commit; 7 NEVER — see the Step 12 as-built ruling table). **`approval_policies` is NOT an E6 item — it is explicitly parked for re-decision AFTER D2 lands (post-Gate 3), because Steps 13–14 rewire the (outlet, role) grain it is keyed on.** | Second-opinion amendment (g) + owner ruling 2026-07-14 |
 | E7 | **Frontend coverage clusters — separate remediation plan** (NOT v2 scope): the 78 orphaned endpoints (clinical/treatment 11, Shopify ops console 8, rentals asset layer 7, packages/prepaid 6, rooms group-booking 5, approvals 4 + dead `POSApprovalModal.jsx`, courier tracking 4, van reconciliation 2, workflow dead-ends incl. cycle-count completion) + public rental booking page + recipe-costing report tab. Step 6b freezes them as the registry-test baseline; the separate plan burns them down per-cluster, owner-prioritized. | AUDIT-FINDINGS §2 + §3 |
 | E8 | Preset-specific operator roles (Restaurant Server, Receptionist, Clinician, Technician, Rental Agent, Front Desk) — the permission-wave roadmap item, not a defect | AUDIT-FINDINGS §4C |
+| E9 | **Company-level module gating for the public QR/kiosk restaurant surface** (`routes/public-restaurant.js`). Step 9 gave `kioskOrderingOff()` the OUTLET half of the rule (`isModuleOffAtOutlet`, which by contract resolves `override ?? default ?? TRUE` and leaves company state "checked separately by the caller" — `feature-flags.js:306-315`). The caller never checks it, so disabling the Restaurant module company-wide does NOT stop an already-issued kiosk token from ordering. **Not a v2 regression — strictly an improvement**: on pre-slice `main` this surface had NO module gate at all (only `phase4_restaurant_day_parting`). Composing the company flag was deliberately left out of Step 9 because it changes behavior for tenants/tests that never touch per-outlet state, which is outside a step whose gate was "single-outlet tenants feel zero change". Fix = AND the company-level `restaurant` flag into `kioskOrderingOff` + a stale-token test. (Step 9's stated reason for leaving it — "would break tenants/tests that never touch per-outlet state" — deserves scrutiny when this is picked up: a tenant with Restaurant OFF getting a 403 on its QR menu is the CORRECT outcome, so the breakage is likely test fixtures that issue kiosk tokens without enabling the flag, not a product constraint.) **Deferred at the Gate 2 walk on measured evidence, not convenience: `restaurant_kiosk_slots` is EMPTY on all 29 prod tenants except `sanoposlivetest1778021564659` (7 slots), which is a TEST tenant — so zero real customers hold a kiosk token, and no token exists that could survive a company-level disable. The gap is unreachable in production today.** ⚠️ **PROMOTION TRIGGER — do not leave this to "v3 someday": the gap goes live the moment ANY real tenant issues a kiosk slot. Re-check `SELECT COUNT(*) FROM <tenant>.restaurant_kiosk_slots` before shipping QR kiosk to a real customer, and fix E9 FIRST if the count is non-zero.** Deliberately NOT bundled into the D5 follow-up release: both are gate-refusal changes, and shipping them together recreates the exact "which gate 403'd?" ambiguity that gave D5 its own release. | Step 9 as-built note 4 (named as "a follow-up" with no home until the Gate 2 ledger walk) |
 
 ---
 

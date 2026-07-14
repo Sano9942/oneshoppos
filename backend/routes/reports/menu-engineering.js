@@ -27,8 +27,10 @@ module.exports = function registerMenuEngineeringReport(app, deps /* , helpers *
   const { requirePerm } = require("../../middleware/permissions");
 
   const gate = [
-    requireMode("restaurant"),
-    requireFeature("phase4_restaurant_menu_engineering"),
+    // companyLevel: cross-outlet report — menu-engineering analysis spans
+    // outlets regardless of where the viewer is standing (Step 9).
+    requireMode("restaurant", { companyLevel: true }),
+    requireFeature("phase4_restaurant_menu_engineering", { companyLevel: true }),
     requirePerm("view_financial_reports"),
   ];
 

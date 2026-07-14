@@ -1,5 +1,5 @@
 {
-  "_comment": "FROZEN baseline for frontend-coverage-drift.test.js (PLAN-V2 Step 6b). Raw dead-route candidates from scan.cjs (backend routes with no detectable frontend caller). The test fails only on NEW identities not listed here; removals (E7 burn-down) are always allowed. Curated breakdown of the real gaps (~78 after removing Tier-2 headless-by-design + false positives) lives in docs/fable5/frontend-coverage-audit/REPORT.md — that is E7 burn-down input, NOT this test problem.",
+  "_comment": "FROZEN baseline for frontend-coverage-drift.test.js (PLAN-V2 Step 6b). Raw dead-route candidates from scan.cjs (backend routes with no detectable frontend caller). The test fails only on NEW identities not listed here; removals (E7 burn-down) are always allowed. Curated breakdown of the real gaps (~78 after removing Tier-2 headless-by-design + false positives) lives in docs/fable5/frontend-coverage-audit/REPORT.md — that is E7 burn-down input, NOT this test problem. NOTE (Step 10): the Step 9 temporary \"POST /api/business-modules/:key/outlet-toggle\" entry was REMOVED here — its UI shipped in Step 10 (BusinessModulesRedesign location matrix), so the endpoint now has a real frontend caller.",
   "engine": "docs/fable5/frontend-coverage-audit/scan.cjs (runScan)",
   "frozenAt": "2026-07-12",
   "count": 144,

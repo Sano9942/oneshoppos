@@ -6,7 +6,22 @@ import { usePreset } from "../../contexts/PresetContext";
 
 const STORAGE_KEY = "onboarding_dismissed";
 
-function buildSteps(data, onNavigate, presetSteps, labelFn) {
+// PLAN-V2 Step 11 (D6): the vertical setup steps below now read their done-ness
+// from the authoritative Business Modules setup checklist (GET
+// /api/business-modules → card.checklist), not from dashboard-data proxies.
+// This REPLACES the old proxy heuristics — the room-count "rate" proxy, the
+// any-contract-row rental "checkout" proxy, and the hardcoded `membership:false`
+// (the latter two step definitions are deleted outright). Two parallel
+// "is it set up" computations must not coexist (AUDIT §3).
+const CHECKLIST_STEP_SOURCE = {
+  floor_plan:  { module: "restaurant",    item: "floor_plan" },
+  menu_item:   { module: "restaurant",    item: "menu_items" },
+  room:        { module: "rooms_lodging", item: "rooms" },
+  rate:        { module: "rooms_lodging", item: "rates" },
+  rental_item: { module: "rentals",       item: "rental_items" },
+};
+
+function buildSteps(data, onNavigate, presetSteps, labelFn, checklistDone) {
   const hasShiftOpen = Array.isArray(data?.operationalReadiness)
     && data.operationalReadiness.some((o) => o.shift_open);
   const hasSales = (data?.lifetimeSaleCount ?? 0) > 0
@@ -30,7 +45,8 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
     menu_item: {
       id: "menu_item",
       label: `Add your first ${labelFn("product").toLowerCase()}`,
-      done: hasProducts,
+      // done sourced from the Business Modules checklist (restaurant.menu_items)
+      done: false,
       navigate: () => onNavigate("/products/new"),
     },
     service: {
@@ -78,7 +94,8 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
     floor_plan: {
       id: "floor_plan",
       label: "Set up your floor plan",
-      done: (data?.floorPlanCount ?? 0) > 0,
+      // done sourced from the Business Modules checklist (restaurant.floor_plan)
+      done: false,
       navigate: () => onNavigate("/restaurant/floor"),
     },
     calendar: {
@@ -100,17 +117,13 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: (data?.ticketCount ?? 0) > 0,
       navigate: () => onNavigate("/service-tickets"),
     },
-    membership: {
-      id: "membership",
-      label: "Set up your first membership plan",
-      // No count exposed — leave manual until membership plans get a counter
-      done: false,
-      navigate: () => onNavigate("/subscriptions"),
-    },
+    // `membership` step removed (D6): it was a hardcoded `done:false` proxy that
+    // could never complete. Memberships get a real checklist in v3 (E5).
     rental_item: {
       id: "rental_item",
       label: `Add your first ${labelFn("product").toLowerCase()}`,
-      done: hasProducts,
+      // done sourced from the Business Modules checklist (rentals.rental_items)
+      done: false,
       navigate: () => onNavigate("/rentals/items"),
     },
     contract: {
@@ -119,25 +132,22 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: (data?.contractCount ?? 0) > 0,
       navigate: () => onNavigate("/rentals/contracts"),
     },
-    checkout: {
-      id: "checkout",
-      label: "Check out a rental",
-      // Same proxy: any contract row is good enough
-      done: (data?.contractCount ?? 0) > 0,
-      navigate: () => onNavigate("/rentals/contracts"),
-    },
+    // `checkout` step removed (D6): it was an "any contract row" proxy that
+    // completed in lockstep with `contract`, so it was never independently
+    // meaningful. Rental onboarding ends at rental_item + contract.
     // M9 — Room management
     room: {
       id: "room",
       label: "Add rooms and room types",
-      done: (data?.roomCount ?? 0) > 0,
+      // done sourced from the Business Modules checklist (rooms_lodging.rooms)
+      done: false,
       navigate: () => onNavigate("/rooms"),
     },
     rate: {
       id: "rate",
       label: "Set your nightly rates",
-      // No rate count exposed — proxy via roomCount until separate counter ships
-      done: (data?.roomCount ?? 0) > 0,
+      // done sourced from the Business Modules checklist (rooms_lodging.rates)
+      done: false,
       navigate: () => onNavigate("/rooms/rates"),
     },
     checkin: {
@@ -161,7 +171,17 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
     },
   };
 
-  return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);
+  return presetSteps
+    .map((key) => ALL_STEPS[key])
+    .filter(Boolean)
+    .map((step) => {
+      // Vertical setup steps read done-ness from the Business Modules checklist
+      // (single source of truth) — never a dashboard-data proxy.
+      const src = CHECKLIST_STEP_SOURCE[step.id];
+      return src
+        ? { ...step, done: checklistDone[`${src.module}:${src.item}`] === true }
+        : step;
+    });
 }
 
 export function DashboardOnboarding({ data, onNavigate }) {
@@ -171,6 +191,10 @@ export function DashboardOnboarding({ data, onNavigate }) {
   );
   const [serverChecked, setServerChecked] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
+  // Authoritative done-ness for the vertical setup steps, keyed
+  // `${moduleKey}:${itemId}`, from the Business Modules checklist payload (D6).
+  // This card only renders for admins (all_access), who can load that endpoint.
+  const [checklistDone, setChecklistDone] = useState(null);
 
   // Check server-side dismissal status on mount
   useEffect(() => {
@@ -186,7 +210,23 @@ export function DashboardOnboarding({ data, onNavigate }) {
       .catch(() => setServerChecked(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const steps = buildSteps(data, onNavigate, onboarding_steps, labelFn);
+  // Load the setup-checklist done-ness once (source of truth for vertical steps).
+  useEffect(() => {
+    if (dismissed) { setChecklistDone({}); return; }
+    api.get("/api/business-modules")
+      .then((res) => {
+        const map = {};
+        for (const mod of res?.modules || []) {
+          for (const item of mod.checklist || []) {
+            map[`${mod.key}:${item.id}`] = item.done === true;
+          }
+        }
+        setChecklistDone(map);
+      })
+      .catch(() => setChecklistDone({}));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const steps = buildSteps(data, onNavigate, onboarding_steps, labelFn, checklistDone || {});
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;
 
@@ -207,7 +247,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
     }).catch(() => {});
   };
 
-  if (dismissed || autoDismissed || !serverChecked) return null;
+  if (dismissed || autoDismissed || !serverChecked || checklistDone === null) return null;
 
   const dismiss = () => {
     setDismissed(true);

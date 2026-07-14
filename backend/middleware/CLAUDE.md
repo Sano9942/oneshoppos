@@ -46,7 +46,7 @@ Primary JWT auth middleware. Reads `Authorization: Bearer <token>`, verifies via
 - `req.employee` — `{ id, role_id, name, email }` (name/email backfilled after the permission lookup)
 - `req.employeePerms` — array of permission strings
 - `req.isImpersonating` — boolean; `req.impersonatedBy` only set when true
-- `req.context.outletId` — from the JWT's `oid` claim, if present; also backfills `req.headers["x-outlet-id"]` if the header is absent
+- `req.jwtOid` — the JWT's `oid` claim (or `null`), consumed by the shared outlet resolver (`outlet-context.js`, Step 9 D1c). The old x-outlet-id header backfill is gone — the resolver is the ONLY interpreter of outlet context
 - `req.headers["x-employee-id"]` — backfilled from `decoded.eid` as a compatibility bridge for code still reading the header directly
 
 **Behavior:**
@@ -73,7 +73,7 @@ No-op in single-tenant mode. In MT mode:
 - `invalidateCompanyProfileCache(tenantIdOrSlug)` — call after setup-complete or profile edits so the next request re-reads instead of serving a stale cached row. Pass nothing/`null` to clear the entire cache.
 
 ### `resolveContext(req, res, next)`
-- Reads `x-company-id`, `x-outlet-id`, `x-scope-mode` headers into `req.context = { companyId, outletId, scopeMode }` (each `null` if the header is absent). Note this **overwrites** `req.context` set earlier in `loadTenantAndPerms` — but since that earlier step also backfills the `x-outlet-id` header itself from the JWT's `oid` claim, the effective outlet value survives.
+- Reads `x-company-id`/`x-scope-mode` headers; `outletId` comes from `req.outletContext` (the shared validated resolver in `outlet-context.js`, mounted just before this middleware) into `req.context = { companyId, outletId, scopeMode }`. Falls back to the legacy raw `x-outlet-id` header read only when the resolver isn't mounted (standalone/unit-test usage).
 - Checks the `context_header_enforced` feature flag using its own small cache (`CONTEXT_FLAG_CACHE_MS`, 30s — independent of `feature-flags.js`'s cache).
 - When enforced and the path is under `/api/`: paths matching `CONTEXT_EXEMPT_PATHS` (`/api/auth/*`, `/api/context/*`, `/api/feature-flags*`, `/api/attendance/pin-*`, `/api/roles/:id/permissions`, `/api/outlets` exact) skip the check entirely. A request with no `x-employee-id` header passes through silently (relies on downstream auth to reject it). A non-admin employee (no `all_access` permission) without `x-outlet-id` set → 428 `{ code: "CONTEXT_REQUIRED" }`.
 
@@ -81,7 +81,7 @@ No-op in single-tenant mode. In MT mode:
 
 **Env vars:** `JWT_SECRET`, `MULTI_TENANT` (via `IS_MULTI_TENANT` passed into `init`)
 
-**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveContext`. Every tenant-scoped route mounts after this chain completes.
+**Mount order:** `loadTenantAndPerms` → `resolveTenant` → (tenant `/uploads` static) → `loadCompanyProfile` → `resolveOutletContext` (outlet-context.js) → `resolveContext`. Every tenant-scoped route mounts after this chain completes.
 
 ---
 
@@ -337,7 +337,8 @@ enrichReqLog                       ← (request-id.js) re-binds req.log with ten
 resolveTenant                      ← req.tenantSlug, asyncStore context wired, deps.db proxy now live
 [tenant /uploads static]
 loadCompanyProfile                 ← req.company (needs resolveTenant's tenant context in MT)
-resolveContext                     ← req.context (reads headers + context_header_enforced flag)
+resolveOutletContext               ← (outlet-context.js) validated x-outlet-id → JWT oid → none; req.outletContext
+resolveContext                     ← req.context (consumes req.outletContext + x-company-id/x-scope-mode + context_header_enforced flag)
 
 [all tenant business routes mount here]
 

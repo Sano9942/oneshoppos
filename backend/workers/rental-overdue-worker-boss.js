@@ -87,7 +87,16 @@ async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueue
     }
   }
 
-  const overdue = await rentals.getOverdueContracts(db);
+  // Step 9 (D1c): skip contracts at outlets where the Rentals module is off
+  // (per-outlet freeze — same semantics as the company-level gate above).
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "rentals");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+
+  const overdue = (await rentals.getOverdueContracts(db)).filter(
+    (c) => !c.outlet_id || !disabledOutlets.includes(Number(c.outlet_id))
+  );
 
   for (const contract of overdue) {
     const expected = contract.expected_return ? new Date(contract.expected_return) : null;
@@ -126,4 +135,6 @@ async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueue
   return count;
 }
 
-module.exports = { registerRentalOverdueWorker };
+// checkOverdueForTenant exported so tests can drive the tenant-scoped
+// handler (incl. the Step 9 per-outlet filter) without pg-boss.
+module.exports = { registerRentalOverdueWorker, checkOverdueForTenant };

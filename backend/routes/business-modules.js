@@ -45,9 +45,13 @@ const {
   rolesWithAccessForCard,
   computeImpact,
   toggleModule,
+  loadActiveOutlets,
+  resolveOutletStates,
+  setOutletModuleState,
+  computeChecklists,
 } = require("../services/business-modules");
 const { validate } = require("../middleware/validate");
-const { ToggleModuleSchema } = require("../schemas/business-modules");
+const { ToggleModuleSchema, OutletToggleSchema } = require("../schemas/business-modules");
 
 async function runConnectedCheck(db, check) {
   if (!check) return null;
@@ -95,11 +99,15 @@ function computeState(card, flags, modes, connected, isLocked) {
 }
 
 module.exports = function registerBusinessModulesRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
 
   app.get(
     "/api/business-modules",
-    requirePerm("manage_business_modules"),
+    // Read path is delegable to manage_outlet_modules too (PLAN-V2 Step 10 —
+    // Step 2 reserved the perm "no route consumes it yet; Step 10 wires it").
+    // A manage_outlet_modules-only role must load the page to drive the
+    // per-outlet matrix; company writes stay gated to manage_business_modules.
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
     async (req, res) => {
       try {
         const [flags, modes, lockedKeys, roleAccess] = await Promise.all([
@@ -122,17 +130,32 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             industry = "general_retail";
           }
         }
-        let outletCount = 1;
-        try {
-          const { rows } = await db.query(
-            "SELECT COUNT(*)::int AS n FROM outlets WHERE COALESCE(outlet_type, 'store') <> 'van'"
-          );
-          outletCount = rows[0]?.n || 1;
-        } catch { /* default 1 */ }
+        // Non-van outlets drive both the recommended chips and the v2 per-outlet
+        // augmentation. Same non-van definition v1 used for outlet_count, so the
+        // top-level outlet_count stays byte-compatible.
+        const activeOutlets = await loadActiveOutlets(db);
+        const outletCount = activeOutlets.length || 1;
 
         const recommended = new Set(
           presetRecommendedModules(industry, { outletCount })
         );
+
+        // Per-outlet augmentation (v2, D1b) — ONLY when the tenant actually has
+        // more than one active outlet. Single-outlet tenants keep the byte-
+        // identical v1 payload (no outlets[]/enabled_outlet_count/outlet_count/
+        // default_outlet_enabled fields on any card). Two bulk queries total,
+        // independent of card/outlet count.
+        const outletStates =
+          activeOutlets.length > 1
+            ? await resolveOutletStates(db, { outlets: activeOutlets, flags, modes })
+            : null;
+
+        // Setup checklists (v2, D6) for ENABLED covered Bucket A cards. The
+        // settings page is allowlisted outlet-less (Step 9), so outlet-scoped
+        // items evaluate tenant-wide here (outletId=null) — the "get started"
+        // summary is a tenant-wide roll-up. The per-outlet dimension lives in
+        // computeChecklists and is exercised directly by the integration suite.
+        const checklists = await computeChecklists(db, { flags, modes, outletId: null });
 
         const modules = [];
         for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
@@ -142,6 +165,19 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
               : null;
 
           const isLocked = lockedKeys.has(key);
+          // Setup-checklist state: an ENABLED covered card with ANY required
+          // item un-done reads `attention_required`. Only overrides the ON
+          // state — a locked/off card is never enabled, so the checklist never
+          // runs for it (locked still wins; the two states can't co-occur).
+          const cardChecklist = checklists[key];
+          let state = computeState(card, flags, modes, connected, isLocked);
+          if (
+            cardChecklist &&
+            state === MODULE_STATES.ON &&
+            cardChecklist.required_incomplete
+          ) {
+            state = MODULE_STATES.ATTENTION_REQUIRED;
+          }
           modules.push({
             key,
             bucket: card.bucket,
@@ -149,7 +185,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             description: card.description,
             scope: card.scope,
             mode: card.mode ?? null,
-            state: computeState(card, flags, modes, connected, isLocked),
+            state,
             locked: isLocked,
             flags: card.flags.map((f) => ({ key: f, enabled: flags[f] === true })),
             sub_toggles: card.sub_toggles.map((s) => ({
@@ -171,6 +207,11 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
                   connected,
                 }
               : {}),
+            // v2: per-outlet breakdown for scope:'outlet' cards on multi-outlet
+            // tenants only (outletStates is null otherwise → v1 payload).
+            ...(outletStates && outletStates[key] ? outletStates[key] : {}),
+            // v2 (D6): setup checklist for ENABLED covered Bucket A cards only.
+            ...(cardChecklist ? { checklist: cardChecklist.checklist } : {}),
           });
         }
 
@@ -186,16 +227,25 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
   );
 
   // Change preview for the enable/disable confirm dialogs (PLAN Step 6).
+  // Also feeds the per-outlet disable confirm (?outlet_id=), so it is delegable
+  // to manage_outlet_modules too — matching the read-path guard above.
   app.get(
     "/api/business-modules/:key/impact",
-    requirePerm("manage_business_modules"),
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
     async (req, res) => {
       try {
         const direction = req.query.direction === "enable" ? "enable" : "disable";
+        // ?outlet_id= scopes disable-direction counts to one outlet (ignored for
+        // enable direction and non-outlet-scoped cards). Ignore a non-numeric.
+        const rawOutlet = req.query.outlet_id;
+        const parsed =
+          rawOutlet !== undefined && rawOutlet !== "" ? Number(rawOutlet) : undefined;
+        const outletId = Number.isFinite(parsed) ? parsed : undefined;
         const { status, body } = await computeImpact(db, {
           key: req.params.key,
           direction,
           tenantId: req.tenantId,
+          outletId,
         });
         return res.status(status).json(body);
       } catch (err) {
@@ -220,6 +270,37 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
           key: req.params.key,
           enabled: req.body.enabled,
           cascade: req.body.cascade === true,
+          actor,
+          tenantId: req.tenantId,
+        });
+        return res.status(status).json(body);
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // Per-outlet activation write path (v2, D1b). Two body shapes — a single
+  // outlet override {outlet_id, enabled:true|false|null} or the card default
+  // {default_outlet_enabled}. Delegable to manage_outlet_modules as well as
+  // manage_business_modules; all the inherit/lock/audit rules live in the
+  // service.
+  app.post(
+    "/api/business-modules/:key/outlet-toggle",
+    requireAnyPerm(["manage_business_modules", "manage_outlet_modules"]),
+    validate(OutletToggleSchema),
+    async (req, res) => {
+      try {
+        const actor =
+          req.employee?.name ||
+          (req.headers["x-employee-id"]
+            ? `employee:${req.headers["x-employee-id"]}`
+            : "unknown");
+        const { status, body } = await setOutletModuleState(db, {
+          key: req.params.key,
+          outletId: req.body.outlet_id,
+          enabled: req.body.enabled,
+          defaultOutletEnabled: req.body.default_outlet_enabled,
           actor,
           tenantId: req.tenantId,
         });

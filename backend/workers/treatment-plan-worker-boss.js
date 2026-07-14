@@ -90,10 +90,19 @@ async function runDailyCheck(db, logger, tenantSlug, tenantName, enqueueEmail, t
     if (rows[0]?.store_name) storeName = rows[0].store_name;
   } catch { /* company_profile may not exist */ }
 
+  // Step 9 (D1c): skip plans/sessions at outlets where the Clinical module
+  // is off (per-outlet freeze — same semantics as the company gate above).
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "clinical");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+  const outletOk = (row) =>
+    !row.outlet_id || !disabledOutlets.includes(Number(row.outlet_id));
+
   // ── 1. Upcoming session reminders ────────────────────────────────
   let sessions = [];
   try {
-    sessions = await tp.getUpcomingSessionsNeedingReminder(db);
+    sessions = (await tp.getUpcomingSessionsNeedingReminder(db)).filter(outletOk);
   } catch (err) {
     // Tables may not exist for tenants that haven't migrated to v39 yet
     if (!String(err.message || "").includes("does not exist")) throw err;
@@ -123,7 +132,7 @@ async function runDailyCheck(db, logger, tenantSlug, tenantName, enqueueEmail, t
   // ── 2. Overdue plan check (staff-facing) ─────────────────────────
   let overduePlans = [];
   try {
-    overduePlans = await tp.getOverduePlans(db);
+    overduePlans = (await tp.getOverduePlans(db)).filter(outletOk);
   } catch (err) {
     if (!String(err.message || "").includes("does not exist")) throw err;
     return count;

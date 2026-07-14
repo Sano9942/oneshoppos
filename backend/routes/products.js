@@ -827,18 +827,17 @@ module.exports = function registerProductRoutes(app, deps) {
       plu_code,                // V01 grocery — 4-5 digit PLU rapid-entry code
       age_restricted,          // V01 — POS cashier-attest age gate
     } = req.body;
-    // Fall back through: explicit body field → header → session context → first outlet.
-    // Without this, the Add Product form's Opening Stock value silently dropped
-    // to 0: the form sends initial_stock but never an outlet_id, and the
-    // stock-insert below is gated on `if (outlet_id && initial_stock)`.
-    // Session context is also unreliable today — if the user auto-resolved
-    // through /context-select without an explicit pick, JWT.oid stays null
-    // and req.context.outletId comes back null. The "first outlet" SQL
-    // fallback guarantees single-outlet tenants always get their initial
-    // stock seeded; multi-outlet tenants who care about which outlet
-    // continue to pass outlet_id explicitly.
-    let outlet_id =
-      req.body.outlet_id || req.headers["x-outlet-id"] || req.context?.outletId;
+    // Fall back through: explicit body field → resolved session context →
+    // first outlet. Without this, the Add Product form's Opening Stock value
+    // silently dropped to 0: the form sends initial_stock but never an
+    // outlet_id, and the stock-insert below is gated on
+    // `if (outlet_id && initial_stock)`. Step 9: req.context.outletId is fed
+    // by the shared validated resolver (header → JWT oid → none) — the old
+    // raw-header read here is gone. The "first outlet" SQL fallback
+    // guarantees single-outlet tenants always get their initial stock
+    // seeded; multi-outlet tenants who care about which outlet continue to
+    // pass outlet_id explicitly.
+    let outlet_id = req.body.outlet_id || req.context?.outletId;
     if (!outlet_id && (_initial_stock || req.body.stock)) {
       const { rows: [first] } = await deps.db.query(
         "SELECT id FROM outlets ORDER BY id LIMIT 1"

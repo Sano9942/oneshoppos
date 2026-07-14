@@ -326,8 +326,9 @@ module.exports = function mountImportRoutes(app, deps) {
           return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
-        // Bulk insert in transaction
-        const outletId = parseInt(req.headers["x-outlet-id"] || "0", 10) || null;
+        // Bulk insert in transaction. Outlet context comes from the shared
+        // validated resolver via resolveContext (Step 9) — never the raw header.
+        const outletId = req.context?.outletId || null;
         let imported = 0;
         const client = await db.getClient();
         try {

@@ -47,7 +47,13 @@ async function registerCourseReleaseWorker(boss, pool) {
               `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant'`
             );
             if (!flagRows[0]?.enabled) continue;
-            const n = await checksSvc.releaseHeldCourses(tenantDb, null);
+            // Step 9 (D1c): held courses at outlets where the Restaurant
+            // module is off stay held (per-outlet freeze).
+            let disabledOutlets = [];
+            try {
+              disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(tenantDb, "restaurant");
+            } catch { /* pre-v136 schema — no per-outlet state */ }
+            const n = await checksSvc.releaseHeldCourses(tenantDb, null, disabledOutlets);
             totalReleased += n;
           } catch (err) {
             // Skip tenants where restaurant_course_fires table doesn't exist.
@@ -63,7 +69,11 @@ async function registerCourseReleaseWorker(boss, pool) {
             `SELECT enabled FROM feature_flags WHERE key = 'phase4_restaurant'`
           );
           if (flagRows[0]?.enabled) {
-            totalReleased = await checksSvc.releaseHeldCourses(db, null);
+            let disabledOutlets = [];
+            try {
+              disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "restaurant");
+            } catch { /* pre-v136 schema — no per-outlet state */ }
+            totalReleased = await checksSvc.releaseHeldCourses(db, null, disabledOutlets);
           }
         } catch (err) {
           if (!/does not exist/i.test(err.message)) throw err;

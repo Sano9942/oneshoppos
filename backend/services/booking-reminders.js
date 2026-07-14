@@ -23,6 +23,19 @@ async function processPendingReminders(db, boss, tenantSlug, deps = { notify: cu
   );
   if (!flagRows[0]?.enabled) return 0;
 
+  // Step 9 (D1c): per-outlet gate — reminders for appointments at an outlet
+  // where the Appointments module is off stay pending (same freeze semantics
+  // as the company-level gate above). NULL-outlet appointments keep following
+  // company state. Fast path: nothing disabled ⇒ no extra SQL.
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("./business-modules").getDisabledOutletIds(db, "appointments");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+  const outletFilter = disabledOutlets.length
+    ? "AND (a.outlet_id IS NULL OR NOT (a.outlet_id = ANY($1)))"
+    : "";
+  const outletParams = disabledOutlets.length ? [disabledOutlets] : [];
+
   const { rows: reminders } = await db.query(
     `SELECT ar.*, a.customer_id, a.customer_email, a.customer_phone, a.customer_name,
        a.start_at AS appt_start, bs.name AS service_name
@@ -31,7 +44,9 @@ async function processPendingReminders(db, boss, tenantSlug, deps = { notify: cu
      JOIN booking_services bs ON bs.id = a.service_id
      WHERE ar.status = 'pending' AND ar.scheduled_for <= NOW()
      AND a.status NOT IN ('cancelled','no_show')
-     LIMIT 50`
+     ${outletFilter}
+     LIMIT 50`,
+    outletParams
   );
 
   if (!reminders.length) return 0;

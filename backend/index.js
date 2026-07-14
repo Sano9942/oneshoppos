@@ -81,6 +81,7 @@ if (IS_MULTI_TENANT) {
 const mtDeps = { db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore };
 tenantAuth.init(mtDeps);
 featureFlags.init(mtDeps);
+require("./middleware/outlet-context").init(mtDeps);
 
 // ─── Express app + middleware chain ─────────────────────────────────────────
 const app = express();

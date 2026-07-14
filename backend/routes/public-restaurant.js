@@ -4,7 +4,25 @@ const {
   isProductAvailableNow,
   filterAvailableProducts,
 } = require("../services/menu-schedule-resolver");
-const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+const { getFeatureFlagsMap, isModuleOffAtOutlet } = require("../middleware/feature-flags");
+
+/**
+ * Step 9 (D1c): kiosk tokens bind an outlet, so this public surface is
+ * outlet-gated — QR ordering goes dark at an outlet where the Restaurant
+ * module is switched off, even though old tokens survive. Deliberately
+ * checks ONLY the per-outlet resolution (override ?? default ?? TRUE):
+ * company-level gating of stale tokens is a separate pre-existing gap, and
+ * composing it here would change behavior for tenants that never touch
+ * per-outlet state. Lookup errors fail open (an availability glitch
+ * shouldn't kill live table service — matches the day-parting fallthrough).
+ */
+async function kioskOrderingOff(tenant, ctx) {
+  try {
+    return await isModuleOffAtOutlet(tenant?.id, "restaurant", ctx.outletId || null);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Resolve a public token to either a counter-mode kiosk slot's current draft,
@@ -101,6 +119,9 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
       if (!ctx) {
         return res.status(404).json({ error: "No active session found for this QR code" });
       }
+      if (await kioskOrderingOff(tenant, ctx)) {
+        return res.status(404).json({ error: "Ordering is not available at this location" });
+      }
 
       // Fetch published menu items for outlet. 2-R.1: hide products that
       // have been 86'd (sold-out). Retail tenants unaffected because
@@ -169,6 +190,9 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
 
       const ctx = await resolveKioskToken(db, req.params.token);
       if (!ctx) return res.status(404).json({ error: "No active check for this token" });
+      if (await kioskOrderingOff(tenant, ctx)) {
+        return res.status(404).json({ error: "Ordering is not available at this location" });
+      }
 
       // Get product. 2-R.1: refuse 86'd items with 422 so the guest UI can
       // show a friendly "unavailable" toast instead of a generic error.
@@ -235,10 +259,13 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
     try {
       const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-      const { db } = resolved;
+      const { db, tenant } = resolved;
 
       const ctx = await resolveKioskToken(db, req.params.token);
       if (!ctx) return res.status(404).json({ error: "No active check for this token" });
+      if (await kioskOrderingOff(tenant, ctx)) {
+        return res.status(404).json({ error: "Ordering is not available at this location" });
+      }
 
       // Refuse empty-cart submits — keeps the inbox clean for staff.
       const { rows: items } = await db.query(

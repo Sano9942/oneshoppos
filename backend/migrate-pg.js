@@ -9917,6 +9917,58 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 136,
+    description:
+      "Business Modules v2 (D1a, PLAN-V2 Step 7) — per-outlet module activation DATA MODEL only, zero behavior change. (a) tenant_business_modules gains default_outlet_enabled BOOLEAN NOT NULL DEFAULT TRUE: the value new/unlisted outlets inherit. Sparse-row rule frozen here — a module with NO tenant_business_modules row at all behaves as default_outlet_enabled=TRUE, so the table stays legal-sparse (nothing reads the column until Step 8). (b) new tenant table outlet_business_modules (outlet_id → outlets ON DELETE CASCADE, module_key, enabled, updated_by, updated_at, PK (outlet_id, module_key)) holds EXPLICIT per-outlet overrides. Resolution semantics (frozen, implemented Step 8): effective(outlet) = company-enabled AND (explicit outlet row ?? default_outlet_enabled ?? TRUE) — explicit row wins, missing row inherits the default, company-off wins everywhere. Participation (frozen): only scope:'outlet' cards ever get an outlet row; tenant/device/hybrid are tenant-wide in v2. Both objects are tenant-only: guarded on current_schema()<>'public' (deterministic vs the stray public.company_profile/outlets a dev DB can carry — v131 rationale) AND on the table existing (graceful no-op on an incomplete schema — v133/v135 idiom). Idempotent: ADD COLUMN IF NOT EXISTS + CREATE TABLE IF NOT EXISTS.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      if (schema === "public") {
+        console.log(
+          "[migrate-pg v136] public schema — per-outlet module tables are tenant-only, skipped"
+        );
+        return;
+      }
+      const tableExists = async (name) => {
+        const { rows } = await client.query(
+          `SELECT 1 FROM information_schema.tables
+             WHERE table_schema = current_schema() AND table_name = $1`,
+          [name]
+        );
+        return rows.length > 0;
+      };
+      // (a) inherit default on the company-level anchor (created in v131).
+      if (await tableExists("tenant_business_modules")) {
+        await client.query(`
+          ALTER TABLE tenant_business_modules
+            ADD COLUMN IF NOT EXISTS default_outlet_enabled BOOLEAN NOT NULL DEFAULT TRUE
+        `);
+      } else {
+        console.log(
+          `[migrate-pg v136] ${schema}: no tenant_business_modules table — default_outlet_enabled skipped`
+        );
+      }
+      // (b) explicit per-outlet override table (FK → outlets, tenant-only).
+      if (await tableExists("outlets")) {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS outlet_business_modules (
+            outlet_id  INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+            module_key TEXT NOT NULL,
+            enabled    BOOLEAN NOT NULL,
+            updated_by TEXT,
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (outlet_id, module_key)
+          )
+        `);
+      } else {
+        console.log(
+          `[migrate-pg v136] ${schema}: no outlets table — outlet_business_modules skipped`
+        );
+      }
+    },
+  },
 ];
 
 /**

@@ -9,11 +9,14 @@ import {
   ModalFooter,
   PageShell,
   SectionCard,
+  Select,
   TableToolbar,
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
 
-const EMPTY = { name: "", address: "", phone: "" };
+// copy_from_outlet_id: "" means "Start fresh" — the backend reads empty as
+// "no copy", leaving the new outlet on the per-module default (D8 / Step 12).
+const EMPTY = { name: "", address: "", phone: "", copy_from_outlet_id: "" };
 
 export default function OutletsRedesign() {
   const [outlets, setOutlets] = useState([]);
@@ -86,6 +89,13 @@ export default function OutletsRedesign() {
         String(o.address || "").toLowerCase().includes(q),
     );
   }, [outlets, search]);
+
+  // Only real store outlets carry per-outlet module settings — a van has none
+  // to copy, and the backend rejects it as a source.
+  const copySources = useMemo(
+    () => outlets.filter((o) => (o.outlet_type || "store") !== "van"),
+    [outlets],
+  );
 
   // Add Outlet routing:
   //   Free tenant         → POST /api/outlets returns 403 PLAN_LIMIT_REACHED;
@@ -278,6 +288,27 @@ export default function OutletsRedesign() {
             value={form.phone}
             onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
           />
+          {!editing && copySources.length > 0 ? (
+            <div className="pt-1">
+              <label className="mb-1 block text-xs font-semibold text-(--ui-text-muted)">
+                Copy settings from
+              </label>
+              <Select
+                className="w-full"
+                value={form.copy_from_outlet_id}
+                onChange={(e) => setForm((p) => ({ ...p, copy_from_outlet_id: e.target.value }))}
+              >
+                <option value="">Start fresh</option>
+                {copySources.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </Select>
+              <p className="mt-1 text-xs text-(--ui-text-muted)">
+                Copies which business modules are switched on at that location. Products,
+                stock, staff and sales are never copied.
+              </p>
+            </div>
+          ) : null}
           <ModalFooter>
             <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>

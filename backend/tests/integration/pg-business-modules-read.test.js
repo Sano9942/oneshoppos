@@ -56,9 +56,11 @@ describe("business modules read API (Postgres)", () => {
     const res = await getModules();
     // Default-true flag with no DB row → on.
     expect(findCard(res.body, "accounting").state).toBe("on");
-    // Harness fixture seeds every phase4_* vertical true → on (harness
-    // state, not a product default).
-    expect(findCard(res.body, "restaurant").state).toBe("on");
+    // Harness fixture seeds every phase4_* vertical true → enabled. Restaurant
+    // is a covered vertical (PLAN-V2 D6 setup checklist): enabled but with no
+    // floor plan configured, its required checklist items are un-done, so the
+    // card reads `attention_required` rather than a bare `on`.
+    expect(findCard(res.body, "restaurant").state).toBe("attention_required");
     // Fixture seeds these false → off.
     expect(findCard(res.body, "gift_cards").state).toBe("off");
     expect(findCard(res.body, "loyalty").state).toBe("off");
@@ -75,6 +77,10 @@ describe("business modules read API (Postgres)", () => {
       `INSERT INTO feature_flags (key, enabled) VALUES ('phase4_rentals', true)
        ON CONFLICT (key) DO UPDATE SET enabled = true`
     );
+    // Rentals is a covered vertical (D6). Seed its one required checklist item
+    // (a rental item) so this test stays focused on the mode/flag → on flip
+    // rather than the attention_required setup state.
+    await db.query(`INSERT INTO rental_items (name) VALUES ('Setup Test Item')`);
     const res = await getModules();
     expect(findCard(res.body, "rentals").state).toBe("on");
 

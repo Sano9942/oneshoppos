@@ -248,6 +248,12 @@ module.exports = function registerAllRoutes(app, deps) {
     });
   }
   app.use(loadCompanyProfile);
+  // Shared requested-outlet resolver (D1c) — the ONLY interpreter of outlet
+  // context (validated x-outlet-id header → JWT oid → none). Must run after
+  // resolveTenant (needs the tenant DB) and before resolveContext (which
+  // consumes req.outletContext).
+  const outletContext = require("../middleware/outlet-context");
+  app.use(outletContext.resolveOutletContext());
   app.use(resolveContext);
 
   // Block write operations for expired subscriptions (must be after tenant resolution)
@@ -261,49 +267,13 @@ module.exports = function registerAllRoutes(app, deps) {
   if (requestId.enrichReqLog) app.use(requestId.enrichReqLog);
   ensureDefaultRolePermissions(db);
 
-  // Enforce outlet assignment for non-admin employees on branch-scoped requests.
-  app.use(async (req, res, next) => {
-    if (!req.path.startsWith("/api/")) return next();
-    // Kiosk PIN routes are public (PIN is the auth) — skip session-based outlet check
-    if (req.path.startsWith("/api/attendance/pin-")) return next();
-    const employeeId = Number(req.headers["x-employee-id"] || 0);
-    if (!employeeId) return next();
-    const perms = req.employeePerms || [];
-    if (perms.includes("all_access")) return next();
-    // Tier 1.2 wholesale: field reps are tenant-scoped, not outlet-scoped.
-    // They never have employee_outlets rows, so this enforcement would
-    // block every API call carrying an outlet_id. Skip for them.
-    // S3 split (PLAN-V2 Step 2): keyed on execute_field_sales — the rep-self
-    // perm — NOT manage_field_sales. Before the split, every default Manager
-    // (who holds manage_field_sales) incidentally bypassed outlet-assignment
-    // enforcement; they now go through it like any other outlet-scoped staff.
-    if (perms.includes("execute_field_sales")) return next();
-
-    const headerOutletId = Number(req.headers["x-outlet-id"] || 0);
-    const contextOutletId = Number(req.context?.outletId || 0);
-    const queryOutletId = Number(req.query?.outlet_id || 0);
-    const bodyOutletId = Number(req.body?.outlet_id || 0);
-    const outletId =
-      contextOutletId || headerOutletId || queryOutletId || bodyOutletId;
-
-    if (!outletId) return next();
-
-    try {
-      const { rows } = await db.query(
-        "SELECT 1 FROM employee_outlets WHERE employee_id = $1 AND outlet_id = $2 LIMIT 1",
-        [employeeId, outletId],
-      );
-      if (!rows[0]) {
-        return res.status(403).json({
-          error:
-            "Forbidden: outlet is not assigned to this employee account.",
-        });
-      }
-      return next();
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
+  // Enforce outlet assignment for non-admin employees on branch-scoped
+  // requests. Step 9 (D1c): moved into middleware/outlet-context.js so it
+  // consumes the shared resolver — the resolved context outlet was already
+  // validated (existence + assignment) there; this keeps independently
+  // checking explicit query/body outlet_id params with the same precedence
+  // as before.
+  app.use(outletContext.enforceOutletAssignment());
 
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
@@ -415,6 +385,26 @@ module.exports = function registerAllRoutes(app, deps) {
       const defaultKeys = new Set(Object.keys(DEFAULT_FEATURE_FLAGS));
       for (const r of rows) {
         if (!defaultKeys.has(r.key)) mergedDefaults.push(r);
+      }
+      // Step 9 (D1c): per-outlet overlay. `effective` is what gates should
+      // use for the caller's resolved outlet; `enabled` stays the company-
+      // level truth (the admin flag editor edits company state, never a
+      // per-outlet view). No resolved outlet ⇒ effective === enabled — the
+      // overlay is only computed for a validated outlet so anonymous
+      // ?tenant= bootstrap calls never read the wrong flag source.
+      const resolvedOutletId = req.outletContext?.outletId || null;
+      if (resolvedOutletId) {
+        try {
+          const { getEffectiveFlagsMap } = require("../middleware/feature-flags");
+          const effectiveMap = await getEffectiveFlagsMap(req.tenantId, resolvedOutletId);
+          for (const r of mergedDefaults) {
+            r.effective = r.enabled === true && effectiveMap[r.key] !== false;
+          }
+        } catch {
+          for (const r of mergedDefaults) r.effective = r.enabled === true;
+        }
+      } else {
+        for (const r of mergedDefaults) r.effective = r.enabled === true;
       }
       return res.json({ flags: mergedDefaults });
     } catch (err) {

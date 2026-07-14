@@ -217,6 +217,16 @@ module.exports = function registerAuthRoutes(app, deps) {
             "SELECT mode FROM tenant_modes WHERE enabled = true"
           );
           enabledModes = modeRows.map(r => r.mode);
+          // Step 9 (D1c): per-outlet overlay — an outlet-scoped mode whose
+          // module is OFF at the caller's resolved outlet is dropped, so
+          // hasMode() nav gates reflect outlet-effective state. Only applied
+          // when a validated outlet resolved; company-level otherwise.
+          const bootstrapOutletId = req.outletContext?.outletId || null;
+          if (bootstrapOutletId && enabledModes.length) {
+            const { getEffectiveModesMap } = require("../middleware/feature-flags");
+            const effModes = await getEffectiveModesMap(req.tenantId, bootstrapOutletId);
+            enabledModes = enabledModes.filter((m) => effModes[m] !== false);
+          }
         } catch {
           // tenant_modes table may not exist yet
         }

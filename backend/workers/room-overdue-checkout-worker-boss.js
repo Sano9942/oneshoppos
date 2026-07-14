@@ -90,7 +90,16 @@ async function checkOverdueForTenant(db, logger, tenantSlug, tenantName, enqueue
     if (rows[0]?.email) staffEmail = rows[0].email;
   } catch { /* ignore */ }
 
-  const overdue = await roomService.getOverdueCheckouts(db);
+  // Step 9 (D1c): skip bookings at outlets where the Rooms module is off
+  // (per-outlet freeze — same semantics as the company-level gate above).
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "rooms_lodging");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+
+  const overdue = (await roomService.getOverdueCheckouts(db)).filter(
+    (b) => !b.outlet_id || !disabledOutlets.includes(Number(b.outlet_id))
+  );
 
   for (const booking of overdue) {
     const expected = booking.check_out_date ? new Date(booking.check_out_date) : null;

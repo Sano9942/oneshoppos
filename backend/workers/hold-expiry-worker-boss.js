@@ -18,10 +18,23 @@ async function sweepTenant(db, logger, tenantSlug) {
   );
   if (!flagRows[0]?.enabled) return 0;
 
+  // Step 9 (D1c): holds at outlets where the module is off freeze in place
+  // (per-outlet analog of the company-level freeze above) — expiry resumes
+  // when the outlet is re-enabled.
+  let disabledOutlets = [];
+  try {
+    disabledOutlets = await require("../services/business-modules").getDisabledOutletIds(db, "holds_layaway");
+  } catch { /* pre-v136 schema — no per-outlet state */ }
+  const outletFilter = disabledOutlets.length
+    ? "AND (outlet_id IS NULL OR NOT (outlet_id = ANY($1)))"
+    : "";
+
   const { rows: due } = await db.query(
     `SELECT id FROM holds
        WHERE status = 'active' AND hold_until IS NOT NULL AND hold_until < NOW()
+       ${outletFilter}
        FOR UPDATE SKIP LOCKED`,
+    disabledOutlets.length ? [disabledOutlets] : [],
   );
   let flipped = 0;
   for (const row of due) {
