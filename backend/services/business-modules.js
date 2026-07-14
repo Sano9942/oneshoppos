@@ -374,9 +374,17 @@ function parseImpactTable(sql) {
  * the simple `SELECT COUNT(*)... FROM <table> [WHERE ...]` shape is handled;
  * anything with a join/group/subquery returns null so the caller falls back to
  * a tenant-wide count rather than risk a wrong scoped query.
+ *
+ * `or` is on the blocklist for a precedence reason, not a parsing one: AND
+ * binds tighter than OR, so appending `AND outlet_id = $1` to
+ * `WHERE a OR b` yields `a OR (b AND outlet_id = $1)` — which silently counts
+ * OTHER outlets' rows via the `a` branch. No impact query has a top-level OR
+ * today; this keeps the next one from being scoped wrongly instead of falling
+ * back. Adding OR support means parenthesising the original WHERE body, which
+ * needs a real parser — the tenant-wide fallback is the honest answer.
  */
 function scopeImpactSql(sql, outletCol = "outlet_id") {
-  if (/\b(group\s+by|having|union|join)\b/i.test(sql)) return null;
+  if (/\b(group\s+by|having|union|join|or)\b/i.test(sql)) return null;
   if (/\bwhere\b/i.test(sql)) return `${sql} AND ${outletCol} = $1`;
   return `${sql} WHERE ${outletCol} = $1`;
 }
