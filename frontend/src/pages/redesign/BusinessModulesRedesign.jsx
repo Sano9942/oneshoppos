@@ -1,13 +1,19 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../../contexts/ToastContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { useAuth } from "../../auth/AuthProvider";
 import { refreshFeatureFlags } from "../../hooks/useFeatureFlags";
 import { PageShell, SectionCard, Badge, Button, Toggle, Tooltip, Drawer, ConfirmDialog, EmptyState } from "../../ui/primitives";
-import { Lock, Sparkles, ChevronDown, ChevronRight, MapPin } from "lucide-react";
+import { Lock, Sparkles, ChevronDown, ChevronRight, MapPin, CheckCircle2, Circle } from "lucide-react";
 import { api } from "../../api";
-import { showOutletControls, locationSummaryLabel, isOutletOverridden } from "./businessModules";
+import {
+  showOutletControls,
+  locationSummaryLabel,
+  isOutletOverridden,
+  showChecklist,
+  checklistProgress,
+} from "./businessModules";
 
 const STATE_BADGE = {
   on: { label: "On", tone: "success" },
@@ -134,9 +140,11 @@ function OutletLocationsDrawer({
   );
 }
 
-function ModuleCard({ module: m, titleByKey, busyKey, canCompany, onToggle, onSubToggle, onSetup, onManageLocations }) {
+function ModuleCard({ module: m, titleByKey, busyKey, canCompany, highlightKey, onToggle, onSubToggle, onSetup, onManageLocations, onStepNavigate }) {
   const requires = (m.depends_on || []).map((k) => titleByKey[k] || k);
-  const isOn = m.state === "on";
+  // A covered vertical that's enabled-but-unconfigured reads attention_required
+  // yet is still functionally on, so treat it as "on" for the sub-toggle gates.
+  const isOn = m.state === "on" || m.state === "attention_required";
   const busy = busyKey === m.key;
   // Sub-toggles are usable only once the parent module is on AND the viewer can
   // manage company-level state (a manage_outlet_modules-only delegate can drive
@@ -151,8 +159,28 @@ function ModuleCard({ module: m, titleByKey, busyKey, canCompany, onToggle, onSu
   const [showCustomize, setShowCustomize] = useState(false);
   const showLocations = showOutletControls(m);
 
+  // Setup checklist (D6) — the "Get started — N of M done" expander.
+  const showSteps = showChecklist(m);
+  const { done: stepsDone, total: stepsTotal } = checklistProgress(m);
+  const [stepsOpen, setStepsOpen] = useState(false);
+  // After a first enable, the parent flags this card's key so we auto-expand +
+  // scroll it into view (highlight, not a modal).
+  const highlight = highlightKey === m.key;
+  const cardRef = useRef(null);
+  useEffect(() => {
+    if (highlight && showSteps) {
+      setStepsOpen(true);
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlight, showSteps]);
+
   return (
-    <div className="border border-(--ui-border) rounded-lg p-4 flex flex-col gap-2">
+    <div
+      ref={cardRef}
+      className={`border rounded-lg p-4 flex flex-col gap-2 transition-shadow ${
+        highlight ? "border-(--ui-primary) ring-2 ring-(--ui-primary)" : "border-(--ui-border)"
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="font-medium text-(--ui-text)">{m.title}</span>
         <div className="flex items-center gap-2 shrink-0">
@@ -196,6 +224,49 @@ function ModuleCard({ module: m, titleByKey, busyKey, canCompany, onToggle, onSu
 
       {m.state === "locked" && (
         <p className="text-xs text-(--ui-muted)">This module is locked for your account. Contact support to enable it.</p>
+      )}
+
+      {/* Setup checklist (D6) — enabled covered verticals still missing a
+          required step. Expands to deep-linked "get started" items. */}
+      {showSteps && (
+        <div className="mt-1 border-t border-(--ui-border) pt-2">
+          <Button
+            tone="link"
+            size="sm"
+            onClick={() => setStepsOpen((v) => !v)}
+            aria-expanded={stepsOpen}
+          >
+            {stepsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Get started — {stepsDone} of {stepsTotal} done
+          </Button>
+          {stepsOpen && (
+            <ul className="mt-2 space-y-2">
+              {(m.checklist || []).map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-2">
+                  <span className="inline-flex items-start gap-2 min-w-0">
+                    {item.done ? (
+                      <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-(--ui-success-fg)" />
+                    ) : (
+                      <Circle size={16} className="shrink-0 mt-0.5 text-(--ui-muted)" />
+                    )}
+                    <span className="min-w-0">
+                      <span className={`text-sm ${item.done ? "text-(--ui-muted) line-through" : "text-(--ui-text)"}`}>
+                        {item.label}
+                      </span>
+                      {!item.required && <span className="text-xs text-(--ui-muted)"> · optional</span>}
+                      {item.scope === "outlet" && <span className="text-xs text-(--ui-muted)"> · all locations</span>}
+                    </span>
+                  </span>
+                  {!item.done && (
+                    <Button tone="link" size="sm" onClick={() => onStepNavigate(item.route)}>
+                      Set up →
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* Per-outlet summary + entry to the location matrix (multi-outlet
@@ -303,10 +374,14 @@ export default function BusinessModulesRedesign() {
   const [locationsKey, setLocationsKey] = useState(null);
   // outlet_id | "default" — the per-row write currently in flight in the Drawer.
   const [outletBusy, setOutletBusy] = useState(null);
+  // Card key to auto-expand + scroll after a first enable that left setup
+  // pending (D6 "route attention to the checklist"). Cleared on a short timer.
+  const [highlightKey, setHighlightKey] = useState(null);
 
   const reload = useCallback(async () => {
     const next = await api.get("/api/business-modules");
     setData(next);
+    return next;
   }, []);
 
   useEffect(() => {
@@ -367,7 +442,17 @@ export default function BusinessModulesRedesign() {
         toast.toast(msgs.join("; "), "info");
       }
       setConfirm(null);
-      await reload();
+      const next = await reload();
+      // First-enable success routes attention to the setup checklist: if the
+      // just-enabled card still has an incomplete required step, flag it so its
+      // card auto-expands + scrolls into view (no new modal).
+      if (enabled) {
+        const card = next?.modules?.find((mod) => mod.key === key);
+        if (card && showChecklist(card)) {
+          setHighlightKey(key);
+          setTimeout(() => setHighlightKey((k) => (k === key ? null : k)), 2600);
+        }
+      }
       // Propagate to the two client cache layers so nav flag + mode gates
       // update in place (the backend invalidated its own caches already).
       refreshFeatureFlags();
@@ -388,7 +473,9 @@ export default function BusinessModulesRedesign() {
   // gets the warn+confirm with live counts (owner decision: never block,
   // never silent).
   const onToggle = async (m) => {
-    const enabling = m.state !== "on";
+    // attention_required is still an ON state (enabled, setup pending), so
+    // clicking the toggle on it means DISABLE, not enable.
+    const enabling = !(m.state === "on" || m.state === "attention_required");
     setBusyKey(m.key);
     try {
       if (enabling) {
@@ -656,10 +743,12 @@ export default function BusinessModulesRedesign() {
     titleByKey,
     busyKey,
     canCompany,
+    highlightKey,
     onToggle,
     onSubToggle,
     onSetup,
     onManageLocations: openLocations,
+    onStepNavigate: (route) => navigate(route),
   };
 
   return (

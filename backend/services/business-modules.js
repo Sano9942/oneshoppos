@@ -382,6 +382,127 @@ function scopeImpactSql(sql, outletCol = "outlet_id") {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Setup checklists (Business Modules v2 / D6, PLAN-V2 Step 11)
+//
+// Each covered Bucket A card carries a `setup_checklist` (config/business-
+// modules.js). GET computes each item's done state ONLY for ENABLED covered
+// cards. Items are `scope:"tenant"` (evaluated tenant-wide) or `scope:"outlet"`
+// (evaluated against a resolved outlet, or tenant-wide when outlet-less — the
+// settings page is allowlisted outlet-less, so it always passes outletId=null).
+// The outlet dimension is built in "from birth" (a floor plan at outlet A never
+// completes outlet B's item) and is proven by direct computeChecklists calls in
+// the integration suite; the v2 settings-page consumer is tenant-wide.
+//
+// State rule (amendment g): a card with ANY required item un-done reads
+// `attention_required`; optional items never hold the state.
+//
+// Query budget: ONE batched query (one EXISTS column per item) regardless of
+// outlet count — so it never scales the Step 8 per-outlet budget. Zero queries
+// when no covered card is enabled (the common retail case). Falls back to
+// per-item queries only if the batch fails (a missing table on an old schema),
+// so one absent table can't blank the whole checklist.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Append `<outletCol> = $1` to a bare `SELECT 1 FROM <table> [WHERE ...]` EXISTS body. */
+function scopeExistsSql(sql, outletCol) {
+  return /\bwhere\b/i.test(sql) ? `${sql} AND ${outletCol} = $1` : `${sql} WHERE ${outletCol} = $1`;
+}
+
+/**
+ * Build the EXISTS body + params for one checklist item. Outlet-scoped items
+ * get the `= $1` predicate only when a concrete outletId is supplied; otherwise
+ * (and for tenant-scoped items) they evaluate tenant-wide with no params.
+ */
+function buildChecklistItemExists(item, outletId) {
+  const scoped =
+    item.scope === "outlet" &&
+    outletId != null &&
+    item.done_query.outlet_column;
+  const inner = scoped
+    ? scopeExistsSql(item.done_query.sql, item.done_query.outlet_column)
+    : item.done_query.sql;
+  return { exists: `EXISTS(${inner})`, scoped };
+}
+
+/** Covered cards (those carrying a setup_checklist) that are currently enabled. */
+function enabledCoveredCards(flags, modes) {
+  const out = [];
+  for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
+    if (!Array.isArray(card.setup_checklist) || !card.setup_checklist.length) continue;
+    if (!isCardEnabled(card, flags, modes)) continue;
+    out.push({ key, card });
+  }
+  return out;
+}
+
+/**
+ * Per-card setup checklist state for every ENABLED covered card. Returns
+ *   { [cardKey]: { checklist: [{ id, label, required, scope, route, done }],
+ *                  required_incomplete } }
+ * `outletId` scopes scope:"outlet" items to one outlet; null = tenant-wide.
+ */
+async function computeChecklists(db, { flags, modes, outletId = null }) {
+  const cards = enabledCoveredCards(flags, modes);
+  if (!cards.length) return {};
+
+  // Flatten items → one EXISTS column each, in a single batched SELECT.
+  const meta = [];
+  const cols = [];
+  let usesOutlet = false;
+  for (const { key, card } of cards) {
+    for (const item of card.setup_checklist) {
+      const alias = `i${meta.length}`;
+      const { exists, scoped } = buildChecklistItemExists(item, outletId);
+      if (scoped) usesOutlet = true;
+      cols.push(`${exists} AS ${alias}`);
+      meta.push({ key, item, alias });
+    }
+  }
+
+  const doneByAlias = {};
+  try {
+    const { rows } = await db.query(
+      `SELECT ${cols.join(", ")}`,
+      usesOutlet ? [outletId] : []
+    );
+    const row = rows[0] || {};
+    for (const { alias } of meta) doneByAlias[alias] = row[alias] === true;
+  } catch (err) {
+    if (!isMissingTableError(err)) throw err;
+    // A missing table on an older tenant schema — evaluate item-by-item so one
+    // absent table can't blank the whole checklist (each failure = not done).
+    for (const { item, alias } of meta) {
+      const { exists, scoped } = buildChecklistItemExists(item, outletId);
+      try {
+        const { rows } = await db.query(
+          `SELECT ${exists} AS done`,
+          scoped ? [outletId] : []
+        );
+        doneByAlias[alias] = rows[0]?.done === true;
+      } catch {
+        doneByAlias[alias] = false;
+      }
+    }
+  }
+
+  const out = {};
+  for (const { key, item, alias } of meta) {
+    if (!out[key]) out[key] = { checklist: [], required_incomplete: false };
+    const done = doneByAlias[alias] === true;
+    out[key].checklist.push({
+      id: item.id,
+      label: item.label,
+      required: item.required === true,
+      scope: item.scope,
+      route: item.route,
+      done,
+    });
+    if (item.required === true && !done) out[key].required_incomplete = true;
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Transaction helpers (all take the transaction client, never db)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1051,4 +1172,6 @@ module.exports = {
   setOutletModuleState,
   // Business Modules v2 — per-outlet worker filtering (Step 9)
   getDisabledOutletIds,
+  // Business Modules v2 — setup checklists (Step 11, D6)
+  computeChecklists,
 };

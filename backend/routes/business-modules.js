@@ -48,6 +48,7 @@ const {
   loadActiveOutlets,
   resolveOutletStates,
   setOutletModuleState,
+  computeChecklists,
 } = require("../services/business-modules");
 const { validate } = require("../middleware/validate");
 const { ToggleModuleSchema, OutletToggleSchema } = require("../schemas/business-modules");
@@ -149,6 +150,13 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             ? await resolveOutletStates(db, { outlets: activeOutlets, flags, modes })
             : null;
 
+        // Setup checklists (v2, D6) for ENABLED covered Bucket A cards. The
+        // settings page is allowlisted outlet-less (Step 9), so outlet-scoped
+        // items evaluate tenant-wide here (outletId=null) — the "get started"
+        // summary is a tenant-wide roll-up. The per-outlet dimension lives in
+        // computeChecklists and is exercised directly by the integration suite.
+        const checklists = await computeChecklists(db, { flags, modes, outletId: null });
+
         const modules = [];
         for (const [key, card] of Object.entries(BUSINESS_MODULES)) {
           const connected =
@@ -157,6 +165,19 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
               : null;
 
           const isLocked = lockedKeys.has(key);
+          // Setup-checklist state: an ENABLED covered card with ANY required
+          // item un-done reads `attention_required`. Only overrides the ON
+          // state — a locked/off card is never enabled, so the checklist never
+          // runs for it (locked still wins; the two states can't co-occur).
+          const cardChecklist = checklists[key];
+          let state = computeState(card, flags, modes, connected, isLocked);
+          if (
+            cardChecklist &&
+            state === MODULE_STATES.ON &&
+            cardChecklist.required_incomplete
+          ) {
+            state = MODULE_STATES.ATTENTION_REQUIRED;
+          }
           modules.push({
             key,
             bucket: card.bucket,
@@ -164,7 +185,7 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             description: card.description,
             scope: card.scope,
             mode: card.mode ?? null,
-            state: computeState(card, flags, modes, connected, isLocked),
+            state,
             locked: isLocked,
             flags: card.flags.map((f) => ({ key: f, enabled: flags[f] === true })),
             sub_toggles: card.sub_toggles.map((s) => ({
@@ -189,6 +210,8 @@ module.exports = function registerBusinessModulesRoutes(app, deps) {
             // v2: per-outlet breakdown for scope:'outlet' cards on multi-outlet
             // tenants only (outletStates is null otherwise → v1 payload).
             ...(outletStates && outletStates[key] ? outletStates[key] : {}),
+            // v2 (D6): setup checklist for ENABLED covered Bucket A cards only.
+            ...(cardChecklist ? { checklist: cardChecklist.checklist } : {}),
           });
         }
 

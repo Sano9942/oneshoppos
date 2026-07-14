@@ -32,3 +32,23 @@ export function locationSummaryLabel(m) {
 export function isOutletOverridden(outlet) {
   return outlet.override !== null && outlet.override !== undefined;
 }
+
+// ── Setup checklists (PLAN-V2 Step 11, D6) ──────────────────────────────────
+// The backend attaches `checklist: [{ id, label, required, scope, route, done }]`
+// only to ENABLED covered Bucket A cards. We surface a "Get started — N of M
+// done" expander while any REQUIRED item is still un-done (that is exactly the
+// attention_required state). Locked cards keep their v1 treatment.
+export function showChecklist(m) {
+  const items = m.checklist || [];
+  if (!items.length || m.locked) return false;
+  if (m.state !== "on" && m.state !== "attention_required") return false;
+  return items.some((i) => i.required && !i.done);
+}
+
+// "N of M done" over ALL checklist items (required + optional).
+export function checklistProgress(m) {
+  const items = m.checklist || [];
+  const done = items.filter((i) => i.done).length;
+  return { done, total: items.length };
+}
+

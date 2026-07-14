@@ -40,6 +40,16 @@
  *                 dependency cascades are deferred (PLAN-V2 E1).
  *   impact_queries named COUNT queries run against the tenant schema for the
  *                 disable-direction warn+confirm dialog
+ *   setup_checklist  Bucket A "get started" guidance (PLAN-V2 D6, Step 11) —
+ *                 ordered [{ id, label, required, scope: "tenant"|"outlet",
+ *                 done_query: { sql (a bare `SELECT 1 FROM <table> [WHERE ...]`
+ *                 EXISTS body), outlet_column (scope:"outlet" only — the column
+ *                 the resolver appends `= $1` to for per-outlet evaluation) },
+ *                 route }]. GET /api/business-modules computes each item's done
+ *                 state for ENABLED covered cards; an enabled card with ANY
+ *                 required item un-done reads state `attention_required`. Only
+ *                 the four covered verticals carry this in v2 (E5 defers the
+ *                 rest); optional items never hold the state.
  *   setup_route / connected_check / setup_required_when   Bucket C only
  *
  * State enum (MODULE_STATES) — computed per card by GET /api/business-modules:
@@ -113,6 +123,32 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM restaurant_tabs WHERE status = 'open'",
       },
     },
+    setup_checklist: [
+      {
+        id: "floor_plan",
+        label: "Create your first floor plan",
+        required: true,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM restaurant_floor_plans", outlet_column: "outlet_id" },
+        route: "/restaurant/floor",
+      },
+      {
+        id: "menu_items",
+        label: "Add menu items",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM products WHERE deleted_at IS NULL" },
+        route: "/products/new",
+      },
+      {
+        id: "kds_station",
+        label: "Set up a kitchen display station",
+        required: false,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM kds_stations", outlet_column: "outlet_id" },
+        route: "/kds",
+      },
+    ],
   },
 
   appointments: {
@@ -147,6 +183,24 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM appointments WHERE status IN ('pending','confirmed') AND start_at >= NOW()",
       },
     },
+    setup_checklist: [
+      {
+        id: "services",
+        label: "Define bookable services",
+        required: true,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM booking_services WHERE is_active = true", outlet_column: "outlet_id" },
+        route: "/appointments/services",
+      },
+      {
+        id: "staff",
+        label: "Assign schedulable staff to a service",
+        required: false,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM booking_staff_assignments" },
+        route: "/appointments/services",
+      },
+    ],
   },
 
   subscriptions_memberships: {
@@ -192,6 +246,16 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM rental_contracts WHERE status = 'checked_out'",
       },
     },
+    setup_checklist: [
+      {
+        id: "rental_items",
+        label: "Add rental items",
+        required: true,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM rental_items WHERE is_active = true", outlet_column: "outlet_id" },
+        route: "/rentals/items",
+      },
+    ],
   },
 
   rooms_lodging: {
@@ -219,6 +283,24 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM room_bookings WHERE status IN ('reserved','confirmed','checked_in')",
       },
     },
+    setup_checklist: [
+      {
+        id: "rooms",
+        label: "Add rooms",
+        required: true,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM rooms", outlet_column: "outlet_id" },
+        route: "/rooms",
+      },
+      {
+        id: "rates",
+        label: "Set nightly rates",
+        required: true,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM room_types WHERE base_rate > 0", outlet_column: "outlet_id" },
+        route: "/rooms/rates",
+      },
+    ],
   },
 
   clinical: {
