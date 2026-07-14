@@ -72,7 +72,7 @@
 | 9 | D1c — Shared outlet resolver + outlet-aware enforcement (fail-closed, workers, surface audit) | ☑ done (local, committed) — resolver + outlet-aware gates + 9-site allowlist + 8 workers filtered + surfaces; 22/22 new tests; full-suite 63/27 vs baseline 65/31 (strictly fewer); see Step 9 as-built | **PAUSE before** — ✅ cleared (owner approved design + Rulings 1–3 as recommended) |
 | 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ✅ DONE (local, committed) — location summary + matrix Drawer + defaults control + delegation perm wired end-to-end; browser-verified on a seeded 3-outlet golv_restaurant + single-outlet golv_salon + a manage_outlet_modules-only role; frontend units 185/185. See Step 10 as-built | — |
 | 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☑ done (verified) — `c6557946` | — |
-| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ◐ Phase 1 done (verified) — `3e0b101a`; **PAUSED at Phase 2** awaiting per-table ruling | **PAUSE mid-step** (allowlist expansion owner-gated) |
+| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☑ done (verified) — Phase 1 `3e0b101a`, ruling + Gate-2 prompt `b061363d`, 5-table follow-up `ae897d25`. **Pause CLEARED 2026-07-14** (all 11 tables ruled; see the as-built ruling table) | **PAUSE mid-step** — ✅ cleared (owner ruled table-by-table; 5 COPY / 7 NEVER / approval_policies→after-D2 / modifier_groups→E6) |
 | — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☐ not started | **PAUSE mid-step** (auth-model design sign-off after Phase 1 findings) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☐ not started | — |
@@ -679,8 +679,26 @@ is justified by per-outlet divergence* (tax profiles) or that *represents physic
 reality* (floor plans, devices, staff schedules, kiosk tokens, channel identity) is never
 copyable — and copying must never silently satisfy a REQUIRED Step 11 setup-checklist item.
 
-The 5 COPY tables are implemented in the Step 12 follow-up commit; `approval_policies` is
-revisited after Gate 3, `modifier_groups` → E6.
+The 5 COPY tables are implemented in the Step 12 follow-up commit (`ae897d25`); `approval_policies`
+is revisited after Gate 3, `modifier_groups` → E6.
+
+**Follow-up as-built (`ae897d25`)**: WHAT is copyable now lives in `services/outlet-copy.js` —
+`COPY_SPECS` is the single allowlist AND a contract: every column of every copied table must be
+classified `scope`/`copy`/`stamp`/`skip`, enforced by `pg-step12-outlet-copy-drift.test.js`
+(negative-tested — dropping a column from a spec fails it with an actionable message). This is
+load-bearing: an explicit column list silently drops columns a later migration adds, and
+**`kds_stations` already carries four columns its `CREATE TABLE` doesn't show** (`printer_id`,
+`balance_strategy`, `target_prep_seconds`, `last_assigned_at`).
+
+Two exclusions decided INSIDE an approved table, applying the durable rule above:
+- `kds_stations.printer_id` — `printer_config` is TENANT-WIDE and holds a `host`/`port`, so
+  carrying it would point the new outlet's station at hardware standing in the source outlet.
+  FK is `ON DELETE SET NULL`, so NULL is an expected state; the merchant picks the printer on site.
+- `kds_stations.last_assigned_at` — runtime load-balancing state, not configuration.
+
+Response keeps `copied_module_overrides` (Phase 1 contract) and adds `copied_settings` (per-table
+map) + `copied_settings_total`; the audit row names each table and count. A test asserts the seven
+NEVER tables stay empty after a copy — the ruling is enforced, not just documented.
 
 ---
 
