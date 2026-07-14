@@ -71,8 +71,8 @@
 | 8 | D1b — Backend per-outlet read + toggle paths (resolution service, default write path, query budget) | ☑ done (committed da56dd45; 18/18 new tests, v1 suites byte-compat) | **PAUSE before** — ✅ cleared (clear=lock-exempt; column-scoped default upsert) |
 | 9 | D1c — Shared outlet resolver + outlet-aware enforcement (fail-closed, workers, surface audit) | ☑ done (local, committed) — resolver + outlet-aware gates + 9-site allowlist + 8 workers filtered + surfaces; 22/22 new tests; full-suite 63/27 vs baseline 65/31 (strictly fewer); see Step 9 as-built | **PAUSE before** — ✅ cleared (owner approved design + Rulings 1–3 as recommended) |
 | 10 | D1d — Frontend per-outlet UI ("On at 2 of 5 locations", location matrix, defaults control) | ✅ DONE (local, committed) — location summary + matrix Drawer + defaults control + delegation perm wired end-to-end; browser-verified on a seeded 3-outlet golv_restaurant + single-outlet golv_salon + a manage_outlet_modules-only role; frontend units 185/185. See Step 10 as-built | — |
-| 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☐ not started | — |
-| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ☐ not started | **PAUSE mid-step** (allowlist expansion owner-gated) |
+| 11 | D6 — Guided setup checklists (outlet-aware from birth; REPLACES DashboardOnboarding proxies) | ☑ done (verified) — `c6557946` | — |
+| 12 | D8 — "Copy settings from" flow (modules only; allowlist pause) | ◐ Phase 1 done (verified) — `3e0b101a`; **PAUSED at Phase 2** awaiting per-table ruling | **PAUSE mid-step** (allowlist expansion owner-gated) |
 | — | **GATE 2: merge + deploy per-outlet slice (D1+D6+D8)** | ☐ not started | **PAUSE — owner-gated merge/deploy/watch** |
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☐ not started | **PAUSE mid-step** (auth-model design sign-off after Phase 1 findings) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☐ not started | — |
@@ -619,6 +619,41 @@ Scope: outlet-creation path + this form + the investigation. No changes to the D
 Autonomy: Phase 1 fully autonomous incl. tests + browser check, commit when green; Phase 2 report-only.
 Report: outcome first — Phase 1 test results, then the Phase 2 proposal table.
 ```
+
+---
+
+### Step 12 as-built (Phase 1 — `3e0b101a`; Phase 2 AWAITING OWNER RULING)
+
+**Phase 1 (shipped)**: `POST /api/outlets` takes optional `copy_from_outlet_id`; the source's
+`outlet_business_modules` rows clone inside the SAME transaction as the outlet INSERT (one
+set-based `INSERT … SELECT`, re-stamped with the acting employee), plus one `action_history`
+row (`action_type='outlet_settings_copied'`) naming source + row count. Response gains
+`copied_from_outlet_id` + `copied_module_overrides`. Frontend: "Copy settings from" Select on
+the add-outlet form, "Start fresh" default, store outlets only.
+
+Rulings taken inside Phase 1 (each defensible, each reversible):
+1. **"Valid source" = exists AND non-van** — the SAME predicate the D1 resolver uses for its
+   outlet set (`loadActiveOutlets`), NOT `outlets.is_active`. The spec said "active"; adopting
+   `is_active` would have created a THIRD interpretation of "active outlet" (amendment b's
+   whole point) and would reject sources the Step 10 matrix happily lists.
+2. **Source validation runs INSIDE the transaction** — a source deleted mid-flight fails the
+   whole create (404) rather than silently producing an outlet with zero copied overrides.
+3. **Copying INTO a van is rejected (400)** — vans carry no per-outlet module state, so the
+   rows would be dead data nothing reads.
+
+**Phase 2 investigation (filed, no code)**: 68 `outlet_id`-bearing tables; ~15 are configuration
+rather than data. Three findings that change the spec's own assumptions:
+- **`receipt_templates` has no `outlet_id`** — the "receipt-template assignment" the spec lists
+  as a copy candidate **does not exist**. Nothing to copy. (`printer_config` is likewise
+  tenant-wide — a separate multi-outlet gap, not D8's.)
+- **Two outlet-scoped tables are invisible to an `outlet_id` grep** — `pos_layouts` and
+  `price_list_assignments` scope via polymorphic `scope_type='outlet'` + `scope_id`. Any future
+  copy allowlist must name them explicitly.
+- **Exactly one outlet-keyed secret exists**: `restaurant_kiosk_slots.slot_token` (UNIQUE, a live
+  capability token). No outlet-keyed table holds credentials — `integration_settings` and
+  `courier_integrations` are tenant-wide.
+
+Owner ruling pending per table (see the report). Approved tables → follow-up commit; the rest → E6.
 
 ---
 
