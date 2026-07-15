@@ -54,7 +54,7 @@ const PresetContext = createContext({
 });
 
 export function PresetProvider({ children }) {
-  const { employee, isBootstrapping } = useAuth();
+  const { employee, isBootstrapping, applyEffectiveSession } = useAuth();
   const [preset, setPreset] = useState(DEFAULT_PRESET);
   const [presetLoaded, setPresetLoaded] = useState(false);
 
@@ -67,7 +67,9 @@ export function PresetProvider({ children }) {
 
   // Re-fetch the bootstrap payload in place (no logout) — called after a
   // business-module toggle so hasMode()/nav mode gates reflect the new
-  // tenant_modes rows immediately. Keeps current preset on failure.
+  // tenant_modes rows immediately, and after an outlet-context switch /
+  // role-permission save (Step 14) so the effective permission set follows.
+  // Keeps current preset on failure.
   const refreshPreset = useCallback(async () => {
     try {
       const data = await api.get("/api/context/bootstrap");
@@ -75,10 +77,13 @@ export function PresetProvider({ children }) {
         setPreset({ ...DEFAULT_PRESET, ...data.preset });
         setPresetLoaded(true);
       }
+      // Step 14 (D2b): the bootstrap's employee payload carries the
+      // outlet-effective role + permission set — overlay it onto the session.
+      applyEffectiveSession?.(data?.employee);
     } catch {
       // transient failure — keep the preset we already have
     }
-  }, []);
+  }, [applyEffectiveSession]);
 
   // Bootstrap preset once employee is authenticated. Self-contained so any
   // route — including ones outside AppLayoutRedesign (e.g. /pos opens in a
@@ -105,6 +110,9 @@ export function PresetProvider({ children }) {
     // Local helper — applies a successful bootstrap response.
     const apply = (data) => {
       if (data?.preset) setPreset({ ...DEFAULT_PRESET, ...data.preset });
+      // Step 14 (D2b): overlay the context-effective permission set on boot
+      // too — the AuthProvider boot path only knows the base role.
+      applyEffectiveSession?.(data?.employee);
       // W1 — auto-seed single-branch context for tenants that never visit
       // /context-select (Free / single-outlet / context_selection_required=off).
       // Without this, restaurant pages that gate on
@@ -158,7 +166,7 @@ export function PresetProvider({ children }) {
         setPresetLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [employee?.id, isBootstrapping]);
+  }, [employee?.id, isBootstrapping, applyEffectiveSession]);
 
   const hasMode = useCallback(
     (modeName) => {

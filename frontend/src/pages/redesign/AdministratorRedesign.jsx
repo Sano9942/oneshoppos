@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Key, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { api } from "../../api";
+import { usePreset } from "../../contexts/PresetContext";
 import {
   Badge,
   Button,
@@ -30,6 +31,7 @@ export default function AdministratorRedesign() {
   const [form, setForm] = useState({ name: "", description: "" });
   const [rolePerms, setRolePerms] = useState([]);
   const [saving, setSaving] = useState(false);
+  const { refreshPreset } = usePreset();
 
   const load = async () => {
     setLoading(true);
@@ -101,6 +103,11 @@ export default function AdministratorRedesign() {
       }
       await api.put(`/api/roles/${roleId}/permissions`, { permissions: rolePerms });
       setModalOpen(false);
+      // C8 (Step 14): re-fetch the context bootstrap so the EDITING session's
+      // own nav/guards pick up the new permission set in place (relevant when
+      // the saved role is the editor's effective role). Other employees
+      // converge at their next bootstrap or outlet-context switch.
+      refreshPreset?.();
       await load();
     } catch (e2) {
       setError(e2.body?.error || e2.message || "Failed to save role");
