@@ -40,6 +40,31 @@ export function AuthProvider({ children }) {
   const isAuthenticated = Boolean(employee?.id);
   const token = session?.token || null;
 
+  // Step 14 (D2b): overlay the context-aware bootstrap's effective identity
+  // onto the live session. The boot contract is unchanged — boot still loads
+  // base-role perms via refreshPermissions — but whenever
+  // /api/context/bootstrap responds (boot, outlet switch, C8 refresh),
+  // PresetContext feeds its employee payload here so hasPerm()/nav reflect
+  // the per-outlet role override for the current outlet context.
+  const applyEffectiveSession = useCallback((emp) => {
+    if (!emp || !Array.isArray(emp.permissions)) return;
+    const stored = readSession();
+    if (!stored?.employee?.id || Number(stored.employee.id) !== Number(emp.id)) return;
+    const next = {
+      ...stored,
+      permissions: emp.permissions,
+      employee: {
+        ...stored.employee,
+        base_role_id: emp.base_role_id ?? stored.employee.role_id,
+        effective_role_id:
+          emp.effective_role_id ?? emp.base_role_id ?? stored.employee.role_id,
+        effective_role_name: emp.effective_role_name ?? null,
+      },
+    };
+    writeSession(next);
+    setSession(next);
+  }, []);
+
   const refreshPermissions = async (roleId, employeeId = null) => {
     const headers = employeeId ? { "x-employee-id": String(employeeId) } : {};
     if (IS_MULTI_TENANT) {
@@ -456,6 +481,7 @@ export function AuthProvider({ children }) {
       logout,
       refreshPermissions,
       refreshAccessToken,
+      applyEffectiveSession,
       hasPerm,
       authHeaders,
       token,
@@ -478,6 +504,7 @@ export function AuthProvider({ children }) {
       isBootstrapping,
       hasPerm,
       authHeaders,
+      applyEffectiveSession,
       token,
       isImpersonating,
       impersonationTenantName,

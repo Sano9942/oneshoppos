@@ -1320,6 +1320,10 @@ CREATE TABLE IF NOT EXISTS employee_outlets (
   outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
   is_primary BOOLEAN NOT NULL DEFAULT FALSE,
   assigned_at TIMESTAMPTZ DEFAULT NOW(),
+  -- v137 (PLAN-V2 Step 13): per-outlet role override. NULL = inherit
+  -- employees.role_id; ON DELETE SET NULL so deleting a role degrades its
+  -- overrides to inherit instead of blocking the delete.
+  role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
   UNIQUE(employee_id, outlet_id)
 );
 

@@ -5,11 +5,13 @@ import { useAuth } from "../auth/AuthProvider";
 import { readContext, writeContext, writeToken } from "../auth/authStore";
 import { IS_MULTI_TENANT } from "../config";
 import { api } from "../api";
-import useFeatureFlags from "../hooks/useFeatureFlags";
+import useFeatureFlags, { refreshFeatureFlags } from "../hooks/useFeatureFlags";
+import { usePreset } from "../contexts/PresetContext";
 
 export default function ContextSelect() {
   const { employee, isAuthenticated, isBootstrapping, authHeaders, hasPerm } = useAuth();
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
+  const { refreshPreset } = usePreset();
   const navigate = useNavigate();
 
   const [bootstrap, setBootstrap] = useState(null);
@@ -127,6 +129,11 @@ export default function ContextSelect() {
     }
 
     writeContext(context);
+    // Step 14 (D2b): flags, modes AND the effective permission set are all
+    // outlet-context-dependent — refresh the gate sources in place (same as
+    // ContextSwitcher) so nav/guards match the chosen outlet immediately.
+    refreshFeatureFlags();
+    refreshPreset?.();
     navigate(preferredHome, { replace: true });
   };
 

@@ -176,17 +176,21 @@ module.exports = function registerAuthRoutes(app, deps) {
         []
       );
 
-      // Get outlets: admin sees all active, others see assigned only
+      // Get outlets: admin sees all active, others see assigned only.
+      // role_id per row = the Step 13 per-outlet override (null = inherit).
       let outlets;
       if (isAdmin) {
         const result = await db.query(
-          "SELECT id, name, address, company_id, branch_code FROM outlets WHERE is_active = true ORDER BY name",
-          []
+          `SELECT o.id, o.name, o.address, o.company_id, o.branch_code, eo.role_id
+           FROM outlets o
+           LEFT JOIN employee_outlets eo ON eo.outlet_id = o.id AND eo.employee_id = $1
+           WHERE o.is_active = true ORDER BY o.name`,
+          [employeeId]
         );
         outlets = result.rows;
       } else {
         const result = await db.query(
-          `SELECT o.id, o.name, o.address, o.company_id, o.branch_code
+          `SELECT o.id, o.name, o.address, o.company_id, o.branch_code, eo.role_id
            FROM outlets o
            JOIN employee_outlets eo ON eo.outlet_id = o.id
            WHERE eo.employee_id = $1 AND o.is_active = true
@@ -248,12 +252,34 @@ module.exports = function registerAuthRoutes(app, deps) {
         // Pre-migration tenants — no preset columns exist yet
       }
 
+      // Step 13: effective role for the current outlet context. resolveEffectiveRole
+      // (mounted after the outlet resolver) already swapped req.employeePerms when
+      // an override applies; base_role_id/effective_role_id come from req.employee
+      // in the JWT chain and default to the base role in header-based harnesses.
+      const baseRoleId = emp.role_id;
+      // req.effectiveOverrideRoleId is set by resolveEffectiveRole ONLY when
+      // an override role took effect this request — the DB role stays the
+      // base truth otherwise (the JWT rid can lag it).
+      const effectiveRoleId = req.effectiveOverrideRoleId ?? baseRoleId;
+      let effectiveRoleName = emp.role_name;
+      if (effectiveRoleId !== baseRoleId) {
+        const { rows: [effRole] } = await db.query(
+          "SELECT name FROM roles WHERE id = $1", [effectiveRoleId]
+        );
+        effectiveRoleName = effRole?.name ?? null;
+      }
+      const effectivePerms = Array.isArray(req.employeePerms) ? req.employeePerms : perms;
+
       res.json({
         employee: {
           id: emp.id,
           name: emp.name,
-          role_id: emp.role_id,
+          role_id: baseRoleId,
           role_name: emp.role_name,
+          base_role_id: baseRoleId,
+          effective_role_id: effectiveRoleId,
+          effective_role_name: effectiveRoleName,
+          permissions: effectivePerms,
         },
         companies: companies || [],
         outlets: outlets || [],

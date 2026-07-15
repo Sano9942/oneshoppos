@@ -14,6 +14,8 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
+import { usePreset } from "../../contexts/PresetContext";
+import { buildOutletRolesMap, overridesFromAssignments } from "./employeeOutletRoles";
 
 const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", email: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
 const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
@@ -33,6 +35,10 @@ export default function EmployeesRedesign() {
   const [allOutlets, setAllOutlets] = useState([]);
   const [assignedOutletIds, setAssignedOutletIds] = useState([]);
   const [primaryOutletId, setPrimaryOutletId] = useState(null);
+  // Step 14 (D2b): per-outlet role overrides — { [outlet_id]: role_id },
+  // explicit overrides only; an absent key means "Inherit (<base role>)".
+  const [outletRoles, setOutletRoles] = useState({});
+  const { refreshPreset } = usePreset();
 
   // Revoke sessions modal
   const [revokeTarget, setRevokeTarget] = useState(null);
@@ -82,6 +88,7 @@ export default function EmployeesRedesign() {
     setAttConfig(EMPTY_ATT);
     setAssignedOutletIds([]);
     setPrimaryOutletId(null);
+    setOutletRoles({});
     setModalOpen(true);
   };
 
@@ -91,6 +98,7 @@ export default function EmployeesRedesign() {
     setAttConfig(EMPTY_ATT);
     setAssignedOutletIds([]);
     setPrimaryOutletId(null);
+    setOutletRoles({});
     setModalOpen(true);
     // Fetch attendance config + outlet assignments (non-blocking)
     try {
@@ -106,6 +114,7 @@ export default function EmployeesRedesign() {
         setAssignedOutletIds(outData.outlets.map((o) => o.outlet_id));
         const primary = outData.outlets.find((o) => o.is_primary);
         setPrimaryOutletId(primary ? primary.outlet_id : null);
+        setOutletRoles(overridesFromAssignments(outData.outlets));
       }
     } catch {}
   };
@@ -143,9 +152,16 @@ export default function EmployeesRedesign() {
         await api.put(`/api/employees/${empId}/outlets`, {
           outlet_ids: assignedOutletIds,
           primary_outlet_id: primaryOutletId || assignedOutletIds[0],
+          // Always round-trip the full map — the PUT is bulk-replace and an
+          // omitted outlet_roles clears every existing override (Step 13).
+          outlet_roles: buildOutletRolesMap(assignedOutletIds, outletRoles),
         });
       }
       setModalOpen(false);
+      // C8: if the editor changed their own assignment/override, their
+      // effective perms refresh in place; other employees converge at their
+      // next bootstrap or context switch.
+      refreshPreset?.();
       await load();
     } catch (e2) {
       setError(e2.body?.error || e2.message || "Failed to save employee");
@@ -472,6 +488,7 @@ export default function EmployeesRedesign() {
                     {allOutlets.map((o) => {
                       const checked = assignedOutletIds.includes(o.id);
                       const isPrimary = primaryOutletId === o.id;
+                      const baseRoleName = roles.find((r) => r.id === Number(form.role_id))?.name || "base role";
                       return (
                         <label key={o.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-(--ui-muted-surface) cursor-pointer text-sm">
                           <input
@@ -481,6 +498,12 @@ export default function EmployeesRedesign() {
                               if (checked) {
                                 setAssignedOutletIds((prev) => prev.filter((id) => id !== o.id));
                                 if (isPrimary) setPrimaryOutletId(null);
+                                setOutletRoles((prev) => {
+                                  if (!(o.id in prev)) return prev;
+                                  const next = { ...prev };
+                                  delete next[o.id];
+                                  return next;
+                                });
                               } else {
                                 setAssignedOutletIds((prev) => [...prev, o.id]);
                               }
@@ -489,6 +512,28 @@ export default function EmployeesRedesign() {
                           />
                           <MapPin size={12} className="text-(--ui-text-muted) shrink-0" />
                           <span className="flex-1 text-(--ui-text)">{o.name}</span>
+                          {checked && (
+                            /* Step 14 (D2b): per-outlet role override — default inherits the base role. */
+                            <Select
+                              value={outletRoles[o.id] ?? ""}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setOutletRoles((prev) => {
+                                  const next = { ...prev };
+                                  if (v === "") delete next[o.id];
+                                  else next[o.id] = Number(v);
+                                  return next;
+                                });
+                              }}
+                              className="w-44 shrink-0 text-xs"
+                            >
+                              <option value="">Inherit ({baseRoleName})</option>
+                              {roles.map((r) => (
+                                <option key={r.id} value={r.id}>{r.name}</option>
+                              ))}
+                            </Select>
+                          )}
                           {checked && (
                             /* Primary-outlet star toggle — intentional tiny favorite icon; <Button> would add padding/border. */
                             <button
@@ -506,6 +551,17 @@ export default function EmployeesRedesign() {
                   </div>
                   {assignedOutletIds.length === 0 && (
                     <p className="text-xs text-(--ui-text-muted)">No outlets assigned — employee will have no branch access.</p>
+                  )}
+                  {Object.keys(outletRoles).length > 0 && (
+                    <p className="text-xs text-(--ui-text-muted)">
+                      A role override applies only while working at that outlet; everywhere else the base role applies.
+                    </p>
+                  )}
+                  {Object.values(outletRoles).some((rid) => Number(rid) === 1) && (
+                    /* Step 13 verifier finding #11: an all_access override at ANY assigned outlet ≡ tenant admin. */
+                    <p className="text-xs text-(--ui-warning-fg)">
+                      An Administrator override at any outlet grants full admin access across the whole business — treat it the same as making this employee an Administrator.
+                    </p>
                   )}
                 </div>
               )}

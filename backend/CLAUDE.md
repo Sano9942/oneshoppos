@@ -52,6 +52,9 @@ Orchestrator. Key responsibilities:
 14b. resolveOutletContext — (middleware/outlet-context.js, Step 9 D1c) the ONLY interpreter of outlet
      context: validated x-outlet-id header → JWT oid → none → req.outletContext. Malformed → 400
      INVALID_OUTLET_CONTEXT; foreign/inactive → 403; unassigned non-all_access → 403 OUTLET_NOT_ASSIGNED
+14c. resolveEffectiveRole — (middleware/tenant-auth.js, Step 13 D2a) per-outlet role override:
+     employee_outlets.role_id at the resolved outlet (v137) swaps req.employeePerms to that role's
+     set; req.baseEmployeePerms preserved (assignment-scope checks key on base; capability on effective)
 15. resolveContext       — consumes req.outletContext (+ x-company-id/x-scope-mode headers) → req.context
 
 --- all tenant routes mount here ---
@@ -128,13 +131,14 @@ Master tenant registry. Exports: `init`, `createTenant`, `getTenantBySlug`, `get
 All middleware in `backend/middleware/`. Chain order documented above; see `middleware/CLAUDE.md` for the full per-file reference (portal auth, rate-limit key patterns, upload validation).
 
 ### `tenant-auth.js`
-Exports: `init(deps)`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`, `loadEmployeePerms`, `invalidateCompanyProfileCache`
+Exports: `init(deps)`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveEffectiveRole`, `resolveContext`, `loadEmployeePerms`, `invalidateCompanyProfileCache`
 
 Requires `init({ db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore })` at boot.
 
 - **`loadTenantAndPerms`** — JWT auth. Sets `req.employee`, `req.employeePerms`, `req.tenantId`, `req.isImpersonating`. No auth header → sets empty perms and calls `next()` (does not reject). Token revocation checked against `revoked_tokens` table + `employees.tokens_revoked_before`. Permission load retries once on transient DB failure; both failures → 503 instead of silent empty-perms. (The `kiosk` token scope + its path restriction were retired 2026-07-12 with the unused `/api/auth/kiosk-login` endpoint — all employee tokens are now full-scope.)
 - **`resolveTenant`** — No-op in ST mode. In MT: resolves tenant either from `req.tenantId` or from `?tenant=<slug>` on an explicit allowlist of public paths (`PUBLIC_TENANT_PARAM_PATHS` — auth, kiosk pin-checkin, feature-flags, setup, health, `company-profile/currency`), calls `tenantDbManager.getDb()`, runs `asyncStore.run(...)` to wire `deps.db`. Sets `req.tenantSlug`, `req.tenantDir`. Error codes: `TENANT_NOT_FOUND`, `TENANT_SUSPENDED`, `TENANT_DELETED` (all 403).
 - **`loadCompanyProfile`** — Reads `company_profile WHERE id = 1`. 5-minute cache per tenant (stale-while-revalidate; cold start awaits synchronously to avoid a post-signup race). Sets `req.company`. Blocks with 503 `SETUP_REQUIRED` if `setup_complete` is falsy and path is not `/api/setup*` or `/api/health*`.
+- **`resolveEffectiveRole`** — Per-outlet role resolution (PLAN-V2 Step 13, D2a; migration v137). Mounts between `resolveOutletContext` (which supplies `req.outletContext.overrideRoleId` from `employee_outlets.role_id` at the resolved outlet) and `resolveContext` (the first consumer of effective perms). Always sets `req.baseEmployeePerms` for authenticated requests; when an override applies it swaps `req.employeePerms` to that role's set and sets `req.effectiveOverrideRoleId` (+ `req.employee.effective_role_id` on the JWT path). No resolvable outlet, a NULL override, or an override equal to the base role → effective = base, **zero extra queries**. The load retries once then 503s `PERM_LOAD_FAILED` — a silent empty-perms fallback would demote an overridden Manager to nothing and surface as a misleading 403. **The invariant that makes this safe**: outlet *reach* is an identity decision keyed on BASE perms (`enforceOutletAssignment` reads `req.baseEmployeePerms`), while *capability* is keyed on effective perms — so an override can grant capability at an outlet but never widen which outlets a principal reaches. An override is scoping, not a demotion: omitting outlet context yields the base role by design, and the Step 9 fail-closed gates are what stop header-omission games on outlet-scoped routes.
 - **`resolveContext`** — Reads `x-outlet-id`, `x-company-id`, `x-scope-mode` headers. Sets `req.context`. When `context_header_enforced` flag is on, non-admin employees without `x-outlet-id` get 428 `CONTEXT_REQUIRED` (exempt: auth, context, feature-flags, attendance, roles, outlets paths).
 
 ### `permissions.js`

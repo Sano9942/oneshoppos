@@ -75,5 +75,8 @@ describe("master-db-pg", () => {
     await db.query(`DROP SCHEMA IF EXISTS tenant_${slug} CASCADE`);
     await db.query("DELETE FROM tenant_audit_log WHERE tenant_id = $1", [result.tenantId]);
     await db.query("DELETE FROM tenants WHERE slug = $1", [slug]);
-  });
+    // Provisioning cost grows with MIGRATIONS.length (full DDL + version
+    // seeding) — ~11-14s locally at v137, which flaked against the default
+    // 15s cap under serial-suite load.
+  }, 30000);
 });

@@ -254,6 +254,12 @@ module.exports = function registerAllRoutes(app, deps) {
   // consumes req.outletContext).
   const outletContext = require("../middleware/outlet-context");
   app.use(outletContext.resolveOutletContext());
+  // Per-outlet role resolution (Step 13, D2a) — consumes the resolver's
+  // overrideRoleId, preserves req.baseEmployeePerms, and swaps
+  // req.employeePerms to the outlet's effective role. Must sit between the
+  // outlet resolver (source of the override) and resolveContext (first
+  // consumer of effective perms).
+  app.use(require("../middleware/tenant-auth").resolveEffectiveRole);
   app.use(resolveContext);
 
   // Block write operations for expired subscriptions (must be after tenant resolution)

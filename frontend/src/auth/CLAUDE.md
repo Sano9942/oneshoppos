@@ -14,7 +14,7 @@ Exports `AuthProvider` + `useAuth()`. Only scope that patches `window.fetch`.
 |-------|-------|
 | `session` | Raw session object from localStorage |
 | `employee` | `session.employee` |
-| `permissions` | `string[]`, re-fetched fresh on boot — not trusted from localStorage |
+| `permissions` | `string[]`, re-fetched fresh on boot — not trusted from localStorage. **Outlet-context-dependent** since Step 14 (D2b): boot loads the *base* role's set, then the bootstrap overlay swaps in the outlet-effective set (see `applyEffectiveSession`) |
 | `isAuthenticated` | `Boolean(employee?.id)` |
 | `isBootstrapping` | `true` during initial boot async work — gate redirects on this |
 | `login(username, password, tenantSlug?)` | See login flows |
@@ -22,6 +22,7 @@ Exports `AuthProvider` + `useAuth()`. Only scope that patches `window.fetch`.
 | `refreshPermissions(roleId, employeeId?)` | `GET /api/roles/:roleId/permissions` |
 | `refreshAccessToken()` | `POST /api/auth/refresh` via httpOnly cookie; module-level `_refreshPromise` coalesces concurrent calls |
 | `hasPerm(perm)` | `true` if `permissions` includes `"all_access"` or `perm` |
+| `applyEffectiveSession(emp)` | Step 14 (D2b). Overlays a `GET /api/context/bootstrap` `employee` payload (`permissions`, `base_role_id`, `effective_role_id`, `effective_role_name`) onto the stored session. No-ops unless the payload has an array `permissions` AND its `id` matches the stored employee — so a stale/foreign response can't swap the live identity. Called by `PresetContext` on every bootstrap (boot, outlet switch, C8 role save); pages should not call it directly |
 | `authHeaders(extra?)` | Returns `{ "x-employee-id", Authorization? }` for manual-header callers (e.g. `useFeatureFlags`) |
 | `token` | JWT access token (MT mode only) |
 | `isImpersonating` / `impersonationTenantName` / `impersonationSessionId` | Admin-impersonation state |
@@ -50,6 +51,10 @@ Order of operations per request:
 3. No existing session → done, `isBootstrapping = false`.
 4. Existing session → re-fetch permissions via `refreshPermissions` (never trust localStorage perms). Best-effort `GET /api/auth/me` refreshes `company` (non-fatal on failure — boot continues with cached company). Any exception here tears the session down (`clearSession()` + `setSession(null)`).
 5. MT mode only, after refresh succeeds: `GET /api/billing/status` populates `subscriptionStatus`, `subscriptionDaysLeft`, `tenantPlan` (best-effort).
+
+Step 14 (D2b) deliberately did **not** change this sequence: step 4 still loads the **base** role's permissions, because `AuthProvider` boots before any outlet context is known. `PresetContext`'s own bootstrap (`GET /api/context/bootstrap`, keyed on `employee?.id`) supplies the outlet-effective set moments later via `applyEffectiveSession`.
+
+Two consequences worth knowing. (1) Between boot and that overlay, `hasPerm()` reflects the base role — at an outlet whose override is *narrower*, nav can briefly show entries the outlet doesn't grant. (2) If the bootstrap request fails, the overlay never applies and perms stay base for the whole session (`presetLoaded` flips to `true` on error too, so it is **not** a reliable "effective perms are loaded" signal). Neither is a privilege hole: `hasPerm()` only draws UI, and the backend re-resolves the effective role on every request, so a route the outlet's role doesn't grant 403s regardless of what the nav shows. Don't "fix" this by making boot outlet-aware — the base-perms boot is what keeps outlet reach (an identity decision) independent of the override.
 
 ### Login flows
 
