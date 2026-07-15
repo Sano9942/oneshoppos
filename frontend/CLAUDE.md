@@ -63,7 +63,7 @@ Never read `import.meta.env` directly anywhere else. Exports: `API_BASE` (no tra
 ### `src/auth/` — see `src/auth/CLAUDE.md`
 Four independent auth scopes with four independent localStorage stores — never mix them: tenant (`AuthProvider.jsx` exports `AuthProvider` + `useAuth()`, `authStore.js`), super-admin (`adminAuthStore.js`), customer portal (`customerPortalStore.js`, slug-scoped), manufacturer portal (`manufacturerPortalStore.js`, slug-scoped).
 
-`useAuth()` key fields: `employee`, `hasPerm(perm)`, `authHeaders()`, `isImpersonating`, `subscriptionStatus`, `company` (includes `tax_mode`).
+`useAuth()` key fields: `employee`, `hasPerm(perm)`, `authHeaders()`, `isImpersonating`, `subscriptionStatus`, `company` (includes `tax_mode`), `applyEffectiveSession(emp)` (Step 14 D2b — overlays the bootstrap's outlet-effective role + permissions onto the session; called by `PresetContext`, not by pages).
 
 **Interceptor gotcha**: do NOT add `token` to any `useEffect` dep array wrapping the interceptor — causes re-registration loop. Token is read live via `readToken()`.
 
@@ -71,7 +71,7 @@ Four independent auth scopes with four independent localStorage stores — never
 Provider nesting: `CurrencyProvider → ToastProvider → AuthProvider → PresetProvider`.
 - `CurrencyContext.jsx` → `useCurrency()` → `{ symbol, code, fmt, refresh, denominations }`. `fmt` = `symbol + " " + toLocaleString(2dp)`.
 - `ToastContext.jsx` → `useToast()` → `{ toast, success, error, warning }`. Max 3 visible, 4s auto-dismiss. Throws if used outside provider.
-- `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset, refreshPreset }`. `refreshPreset()` re-fetches the bootstrap payload in place (no logout) — called after a business-module toggle so `hasMode()`/nav mode gates update immediately.
+- `PresetContext.jsx` → `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode, presetLoaded, updatePreset, refreshPreset }`. `refreshPreset()` re-fetches the bootstrap payload in place (no logout) — called after a business-module toggle so `hasMode()`/nav mode gates update immediately, and after an outlet switch or role-permission save so the effective permission set follows. Every bootstrap response (boot and refresh alike) is also passed to `applyEffectiveSession()` from `useAuth()`, which is how the per-outlet effective role reaches `hasPerm()` — see Permissions below.
 
 ### `src/ui/` — see `src/ui/CLAUDE.md`
 Design system primitives, banners, and shared components — the **Square design system** (light-only; dark mode was removed in the reskin, no `theme.js`, no `[data-theme]`). Components style via `--ui-*` tokens (`ui/tokens.css`): black primary, hairline borders, flat/no shadow, pill buttons, Inter. `primitives.jsx` is fully token-based (incl. `Badge`/`BulkActionBar`). Still-hardcoded exceptions: `AnnouncementBanner.jsx`, `PwaInstallPrompt.jsx`, `MultiOutletEnabledBanner.jsx`, `SubscriptionBanner.jsx`, `StarRating.jsx`, parts of `SupportWidget.jsx`, and the `Modal`/`Drawer` `bg-black/45` scrim. POS uses hardcoded colors by exception.
@@ -140,7 +140,9 @@ No `RequireFeature` wrapper exists — checks are always inline. Do NOT pass an 
 `useFeatureFlags` also exposes cross-component refresh: `refreshFeatureFlags()` (named export) dispatches the `sanopos:flags-refresh` window event, and every mounted `useFeatureFlags` instance refetches and rewrites the warm cache — nav/gates update in-place without a re-login. Used by `BusinessModulesRedesign` after a module toggle (together with `refreshPreset()` for mode gates).
 
 ### Permissions
-`hasPerm("perm_name")` from `useAuth()`. Returns true if `all_access` or the specific permission.
+`hasPerm("perm_name")` from `useAuth()`. Returns true if `all_access` or the specific permission. It reads `session.permissions`, which is **outlet-context-dependent** since PLAN-V2 Step 14 (D2b): an employee can hold a per-outlet role override (`employee_outlets.role_id`, v137), so the same person has different permissions at different outlets.
+
+The boot contract is unchanged — `AuthProvider`'s own boot path still loads the **base** role's perms via `refreshPermissions`. The effective set arrives from `GET /api/context/bootstrap`, whose `employee` payload carries `permissions` (effective), `base_role_id`, `effective_role_id`, `effective_role_name`. `PresetContext` feeds that payload to `applyEffectiveSession(emp)` (exposed on `useAuth()`), which overlays it onto the stored session so `hasPerm()`/nav follow the current outlet. That happens on boot, on outlet switch (`ContextSelect` + `ContextSwitcher` both call `refreshFeatureFlags()` + `refreshPreset()`), and after a role-permission save (C8). There is **no permission cache** anywhere in the backend chain — perms are re-read per request, so removing an override reverts on the very next request.
 
 ### Route Wrappers
 `pages/*Route.jsx` files are thin wrappers that lazy-load the corresponding `*Redesign.jsx`. Never edit these (except `POSRoute.jsx`/`ReportsRoute.jsx`) — all logic belongs in the `*Redesign.jsx`.

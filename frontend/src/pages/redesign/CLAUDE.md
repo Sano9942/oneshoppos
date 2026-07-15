@@ -35,6 +35,12 @@ The POS terminal is its own self-contained module with a full dedicated guide �
 ### HR/Staff
 `EmployeesRedesign` (admin-only), `AdministratorRedesign`, `HRManagementRedesign`, `AttendanceRedesign` (LOCAL time), `SchedulingRedesign`, `CommissionPlansRedesign`.
 
+**Per-outlet role overrides (Step 14 / D2b)** — `EmployeesRedesign`'s outlet-assignment block renders a role `<Select>` beside each checked outlet, defaulting to "Inherit (*base role*)". Pure helpers live in `redesign/employeeOutletRoles.js` (`buildOutletRolesMap`, `overridesFromAssignments`) — unit-tested in `frontend/tests/unit/outlet-role-overrides.test.jsx`.
+- **Contract gotcha**: `PUT /api/employees/:id/outlets` is **bulk-replace** — omitting `outlet_roles` clears every existing override. The editor therefore always round-trips the *full* map (explicit `role_id`, or `null` for inherit) via `buildOutletRolesMap`. Don't "optimize" it to send only changed entries.
+- Unchecking an outlet drops its override from state, so a re-check starts at Inherit rather than silently restoring a stale role.
+- An `all_access` override at *any* one outlet is effectively tenant-admin (backend keys outlet *reach* on base perms, capability on effective) — the page warns on this. That check is `Number(rid) === 1`, matching the file's existing `role_id === 1 → Administrator` seeding idiom (same convention as the row badge tone). It's advisory UI and fails open if a tenant's admin role isn't id 1; the real enforcement is server-side.
+- `AdministratorRedesign` calls `refreshPreset()` after a role-permission save (C8) so the *editing* session's own nav/guards pick up the new set in place; other employees converge at their next bootstrap or outlet switch.
+
 ### Finance
 `ExpensesRedesign` (LOCAL time), `AccountingRedesign` (`accounting_core` flag, `from`/`to` params), `JournalEntriesRedesign`, `ChartOfAccountsRedesign`, `PostdatedChequesRedesign`, `CreditDebitNotesRedesign`, `CustomerInvoicesRedesign` (`customer_invoicing` flag), `RetailRiskRedesign` (A/R aging, credit risk).
 

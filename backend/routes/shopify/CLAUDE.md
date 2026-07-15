@@ -86,7 +86,7 @@ Product + location routes: `manage_inventory`. Customer routes: `manage_orders`.
 
 Has its own local `getActiveShopifyConnection()` built directly from `shopify/utils` (re-derived here rather than reused from `index.js`'s closure — both do the same thing, just constructed independently in this file).
 
-- `GET /reconciliation` — `requireAnyPerm(["view_reports","manage_inventory"])`. Filters by `?status=` and `?resolution_status=`. Joins `products`/`outlets`. Remaps `local_qty`→`pos_qty`, `external_qty`→`shopify_qty` in the JSON response (frontend-facing naming, doesn't match the DB columns).
+- `GET /reconciliation` — `requireAnyPerm(["view_inventory_reports","manage_inventory"])` (D4 split retired `view_reports`). Filters by `?status=` and `?resolution_status=`. Joins `products`/`outlets`. Remaps `local_qty`→`pos_qty`, `external_qty`→`shopify_qty` in the JSON response (frontend-facing naming, doesn't match the DB columns).
 - `POST /reconciliation` — `manage_inventory`. Full live reconciliation run: pulls all active `shopify_product_map` × `shopify_location_map` combos, sums local `outlet_stock`, batches (50 at a time, grouped by location) calls to `fetchInventoryLevelsBatch`, computes `diff = local_qty - external_qty`, and **replaces the entire `inventory_reconciliation` table** (`DELETE FROM inventory_reconciliation` then bulk insert, all inside one transaction) — a full-table replace on every run, not an incremental update. Per-location batch fetch failures produce `status='error'` rows rather than aborting the whole run.
 - `PUT /reconciliation/:id` — `manage_inventory`. Updates `resolution_status` (`open|resolved|ignored`) + `resolution_note`; clearing back to `open` nulls `resolved_at`.
 - `POST /reconciliation/:id/fix` — `manage_inventory` **+ `requireFeature("approvals")`** (the only feature-flag-gated route in the whole directory). Doesn't touch inventory itself — creates an `approval_requests` row (`request_type='reconciliation_fix'`) with a JSON `notes` snapshot of the diff; actual stock adjustment happens elsewhere once approved.
@@ -115,7 +115,7 @@ Has its own local `getActiveShopifyConnection()` built directly from `shopify/ut
 | `sync/pull-orders` | `manage_orders` |
 | `mappings/customers` (GET + PUT) | `manage_orders` |
 | `status`, `events`, `uat-checklist` | `requireAnyPerm(["manage_inventory","manage_orders"])` |
-| `reconciliation` GET | `requireAnyPerm(["view_reports","manage_inventory"])` |
+| `reconciliation` GET | `requireAnyPerm(["view_inventory_reports","manage_inventory"])` |
 | `reconciliation/:id/fix` | `manage_inventory` + `requireFeature("approvals")` |
 | `webhooks/orders-create` | none — HMAC signature-verified instead |
 
