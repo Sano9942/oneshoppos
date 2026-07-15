@@ -1,24 +1,24 @@
 # Admin Pages — Claude Guide
 
-Super-admin panel at `/admin/*`. Completely separate auth system from tenant auth — no `AuthProvider`, no `api.js`, no permissions system, no `useCurrency`/tenant `ui/primitives`. Styled with the same `--ui-*` token classes as the rest of the app (light-only, Square design system), not a distinct dark theme.
+Super-admin panel at `/admin/*`. Completely separate auth system from tenant auth — no `AuthProvider`, no `api.js`, no tenant permissions system, no `useCurrency`/tenant `ui/primitives`. Styled with the same `--ui-*` token classes as the rest of the app (light-only, Square design system), not a distinct dark theme.
 
-**Auth pattern**: Bearer token stored in `localStorage["adminSession"]` via `auth/adminAuthStore.js` (`readAdminSession`, `writeAdminSession`, `clearAdminSession`, `getAdminToken`, `getAdminSession`). All pages call `adminFetch(path, options)` defined in `AdminLogin.jsx`, which reads the token and attaches `Authorization: Bearer <token>` + JSON content-type. **`adminFetch` now silently refreshes on 401**: if the response is 401 with `code: "TOKEN_EXPIRED"`, it POSTs `${API_BASE}/api/admin/auth/refresh` (httpOnly refresh cookie, `credentials: "include"`), coalesces concurrent refreshes into one in-flight promise, writes the new token, and retries the original request once. Only a refresh failure (or a 401 without that code) should be treated as "redirect to `/admin/login`" — not every page does this consistently.
+**Auth pattern**: Bearer token stored in `localStorage["adminSession"]` via `auth/adminAuthStore.js` (`readAdminSession`, `writeAdminSession`, `clearAdminSession`, `getAdminToken`, `getAdminSession`). Every page calls `adminFetch(path, options)`, defined in `AdminLogin.jsx` and re-exported from there for backward-compat imports. `adminFetch` attaches `Authorization: Bearer <token>` + JSON content-type, and **silently refreshes on 401**: if the response is 401 with `code: "TOKEN_EXPIRED"`, it POSTs `${API_BASE}/api/admin/auth/refresh` (httpOnly refresh cookie, `credentials: "include"`), coalesces concurrent refreshes into one in-flight promise, writes the new token, and retries the original request once. A 401 without that code, or a failed refresh, is not handled uniformly — some raw-`fetch()` call sites (noted below) just hard-redirect or silently fail.
 
-**2FA (TOTP)** is layered on top of the password login: `POST /api/admin/auth/login` may return `{ totp_required: true, pending_token }` instead of a session, in which case `AdminLogin.jsx` shows a second step that posts `{ pending_token, code }` to `POST /api/admin/auth/totp`. See `AdminSecurity.jsx` for enrollment.
+**2FA (TOTP)** layers on top of password login: `POST /api/admin/auth/login` may return `{ totp_required: true, pending_token }` instead of a session, in which case `AdminLogin.jsx` shows a second step that posts `{ pending_token, code }` to `POST /api/admin/auth/totp`. Enrollment/disable/session management live in `AdminSecurity.jsx`.
 
-Most pages auto-refresh via `setInterval` in `useEffect`; noted per file below.
+Most list/log pages auto-refresh via `setInterval` in a `useEffect` (background refetch, not a full loading-state reset) — noted per file below.
 
 ---
 
 ## `AdminLogin.jsx`
 
-Login form + defines/re-exports the shared helpers every other admin page imports.
+Login form, and the module every other admin page imports from.
 
-- Defines and exports `adminFetch(path, options)` — the canonical fetch wrapper (Bearer token + JSON headers + silent-refresh-on-401 described above).
-- Re-exports `writeAdminSession`, `getAdminToken`, `clearAdminSession`, `getAdminSession` from `../../auth/adminAuthStore` — a backward-compat shim so other files can `import { adminFetch, getAdminToken, ... } from "./AdminLogin"` instead of the store directly.
-- If a valid session already exists (`session.token && session.admin.id`), redirects to `/admin` immediately (`<Navigate>`).
-- Login: `POST /api/admin/auth/login` with `{ email, password }`. Two outcomes: normal session (`{ token, admin }` → `writeAdminSession` → navigate `/admin`) or `{ totp_required: true, pending_token }` → switches to the TOTP step.
-- TOTP step: `POST /api/admin/auth/totp` with `{ pending_token, code }` (accepts a 6-digit code or a recovery code). On `PENDING_EXPIRED`/`PENDING_INVALID` error codes, bounces back to the password step.
+- Defines and exports `adminFetch(path, options)` — the fetch wrapper described above.
+- Re-exports `writeAdminSession`, `getAdminToken`, `clearAdminSession`, `getAdminSession` from `../../auth/adminAuthStore` — a compat shim so other files can `import { adminFetch, getAdminToken, ... } from "./AdminLogin"` instead of the store directly.
+- If a valid session already exists, redirects to `/admin` immediately (`<Navigate>`).
+- Login: `POST /api/admin/auth/login` with `{ email, password }`. Two outcomes: a normal session (`{ token, admin }` → `writeAdminSession` → navigate `/admin`) or `{ totp_required: true, pending_token }` → switches to the TOTP step.
+- TOTP step: `POST /api/admin/auth/totp` with `{ pending_token, code }` (6-digit code or recovery code). On `PENDING_EXPIRED`/`PENDING_INVALID`, bounces back to the password step.
 
 ---
 
@@ -27,15 +27,15 @@ Login form + defines/re-exports the shared helpers every other admin page import
 Shell: sidebar nav + `<Outlet>`. Imports `{ adminFetch, clearAdminSession, getAdminToken, getAdminSession }` from `./AdminLogin`.
 
 - **Auth guard**: calls `getAdminToken()` directly at render time (no context, no effect) — redirects to `/admin/login` if missing.
-- **Support badge**: polls `GET /api/admin/support-tickets?status=open` every 60s, shows open count on the "Support" nav item.
-- **Nav items in order**: Dashboard (`/admin`, exact), Tenants, Support (badge), Emails, Activity, Adoption, Tax Rates, Dead Letters, Billing, Stuck Payments, Security.
+- **Support badge**: polls `GET /api/admin/support-tickets?status=open` every 60s, shows the open count on the "Support" nav item.
+- **Nav items in order**: Dashboard (`/admin`, exact), Tenants, Support (badge), Emails, Activity, Adoption, Tax Rates, Dead Letters, Billing, Stuck Payments, Security, Module Locks.
 - Logout: `POST /api/admin/auth/logout` (best-effort server-side refresh-session revoke, errors swallowed) then `clearAdminSession()` and navigate to `/admin/login`.
 
 ---
 
 ## `AdminDashboard.jsx`
 
-Loads 9 endpoints in parallel on mount (mixed raw `fetch` + `adminFetch`):
+Loads roughly a dozen endpoints in parallel on mount (mixed raw `fetch` + `adminFetch`):
 
 | Endpoint | State | Fetch style |
 |----------|-------|-------------|
@@ -49,7 +49,7 @@ Loads 9 endpoints in parallel on mount (mixed raw `fetch` + `adminFetch`):
 | `GET /api/admin/announcements` | `announcements` | `adminFetch` |
 | `GET /api/admin/infra` | (see `InfrastructurePanel`) | raw fetch, manual header |
 
-**`InfrastructurePanel`** (internal component, not exported): polls `GET /api/admin/infra` every 60s using raw `fetch` with a manual `Authorization` header (not `adminFetch`, so it does not get silent-refresh). Backend caches this endpoint 5 min server-side, so 60s client polling is safe. **Pauses when the tab is hidden** (`visibilitychange` listener) and immediately refetches + resumes on focus. Renders: connection pool usage (color-coded bar), DB size, cache hit ratio (flags <95%), dead tuple counts, schema sizes, currently-running slow queries, historical slow query stats (`pg_stat_statements`), and a `<details>` table of per-table dead-tuple health.
+**`InfrastructurePanel`** (internal component): polls `GET /api/admin/infra` every 60s using raw `fetch` with a manual `Authorization` header (not `adminFetch` — no silent refresh here). Backend caches this endpoint 5 min server-side, so 60s client polling is safe. **Pauses when the tab is hidden** (`visibilitychange` listener) and immediately refetches + resumes on focus. Renders: connection pool usage (color-coded bar), DB size, cache hit ratio (flags <95%), dead tuple counts, schema sizes, currently-running slow queries, historical slow query stats (`pg_stat_statements`), and a `<details>` table of per-table dead-tuple health.
 
 **`WorkerStatusPanel`** (internal component): groups `workers` data by domain (`WORKER_GROUPS` — Platform, Billing & subscriptions, Retail & inventory, Restaurant & reservations, Appointments & clinical, Rentals & lodging, Integrations & compliance, plus an "Other" bucket for ungrouped keys). Any worker with `w.alert` set (`env_var_missing`, `register_failed`, `enabled_but_stopped`) surfaces in an amber banner above the groups. Each row shows a status dot, queue depth, processed-today count, and last-poll-ago.
 
@@ -57,15 +57,15 @@ Loads 9 endpoints in parallel on mount (mixed raw `fetch` + `adminFetch`):
 - Orphaned schema cleanup: `POST /api/admin/orphaned-schemas/cleanup` (confirm dialog first)
 - Manual backup: `POST /api/admin/backup`, then refreshes `backup-history`
 - "Migrate All Tenants": `POST /api/admin/migrate-all` (confirm dialog first) — runs pending migrations across every tenant schema, reports `{ migrated, skipped, errors }`
-- Announcements CRUD: create (`POST /api/admin/announcements` with `{ message, type, ends_at?, audience_plan?, audience_industry? }`, types: info/warning/maintenance, audience can target a plan and/or a comma-joined list of industry keys drawn from `INDUSTRY_LABELS`), deactivate (`PUT /api/admin/announcements/:id` with `{ active: false }`), delete (`DELETE /api/admin/announcements/:id`)
+- Announcements CRUD: create (`POST /api/admin/announcements` with `{ message, type, ends_at?, audience_plan?, audience_industry? }`, types info/warning/maintenance, audience can target a plan and/or a comma-joined list of industry keys drawn from `INDUSTRY_LABELS`), deactivate (`PUT /api/admin/announcements/:id` with `{ active: false }`), delete (`DELETE /api/admin/announcements/:id`)
 
-Also renders recent tenants list (click → `/admin/tenants/:id`) and recent audit log entries from `stats.recent_tenants` / `stats.recent_audit`.
+Also renders a recent-tenants list (click → `/admin/tenants/:id`) and recent audit log entries from `stats.recent_tenants` / `stats.recent_audit`.
 
 ---
 
 ## `AdminTenantList.jsx`
 
-Search (name/slug) + status filter (all/active/suspended) + industry filter (built dynamically from `industry_type` values actually present in the loaded tenants, labeled via `industryLabel()` from `industryLabels.js`). `GET /api/admin/tenants`. Also loads `GET /api/admin/test-fleet` (tenants matching a test-prefix) for the fleet card below. Rows are clickable → `/admin/tenants/:id`.
+Search (name/slug) + status filter (all/active/suspended) + industry filter (built dynamically from the `industry_type` values actually present in the loaded tenants, labeled via `industryLabel()` from `industryLabels.js`). `GET /api/admin/tenants`. Also loads `GET /api/admin/test-fleet` (tenants matching a test-prefix) for the fleet card below. Rows are clickable → `/admin/tenants/:id`.
 
 **`healthDot` logic**: setup incomplete → muted "Setup pending"; never logged in → red "Never logged in"; last login <1d → green "Active today"; <7d → amber "`{n}d ago`"; ≥7d → red "`{n}d ago`".
 
@@ -75,7 +75,7 @@ Search (name/slug) + status filter (all/active/suspended) + industry filter (bui
 
 **Test fleet card**: shown when `fleet.count > 0` (tenants matching `fleet.prefix*`). "Extend all +30d" reuses `bulk-lifecycle`. "Delete fleet" opens a confirm modal requiring the exact prefix to be typed, then `POST /api/admin/test-fleet/delete` with `{ prefix, confirm }`.
 
-**Create tenant modal**: fields `slug` (regex `^[a-z0-9_]{3,40}$`), `name`, `owner_email` (optional), `pin` (required admin PIN), `timezone` (default UTC), `plan` (free/pro). `POST /api/admin/tenants`. On success shows a copyable setup URL in a follow-up modal.
+**Create tenant modal**: fields `slug` (regex `^[a-z0-9_]{3,40}$`), `name`, `owner_email` (optional), `pin` (required admin PIN), `timezone` (default UTC), `plan` (free/pro). `POST /api/admin/tenants`. On success, shows a copyable setup URL in a follow-up modal.
 
 **Delete modal**: requires typing the exact tenant slug to enable the delete button. `DELETE /api/admin/tenants/:id`. Inline handler, not shared with any `doAction` helper.
 
@@ -99,25 +99,25 @@ Loads `GET /api/admin/tenants/:id` + `GET /api/admin/tenants/:id/stats` together
 | Reset PIN | `POST /api/admin/tenants/:id/reset-pin` | active only, resets to `"0000"`, confirm dialog |
 | Delete | `DELETE /api/admin/tenants/:id` | always, confirm dialog |
 
-**Impersonation** ("Log in as Tenant") is a separate inline handler, not `doAction`: `POST /api/admin/impersonate/:id` → opens a **new tab** at `/context-select?impersonate_token=...&impersonate_session=...&tenant_slug=...&tenant_name=...`. Only enabled when tenant is active.
+**Impersonation** ("Log in as Tenant") is a separate inline handler, not `doAction`: `POST /api/admin/impersonate/:id` → opens a **new tab** at `/context-select?impersonate_token=...&impersonate_session=...&tenant_slug=...&tenant_name=...`. Only enabled when the tenant is active.
 
-**Setup status card**: shown when `setupInfo` present. If incomplete, shows setup URL + copy button + "Regenerate Token" (`POST /api/admin/tenants/:id/regenerate-setup-token`).
+**Setup status card**: shown when `setupInfo` is present. If incomplete, shows the setup URL + copy button + "Regenerate Token" (`POST /api/admin/tenants/:id/regenerate-setup-token`).
 
-**Billing section**: shows plan/cycle/expiry/payment_status. "Record Payment" button opens a modal (plan, cycle, amount auto-filled from `planPricing`, payment_method, reference_note) → `POST /api/admin/tenants/:id/record-payment`. Pending upgrade requests shown inline with Approve/Dismiss (`PUT /api/admin/upgrade-requests/:id` with `{ status: "approved"|"dismissed" }`). Payment history table exportable via `downloadCsv`.
+**Billing section**: shows plan/cycle/expiry/payment_status. "Record Payment" opens a modal (plan, cycle, amount auto-filled from `planPricing`, payment_method, reference_note) → `POST /api/admin/tenants/:id/record-payment`. Pending upgrade requests shown inline with Approve/Dismiss (`PUT /api/admin/upgrade-requests/:id` with `{ status: "approved"|"dismissed" }`). Payment history table exportable via `downloadCsv`.
 
 **Verticals card** (`verticalUsage`): shows industry label (`industryLabel()`), business model badge, enabled mode pills (`MODE_LABELS`), and per-feature usage counts (`u.count`, `u.label`, last-activity timestamp) filtered to `count > 0`.
 
 **Modes card**: toggle switches per mode (`toggleMode` → `PUT /api/admin/tenants/:id/modes` with `{ mode, enabled }`) — enabling/disabling a mode also flips its whole registry-flag bundle, per the tooltip text.
 
-**Feature flags card**: ~107 flags grouped client-side by key prefix via `flagGroup()` (Restaurant, Appointments & memberships, Projects & tickets, Rentals, Lodging, Clinical, Wholesale, Retail, Integrations & compliance, Reports, Platform (phase 2), Context enforcement, Billing & subscriptions, Marketing & messaging, Core — see `FLAG_GROUP_ORDER`). Searchable by key substring. Toggle a single flag: `toggleFlag()` → `PUT /api/admin/tenants/:id/feature-flags` with `{ key, enabled }`, optimistic local update, then re-fetches `flag-drift`.
+**Feature flags card**: flags grouped client-side by key prefix via `flagGroup()` (Restaurant, Appointments & memberships, Projects & tickets, Rentals, Lodging, Clinical, Wholesale, Retail, Integrations & compliance, Reports, Platform (phase 2), Context enforcement, Billing & subscriptions, Marketing & messaging, Core — see `FLAG_GROUP_ORDER`). Searchable by key substring. Toggling a single flag calls `toggleFlag()` → `PUT /api/admin/tenants/:id/feature-flags` with `{ key, enabled }`, optimistic local update, then re-fetches `flag-drift`.
 
-**Preset drift detection** (`drift` state from `GET /api/admin/tenants/:id/flag-drift`): flags the preset expects ON but are currently OFF are tagged "expected on"; flags outside the preset's expected set that are manually ON are tagged "manual". A warning banner lists missing flags. "Re-apply preset" button opens a modal (`showReapply`) with an "also re-run signup flag bundles" checkbox, then calls `POST /api/admin/tenants/:id/reapply-preset` with `{ include_bundles }`.
+**Preset drift detection** (`drift` from `GET /api/admin/tenants/:id/flag-drift`): flags the preset expects ON but are currently OFF are tagged "expected on"; flags outside the preset's expected set that are manually ON are tagged "manual". A warning banner lists missing flags. "Re-apply preset" opens a modal (`showReapply`) with an "also re-run signup flag bundles" checkbox, then calls `POST /api/admin/tenants/:id/reapply-preset` with `{ include_bundles }`.
 
 **Tenant Notes**: `POST /api/admin/tenants/:id/notes` (add), `DELETE /api/admin/tenants/:id/notes/:noteId` (confirm dialog).
 
 **Plan pricing editor**: inline edit of the global `planPricing` list (shared across all tenants, not tenant-specific) — `PUT /api/admin/plan-pricing/:id` with `{ price }`.
 
-**Health Dashboard (right column)**: from `stats` — last login/sale/shift, active staff (7d/30d), sales+revenue for today/week/month, plan usage bars (employees/products/outlets vs max), schema size, total sales, customers, and feature usage (30d) with top users list (from `featureUsage`).
+**Health Dashboard (right column)**: from `stats` — last login/sale/shift, active staff (7d/30d), sales+revenue for today/week/month, plan usage bars (employees/products/outlets vs max), schema size, total sales, customers, and feature usage (30d) with a top-users list (from `featureUsage`).
 
 No auto-refresh polling on this page — data reloads only after an action completes.
 
@@ -129,12 +129,12 @@ Auto-refreshes every 30s (background refetch, no loading spinner).
 
 Status filter: all / open / acknowledged / resolved. Statuses styled: open=amber, acknowledged=muted, resolved=green.
 
-Clicking a ticket row expands it to show full message, page URL, browser info, last request ID, employee ID, screenshots, and any existing admin reply.
+Clicking a ticket row expands it to show the full message, page URL, browser info, last request ID, employee ID, screenshots, and any existing admin reply.
 
 **Actions per ticket:**
 - Acknowledge / Resolve: `PUT /api/admin/support-tickets/:tenantId/:ticketId` with `{ status }`
 - Reply: inline textarea → `PUT /api/admin/support-tickets/:tenantId/:ticketId/reply` with `{ reply }`
-- Quick Impersonate: `POST /api/admin/impersonate/:tenantId` → opens new tab at `/context-select?...` and appends `&redirect=<page_url>` if the ticket recorded a `page_url`
+- Quick Impersonate: `POST /api/admin/impersonate/:tenantId` → opens a new tab at `/context-select?...` and appends `&redirect=<page_url>` if the ticket recorded a `page_url`
 - Delete: `DELETE /api/admin/support-tickets/:tenantId/:ticketId` (confirm dialog)
 
 ---
@@ -149,15 +149,15 @@ Auto-refreshes every 30s — **except** the Broadcasts tab, which loads from a d
 
 **Per-email actions**: Send Now (`POST /api/admin/email-queue/:id/send-now`, pending only), Retry (`POST /api/admin/email-queue/:id/retry`, failed only), Delete (`DELETE /api/admin/email-queue/:id`, confirm dialog).
 
-**Global actions**: "Purge Deleted Tenants" (`DELETE /api/admin/email-queue/purge-deleted`, confirm dialog, shows count purged), CSV export via `downloadCsv` (disabled on Broadcasts tab).
+**Global actions**: "Purge Deleted Tenants" (`DELETE /api/admin/email-queue/purge-deleted`, confirm dialog, shows count purged), CSV export via `downloadCsv` (disabled on the Broadcasts tab).
 
-**Broadcast form**: type (downtime/announcement), subject, HTML message → `POST /api/admin/email/broadcast` with `{ type, subject, message }`, reports `enqueued` count.
+**Broadcast form**: type (downtime/announcement), subject, HTML message → `POST /api/admin/email/broadcast` with `{ type, subject, message }`, reports the `enqueued` count.
 
 ---
 
 ## `AdminDeadLetters.jsx`
 
-Renamed in practice to "Dead Letters & Queue Health" — 4 tabs, each with a distinct endpoint and its own table columns:
+Reads "Dead Letters & Queue Health" in the UI — 4 tabs, each with a distinct endpoint and its own table columns:
 
 | Tab | Endpoint | Columns | Actions |
 |-----|----------|---------|---------|
@@ -172,13 +172,13 @@ Auto-refreshes every 30s (per active tab).
 
 ## `AdminActivity.jsx`
 
-3 tabs: Admin Actions, Tenant Activity, Security. Page size fixed at 50 rows. Auto-refreshes every 30s. Switching tabs resets `offset` and `filter` to 0/none.
+3 tabs: Admin Actions, Tenant Activity, Security. Page size fixed at 50 rows. Auto-refreshes every 30s. Switching tabs resets `offset` and `filter`.
 
 **Also renders `ImpersonationCard`** at the top of the page (independent of the tab state): shows currently-active impersonation sessions with a "Revoke" button per session (`POST /api/admin/impersonate/:sessionId/end` — blacklists the token's `jti`), polls `GET /api/admin/impersonation-sessions?active=1` every 30s, and has a togglable "Recent history" panel (`GET /api/admin/impersonation-sessions?limit=20`) showing active/revoked/ended state per session.
 
 | Tab | Endpoint | Filter param | Response key fallback chain |
 |-----|----------|-------------|------------------------------|
-| Admin Actions | `GET /api/admin/activity-log` | `action` (30+-value `ACTION_TYPES` list, includes tax/backup/cleanup/orphan-schema actions) | `entries` \|\| `rows` \|\| `logs` \|\| `events` |
+| Admin Actions | `GET /api/admin/activity-log` | `action` (a long `ACTION_TYPES` list, includes tax/backup/cleanup/orphan-schema actions) | `entries` \|\| `rows` \|\| `logs` \|\| `events` |
 | Tenant Activity | `GET /api/admin/tenant-activity` | none | same |
 | Security | `GET /api/admin/security-log` | `event_type` (login_success/login_failed) | same |
 
@@ -231,7 +231,7 @@ Super-admin's own account security (not tenant-facing) — TOTP 2FA enrollment/d
 
 ## `AdminTaxRates.jsx`
 
-**Exception to the shared pattern**: defines its own **local** `adminFetch` inline (does not import from `AdminLogin.jsx`). Uses `getAdminToken()` from `../../auth/adminAuthStore` directly and prepends `API_BASE` manually to every URL.
+Imports `adminFetch` from `./AdminLogin` like every other admin page — no local duplicate here.
 
 2 tabs: Tax Rates (CRUD on `tax_rate_reference`) and Suggestions (tenant-submitted correction review).
 
@@ -253,18 +253,29 @@ Payment-ops debug tool, two independent sections, both auto-refresh every 30s. T
 
 ---
 
+## `AdminModuleLocks.jsx`
+
+The Business Modules super-admin backstop. A lock prevents a tenant from self-**enabling** a module from its own Business Modules page — disabling stays allowed, and locking never disables a module for a tenant that already has it on. Force-off for an already-enabled module is done separately via the per-tenant feature-flag editor on `AdminTenantDetail.jsx`.
+
+Loads `GET /api/admin/module-locks` → `{ locks, module_keys }` (the list of lockable module keys). No auto-refresh.
+
+**Add/refresh lock form**: module (select from `module_keys`), optional tenant ID (empty = platform-wide/global lock), reason. `PUT /api/admin/module-locks/:module_key` with `{ tenant_id?, reason }`.
+
+**Locks table**: module key, scope (tenant name/slug badge, or a "GLOBAL" badge for platform-wide locks), reason, locked-by, locked-at, and a Remove action — `DELETE /api/admin/module-locks/:module_key` (`?tenant_id=` query param for a per-tenant lock, omitted for global), confirm dialog first.
+
+---
+
 ## `industryLabels.js`
 
-Shared display-name maps, mirrored from `backend/config/industry-config.js` (`INDUSTRY_PRESETS[].display_name`) and `backend/config/mode-registry.js` — keep in sync when adding a preset/mode. Exports `INDUSTRY_LABELS` (industry key → display name, e.g. `general_retail` → "Retail Store"), `MODE_LABELS`, and helper functions `industryLabel(key)` / used inline elsewhere as `INDUSTRY_LABELS[key] || key`. Consumed by `AdminDashboard.jsx` (announcement audience picker), `AdminTenantList.jsx` (industry filter), `AdminTenantDetail.jsx` (verticals/modes cards), `AdminAdoption.jsx` (matrix labels).
+Shared display-name maps, mirrored from `backend/config/industry-config.js` (`INDUSTRY_PRESETS[].display_name`) and `backend/config/mode-registry.js` — keep in sync when adding a preset/mode. Exports `INDUSTRY_LABELS` (industry key → display name, e.g. `general_retail` → "Retail Store"), `MODE_LABELS`, and `industryLabel(key)` (falls back to the raw key, or "—" if falsy). Consumed by `AdminDashboard.jsx` (announcement audience picker), `AdminTenantList.jsx` (industry filter), `AdminTenantDetail.jsx` (verticals card), `AdminAdoption.jsx` (matrix labels).
 
 ---
 
 ## Cross-cutting gotchas
 
-- **Two different `adminFetch` implementations exist**: the shared one in `AdminLogin.jsx` (used everywhere else, includes silent 401 refresh) and a local duplicate in `AdminTaxRates.jsx` (no refresh logic). Don't assume importing `adminFetch` from `AdminLogin` covers all admin pages.
 - **Impersonation always opens a new tab** at `/context-select?impersonate_token=...&impersonate_session=...&tenant_slug=...&tenant_name=...` — implemented independently in `AdminTenantDetail.jsx` and `AdminSupportTickets.jsx` (the latter also appends `&redirect=<page_url>` when available). No shared helper — if impersonation behavior changes, update both call sites. Revocation lives in `AdminActivity.jsx`'s `ImpersonationCard` (`POST /api/admin/impersonate/:sessionId/end`), a third, independent code path.
-- **Admin sessions can silently refresh** (unlike the old no-refresh model): `adminFetch` exchanges the httpOnly refresh cookie for a new access token on a `TOKEN_EXPIRED` 401 and retries once. A handful of raw `fetch()` call sites bypass this (the `stats`/`attention`/`billing-attention` calls in `AdminDashboard.jsx`, and the `infra` poll in `InfrastructurePanel`) — those still hard-redirect or silently fail on 401.
-- **`plan-pricing` and `tax-rates` are global, not tenant-scoped** — edits from `AdminTenantDetail.jsx`, `AdminBilling.jsx`, or `AdminTaxRates.jsx` affect all tenants/currency-wide reference data, not just the one being viewed. Note `AdminTenantDetail.jsx` and `AdminBilling.jsx` each embed their own independent plan-pricing editor UI over the same table.
-- **Feature flags have two layers**: individual flags (`GET/PUT .../feature-flags`) and coarser "modes" (`GET/PUT .../modes`) that bundle a set of flags — toggling a mode flips its whole registry-flag bundle. `flag-drift` compares the tenant's actual flags against what its industry preset expects, surfacing "expected on" (missing) and "manual" (extra) tags; "Re-apply preset" resets to the expected baseline.
-- Destructive actions (delete tenant, delete ticket, delete note, purge emails, retry-all, delete fleet) all gate behind `window.confirm`/inline confirm modals — no custom `ConfirmDialog` component is used here (that's a tenant-app-only primitive).
-- Most list/log pages (`AdminSupportTickets`, `AdminEmails`, `AdminDeadLetters`, `AdminActivity`, `AdminStuckPayments`) auto-refresh via `setInterval(fn, 30000)` in a `useEffect` keyed on the active tab/filter — a background refetch, not a full loading-state reset. `AdminAdoption.jsx` and `AdminTenantDetail.jsx` are point-in-time / action-triggered only, no polling.
+- **Admin sessions can silently refresh**: `adminFetch` exchanges the httpOnly refresh cookie for a new access token on a `TOKEN_EXPIRED` 401 and retries once. A handful of raw `fetch()` call sites bypass this (the `stats`/`attention`/`billing-attention` calls in `AdminDashboard.jsx`, and the `infra` poll in `InfrastructurePanel`) — those still hard-redirect or silently fail on 401.
+- **`plan-pricing` and `tax-rates` are global, not tenant-scoped** — edits from `AdminTenantDetail.jsx`, `AdminBilling.jsx`, or `AdminTaxRates.jsx` affect all tenants/currency-wide reference data, not just the one being viewed. `AdminTenantDetail.jsx` and `AdminBilling.jsx` each embed their own independent plan-pricing editor UI over the same table.
+- **Feature flags have two layers**: individual flags (`GET/PUT .../feature-flags`) and coarser "modes" (`GET/PUT .../modes`) that bundle a set of flags — toggling a mode flips its whole registry-flag bundle. `flag-drift` compares a tenant's actual flags against what its industry preset expects, surfacing "expected on" (missing) and "manual" (extra) tags; "Re-apply preset" resets to the expected baseline. `AdminModuleLocks.jsx` is a third, separate layer — it doesn't touch flags/modes directly, it gates whether a tenant is *allowed* to self-enable a module at all.
+- Destructive actions (delete tenant, delete ticket, delete note, purge emails, retry-all, delete fleet, remove module lock) all gate behind `window.confirm`/inline confirm modals — no custom `ConfirmDialog` component is used here (that's a tenant-app-only primitive).
+- Most list/log pages (`AdminSupportTickets`, `AdminEmails`, `AdminDeadLetters`, `AdminActivity`, `AdminStuckPayments`) auto-refresh via `setInterval(fn, 30000)` in a `useEffect` keyed on the active tab/filter — a background refetch, not a full loading-state reset. `AdminAdoption.jsx`, `AdminTenantDetail.jsx`, `AdminModuleLocks.jsx`, and `AdminTaxRates.jsx` are point-in-time / action-triggered only, no polling.

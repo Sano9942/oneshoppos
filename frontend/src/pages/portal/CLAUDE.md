@@ -1,6 +1,8 @@
 # Portal Pages — Claude Guide
 
-Customer-facing self-service portal, mounted at `/portal/:tenantSlug`. Fully self-contained: separate auth (`PortalAuthProvider` + `../../auth/customerPortalStore`), separate API client (`portalApi`), no main-app `useAuth`, no permissions system, no `ui/primitives`, no `useCurrency`. Most pages are styled with the Square `--ui-*` tokens (same tokens as the rest of the app); a few newer pages (`PortalForms`, `PortalPackages`) still use raw Tailwind slate/emerald classes instead — don't treat that as a bug to silently "fix", just be aware of the split when touching either file.
+Customer-facing self-service portal, mounted at `/portal/:tenantSlug`. Fully self-contained: separate auth (`PortalAuthProvider` + `../../auth/customerPortalStore`, JWT scope `"customer"` — distinct from tenant `useAuth()` and the super-admin auth system), separate API client (`portalApi`), no main-app permissions system, no `ui/primitives`, no `useCurrency`. Backend routes live in `backend/routes/customer-portal/` and are mounted before tenant middleware — they never see `req.employee` or the ALS-proxied tenant `deps.db`; their own auth middleware resolves tenant DB routing directly.
+
+Most pages are styled with the Square `--ui-*` tokens (same tokens as the rest of the app); `PortalForms.jsx` and `PortalPackages.jsx` still use raw Tailwind slate/emerald/red/amber classes instead — don't treat that as a bug to silently "fix", just be aware of the split when touching either file.
 
 Tab visibility is server-driven: `PortalLayout` fetches `GET /api/portal/config` and passes `enabledTabs`/`labels`/`config`/`storeName`/`tenantSlug` down via `<Outlet context>`. Never assume a tab/page is reachable — always check `enabledTabs` before wiring new nav or cross-links.
 
@@ -15,8 +17,8 @@ Named export `portalApi`: `get(slug, path, query?)`, `post(slug, path, data)`, `
 - **Auto-refresh on 401**: silently POSTs `/api/portal/auth/refresh`, retries the original request once. If the retry also 401s, clears the session and throws `Error("Session expired")`.
 - Non-ok responses throw `Error(body.error || "HTTP N")` with `.status` and `.body` attached (matches `api.js` conventions).
 - Exceptions using raw `fetch()` against `API_BASE` directly (public, unauthenticated endpoints, not portal-scoped):
-  - `PortalAppointments.jsx`'s booking modal → `/api/public/bookings/config`, `/api/public/bookings/availability`
-  - `PortalStays.jsx` → probes `/api/public/rooms/config?tenant=` just to decide whether to show a "Book a stay" CTA (403 means the flag is off; hides the link, doesn't error)
+  - `PortalAppointments.jsx`'s booking modal → `GET /api/public/bookings/config?tenant=`, `GET /api/public/bookings/availability?tenant=&service_id=&date=`
+  - `PortalStays.jsx` → probes `GET /api/public/rooms/config?tenant=` just to decide whether to show a "Book a stay" CTA (non-ok means the flag is off; hides the link, doesn't error)
 
 ---
 
@@ -32,13 +34,13 @@ Exports `PortalAuthProvider({ tenantSlug, children })` and `usePortalAuth()` (th
 
 ## `PortalLayout.jsx`
 
-Default export wraps `PortalShell` in `<PortalAuthProvider tenantSlug={slug}>`.
+Default export wraps an internal `PortalShell` in `<PortalAuthProvider tenantSlug={slug}>`.
 
-`PortalShell` (internal):
+`PortalShell`:
 - Fetches `GET /api/portal/config` on mount → `{ enabled_tabs, portal_labels, branding, tenant }`. Shows a "Portal unavailable" error state if this fails.
 - Auth guard (runs once `auth.bootstrapping` is false): unauthenticated + non-public path → redirect to `login`. Authenticated + public path → redirect to portal root. Public path segments: `login`, `signup`, `forgot`, `reset`, `verify-otp`.
-- Renders sticky header (logo/store name/customer name-or-email/sign-out), a tab nav (only when authenticated — Dashboard always first, then `enabled_tabs` in order), and `<Outlet context={{ config, enabledTabs, labels, storeName, tenantSlug }}>`.
-- Full set of recognized tab keys (`TAB_LABEL_KEYS`/`TAB_PATHS`, path segment = key, all flat under `/portal/:slug/`): `invoices`, `orders`, `appointments`, `subscriptions`, `contracts`, `tickets`, `loyalty`, `wallet`, `profile`, `stays`, `treatments`, `packages`, `gallery`. Every one of these now has a matching page component in this directory (unlike earlier versions of this doc — `subscriptions`/`contracts`/`tickets`/`packages`/`gallery` were added later). `profile` is always reachable via the header even if not in `enabled_tabs` (it's not gated the same way — check the actual route file if wiring a new profile link).
+- Renders a sticky header (logo/store name/customer name-or-email/sign-out), a tab nav (only when authenticated — Dashboard always first, then `enabled_tabs` in order), and `<Outlet context={{ config, enabledTabs, labels, storeName, tenantSlug }}>`.
+- Full set of recognized tab keys (path segment = key, all flat under `/portal/:slug/`): `invoices`, `orders`, `appointments`, `subscriptions`, `contracts`, `tickets`, `loyalty`, `wallet`, `profile`, `stays`, `treatments`, `packages`, `gallery`. Every one of these has a matching page component in this directory. `profile` is always reachable via the header even if not in `enabled_tabs` — it's not gated the same way as the tab nav.
 
 ---
 
@@ -57,7 +59,7 @@ Reads `?email=` and `?purpose=` (`login` default). `purpose=email_verify` → `P
 `POST /api/portal/auth/request-password-reset` with `{ email }`. Always shows a generic confirmation (no user-enumeration signal).
 
 ### `PortalResetPassword.jsx`
-Reads `?token=`. `POST /api/portal/auth/reset-password` with `{ token, password }`. Redirects to login after a 2.5s delay on success. Shows an error state (no form) if `token` is missing.
+Reads `?token=`. `POST /api/portal/auth/reset-password` with `{ token, password }`. Redirects to login after a delay on success. Shows an error state (no form) if `token` is missing.
 
 ---
 
@@ -80,15 +82,15 @@ Params: `:tenantSlug`, `:invoiceId`. Fetches `GET /api/portal/me/invoices/:invoi
 "Pay now" (shown when status not `paid`/`void` and `balance_due > 0`) posts `POST /api/portal/me/invoices/:invoiceId/pay` (no body) → `window.location.href = res.checkout_url`. Gateway redirects back to `invoice-paid?invoice=:id`.
 
 ### `PortalInvoicePaidPage.jsx`
-Post-payment confirmation. Reads `?invoice=` from query params (errors immediately if missing). Polls `GET /api/portal/me/invoices/:id` every 1500ms (`POLL_INTERVAL_MS`) for up to 8 attempts (`MAX_POLLS`). Success condition: `status === "paid"` OR `Number(balance_due) === 0`. States: `polling` → `paid` | `timeout` | `error`.
+Post-payment confirmation. Reads `?invoice=` from query params (errors immediately if missing). Polls `GET /api/portal/me/invoices/:id` on an interval for a capped number of attempts. Success condition: `status === "paid"` OR `Number(balance_due) === 0`. States: `polling` → `paid` | `timeout` | `error`.
 
 ### `PortalAppointments.jsx`
 Fetches `?scope=upcoming` and `?scope=past` in parallel via `GET /api/portal/me/appointments`. Cancel: `PUT /api/portal/me/appointments/:id/cancel` with `{ reason }` (uses `window.confirm`). Includes two modals:
 - **BookingModal**: uses raw `fetch()` (not `portalApi`) against public `GET /api/public/bookings/config?tenant=` and `GET /api/public/bookings/availability?tenant=&service_id=&date=` to pick service/date/slot, then submits via `portalApi.post(..., "/api/portal/me/appointments", { service_id, start_at, employee_id, notes })`.
-- **RescheduleModal**: `PUT /api/portal/me/appointments/:id/reschedule` with `{ start_at }` (ISO string from a `datetime-local` input; UI note says must be ≥15 min from now — not enforced client-side beyond the hint text).
+- **RescheduleModal**: `PUT /api/portal/me/appointments/:id/reschedule` with `{ start_at }` (ISO string from a `datetime-local` input; UI hint says must be ≥15 min from now — not enforced client-side beyond the hint text).
 
 ### `PortalOrders.jsx`
-Fetches `GET /api/portal/me/order-history` (unified web + in-store order list, each row has a `source: "web"|"in-store"` field and composite key `${source}:${id}`) and, separately, `GET /api/portal/me/backorders` (wholesale-only — items reserved at order-time price, invoiced when stock arrives; fails silently to `[]` for non-wholesale tenants). "Reorder" button posts `POST /api/portal/me/reorder` with `{ source, order_id }` → response includes `redirect_url` (this is the **reorder/cart-handoff flow**: the storefront cart page reads `?adopt=` on mount, saves the cart token to `localStorage`, then strips the query param) and optionally `items_added`/`items_skipped[]` (shown as a notice banner, including on partial failure via `err.body.items_skipped`). No MOQ/case-pack UI here — MOQ enforcement (`services/moq.js`) applies to the storefront/field-rep cart the reorder hands off into, not to this page itself.
+Fetches `GET /api/portal/me/order-history` (unified web + in-store order list, each row has a `source: "web"|"in-store"` field and composite key `${source}:${id}`) and, separately, `GET /api/portal/me/backorders` (wholesale-only — items reserved at order-time price, invoiced when stock arrives; fails silently to `[]` for non-wholesale tenants). "Reorder" button posts `POST /api/portal/me/reorder` with `{ source, order_id }` → response includes `redirect_url` (the reorder/cart-handoff flow: the storefront cart page reads `?adopt=` on mount, saves the cart token to `localStorage`, then strips the query param) and optionally `items_added`/`items_skipped[]` (shown as a notice banner, including on partial failure via `err.body.items_skipped`). No MOQ/case-pack UI here — MOQ enforcement (`services/moq.js`) applies to the storefront/field-rep cart the reorder hands off into, not to this page itself.
 
 ### `PortalLoyalty.jsx`
 Fetches `GET /api/portal/me/loyalty` → `{ loyalty_points, total_spend, tier }`. Read-only; redemption instructions point to in-store checkout.
@@ -100,7 +102,7 @@ Fetches `GET /api/portal/me` + `GET /api/portal/me/addresses` in parallel (addre
 Clinical treatment plan viewer, two-level UI (list → drill-down, no routing — just local state).
 
 - **List**: `GET /api/portal/me/treatment-plans` → `res.plans`. Also fetches `GET /api/portal/me/handouts` (clinic-shared documents, independent of any specific plan) — non-fatal if it 404s/is feature-gated off, section just doesn't render.
-- **Detail**: `GET /api/portal/me/treatment-plans/:planId`. Renders sections from the response: Sessions (SOAP `soap_subjective`, session_number, status, provider, scheduled_at), Prescriptions, Chart (`chart_entries[]`: area_code, condition_code, severity, notes), Lab Results (`lab_orders[]`), Consent Documents (`consents[]`, with `document_pdf_url` link), Shared Documents (`documents[]`, only rendered if non-empty). If `plan.subject_type === "pet"`, also fetches `GET /api/portal/me/subjects/:subjectId/vaccination-card` (vet vertical) and renders a Vaccination card section if records exist — non-fatal, hidden on failure. Also shows an invoice reference block if `plan.invoice_number` is set, with a balance_due warning.
+- **Detail**: `GET /api/portal/me/treatment-plans/:planId`. Renders sections from the response: Sessions (SOAP `soap_subjective`, session_number, status, provider, scheduled_at), Prescriptions, Chart (`chart_entries[]`: area_code, condition_code, severity, notes), Lab Results (`lab_orders[]`), Consent Documents (`consents[]`, with `document_pdf_url` link), Shared Documents (`documents[]`, only rendered if non-empty). If `plan.subject_type === "pet"`, also fetches `GET /api/portal/me/subjects/:subjectId/vaccination-card` and renders a Vaccination card section if records exist — non-fatal, hidden on failure. Also shows an invoice reference block if `plan.invoice_number` is set, with a balance_due warning.
 - "Back to plans" just clears local `selected`/`detail` state — no re-fetch of the list.
 
 ### `PortalStays.jsx`
@@ -131,11 +133,11 @@ Repair/service ticket history (read-only). Reads `labels.tickets_tab` heading ov
 
 ## Gotchas
 
-- **Don't confuse `PortalInvoiceDetail`'s pay endpoint** (`/pay`) with `PortalWallet`'s top-up endpoint (`/wallet/top-up-intent`) — they're not the same pattern; check the actual route file (`backend/routes/...customer-portal...`) before assuming a naming convention.
+- **Don't confuse `PortalInvoiceDetail`'s pay endpoint** (`/pay`) with `PortalWallet`'s top-up endpoint (`/wallet/top-up-intent`) — they're not the same pattern; check the actual route file under `backend/routes/customer-portal/` before assuming a naming convention.
 - Every payment-initiating flow here (invoice pay, wallet top-up) follows redirect-to-gateway, not inline card entry — always `window.location.href = res.checkout_url`, never render a card form.
 - `PortalOrders.jsx` is the only page that crosses into the storefront (`redirect_url` handoff via `?adopt=` cart token) — if working on storefront cart adoption, this is the other end of that handshake. It's also the only page here surfacing wholesale backorders.
-- Several pages use `window.confirm`/`alert` for destructive actions (cancel appointment, delete address) instead of the toast/modal system used elsewhere in the app — this is intentional isolation from `ui/primitives`, not an oversight to "fix" by importing app-level UI.
-- Session bootstrap ordering: always check `auth.bootstrapping` before treating `isAuthenticated === false` as a real logged-out state — a false negative during the silent-refresh window causes a login-page flash/redirect loop if ignored.
+- Several pages use `window.confirm`/`alert` for destructive actions (cancel appointment, delete address) instead of the toast/modal system used elsewhere in the app — this is intentional isolation from `ui/primitives`, not an oversight to "fix".
 - Styling is inconsistent across the directory: most pages use `--ui-*` tokens (matching the app's Square design system), but `PortalForms.jsx` and `PortalPackages.jsx` use raw Tailwind slate/emerald/red classes. Match whichever convention the file you're editing already uses — don't silently "fix" one without being asked.
 - Several read-only pages (`PortalContracts`, `PortalSubscriptions`, `PortalTickets`, `PortalPackages`) tolerate two response shapes (bare array vs. `{ <key>: [] }`) — if a backend route changes its response envelope, check these `Array.isArray(data) ? data : data?.foo || []` guards before assuming a page is broken.
-- Vertical-specific sections are additive and fail closed: `PortalTreatments`' vaccination-card fetch (vet) and handouts fetch, and `PortalStays`'/`PortalOrders`' probe-then-hide-CTA pattern, all swallow errors and just omit the UI rather than showing an error state — don't "fix" a silently-empty section without first checking whether the underlying feature is actually enabled for that tenant.
+- Vertical-specific sections are additive and fail closed: `PortalTreatments`' vaccination-card fetch and handouts fetch, and `PortalStays`'/`PortalOrders`' probe-then-hide-CTA pattern, all swallow errors and just omit the UI rather than showing an error state — don't "fix" a silently-empty section without first checking whether the underlying feature is actually enabled for that tenant.
+- Session bootstrap ordering: always check `auth.bootstrapping` before treating `isAuthenticated === false` as a real logged-out state — a false negative during the silent-refresh window causes a login-page flash/redirect loop if ignored.

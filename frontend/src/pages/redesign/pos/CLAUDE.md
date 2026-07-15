@@ -1,165 +1,159 @@
 # POS Module — Claude Guide
 
-The entire POS terminal UI, driven by a single React Context (`POSContext`) composed from 8 domain hooks in `hooks/`. A `restaurant/` subdirectory holds table-service components used by `POSRestaurantRedesign.jsx` (floor grid, seat/course picker, split check, table transfer, guest-mode handoff) — those are documented in `pages/redesign/CLAUDE.md`; this guide covers the top-level POS files only.
+The POS terminal UI is driven by a single React Context (`POSContext`) composed from domain-specific hooks in `hooks/`. Every file covered below lives directly under `pos/`. A `restaurant/` subdirectory holds table-service components (floor grid, seat/course picker, split check, table transfer, guest-mode handoff) backing `POSRestaurantRedesign.jsx` — those are documented in `pages/redesign/CLAUDE.md`, not here.
 
-- **`POSContext.jsx`** — orchestrator (~1,250 lines). Composes 8 hooks bottom-up, wires cross-hook state (modifier picker, restaurant seat/course stamping, cart checkpoint/resume, F-key shortcuts, barcode scanner buffer, POS device registration), and exposes a large `value` object via `usePOS()`. A comment block at the top of the file lists every key as a "WAVE-C SNAPSHOT" for diff verification — keep it in sync if you add/remove exports. `usePOS()` throws if used outside `POSProvider`.
-- **`cartMath.js`** — pure utility, zero React. `calcGrossTotal(cart)`, `calcDiscountValue(grossTotal, type, input)` (percent/flat), `calcTaxTotal(cart, taxInclusive)` (inclusive backs tax out of price; exclusive adds on top — each line uses its own `effectiveTaxRate` so mixed-rate carts compute correctly), `calcTotal(...)` (always clamped to ≥ 0).
-- **`omniInputRouter.js`** — pure pattern classifier, zero React. `classifyOmniInput(raw)` → `{ kind, value?, format? }`. Kinds: `noop`, `barcode` (EAN-8/12/13/14 by digit length), `plu` (4-5 digit numeric), `customer` (`#`-prefixed), `text` (fallback).
+## Core files
 
-Both `cartMath.js` and `omniInputRouter.js` are deliberately pure — no imports from React or `usePOS()` — so they're cheap to unit-test in isolation (see `frontend/tests/unit/`).
+- **`POSContext.jsx`** — the orchestrator. Composes the domain hooks bottom-up (each hook receives outputs of earlier hooks as inputs), wires cross-hook state that doesn't belong to any single hook (modifier picker, restaurant seat/course stamping, cart checkpoint/resume, the global F-key + barcode-scanner keydown listener, POS device registration), and exposes one large `value` object via `usePOS()`. A comment block near the top of the file enumerates every key that must stay in the exported `value` object — keep it in sync when adding or removing exports. `usePOS()` throws if called outside `POSProvider`.
+- **`cartMath.js`** — pure functions, zero React imports. `calcGrossTotal(cart)`; `calcDiscountValue(grossTotal, discountType, discountInput)` (percent or flat); `calcTaxTotal(cart, taxInclusive)` (inclusive backs tax out of the sticker price, exclusive adds tax on top — each line uses its own `effectiveTaxRate` so mixed-rate carts compute correctly); `calcTotal(grossTotal, discountValue, taxTotal, taxInclusive)` (always clamped to ≥ 0).
+- **`omniInputRouter.js`** — pure pattern classifier, zero React. `classifyOmniInput(raw)` returns `{ kind, value?, format? }`. Kinds: `noop` (empty/too short input), `barcode` (all-digit, EAN-8/12/13/GTIN-14 by digit length), `plu` (4-5 digit numeric that doesn't match a recognized barcode length), `customer` (`#`-prefixed), `text` (fallback). Consumed only by `POSOmniInput.jsx`.
 
----
+Both `cartMath.js` and `omniInputRouter.js` are deliberately pure — no React, no `usePOS()` — so they're cheap to unit-test in isolation.
 
-## Context Hook Decomposition
+## Hook decomposition
 
-`POSContext.jsx` composes hooks bottom-up (each receives outputs of earlier hooks) from `hooks/`:
+`POSContext.jsx` composes these hooks from `hooks/`, each receiving outputs of earlier hooks:
 
 | Hook | Owns |
-|------|------|
-| `useShiftGate` | outlets, `selectedOutletId`, `activeShift`, attendance status/code, `gateLoading`, `canOpenShift`/`canSwitchOutlet` perms, `isReadyForCheckout`, opening denominations, `openShiftFromPOS` |
-| `useCart` | search (4 fields + unified), cart array, `taxInclusive`, price-list resolution (customer list overrides outlet list), POS layout tiles, item suggestions, auto-applied promotions, discount/note state, computed totals via `cartMath.js` |
-| `useReceipt` | slip, `slipOpen`, `receiptTemplate`, recent sales list/search, `printSlip` (hardware print + retry-prompt arming), `printBrowserFallback` |
-| `useCustomerDisplay` | pure side-effect — debounced 500ms `POST /api/pos/customer-display` whenever cart/totals/shift change; no state returned |
-| `useLoyaltyWallet` | wallet balance, points earn/redeem math, loyalty config (fetched from `/api/loyalty/config`, not hardcoded) |
-| `useFolioCharging` | charge-to-room-folio (M9) / charge-to-treatment-plan-folio (M10) dropdown data, fetched only while checkout is open |
-| `useOfflineQueue` | IndexedDB-backed offline sale/return queue (thin wrapper over `utils/offlineQueue.js`), auto-sync on `window.online` |
-| `useCheckout` | payments, `completeSale`, `addPayment`, tip/server capture, session-expiry recovery, wholesale credit-limit override, backorder staging |
+|---|---|
+| `useShiftGate` | Outlets list, `selectedOutletId`, `activeShift`, attendance status/code, `gateLoading`, `canOpenShift`/`canSwitchOutlet` (keyed on `manage_orders`/`all_access`), `isReadyForCheckout`, opening-cash denominations + `openingFloat`, `openShiftFromPOS` |
+| `useCart` | Search state (barcode/SKU/price/general fields), the cart array, `taxInclusive`, price-list price resolution (a customer's price list overrides the outlet's), POS layout tiles, item suggestions, auto-applied promotions, order-level discount/note state, computed totals (delegated to `cartMath.js`) |
+| `useReceipt` | The last sale's slip object, `slipOpen`, the active receipt template, recent-sales list/search, `printSlip` (drives hardware print and arms a retry prompt on failure), `printBrowserFallback` |
+| `useCustomerDisplay` | Pure side effect, no state returned — debounces 500ms then POSTs the current cart/totals to the customer-facing display endpoint whenever they change, keyed off the active shift id |
+| `useLoyaltyWallet` | Wallet balance, points earn/redeem math (rates fetched from a loyalty-config endpoint, hardcoded fallbacks only if that call fails), zeroes every derived value when the loyalty feature is off |
+| `useFolioCharging` | Charge-to-room-folio and charge-to-treatment-plan-folio dropdown data — room bookings fetched only while checkout is open, treatment plans fetched only once a checkout customer is set |
+| `useOfflineQueue` | The IndexedDB-backed offline sale/return queue (thin wrapper over `utils/offlineQueue.js`), auto-syncs on the browser's `online` event, splits pending counts by type |
+| `useCheckout` | Payments array, `completeSale`, `addPayment`, tip/server capture, session-expiry recovery, credit-limit override retry, backorder staging |
 
-`POSContext.jsx` itself also owns: lock state, customers list, parked sales, endless aisle, appointments (F06), modifier picker wiring, restaurant shell state (`draftOrderId`/`orderContext`/seat/course), price override apply, cart checkpoint/resume, stale-shift detection, POS device registration, and the global F-key/barcode-scanner keydown listener.
+`POSContext.jsx` itself also owns: lock state, the customers list, parked sales, the endless-aisle out-of-stock order flow, the "today's appointments" checkout entry point, modifier-picker wiring, restaurant shell state (draft order id, order context, seat/course), price-override apply, cart checkpoint/resume, stale-shift detection, POS device registration, and the global F-key/barcode-scanner keydown listener.
 
----
+## Critical gotchas
 
-## Critical Gotchas
+- **`completeSale` uses `api.raw`, not `api.post`** — it needs to branch on the response status/code before deciding what to do: a 401 parks the payload and opens the session-expired modal; a 400 with `code: "insufficient_stock"` opens the insufficient-stock modal; a 403 with `code: "CREDIT_LIMIT_EXCEEDED"` (on-account tender pushing a customer over their credit limit) opens the credit-limit modal with the payload parked for a manager-PIN retry. Don't refactor this call to `api.post`.
+- **Offline-first checkout** — if `!navigator.onLine` (or the fetch throws `TypeError`), `completeSale` enqueues the sale via `useOfflineQueue` and immediately shows a `"PENDING"` slip instead of blocking. Idempotency is `crypto.randomUUID()` stamped as `idempotency_key`; the backend returns `{ duplicate: true }` on replay.
+- **Park sale is feature-flagged** — with `posFlags.phase2_draft_orders` on, park writes to `POST /api/draft-orders` instead of `POST /api/parked-sales`. `loadParked` always reads and merges both sources (normalizing draft rows to the legacy shape with a `_source` tag) so a tenant that flips the flag mid-life doesn't lose access to previously parked sales.
+- **F-key handlers use ref indirection** — `parkSaleRef`, `openCheckoutRef`, `removeFromCartRef` are refreshed every render via small effects so the single keydown listener (registered once on mount) always calls current closures instead of stale ones captured at mount time.
+- **Barcode scanner buffer** — the global keydown listener buffers rapid keystrokes (a 100ms inter-key gap resets the buffer) and fires the scan handler on `Enter` once the buffer is at least 3 characters. This is separate from the omni-input's own typed field and the PLU pad. `POSReturnExchangeModal` and `POSHoldPickupModal` each register their own independent copy of the same buffering pattern for their own scan contexts (invoice barcode, hold barcode).
+- **Barcode-not-found handling** — a 404 from the scan endpoint shows a quick-create modal to cashiers with `manage_inventory`; everyone else just gets a toast. Serialized products (`serial_required`) intercept the add-to-cart flow into the serial-entry modal instead of adding directly.
+- **Cart checkpoint/resume** — the cart is debounce-written (1s) to a `sessionStorage` key scoped to the logged-in employee. On mount, if the cart is empty and a checkpoint younger than 8 hours exists, a resume prompt is offered. Per-employee scoping means a second cashier logging into the same terminal never inherits the first cashier's cart.
+- **Stale-shift recovery** — fires whenever the active shift is older than 20 hours, with no time-of-day filter (overnight/extended shifts qualify too). Dismissing it is session-only, never persisted.
+- **Tax-inclusive default** — derives from the tenant's `tax_mode` (via `useAuth()`, threaded through `POSContext` into `useCart`), and re-syncs whenever that value finishes loading asynchronously — but only while the cart is empty, so it never mutates an in-progress sale. The toggle is hidden entirely when `tax_mode === "none"` (an unregistered tenant can't legally charge GST).
+- **`isReadyForCheckout`** — `Boolean(selectedOutletId && activeShift && attendanceCode === "clocked_in")`. All three are required.
+- **Loyalty rates are not hardcoded** — fetched from a loyalty-config endpoint on mount; only falls back to a hardcoded earn/redeem rate if that call errors (e.g. an older tenant schema missing the config columns).
+- **Price-list priority** — a customer's price list overrides the outlet's price list; the outlet price list is only fetched at all when a dedicated feature flag is on. Every cart line's price is re-resolved whenever the price-list source changes (e.g. attaching or removing a customer).
+- **POS device identity** — a stable UUID is generated once and cached in `localStorage`, then registered with the backend (feature-gated, skipped entirely when the flag is off to avoid phantom failed requests) to obtain an integer device id used for per-device layout scoping and per-device bulk-scan-mode storage keys.
+- **Modifier picker** — adding a product with linked modifier groups pauses the add flow until the cashier confirms selections in the modifier modal; bundles and products with no modifier groups skip the lookup and add directly.
+- **Restaurant seat/course stamping** — when a restaurant check is open (order context set) and the tenant isn't in counter-service layout mode, every cart line is stamped with the active seat number and course name. Counter-service tenants that inherit the restaurant shell force these back to schema defaults so kitchen routing, reports, and tax exports treat the sales as standard.
+- **Salon walk-in guard** — checkout blocks (rather than silently defaulting to the cashier) when the tenant's industry type is salon, there's no linked appointment, and any cart line lacks a `staff_id` with no server selected either — the checkout modal shows a blocking "Performed by" picker for walk-ins.
+- **Scale/grocery decoded lines** — a line decoded from a scale price- or weight-embedded barcode always creates a new cart line, never merges with an existing line for the same product. Price-embedded lines carry a final, locked price (excluded from percentage promotions, bypasses the price-list cascade); weight-embedded lines carry the decoded net weight as quantity at the shelf unit price. Both lock the tare-weight field since the deli scale already netted it into the label.
+- **Age-restricted attest** — the omni-input and PLU pad both gate `product.age_restricted` items behind a native `window.confirm()` before adding to cart (not a custom modal).
+- **`navigate` is read from `usePOS()` in two places but never exposed on the context value object.** `POSContext.jsx` calls `useNavigate()` internally (used by its own `handleLogout`) but the exported `value` object does not include a `navigate` key. `POSLockScreen.jsx` ("Sign out completely" button) and `POSSessionExpiredModal.jsx` (`handleCancel`) both destructure `navigate` from `usePOS()` and call it after `logout()`/`parkSale()` — this resolves to `undefined` and will throw at runtime. Confirm in the browser before relying on either flow; the fix is either adding `navigate` to the context value or having both components call `useNavigate()` themselves.
 
-- **`completeSale` uses `api.raw` (not `api.post`)** — to inspect status codes mid-checkout: 401 → parks payload in `pendingSaleRef`, sets `sessionExpired=true`; `insufficient_stock` → fires `onInsufficientStock` (opens `POSInsufficientStockModal`); `CREDIT_LIMIT_EXCEEDED` (Tier 0.1 wholesale) → fires `onCreditLimitExceeded` (opens `POSCreditLimitModal`), payload parked for retry with a manager PIN. Do NOT refactor to `api.post`.
-- **Offline-first checkout** — if `!navigator.onLine` (or the fetch throws `TypeError`), `completeSale` enqueues via `useOfflineQueue` and shows a `"PENDING"` slip immediately instead of blocking. Idempotency via `crypto.randomUUID()` stamped as `idempotency_key`; backend returns `{ duplicate: true }` on replay. `useOfflineQueue` splits counts by type (`queuedSalesCount`/`queuedReturnsCount`) so the UI can show e.g. "3 sales + 1 refund queued offline".
-- **Park sale is feature-flagged** — `posFlags.phase2_draft_orders` → parks to `POST /api/draft-orders` instead of `POST /api/parked-sales`. `loadParked` reads and merges both sources (normalizing draft rows to the legacy shape) so tenants who flip the flag mid-life don't lose access to old parked sales.
-- **F-key shortcuts use ref indirection** — `parkSaleRef`, `openCheckoutRef`, `removeFromCartRef` are updated every render (via small `useEffect`s) so the keydown listener (registered once, in `POSContext`) always calls the current closures.
-- **Barcode scanner buffer** — the global keydown listener in `POSContext` buffers rapid keystrokes (100ms inter-key timeout), fires `handleBarcodeScanned` on `Enter` when buffer ≥ 3 chars. Separate from `POSOmniInput`'s explicit typed input and PLU pad. `POSReturnExchangeModal` and `POSHoldPickupModal` register their own independent instances of the same buffering pattern for their own scan contexts (invoice barcode, hold barcode).
-- **Barcode 404 handling** — cashiers with `manage_inventory` see `POSBarcodeMissModal` (quick-create); everyone else gets a toast. Serialized products (`serial_required`) intercept the add-to-cart flow into `POSSerialEntryModal` instead of adding directly.
-- **Cart checkpoint/resume** — debounced 1s write to `sessionStorage["pos_cart_checkpoint_${employeeId}"]`. On mount with an empty cart, if a checkpoint ≤ 8h old exists, `cartResumePrompt` is set (consumed by `POSCartResumeModal`, props-based). Scoped per employee so a second cashier on the same terminal never inherits the first cashier's cart.
-- **Stale-shift recovery** — fires when the active shift is > 20h old (no time-of-day filter — overnight/extended shifts also qualify). Dismissed for the session only via state, not persisted.
-- **Tax mode** — `taxInclusive` default derives from `company.tax_mode` (via `useAuth()`, threaded through `POSContext` → `useCart`); re-syncs when that loads asynchronously, but only while the cart is empty (never mutates an in-progress cart). `POSSubHeader` hides the Tax Inclusive toggle entirely when `taxMode === "none"` (unregistered tenants can't legally charge GST).
-- **`isReadyForCheckout`** — `Boolean(selectedOutletId && activeShift && attendanceCode === "clocked_in")`. All three required.
-- **Loyalty rates are NOT hardcoded** — fetched from `GET /api/loyalty/config` on mount; falls back to earn=1pt/100 spent, redeem=PKR10/100pts if the endpoint errors (e.g. pre-v63 tenant schema) or on a tenant that predates the config columns.
-- **Price list priority** — customer price list overrides outlet price list; outlet list is only fetched at all when `posFlags.phase2_outlet_pricing` is on. Re-resolves every cart line's price whenever the price-list source changes (e.g. attaching/removing a customer).
-- **POS device identity** — a stable UUID is generated once and cached in `localStorage["pos_device_uuid"]`, registered via `POST /api/pos-devices/register` (gated `phase2_pos_layouts`, skipped entirely when the flag is off to avoid phantom 503s) to obtain an integer id used for per-device POS layout scoping (`pos_layouts.scope_id` with `scope_type='device'`) and per-device bulk-scan-mode `localStorage` keys.
-- **Modifier picker** — adding a product with linked modifier groups pauses the add flow (`addToCartWithModifiers` → `setModifierModalState`) until the cashier confirms selections in `POSModifierModal`; bundles and non-restaurant flows skip the tree lookup and add directly.
-- **Restaurant seat/course stamping** — when `orderContext` is set (a restaurant check is open) and the tenant is not in `counter` layout mode, every cart line is stamped with `seat_number`/`course_name` from the active seat/course picker state (`buildSeatCourseOverlay`). Counter-service tenants (cafe/quick-service inheriting the restaurant shell) force these back to schema defaults so KDS/reports/FBR treat them as standard sales.
-- **V04 salon walk-in guard** — `completeSale` blocks (does not silently default to the cashier) if `industryType === "salon"`, there's no linked appointment, and any cart line lacks a `staff_id` and no server is selected — the UI surfaces a blocking "Performed by" picker in `POSCheckoutModal` for walk-ins.
-- **V01 grocery decoded lines** — `addDecodedLine` (in `useCart`) always creates a NEW cart line (never merges) for scale price/weight-embedded barcodes: price-embedded lines are FINAL price + `price_locked: true` (excluded from % promos, bypasses the price-list cascade); weight-embedded lines carry the decoded net weight as quantity at the shelf unit price. Both lock `tare_weight` since the deli scale already netted it.
-- **Age-restricted attest** — `POSOmniInput` and `POSPluPad` both gate `product.age_restricted` items behind a native `window.confirm()` before adding to cart (not a custom modal).
+## Modal components
 
----
+Most modals null-guard with `if (!x) return null`, reading their own visibility state directly from `usePOS()`. A subset instead take visibility via an `open` (or similarly named) prop rather than context — this matters when wiring a new modal into `POSRedesign.jsx`, since every POS modal mounts there rather than inside individual components.
 
-## Modal Components
-
-**Convention**: most modals null-guard with `if (!x) return null`, reading visibility state directly from `usePOS()`. A subset instead receive all data via **props** and do not read visibility from context — this matters when wiring a new modal into `POSRedesign.jsx` (all POS modals mount there, not inside individual components).
-
-Props-based modals (no internal `usePOS()` visibility check): `POSEmailReceiptModal`, `POSStuckQueueModal`, `POSCartCollisionModal`, `POSCartResumeModal`, `POSShiftRecoveryModal`, `POSRefundThresholdModal`, `POSCreditLimitModal`, `POSNoSaleReasonModal`, `POSReceiptRetryModal`, `POSApprovalModal`, `POSBarcodeMissModal`, `POSInsufficientStockModal`. Of these, `POSApprovalModal`, `POSNoSaleReasonModal`, `POSBarcodeMissModal`, and `POSInsufficientStockModal` don't call `usePOS()` at all — fully standalone/reusable outside POS.
+Props-driven modals: `POSEmailReceiptModal`, `POSStuckQueueModal`, `POSCartCollisionModal`, `POSCartResumeModal`, `POSShiftRecoveryModal`, `POSRefundThresholdModal`, `POSCreditLimitModal`, `POSNoSaleReasonModal`, `POSReceiptRetryModal`, `POSApprovalModal`, `POSBarcodeMissModal`, `POSInsufficientStockModal`. Of these, `POSApprovalModal`, `POSNoSaleReasonModal`, `POSBarcodeMissModal`, and `POSInsufficientStockModal` never call `usePOS()` at all — fully standalone and reusable outside POS. (`POSStuckQueueModal` still calls `usePOS()` for `syncQueue`/`showNotice` even though visibility is prop-driven.)
 
 ### Checkout / payment
-- **`POSCheckoutModal`** (context) — multi-tender payment (Cash/Card/Wallet/Gift Card/Credit). Gift card gated `phase2g_gift_cards` (includes pre-printed-card auto-activation on first balance lookup); on-account "Credit" tender gated `wholesale_credit_controls` and disabled until a customer is attached. Charge-to-room/treatment-plan-folio dropdowns are mode-gated via `usePreset().hasMode`; a walk-in clinical customer with no active plan gets an inline quick-create-plan form (B4). Restaurant mode (`hasMode("restaurant")`) adds tip %/custom + tip method + server assignment + "Hand to guest" (opens `RestaurantGuestModeModal` for signature capture). V04 salon walk-ins get a blocking "Performed by" stylist picker.
-- **`POSCreditLimitModal`** (props) — Tier 0.1 wholesale. Shown on 403 `CREDIT_LIMIT_EXCEEDED`; collects a manager PIN, caller's `retryWithManagerPin(pin)` re-posts the parked sale. Displays outstanding/attempted/limit/deficit.
-- **`POSReceiptModal`** (context) — post-sale view: returned items (exchange), gift cards issued, A/R invoice details for on-account sales, WhatsApp share link (via `utils/publicReceipt.js`), embeds `POSEmailReceiptModal`, Print via `printSlip`.
-- **`POSReturnExchangeModal`** (context) — the most complex modal. Invoice search (by number or its own barcode-scanner buffer via `GET /api/sales/by-barcode/:code`), or no-bill manual return; refund vs exchange (exchange POSTs the new sale first, then the return, to avoid inventory inconsistency — if the shift is closed the sale POST fails before any return is recorded); per-line restock toggle + reason code (`phase2g_per_line_restock`, scrapped lines require a reason); serial picker for serialized returns (matched against `GET /api/sales/:id/serials`); 409 `duplicate_return` → opens `POSCartCollisionModal`; `manager_pin_required` → inline `POSRefundThresholdModal` (blocks via an awaited `Promise` until PIN succeeds or is cancelled); offline refund queueing gated `offline_returns` (refund-only — exchanges always require the network since they mutate stock via a new sale).
-- **`RestaurantGuestModeModal`** (in `restaurant/`) — writes tip + signature back through `POSContext` (`setTipAmount`, `setSignatureSvg`), then closes so the operator completes the sale from `POSCheckoutModal`.
+
+- **`POSCheckoutModal`** — multi-tender payment (Cash/Card/Wallet/Gift Card/on-account Credit). Gift card tender includes pre-printed-card auto-activation on first balance lookup; the on-account "Credit" tender is disabled until a customer is attached (the backend rejects it otherwise). Charge-to-room and charge-to-treatment-plan-folio dropdowns are gated by preset mode; a walk-in clinical customer with no active treatment plan gets an inline quick-create-plan form. Restaurant mode adds tip percentage/custom amount + tip method + server assignment + a "Hand to guest" button opening the guest-mode signature modal. Salon walk-ins get a blocking "Performed by" stylist picker.
+- **`POSCreditLimitModal`** — shown on a 403 `CREDIT_LIMIT_EXCEEDED` from the sale POST. Collects a manager PIN; the caller's `retryWithManagerPin(pin)` re-posts the parked sale. Displays outstanding/attempted/limit/deficit.
+- **`POSReceiptModal`** — the post-sale view: returned items (on an exchange receipt), gift cards issued, on-account invoice details for credit sales, a WhatsApp share link, an embedded `POSEmailReceiptModal`, and Print (via `printSlip`).
+- **`POSReturnExchangeModal`** — the most complex modal in the module. Looks up the original invoice by number, via its own barcode-scanner buffer against a sale-by-barcode endpoint, or proceeds with a no-bill manual return. Supports refund or exchange — an exchange posts the new sale first, then the return, so a closed shift fails the sale before any return record is created, avoiding a restocked-but-unsold inconsistent state. Per-line restock toggle and reason code are feature-gated; scrapped (non-restocked) lines require a reason. A serial picker lets the cashier pick specific serialized units to return, matched against the sale's serial history. A 409 `duplicate_return` opens the cart-collision modal; `manager_pin_required` opens the refund-threshold modal inline, blocking via an awaited `Promise` until the PIN succeeds or is cancelled. Offline refund queueing is feature-gated and refund-only — exchanges always require the network since they mutate stock through a new sale.
+- **`RestaurantGuestModeModal`** (in `restaurant/`) — writes tip and signature back through `POSContext` (`setTipAmount`, `setSignatureSvg`) and closes itself so the checkout modal completes the sale.
 
 ### Cart / stock intervention
-- **`POSBarcodeMissModal`** (props) — shown on barcode 404, only to cashiers with inventory perms. Quick-creates the product then adds to cart.
-- **`POSInsufficientStockModal`** (props) — shown on `insufficient_stock` from `/api/sales`. Adjust (clamp qty) / Backorder remainder (V02 wholesale, only when `backorder_available` and a customer is attached) / Oversell (perm-gated) / Cancel.
-- **`POSCartCollisionModal`** (props) — shown on 409 `duplicate_return`; displays the existing return's id/amount/employee/timestamp.
-- **`POSCartResumeModal`** (props) — the cart-checkpoint resume prompt (see gotchas above).
-- **`POSCreditLimitModal`** — see Checkout section.
+
+- **`POSBarcodeMissModal`** — shown on a barcode 404, only to cashiers with inventory-management permission. Quick-creates the product and adds it to cart.
+- **`POSInsufficientStockModal`** — shown on `insufficient_stock` from the sale POST. Options: adjust (clamp quantity to what's available), backorder the remainder (only offered when the backend flags it as possible and a customer is attached), oversell (permission-gated), or cancel.
+- **`POSCartCollisionModal`** — shown on a 409 `duplicate_return`; displays the existing return's id, amount, employee, and timestamp.
+- **`POSCartResumeModal`** — the cart-checkpoint resume prompt (see gotchas above).
+- **`POSCreditLimitModal`** — see checkout section above.
 
 ### Shift / session
-- **`POSLockScreen`** (context, full-page — not a modal overlay) — PIN unlock via context's `handleUnlock`; "Sign out completely" logs out and navigates to `/login`.
-- **`POSSessionExpiredModal`** (context) — shown on mid-checkout 401. Re-auth is always PIN-based (`POST /api/employees/validate-pin`, never `/auth/login`, even if the employee also has a dashboard password). Success → `retryPendingSale()`. Cancel → parks the sale, navigates to `/login`.
-- **`POSCloseShiftModal`** (context) — denomination-based cash count + variance reason/approver/notes; flips into a threshold-approval sub-mode (PIN + reason) on backend `manager_pin_required`/`variance_reason_required`.
-- **`POSOpeningGateModal`** (context) — 3-state gate: needsOutlet → needsShift → needsClockIn. Cashiers without `canOpenShift` only see a Logout option; managers who can open a shift see the denomination grid + opening float.
-- **`POSShiftRecoveryModal`** (props) — shown when the active shift is > 20h old; Close now / Quick-close / Keep open.
-- **`POSStuckQueueModal`** (props: `{ open, onClose }`, also opened directly from `POSHeader`'s admin-only "Stuck (N)" button) — reads failed offline-queue entries via `getQueueByState`; Retry marks pending + calls `syncQueue()`; Discard marks synced (drops it) after a `confirm()`.
+
+- **`POSLockScreen`** — a full-page terminal lock (not an overlay modal). PIN unlock through the context's `handleUnlock`; a "Sign out completely" option fully logs out (see the `navigate` gotcha above — this button currently throws).
+- **`POSSessionExpiredModal`** — shown on a mid-checkout 401. Re-authentication is always PIN-based, never the dashboard password flow, even for an employee who also has a password set. Success retries the pending sale; cancel parks the sale and attempts to navigate to login (same `navigate` gotcha).
+- **`POSCloseShiftModal`** — denomination-based cash count with a variance reason/approver/notes; flips into a threshold-approval sub-mode requiring a manager PIN and a reason once the backend signals the variance crossed the tenant's threshold.
+- **`POSOpeningGateModal`** — a three-state gate: needs outlet selected → needs an open shift → needs the employee clocked in. Cashiers without shift-opening permission only see a logout option when a shift needs opening; those who can open one see the denomination grid and opening float.
+- **`POSShiftRecoveryModal`** — shown when the active shift is more than 20 hours old; offers close now / quick-close / keep open.
+- **`POSStuckQueueModal`** — reads failed offline-queue entries. Retry marks the entry pending again and calls `syncQueue()`; discard marks it synced (effectively dropping it) after a confirmation prompt. Also opened directly from an admin-only "Stuck (N)" button in `POSHeader`.
 
 ### Product entry
-- **`POSModifierModal`** (context) — `single` (radio) or `multi` (checkbox, `max_select`-capped) modifier group selection; `is_default` pre-selects; validates `min_select`/`is_required` before confirming; sums `price_delta`.
-- **`POSVariantMatrixModal`** (context) — opens on `pendingVariantProductId`; grid of up to 2 axes + a filterable 3rd axis; arrow-key nav, Enter to commit, stock-colored cells (green/amber/grey with strikethrough for out-of-stock). Gated `phase2g_variant_picker`. Chains into `POSSerialEntryModal` if the resolved variant's parent product is `serial_required` (mutates the already-added cart line rather than adding a new one).
-- **`POSSerialEntryModal`** (context) — opens on `pendingSerialContext`/`pendingSerialProductId`; one input slot per unit of quantity, matched against `GET /api/products/:id/serials?status=available` (variant-scoped when applicable). Tab advances, Enter commits when all slots resolve to a valid, non-duplicate serial. Gated `phase2g_serialized_inventory`.
-- **`POSPriceOverrideModal`** (context) — opens on `priceOverrideLineId`; requires a reason code + manager PIN, posts `POST /api/approvals/price-override`, then calls context's `applyPriceOverride(lineId, {...})`. Gated `phase2g_price_override`.
-- **`POSHoldCreateModal`** (context) — layaway hold creation (`POST /api/holds`); deposit amount/method, hold days (default 14), customer name/phone or attached customer; clears cart on success; best-effort printable slip.
-- **`POSHoldPickupModal`** (context) — pickup flow with its own independent barcode-scanner buffer (`GET /api/holds/by-barcode/:code`) or manual search; "Take Deposit" (partial payment, hold stays open) vs "Complete & Print" (settles remaining balance via `POST /api/holds/:id/complete`).
-- **`POSAppointmentsModal`** (context, F06) — "Today's appointments" checkout entry point (`GET /api/appointments/pos-today`). Tapping a row prefills the cart (one line per segment for multi-service visits, each stamped with its own `staff_id`) and links the eventual sale back to the appointment via `loadAppointmentToCart` → `activeAppointment`.
-- **`EndlessAisleModal`** (context) — out-of-stock order capture (`POST /api/orders/endless-aisle`); ship-to-customer or pickup delivery; pre-fills from `selectedCustomer`.
+
+- **`POSModifierModal`** — single (radio) or multi (checkbox, capped at a max-select count) modifier group selection; default options pre-select; validates min-select/required rules before confirming; sums the price delta across all picked options.
+- **`POSVariantMatrixModal`** — opens when a scanned/searched product has more than one variant. Renders a grid of up to two attribute axes plus a filterable third axis; arrow-key navigation, Enter to commit, stock-colored cells (in-stock/low-stock/out-of-stock, out-of-stock disabled with strikethrough). Feature-gated. Chains into the serial-entry modal if the resolved variant's parent product requires serials — mutating the already-added cart line rather than adding a new one.
+- **`POSSerialEntryModal`** — opens when a pending-serial context is set (from a scan, the variant matrix, or a direct serialized-product add). One input slot per unit of quantity, matched against the product's available-serials list (variant-scoped when applicable). Tab advances between slots; Enter commits once every slot resolves to a valid, non-duplicate serial. Feature-gated.
+- **`POSPriceOverrideModal`** — opens when a cart line's override menu is used. Requires a reason code and a manager PIN, posts to a price-override approval endpoint, then calls the context's `applyPriceOverride(lineId, {...})`. Feature-gated.
+- **`POSHoldCreateModal`** — creates a layaway hold from the current cart: deposit amount/method, hold expiry in days (default 14), attached customer or manual name/phone. Clears the cart on success and attempts a best-effort printable slip.
+- **`POSHoldPickupModal`** — pickup flow with its own independent barcode-scanner buffer (or manual hold-number search). "Take Deposit" records a partial payment and leaves the hold open; "Complete & Print" settles the remaining balance and completes the hold.
+- **`POSAppointmentsModal`** — the "today's appointments" checkout entry point. Tapping a row prefills the cart — one line per segment for a multi-service visit, each stamped with its own provider — and links the eventual sale back to the appointment so the backend marks it completed on commit.
+- **`EndlessAisleModal`** — out-of-stock order-capture flow (ship-to-customer or pickup delivery); pre-fills from the currently selected customer.
 
 ### Misc
-- **`POSDiscountModal`** (context) — percent/fixed toggle → `discountInput`/`discountType`.
-- **`POSNoteModal`** (context) — plain textarea → `orderNote`.
-- **`POSApprovalModal`** (props, standalone) — generic manager-PIN authorization (`POST /api/approvals/pos-authorize`) usable for any `actionType`, not POS-specific.
-- **`POSNoSaleReasonModal`** (props, standalone) — logs opening the cash drawer without a sale (`POST /api/risk/no-sale`); reasons from `GET /api/risk/no-sale-reasons`.
-- **`POSReceiptRetryModal`** (props) — shown when hardware print fails; Print Again / Email (embeds `POSEmailReceiptModal`) / WhatsApp / Browser fallback / Skip, each logged via `logErrorState`.
-- **`POSEmailReceiptModal`** (props: `{ saleId, customerEmail, onClose }`) — `POST /api/email/send-receipt-v2`; auto-closes 1.5s after success. Embedded by `POSRecentSalesPanel`, `POSReceiptModal`, and `POSReceiptRetryModal`.
-- **`POSParkedModal`** (context) — lists parked sales / draft orders merged by `loadParked`; Restore or Delete, routed to the correct endpoint via each row's `_source` tag.
-- **`POSRefundThresholdModal`** (props) — generic manager-PIN prompt reused by both `POSReturnExchangeModal` (refund threshold) and structurally mirrored by `POSCreditLimitModal` (credit-limit override).
 
----
+- **`POSDiscountModal`** — percent/fixed toggle feeding `discountInput`/`discountType`.
+- **`POSNoteModal`** — plain textarea feeding `orderNote`.
+- **`POSApprovalModal`** — generic manager-PIN authorization for any action type — not POS-specific.
+- **`POSNoSaleReasonModal`** — logs opening the cash drawer without a sale; reasons come from a configurable list.
+- **`POSReceiptRetryModal`** — shown when hardware print fails; offers Print Again / Email (embeds `POSEmailReceiptModal`) / WhatsApp / a plain browser-print fallback / Skip, each logged for audit.
+- **`POSEmailReceiptModal`** — emails a receipt; auto-closes shortly after success. Embedded by `POSRecentSalesPanel`, `POSReceiptModal`, and `POSReceiptRetryModal`.
+- **`POSParkedModal`** — lists parked sales and draft orders merged by `loadParked`; Restore or Delete routes to the correct endpoint via each row's `_source` tag.
+- **`POSRefundThresholdModal`** — generic manager-PIN prompt reused by `POSReturnExchangeModal` for refund-threshold approval; `POSCreditLimitModal` follows the same prop pattern for the separate credit-limit-override flow.
 
-## Layout / Display Components
+## Layout / display components
 
-- **`POSHeader`** — outlet switcher (`all_access` only), Last Receipt, Recent Sales, Return, customer-display popout (opens `/customer-display?shift_id=...` in a new tab/window), admin-only "Stuck (N)" button opening `POSStuckQueueModal`, Close Shift, Help (F1), Lock, Logout.
-- **`POSSubHeader`** — "Sell" heading + today's date, Tax Inclusive toggle (hidden entirely when `taxMode === "none"`), bulk-scan mode toggle (per-device `localStorage`), Appointments button (F06, gated `phase4_appointments`), Park Sale + Parked Sales badge, Hold/Pick Up buttons gated `phase2g_holds`.
-- **`POSSidebar`** — customer search/attach dropdown (`data-pos-customer-search` attribute is the F4 focus target), discount/note quick buttons, totals breakdown (subtotal, discount, promo, tax-inclusive line, total), Pay button.
-- **`POSCartTable`** — bundle/special-price/price-override badges per line; weighted-unit inline decimal qty input (`WeightedQtyCell`, gated by `isWeightedUnit(item.unit)`) with a "Weigh" button when the browser supports Web Serial (`utils/scale.js`) and an optional tare field (`preset.pos_search_config.show_tare`) that's read-only when the line's `tare_locked` (already netted by a deli scale label); per-line override-price menu gated `phase2g_price_override`. Mobile hides the Unit column.
-- **`POSSearchArea`** — conditionally shows barcode/SKU/price fields per tenant's `pos_search_config`; grid/list view toggle persisted in `localStorage["pos_view_mode"]`. Renders `POSOmniInput` above the classic fields when `phase2g_omni_input` is on, and `POSPluPad` when `pos_search_config.show_plu` is on — both are additive, the classic fields remain active below.
-- **`POSOmniInput`** — single smart search bar using `classifyOmniInput`. Barcode/PLU → `GET /api/products/scan/:barcode` via `api.raw`, decodes scale price/weight-embedded barcodes client-side for instant feedback then confirms server-side, chains into variant/serial modals as needed; `#`-prefixed → customer search (auto-selects on exactly one match); plain text → sets `search`. Auto-focuses on mount and re-focuses every 10s if no input is active; `/` key focuses it globally.
-- **`POSPluPad`** — collapsed to a small "PLU pad" button by default; expands into a touch numeric keypad for ringing loose produce/deli items by 4-8 digit code, reusing the same `GET /api/products/scan/:code` endpoint (so a typed PLU resolves identically to a scanned barcode, including scale-embedded decoding).
-- **`POSRecentSalesPanel`** — today's sales with search filter; Reprint re-fetches `GET /api/sales/:id` and rebuilds a slip object; Email opens `POSEmailReceiptModal`; Return calls `openReturnFromSale`.
-- **`POSShortcutsOverlay`** — renders the `SHORTCUTS` table below, substituting `presetLabels.customer` for the F4 label.
+- **`POSHeader`** — outlet switcher (admin-only), last-receipt access, recent sales, return entry point, a customer-display popout (opens a second-screen view in a new tab/window keyed to the active shift), an admin-only "Stuck (N)" button opening `POSStuckQueueModal`, close-shift, help (F1), lock, logout.
+- **`POSSubHeader`** — the "Sell" heading and today's date, the tax-inclusive toggle (hidden entirely when tax mode is "none"), a bulk-scan-mode toggle stored per device, the appointments entry button (feature-gated), park sale + parked-sales count badge, hold/pickup buttons (feature-gated).
+- **`POSSidebar`** — customer search/attach dropdown (its search input carries a `data-pos-customer-search` attribute — the F4 focus target), discount/note quick buttons, the totals breakdown (subtotal, discount, promo, tax line, total), the Pay button.
+- **`POSCartTable`** — per-line badges for bundles, special pricing, and price overrides; an inline decimal quantity input for weighted-unit lines with a "Weigh" button when the browser supports the Web Serial API, plus an optional tare field that's read-only when the line's tare was already netted by a deli-scale label; a per-line override-price menu (feature-gated). The Unit column is hidden on mobile.
+- **`POSSearchArea`** — conditionally shows barcode/SKU/price search fields per the tenant's search config; a grid/list view toggle persisted in `localStorage`. Renders the omni-input above the classic fields when its feature flag is on, and the PLU pad when the preset enables it — both are additive; the classic fields stay active underneath either.
+- **`POSOmniInput`** — a single smart search bar built on `classifyOmniInput`. Barcode/PLU input hits the product scan endpoint, decodes scale price/weight-embedded barcodes client-side for instant feedback before confirming server-side, and chains into the variant/serial modals as needed. `#`-prefixed input searches customers (auto-selecting on exactly one match). Plain text sets the general search field. Auto-focuses on mount and re-focuses periodically if nothing else has focus; the `/` key focuses it globally.
+- **`POSPluPad`** — collapsed to a small button by default; expands into a touch numeric keypad for ringing loose items by a short numeric code, reusing the same scan endpoint as a physical barcode scan (so a typed code resolves identically, including scale-embedded decoding).
+- **`POSRecentSalesPanel`** — today's sales with a search filter; Reprint re-fetches the sale and rebuilds a slip object; Email opens the email-receipt modal; Return calls into the return/exchange flow.
+- **`POSShortcutsOverlay`** — renders the shortcut table below, substituting the preset's customer label into the F4 row.
 
----
-
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Key | Action |
-|-----|--------|
-| F1 | Toggle shortcuts overlay |
-| F2 | Apply discount (only if cart non-empty) |
-| F3 | Park sale (only if cart non-empty) |
-| F4 | Focus customer search (`[data-pos-customer-search]`) |
+|---|---|
+| F1 | Toggle the shortcuts overlay |
+| F2 | Apply discount (only if the cart is non-empty) |
+| F3 | Park sale (only if the cart is non-empty) |
+| F4 | Focus the customer search field |
 | F5 | Open parked sales |
-| F8 | Remove last cart item |
+| F8 | Remove the last cart item |
 | F9 | Open checkout |
-| F10 | Clear cart (confirms via `window.confirm`) |
-| Esc | Close discount modal / parked sales / shortcuts overlay |
-| `/` | Focus omni-input (only when no input/textarea/select is focused; handled inside `POSOmniInput`, not the global listener) |
+| F10 | Clear the cart (confirms first) |
+| Esc | Close the discount modal / parked sales / shortcuts overlay |
+| `/` | Focus the omni-input (only when no input/textarea/select currently has focus; handled inside the omni-input component itself, not the global listener) |
 
-F-keys fire even when focus is inside an input — checked before the plain-character barcode-buffer branch in the global keydown handler.
+F-keys fire even when focus is inside an input — they're checked before the plain-character barcode-buffer branch in the global keydown handler.
 
----
+## Styling convention
 
-## Styling Convention
+The module uses the same design-system CSS variable tokens as the rest of the app's `redesign/` pages — nearly every top-level component and every cart/checkout/shift/product-entry modal is built on tokens (surface/border/text-muted/etc.), not hardcoded Tailwind color classes or hex values. New work in this directory should follow the same convention.
 
-The module has migrated to the app-wide **Square design system** — nearly every top-level component (`POSContext`-driven layout components, all cart/checkout/shift/product-entry modals, `POSHeader`/`POSSubHeader`/`POSSidebar`/`POSCartTable`/`POSSearchArea`/`POSOmniInput`/`POSPluPad`) now uses `--ui-*` CSS variable tokens (`bg-(--ui-surface)`, `text-(--ui-text-muted)`, `border-(--ui-border-strong)`, etc.) from `ui/tokens.css` — the same tokens the rest of the app's `redesign/` pages use. Treat this directory the same as any other `redesign/` page for new work: build from tokens, don't hardcode Tailwind color classes or hex values.
+Known remaining hardcoded-color exceptions (don't use these as a template): `POSAppointmentsModal` (`bg-white`, `text-slate-*`, a hardcoded accent hex) and the appointments-button branch inside `POSSubHeader` (hardcoded hex/emerald/indigo Tailwind classes). If touching either, consider migrating to tokens rather than extending the hardcoded style further.
 
-**Known remaining hardcoded-color exceptions** (do not use as a template for new components): `POSAppointmentsModal` (`bg-white`, `text-slate-*`, `#8066FF` accent), and the appointments-button branch inside `POSSubHeader` (`text-[#8066FF]`, `emerald-*`, `indigo-*`). If touching either, consider migrating them to tokens to close the gap rather than extending the hardcoded style further.
-
----
-
-## `completeSale` Payload (`POST /api/sales`)
+## `completeSale` payload (`POST /api/sales`)
 
 ```js
 {
   outlet_id, employee_id, customer_id?,
   cartItems: [{ id, variant_id?, price, quantity, staff_id?, modifiers?, serials?, seat_number?, course_name? }],
   payments: [{ method, amount, code? }],   // code: gift-card redemption code
-  discount_amount, discount_type,          // includes promo_discount folded in when no manual discount set
+  discount_amount, discount_type,          // includes any auto-applied promo discount folded in when no manual discount is set
   notes,                                   // JSON-stringified { text, signature_svg } when a guest signature was captured
   points_earned, points_redeemed,
   idempotency_key,          // crypto.randomUUID(), backend dedupes on replay
-  folio_id?, treatment_folio_id?,          // M9/M10 charge-to-folio (no payment collected when set)
-  tip_amount?, tip_method?, server_id?,    // Phase 2.1 restaurant tip capture; tip_method lowercased at the wire
+  folio_id?, treatment_folio_id?,          // charge-to-folio — no payment collected when set
+  tip_amount?, tip_method?, server_id?,    // restaurant tip capture; tip_method lowercased at the wire
   draft_order_id?, order_context?, table_session_id?, seat_count?,  // restaurant shell context
-  tax_inclusive,            // backend resolves against company_profile.tax_mode + snapshots per-line tax
-  manager_pin?,             // wholesale credit-limit override retry only; read once then cleared
-  appointment_id?,          // F06 — backend completes the appointment on commit
-  backorder_items?,         // V02 wholesale — accepted shortfall remainder; requires a customer
+  tax_inclusive,            // backend resolves against company_profile.tax_mode and snapshots per-line tax
+  manager_pin?,             // credit-limit override retry only; read once then cleared
+  appointment_id?,          // backend completes the appointment on commit
+  backorder_items?,         // accepted shortfall remainder from an insufficient-stock offer; requires a customer
 }
 ```

@@ -1,36 +1,36 @@
 # Routes Directory — Claude Guide
 
-This directory contains all Express route handlers for the backend API. Most files mount after tenant middleware and have full session context (`deps.db`, `req.employee`, `req.company`, `req.context`). A small set mount before tenant middleware and must never assume that context.
+Express route handlers for the backend API. Most files mount after tenant middleware and have full session context (`deps.db` tenant proxy, `req.employee`, `req.company`, `req.context`, `req.outletContext`). A smaller set mount before tenant middleware and must never assume that context — see the mounting-order section below.
 
 ---
 
 ## Subdirectory Modules
 
-Each subdirectory has its own CLAUDE.md. Summary:
+Each subdirectory has its own CLAUDE.md with full detail. Summary:
 
 ### admin/
-Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Most routes require `requireAllowedIp` + `requireSuperAdmin`; the exception is `POST /api/admin/auth/login` itself (uses `requireAllowedIp` + `authLimiter` only — it mints the admin token) and `GET /api/announcements/active` (fully public). Uses `db` (direct pool, schema-qualified queries) for cross-tenant fanout and `masterDb` for public-schema-only tables. Sub-modules: `auth.js`, `tenants.js` (CRUD, flags, notes, migration, PIN reset), `monitoring.js` (global stats, infra, cleanup), `billing.js` (plan pricing, payments), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue reads `pgboss.job`, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup). Not every mutation calls `logAdminAction()` — tax/compliance mutations, email-queue retry, announcement updates, and backup verify are notable gaps. Frontend uses `adminFetch()` (not `api.js`), token in `adminAuthStore.js`.
+Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Most routes require `requireAllowedIp` + `requireSuperAdmin`; exceptions are the login/2FA-exchange/refresh endpoints (which mint the session) and `GET /api/announcements/active` (fully public). Uses `db` (direct pool, schema-qualified queries) for cross-tenant fanout and `masterDb` for public-schema-only tables; `tenantDbManager.getDb(tenantId)` for single-tenant-scoped work. Sub-modules: `auth.js` (login, TOTP, sessions), `tenants.js` (CRUD, flags, modes, notes, migration, PIN reset, flag-drift repair), `monitoring.js` (global stats, infra introspection, cleanup), `billing.js` (plan pricing, payments, trial lifecycle), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue reads the pg-boss job table directly, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup), `module-locks.js` (platform-level module enable locks). Cross-tenant fanout is the dominant pattern here — always wrapped in a per-tenant try/catch so one tenant with a missing table doesn't break the whole response. Not every mutation calls the audit-log helper — verify per-route. Frontend uses `adminFetch()` (not `api.js`), token in `adminAuthStore.js`.
 
 ### integrations/
-Routes at `/api/integrations/*`. Every sub-module is `(router, deps) => {}` receiving the shared router. `requireFeature("marketplace_integrations")` applied per-route (not centrally) except `POST /:provider/send-test-sms`, gated by `phase5_sms_providers`. Sub-modules: `hub.js` (unified dashboard — aggregates channels/payment/sms/couriers/shopify/woocommerce), `credentials.js` (generic BYOK connect/disconnect/test/status — `/test` is DB-only, never calls the live API), `daraz.js`, `facebook.js`, `whatsapp.js`, `google-merchant.js` (one file per channel, each with its own local `getXClient()`, no caching). Credentials AES-256-GCM encrypted in `integration_settings` via `services/crypto.js`. Inbound webhooks (Meta, Daraz, WhatsApp) are handled in `routes/webhooks.js` (mounted before tenant middleware), not here — this directory is outbound-only. DB provider key for Google is `google_merchant` (underscore); URL path segment is `/google-merchant/` (hyphen) — don't mix them.
+Routes at `/api/integrations/*`. Every sub-module is `(router, deps) => {}` receiving the shared router. `requireFeature("marketplace_integrations")` is applied per-route (not centrally) except the SMS test-send route, gated by a separate SMS-provider flag. Sub-modules: `hub.js` (unified dashboard aggregating channels/payment/sms/couriers/shopify/woocommerce), `credentials.js` (generic BYOK connect/disconnect/test/status — `/test` is DB-only, never calls the live API), `daraz.js`, `facebook.js`, `whatsapp.js`, `google-merchant.js` (one file per channel, each with its own local client-getter, no caching). Credentials are AES-256-GCM encrypted in `integration_settings` via `services/crypto.js`. Inbound webhooks (Meta, Daraz, WhatsApp) are handled in `routes/webhooks.js` (mounted before tenant middleware), not here — this directory is outbound-only. The DB provider key for Google Merchant uses an underscore; the URL path segment uses a hyphen — don't conflate them.
 
 ### reports/
-Routes at `/api/reports/*`. Standard tenant middleware — `req.company.timezone` always present. Every route file here carries an explicit permission guard since the D4 split (PLAN-V2 Step 4, v134) retired the blanket `view_reports` in favour of five data-classified `view_*_reports` splits — see `reports/CLAUDE.md` for the per-file map. Cross-outlet reports pass `{ companyLevel: true }` to `requireFeature`/`requireMode` (the Step 9 allowlist) so history stays readable where the module is off at the viewer's outlet. Orchestrated by `index.js`, returns `{ processPendingReportSchedules }` for the report-schedule worker. Sub-modules: `dashboard.js`, `sales.js` (largest file), `inventory.js`, `analytics.js`, `purchasing.js`, `finance.js`, `staff.js`, `shifts.js` (most routes require `session_id`), `governance.js` (scheduled report exports + saved views — the only file doing CSV generation + R2 upload + direct nodemailer sending), `fbr-export.js`, `stock-aging.js`, `multichannel.js`, `clinical.js`, `kds-analytics.js`, `menu-engineering.js`. Date params are **not consistent** — most use `date_from`/`date_to`; `multichannel.js` and `kds-analytics.js` use `from`/`to`; `fbr-export.js` requires `from`/`to`. The `stock-aging` shadow duplicate is gone: `stock-aging.js` is the one canonical implementation (gated `requireAnyPerm(["view_inventory_reports","manage_inventory"])`), and `inventory.js` now carries only a pointer comment where the duplicate used to be.
+Routes at `/api/reports/*`. Standard tenant middleware — `req.company.timezone` always present. Every route file carries an explicit permission guard keyed to the class of data it returns, rather than one blanket reporting permission: five data-classified permissions (`view_sales_reports`, `view_inventory_reports`, `view_financial_reports`, `view_hr_reports`, `view_customer_reports`) plus a governance permission for the scheduling/export surface — see `reports/CLAUDE.md` for the per-file map. Cross-outlet reports pass a company-level override to `requireFeature`/`requireMode` so history stays readable where a module is switched off at the viewer's outlet. Orchestrated by `index.js`, which returns a handle consumed by the report-schedule worker. Sub-modules: `dashboard.js`, `sales.js` (largest file), `inventory.js`, `analytics.js`, `purchasing.js`, `finance.js`, `staff.js`, `shifts.js` (most routes require `session_id`), `governance.js` (scheduled report exports + saved views — the only file doing CSV generation, R2 upload, and direct SMTP sending), `fbr-export.js`, `stock-aging.js`, `multichannel.js`, `clinical.js`, `kds-analytics.js`, `menu-engineering.js`, `recipe-costing.js`. Date params are **not** consistent across files — most use `date_from`/`date_to`; a handful use `from`/`to` instead; check the specific file before wiring a new frontend tab.
 
 ### shopify/
-Routes at `/api/integrations/shopify/*` and `/api/integrations/mappings/*`. Mounted after tenant middleware, except the inbound order webhook which has no auth. Sub-modules: `config.js` (connection config), `health.js` (status, live verify, UAT checklist), `sync.js` (event retry/process), `orders.js` (manual order pull), `import.js` (product/inventory import — the product-delete route is checked by `ensureCriticalRoutesRegistered()` at boot), `mappings.js` (product/location/customer mapping), `webhooks.js` (public, HMAC-SHA256-verified via `rawBody` — only `orders/create` topic is actually implemented despite the setup endpoint advertising more), `reconciliation.js` (full-table-replace inventory reconciliation, gated `requireFeature("approvals")` on the fix-request route only). Only one `shopify_connections` row is `is_active=true` at a time. `rawBody` is captured globally by `express.json` at boot for this path — never add a body-parser to the webhook route.
+Routes at `/api/integrations/shopify/*` and `/api/integrations/mappings/*`. Mounted after tenant middleware, except the inbound order webhook, which has no auth. Sub-modules: `config.js` (connection config), `health.js` (status, live verify, go-live checklist), `sync.js` (event retry/process), `orders.js` (manual order pull), `import.js` (product/inventory import — the product-delete route is one of the boot-time critical-route checks), `mappings.js` (product/location/customer mapping), `webhooks.js` (public, HMAC-SHA256-verified via the captured raw body — only the order-create topic is actually implemented despite the setup endpoint advertising more), `reconciliation.js` (full-table-replace inventory reconciliation; the fix-request route is the only one gated by an additional feature flag). Only one Shopify connection row is active at a time. The raw request body is captured globally by the JSON body-parser at boot specifically for this path — never add another body parser here, or HMAC verification breaks.
 
 ### tier4/
-Routes at `/api/*` (mixed prefix, not `/api/tier4/*`). Mounted after tenant middleware. Sub-modules: `notifications.js` (flag `notifications`; `read-all` registered after `/:id/read` but doesn't shadow — different segment shape), `company-profile.js` (`GET /api/company-profile/currency` is the one fully public route in the directory; `PUT` with a valid `industry_type` re-seeds all mode-derived flags), `accounting.js` (flag `accounting_core`; date params `from`/`to` except `cashflow/daily`; journal debit/credit must balance within 0.005 tolerance; COA delete is soft), `hr.js` (flag `advanced_hr`; payroll generation is O(employees) sequential — no batching), `crm.js` (flag `crm_quotations`; quotation `convert` requires status `accepted` first; sends via raw nodemailer against tenant `email_config`, bypassing `services/email.js`), `approvals.js` (flag `approvals`; PO statuses use capitalized `Draft`/`Approved`, transfer statuses are all-lowercase — different state machines despite the parallel shape). `x-employee-id` header (not `req.employee.id`) is the attribution source for `approved_by`/`created_by`/etc. throughout this directory.
+Routes at mixed `/api/*` prefixes (not one shared prefix). Mounted after tenant middleware. Sub-modules: `notifications.js` (in-app notification inbox, gated by a flag; no permission guard — any authenticated user manages their own), `company-profile.js` (the currency-lookup route is the one fully public route in the directory; changing `industry_type` re-seeds every mode-derived feature flag through the shared preset-apply service), `accounting.js` (P&L/cashflow/balance-sheet reporting, accounting periods, credit/debit notes, chart of accounts, post-dated cheques, journal entries — journal debits/credits must balance within a small tolerance; chart-of-accounts delete is soft), `hr.js` (leave requests, payroll period generation — sequential per-employee, no batching — and overtime alerting), `crm.js` (leads, quotations; quotation-to-sale conversion requires `accepted` status first and funnels stock decrement through the shared stock-ledger service; quotation email uses raw SMTP against tenant mail config, bypassing the shared email service), `approvals.js` (purchase-order and stock-transfer submit/approve workflows — PO statuses are capitalized, transfer statuses are all-lowercase; these are different state machines despite the parallel shape). The employee-id header (not the authenticated session's employee object) is the attribution source for approved-by/created-by/closed-by fields throughout this directory — a deliberate, longstanding convention here, not an oversight.
 
 ### customer-portal/
-Routes at `/api/portal/*`. Mounted **before** tenant middleware. Uses `loadCustomerAuth` + `resolvePublicTenantDb` instead of the standard employee middleware chain — `req.employee`/`req.company` never set; `req.db` is set directly by the portal auth middleware. Sub-modules: `auth.js`, `data.js`, `payments.js`, `appointments.js`, `stays.js`, `treatments.js`. No sub-guide — read source directly.
+Routes at `/api/portal/*`. Mounted **before** tenant middleware. Uses a dedicated customer-auth middleware plus a public tenant resolver instead of the standard employee middleware chain — `req.employee`/`req.company` are never set; `req.db` is set directly by the portal auth middleware. Sub-modules: `auth.js`, `data.js`, `payments.js`, `appointments.js`, `stays.js`, `treatments.js`. No sub-guide — read source directly.
 
 ### restaurant/
-Sub-router under `routes/restaurant/`. Gated by `requireFeature("phase4_restaurant")`. Sub-modules: `availability.js`, `menu-schedules.js`, `void-comp.js`, `pay-at-table.js`, `reservations.js`, `waitlist.js`. No sub-guide.
+Sub-router under `routes/restaurant/`. Gated by the restaurant-mode feature flag. Sub-modules: `availability.js`, `menu-schedules.js`, `void-comp.js`, `pay-at-table.js`, `reservations.js`, `waitlist.js`. No sub-guide.
 
 ### manufacturer-portal/
-Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant middleware, parallel in structure to `customer-portal/` — uses `loadManufacturerAuth` (scope `"manufacturer"`, `MANUFACTURER_PORTAL_JWT_SECRET`) instead of the standard employee chain; `req.employee`/`req.company` never set. Backs the brand-scoped manufacturer-partner directory (`routes/manufacturer-partners.js` is the admin-side CRUD; this directory is the partner-facing read surface). Only `customers.city` is ever exposed to a manufacturer partner — a deliberate PII invariant, don't widen the query without checking that constraint first. No sub-guide.
+Routes backing a brand-scoped manufacturer partner portal. Mounted **before** tenant middleware, structurally parallel to `customer-portal/` — uses a dedicated manufacturer-auth middleware instead of the standard employee chain; `req.employee`/`req.company` never set. `routes/manufacturer-partners.js` is the admin-side CRUD; this directory is the partner-facing read surface. Only a customer's city is ever exposed to a manufacturer partner — a deliberate privacy invariant; don't widen any query here without preserving that constraint. No sub-guide.
 
 ---
 
@@ -38,167 +38,170 @@ Routes at `/manufacturer-portal/:slug` API surface. Mounted **before** tenant mi
 
 ### Core POS
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `auth.js` | `/api/auth` | Login, logout, refresh token, forgot/reset password, self-service signup. Also hosts `GET /api/context/bootstrap` (despite the `/api/context` prefix) — the preset/mode/outlet payload the frontend boots from. Since Step 14 its `employee` object carries `base_role_id`, `effective_role_id`, `effective_role_name` and the outlet-**effective** `permissions` array (read off `req.employeePerms`, already swapped by `resolveEffectiveRole`; `req.effectiveOverrideRoleId` is the "an override is in effect" signal, since the JWT `rid` can lag the DB). Each `outlets[]` row carries its `role_id` override. This is the only path by which the frontend learns its effective permission set |
-| `sales.js` | `/api/sales` | Sales (POST body: `cartItems`, item `id`, item `price`), voids, sale detail |
-| `returns.js` | `/api/returns` | Return/refund flow; body needs `original_sale_id`, `total_refund`, `refund_method`, items need `refund_price` |
-| `products.js` | `/api/products` | Product CRUD, variants, stock lookup, bulk import/delete/status, price history |
-| `customers.js` | `/api/customers` | Customer CRUD, loyalty, wallet, purchase history |
-| `receipts.js` | `/api/receipts` | **Mounted before tenant middleware** — public shareable receipt endpoint; manual tenant resolution |
-| `parked-sales.js` | `/api/parked-sales` | Park/retrieve cart state |
-| `shifts.js` | `/api/shifts` | Cash shift open/close; `GET /api/shifts/active?outlet_id=1` for active shift (no status filter on base GET) |
-| `kds.js` | `/api/kds` | Kitchen display system — orders/tickets (flag: `phase4_restaurant_kds`) |
-| `modifiers.js` | `/api/modifiers` | POS item modifier groups |
-| `tips.js` | `/api/tips` | Tip recording |
-| `draft-orders.js` | `/api/draft-orders` | Draft order hold/resume |
-| `holds.js` | `/api/holds` | Inventory holds/reservations |
-| `pos-devices.js` | `/api/pos-devices` | POS device registration |
-| `pos-layouts.js` | `/api/pos-layouts` | Per-device POS layout config |
-| `customer-display.js` | `/api/customer-display` | Customer-facing display events |
-| `gift-cards.js` | `/api/gift-cards` | Gift card CRUD + redemption (auth) |
-| `gift-cards-public.js` | `/api/gift-cards` | **Mounted before tenant middleware** — public gift card balance lookup |
+|------|-------------|---------------|
+| `auth.js` | `/api/auth` | Login, logout, refresh, forgot/reset password, self-service signup. Also hosts the context-bootstrap route (despite living under a different prefix) — the payload the frontend boots from, carrying the employee's base role, effective role (after any per-outlet override), and the outlet-effective permission array. Each outlet row in the response carries its own role override. This is the only path by which the frontend learns its effective permission set. |
+| `sales.js` | `/api/sales` | Sales (POST body uses `cartItems`, item `id`, item `price`), voids, sale detail. |
+| `returns.js` | `/api/returns` | Return/refund flow; body needs `original_sale_id`, `total_refund`, `refund_method`, items need `refund_price`. |
+| `products.js` | `/api/products` | Product CRUD, variants, stock lookup, bulk import/delete/status, price history. |
+| `customers.js` | `/api/customers` | Customer CRUD, loyalty, wallet, purchase history. |
+| `receipts.js` | `/api/receipts` | **Mounted before tenant middleware** — public shareable receipt endpoint; resolves its own tenant. |
+| `parked-sales.js` | `/api/parked-sales` | Park/retrieve cart state. |
+| `shifts.js` | `/api/shifts` | Cash shift open/close; the active-shift lookup takes `outlet_id` (there's no status filter on the base list route). |
+| `kds.js` | `/api/kds` | Kitchen display system — orders/tickets, gated by a restaurant-KDS feature flag. |
+| `modifiers.js` | `/api/modifiers` | POS item modifier groups. |
+| `tips.js` | `/api/tips` | Tip recording. |
+| `draft-orders.js` | `/api/draft-orders` | Draft order hold/resume. |
+| `holds.js` | `/api/holds` | Inventory holds/reservations. |
+| `pos-devices.js` | `/api/pos-devices` | POS device registration. |
+| `pos-layouts.js` | `/api/pos-layouts` | Per-device POS layout config. |
+| `customer-display.js` | `/api/customer-display` | Customer-facing display events. |
+| `gift-cards.js` | `/api/gift-cards` | Gift card CRUD + redemption (authenticated). |
+| `gift-cards-public.js` | `/api/gift-cards` | **Mounted before tenant middleware** — public gift card balance lookup. |
 
 ### Inventory & Products
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `inventory.js` | `/api/transfers`, `/api/adjustments` | Stock transfers + adjustments |
-| `purchase-orders.js` | `/api/purchase-orders` | PO CRUD; credit supplier warning on submit (not blocked) |
-| `grn.js` | `/api/grn` | GRN receiving + supplier payables |
-| `supplier-returns.js` | `/api/supplier-returns` | Return stock to suppliers |
-| `categories.js` | `/api/categories` | Category CRUD (hierarchical; leaf-only assignment) |
-| `brands.js` | `/api/brands` | Brand CRUD |
-| `attribute-sets.js` | `/api/attribute-sets` | Product variant attribute definitions |
-| `barcode-expenses.js` | `/api/barcode-expenses` | Barcode print job logging + expenses |
-| `price-lists.js` | `/api/price-lists` | Price list CRUD — gated by `manage_inventory` perm only, no feature flag |
-| `price-list-assignments.js` | `/api/price-list-assignments` | Assign price lists to outlets |
-| `price-books.js` | `/api/price-books` | Price book management |
-| `outlet-tax-profiles.js` | `/api/outlet-tax-profiles` | Per-outlet tax profile config |
-| `outlet-visibility.js` | `/api/outlet-visibility` | Per-product outlet visibility |
-| `smart-collections.js` | `/api/smart-collections` | Rule-based auto-collections |
-| `scheduled-changes.js` | `/api/scheduled-changes` | Scheduled product/price changes |
-| `item-suggestions.js` | `/api/item-suggestions` | POS affinity / upsell suggestions |
-| `inventory-intelligence.js` | `/api/inventory-intelligence` | ABC classification, cycle counts, reorder suggestions |
-| `product-serials.js` | `/api/product-serials` | Serial number tracking per product |
-| `import.js` | `/api/import` | Bulk CSV/XLSX import for products, customers, suppliers; `?preview=1` supported |
+|------|-------------|---------------|
+| `inventory.js` | `/api/transfers`, `/api/adjustments` | Stock transfers + adjustments. |
+| `purchase-orders.js` | `/api/purchase-orders` | PO CRUD; over-credit-limit warning on submit (not blocked). |
+| `grn.js` | `/api/grn` | GRN receiving + supplier payables. |
+| `supplier-returns.js` | `/api/supplier-returns` | Return stock to suppliers. |
+| `categories.js` | `/api/categories` | Category CRUD — hierarchical, leaf-only product assignment. |
+| `brands.js` | `/api/brands` | Brand CRUD. |
+| `attribute-sets.js` | `/api/attribute-sets` | Product variant attribute definitions. |
+| `barcode-expenses.js` | `/api/barcode-expenses` | Barcode print job logging + expenses. |
+| `price-lists.js` | `/api/price-lists` | Price list CRUD — permission-gated only, no feature flag. |
+| `price-list-assignments.js` | `/api/price-list-assignments` | Assign price lists to outlets. |
+| `price-books.js` | `/api/price-books` | Price book management. |
+| `outlet-tax-profiles.js` | `/api/outlet-tax-profiles` | Per-outlet tax profile config. |
+| `outlet-visibility.js` | `/api/outlet-visibility` | Per-product outlet visibility. |
+| `smart-collections.js` | `/api/smart-collections` | Rule-based auto-collections. |
+| `scheduled-changes.js` | `/api/scheduled-changes` | Scheduled product/price changes. |
+| `item-suggestions.js` | `/api/item-suggestions` | POS affinity / upsell suggestions. |
+| `inventory-intelligence.js` | `/api/inventory-intelligence` | ABC classification, cycle counts, reorder suggestions. |
+| `product-serials.js` | `/api/product-serials` | Serial number tracking per product. |
+| `import.js` | `/api/import` | Bulk CSV/XLSX import for products, customers, suppliers; supports a preview mode. |
 
 ### Employees & HR
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `employees.js` | `/api/employees` | Employee CRUD, PIN/password change, validate-pin (POS re-auth). Outlet assignments: `GET /:id/outlets` returns per-row `role_id`/`role_name` (the Step 13 override; null = inherit) + top-level `base_role_id`; `PUT /:id/outlets` is bulk-replace and takes an optional `outlet_roles` map (`{ outlet_id: role_id \| null }`) — **omitting it clears every override**, so callers must round-trip the full map. Both are `requirePerm("all_access")`. The old "Manager/Cashier = exactly one outlet" rule was removed with D2a: multi-outlet assignment is legal for every role, since outlet-assignment enforcement already confines a non-`all_access` employee to assigned outlets and per-outlet roles express the branch-fixed intent properly |
-| `attendance.js` | `/api/attendance` | Attendance sessions + kiosk PIN check-in endpoint |
-| `roles.js` | `/api/roles` | Role + permission management. `GET /api/roles` + all role mutations require `manage_roles` (PLAN-V2 Step 2 — was all_access; Administrators still pass via the `requireAnyPerm` all_access bypass); `GET /:id/permissions` is self-or-admin (every employee reads their own role on boot); `PUT /:id/permissions` rejects strings not in `config/permissions-catalog.js`; `GET /api/permissions-catalog` (also `manage_roles`) backs the role editor |
-| `schedules.js` | `/api/schedules` | Employee scheduling |
-| `commissions.js` | `/api/commissions` | Commission plans + earnings |
-| `approval-policies.js` | `/api/approval-policies` | POS discount approval rules |
-| `override-reasons.js` | `/api/override-reasons` | Manager override reason codes |
-| `risk-controls.js` | `/api/risk-controls` | Cashier risk/fraud controls |
+|------|-------------|---------------|
+| `employees.js` | `/api/employees` | Employee CRUD, PIN/password change, validate-pin (POS re-auth). Outlet assignments: the read route returns per-row role override (null = inherit) plus the base role id; the write route is bulk-replace and takes an optional per-outlet role map — omitting it clears every existing override, so callers must round-trip the full map. Multi-outlet assignment is legal for every role; outlet-assignment enforcement is what confines a non-admin employee to assigned outlets. |
+| `attendance.js` | `/api/attendance` | Attendance sessions + kiosk PIN check-in endpoint. |
+| `roles.js` | `/api/roles` | Role + permission management. Role listing and all role mutations require a dedicated role-management permission (administrators still pass via the blanket bypass); reading one's own role's permission list is self-or-admin; the permissions-catalog endpoint backs the role editor and rejects any permission string not registered in the catalog. |
+| `schedules.js` | `/api/schedules` | Employee scheduling. |
+| `commissions.js` | `/api/commissions` | Commission plans + earnings. |
+| `approval-policies.js` | `/api/approval-policies` | POS discount approval rules. |
+| `override-reasons.js` | `/api/override-reasons` | Manager override reason codes. |
+| `risk-controls.js` | `/api/risk-controls` | Cashier risk/fraud controls. |
 
 ### Finance
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `taxes.js` | `/api/taxes` | Tax rate CRUD |
-| `suppliers.js` | `/api/suppliers` | Supplier CRUD |
-| `promotions.js` | `/api/promotions` | Promotion/discount rules, including slab-percent wholesale schemes |
-| `customer-invoices.js` | `/api/customer-invoices` | Accounts receivable invoices |
-| `billing.js` | `/api/billing` | Subscription billing status, pricing, checkout, payment history, upgrade requests |
-| `webhooks.js` | `/api/webhooks` | **Mounted before tenant middleware** — payment gateway webhooks (xPay HMAC-verified), Meta/WhatsApp/Daraz inbound webhooks |
+|------|-------------|---------------|
+| `taxes.js` | `/api/taxes` | Tax rate CRUD. |
+| `suppliers.js` | `/api/suppliers` | Supplier CRUD. |
+| `promotions.js` | `/api/promotions` | Promotion/discount rules, including slab-percent wholesale schemes. |
+| `customer-invoices.js` | `/api/customer-invoices` | Accounts receivable invoices. |
+| `billing.js` | `/api/billing` | Subscription billing status, pricing, checkout, payment history, upgrade requests. |
+| `webhooks.js` | `/api/webhooks` | **Mounted before tenant middleware** — payment gateway webhooks (HMAC-verified) plus inbound Meta/WhatsApp/Daraz webhooks. |
 
 ### Reporting & Analytics
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `insights.js` | `/api/insights/auto` | 5 pre-built analytics insight cards |
-| `insights-ai.js` | `/api/insights/ask` | Claude AI chat for data questions (requires `ANTHROPIC_API_KEY`) |
-| `fbr.js` | `/api/fbr` | FBR Digital Invoicing config, invoice queue dashboard, retry |
-| `tax-lookup.js` | `/api/tax-lookup` | HS code search + suggest corrections |
-| `report-builder.js` | `/api/report-builder` | Custom report builder |
+|------|-------------|---------------|
+| `insights.js` | `/api/insights/auto` | Pre-built analytics insight cards. |
+| `insights-ai.js` | `/api/insights/ask` | AI chat for data questions (requires an AI provider key). |
+| `fbr.js` | `/api/fbr` | Tax-authority digital-invoicing config, invoice queue dashboard, retry. |
+| `tax-lookup.js` | `/api/tax-lookup` | HS code search + suggest corrections. |
+| `report-builder.js` | `/api/report-builder` | Custom report builder. |
 
 ### Orders & Fulfillment
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `orders.js` | `/api/orders` | Web/marketplace order management |
-| `fulfillment.js` | `/api/fulfillment` | Picklists, loadsheets, dispatch, COD settlements |
-| `couriers.js` | `/api/couriers` | Courier CRUD + ship/track (13-adapter pattern in `services/couriers/`) |
-| `woocommerce.js` | `/api/integrations/woocommerce` | WooCommerce connect, product import, stock sync |
+|------|-------------|---------------|
+| `orders.js` | `/api/orders` | Web/marketplace order management. |
+| `fulfillment.js` | `/api/fulfillment` | Picklists, loadsheets, dispatch, COD settlements. |
+| `couriers.js` | `/api/couriers` | Courier CRUD + ship/track (adapter pattern in `services/couriers/`). |
+| `woocommerce.js` | `/api/integrations/woocommerce` | WooCommerce connect, product import, stock sync. |
 
 ### Restaurant
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `restaurant.js` | `/api/restaurant` | Floor plan, table management, tabs, KOT |
-| `restaurant-inbox.js` | `/api/restaurant-inbox` | Restaurant order inbox |
-| `restaurant-kiosk.js` | `/api/restaurant/kiosk-tokens` | QR self-order kiosk token issue/list (gated `phase4_restaurant_qr` + `manage_restaurant`) |
-| `public-restaurant.js` | `/api/public-restaurant` | **Mounted before tenant middleware** — QR menu public endpoint |
-| `kds.js` | `/api/kds` | Kitchen display system |
+|------|-------------|---------------|
+| `restaurant.js` | `/api/restaurant` | Floor plan, table management, tabs, kitchen order tickets. |
+| `restaurant-inbox.js` | `/api/restaurant-inbox` | Restaurant order inbox. |
+| `restaurant-kiosk.js` | `/api/restaurant/kiosk-tokens` | QR self-order kiosk token issue/list. |
+| `public-restaurant.js` | `/api/public-restaurant` | **Mounted before tenant middleware** — QR menu public endpoint. |
+| `kds.js` | `/api/kds` | Kitchen display system. |
 
 ### Bookings & Services
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `bookings.js` | `/api/bookings` | Appointment CRUD, services, staff |
-| `public-bookings.js` | `/api/public-bookings` | **Mounted before tenant middleware** — public booking flow |
-| `service-tickets.js` | `/api/service-tickets` | Workflow ticket CRUD |
-| `rentals.js` | `/api/rentals` | Rental contracts, asset check-out/in |
-| `rooms.js` | `/api/rooms` | Room CRUD, bookings, folio |
-| `treatment-plans.js` | `/api/treatment-plans` | Clinical treatment plans |
-| `treatment-plan-templates.js` | `/api/treatment-plan-templates` | Reusable plan templates |
-| `projects.js` | `/api/projects` | Service projects |
-| `contracts.js` | `/api/contracts` | Service contracts |
-| `subscriptions.js` | `/api/subscriptions` | Customer subscription billing |
+|------|-------------|---------------|
+| `bookings.js` | `/api/bookings` | Appointment CRUD, services, staff. |
+| `public-bookings.js` | `/api/public-bookings` | **Mounted before tenant middleware** — public booking flow. |
+| `service-tickets.js` | `/api/service-tickets` | Workflow ticket CRUD. |
+| `rentals.js` | `/api/rentals` | Rental contracts, asset check-out/in. |
+| `rooms.js` | `/api/rooms` | Room CRUD, bookings, folio. |
+| `treatment-plans.js` | `/api/treatment-plans` | Clinical treatment plans. |
+| `treatment-plan-templates.js` | `/api/treatment-plan-templates` | Reusable plan templates. |
+| `projects.js` | `/api/projects` | Service projects. |
+| `contracts.js` | `/api/contracts` | Service contracts. |
+| `subscriptions.js` | `/api/subscriptions` | Customer subscription billing. |
 
 ### Wholesale / B2B
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `field.js` | `/api/field`, `/api/admin/field-routes` | Wholesale field-rep app: today's route, GPS+selfie check-in, visit history, owner summary cards (flag `wholesale_field_sales`). Two perm tiers since the PLAN-V2 Step 2 split (migration v133): the rep-self surface accepts `requireAnyPerm(["execute_field_sales","manage_field_sales"])`; the four owner surfaces (all-reps visit log, route planning, summary cards) stay `requirePerm("manage_field_sales")`. The "Field Rep" default role has `execute_field_sales` **only** |
-| `manufacturer-partners.js` | `/api/manufacturer-partners` | Manufacturer-partner CRUD backing the brand-scoped partner portal (flag `wholesale_secondary_sales`, perm `manage_inventory`) |
+|------|-------------|---------------|
+| `field.js` | `/api/field`, `/api/admin/field-routes` | Wholesale field-rep app: today's route, GPS+selfie check-in, visit history, owner summary cards. Two permission tiers: the rep-self surface accepts either a narrow execute-only permission or the broader management permission; the owner-facing surfaces (all-reps visit log, route planning, summary cards) require the management permission. The default Field Rep role holds only the narrow execute permission. |
+| `manufacturer-partners.js` | `/api/manufacturer-partners` | Manufacturer-partner CRUD backing the brand-scoped partner portal. |
 
 ### Customer-Facing
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `customers.js` | `/api/customers` | See above |
-| `loyalty.js` | `/api/loyalty` | Loyalty program rules + point calculations |
-| `return-policies.js` | `/api/return-policies` | Return policy definitions |
-| `messaging.js` | `/api/messaging` | Customer messaging inbox |
-| `marketing.js` | `/api/marketing` | Campaign management |
+|------|-------------|---------------|
+| `customers.js` | `/api/customers` | See above. |
+| `loyalty.js` | `/api/loyalty` | Loyalty program rules + point calculations. |
+| `return-policies.js` | `/api/return-policies` | Return policy definitions. |
+| `messaging.js` | `/api/messaging` | Customer messaging inbox. |
+| `marketing.js` | `/api/marketing` | Campaign management. |
 
 ### Setup & Config
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `setup.js` | `/api/setup` | First-run wizard with `setupTenantDbManager` (not standard tenant middleware). Seeds roles 1-3 / outlet 1 / receipt_template 1 with explicit ids, then setvals those sequences (explicit-id inserts never advance nextval) |
-| `business-modules.js` | `/api/business-modules` | Self-service module toggles: GET page payload (cards + computed state + roles_with_access; on multi-outlet tenants each `scope:"outlet"` card also carries `outlets[]`/`enabled_outlet_count`/`default_outlet_enabled`, and enabled covered Bucket A cards carry a `checklist`), GET `:key/impact` confirm preview (`?outlet_id=` scopes disable counts where the table is outlet-dimensioned, else `tenant_wide:true`), POST `:key/toggle` (company-level), POST `:key/outlet-toggle` (per-outlet override or the new-outlet default). The company toggle stays `requirePerm("manage_business_modules")`; the other three are `requireAnyPerm(["manage_business_modules","manage_outlet_modules"])` — neither perm has a default role; admins pass via all_access. Rules live in `services/business-modules.js` |
-| `receipt-templates.js` | `/api/receipt-templates` | Receipt layout templates |
-| `email.js` | `/api/email` | Send receipt email (`send-receipt-v2`) |
-| `support.js` | `/api/support` | Support ticket submit + screenshot upload |
+|------|-------------|---------------|
+| `setup.js` | `/api/setup` | First-run wizard. Seeds the base roles/outlet/receipt template with explicit ids and resets the corresponding sequences afterward — explicit-id inserts never advance a sequence's `nextval()` on their own. |
+| `business-modules.js` | `/api/business-modules` | Self-service module toggles: page payload (cards + computed state + roles with access; multi-outlet tenants additionally see a per-outlet breakdown and default; enabled cards with a defined setup flow carry a checklist), an impact-preview route, a company-level toggle route, and a per-outlet toggle route. The company toggle requires a dedicated module-management permission; the other three additionally accept a narrower outlet-module-management permission — neither has a default role holder, so only administrators (via the blanket bypass) or an explicit grant reach them. Underlying rules live in `services/business-modules.js`. |
+| `receipt-templates.js` | `/api/receipt-templates` | Receipt layout templates. |
+| `email.js` | `/api/email` | Send receipt email. |
+| `support.js` | `/api/support` | Support ticket submit + screenshot upload. |
 
 ### Misc / Infrastructure
 | File | Mount prefix | What it does |
-|------|-------------|--------------|
-| `country-packs.js` | `/api/country-packs` | **Mounted before tenant middleware** — pre-seeded tax rates + flags for signup flow |
-| `sandbox.js` | `/api/sandbox` | **No auth, mounted before tenant middleware** — test payment simulation (only when `PAYMENT_GATEWAY=sandbox`) |
-| `storefront.js` | `/api/storefront` | **Mounted before tenant middleware** — public storefront API using `resolvePublicTenantDb` |
-| `public-reservations.js` | `/api/public-reservations` | **Mounted before tenant middleware** — public restaurant reservation form |
+|------|-------------|---------------|
+| `country-packs.js` | `/api/country-packs` | **Mounted before tenant middleware** — pre-seeded tax rates + flags for the signup flow. |
+| `sandbox.js` | `/api/sandbox` | **No auth, mounted before tenant middleware** — test payment simulation, only reachable when a sandbox payment gateway is configured. |
+| `storefront.js` | `/api/storefront` | **Mounted before tenant middleware** — public storefront API using the shared public tenant resolver. |
+| `public-reservations.js` | `/api/public-reservations` | **Mounted before tenant middleware** — public restaurant reservation form. |
 
 ---
 
 ## Key Conventions & Gotchas
 
 ### Mounting order
-Routes mounted **before** tenant middleware (no standard session context): `admin/`, `webhooks.js`, `receipts.js`, `customer-portal/`, `storefront.js`, `public-restaurant.js`, `public-bookings.js`, `public-reservations.js`, `country-packs.js`, `sandbox.js`, `gift-cards-public.js`. Never add `req.employee`-dependent logic to these files.
+Routes mounted **before** tenant middleware (no standard session context): `admin/`, `webhooks.js`, `receipts.js`, `customer-portal/`, `manufacturer-portal/`, `storefront.js`, `public-restaurant.js`, `public-bookings.js`, `public-reservations.js`, `country-packs.js`, `sandbox.js`, `gift-cards-public.js`. Never add `req.employee`-dependent logic to these files.
 
 ### registerAllRoutes.js
-Contains inline health check routes, feature-flag routes, middleware wiring, outlet-assignment enforcement, and restore guard — not a pure orchestrator. Mounts every route module under `/api/<domain>`. Only edit it when adding a new route module — never for domain-level changes.
+Contains inline health-check routes, feature-flag routes, middleware wiring (including the blanket permission-rules middleware and outlet-assignment enforcement), and a restore guard — not a pure orchestrator. Mounts every route module under its `/api/<domain>` prefix. Only edit it when adding a brand-new route module — never for domain-level changes.
 
 ### Auth on GET routes
-Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (e.g. receipts, country-packs, public bookings, storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute.
+Most authenticated tenant GETs use `requirePerm` or `requireAnyPerm`. Public GETs exist by design (receipts, country-packs, public bookings, storefront). Some authenticated GETs rely on shared auth/session context rather than an explicit permission guard — the rule is not absolute; check the specific file.
 
 ### Error conventions
 Success: `res.json({...})` or `res.status(201).json({...})`. Client errors: `res.status(4xx).json({ error: "..." })`. Server errors: `res.status(500).json({ error: err.message })` in catch blocks. `validate(schema)` middleware returns 400 with `{ error, details }` automatically.
 
 ### Transactions
-`deps.db.transaction(async (client) => {...})` — client inherits tenant `search_path`. For atomicity-critical flows, reads can go outside the transaction while writes go inside.
+`deps.db.transaction(async (client) => {...})` — the client inherits the tenant's search path. For atomicity-critical flows, reads can go outside the transaction while writes go inside.
 
 ### Feature-flagged routes
 Apply `requireFeature("<flag>")` as middleware, sometimes combined with `requireMode("<mode>")` for vertical-specific gating. See `backend/middleware/CLAUDE.md` for the flag/mode registry mechanics.
 
 ### Validation
-`validate(schema)` middleware from `middleware/validate.js` using Zod schemas in `backend/schemas/`. Not yet universal — check the specific route file.
+`validate(schema)` middleware from `middleware/validate.js`, using Zod schemas in `backend/schemas/`. Not yet universal — check the specific route file.
 
 ### Boot guard
-`ensureCriticalRoutesRegistered()` in `index.js` verifies 4 routes exist at startup and crashes boot if missing: `POST /api/products/bulk-import`, `POST /api/products/bulk-delete`, `POST /api/products/bulk-status`, `DELETE /api/integrations/shopify/import/products`.
+A boot-time assertion verifies four critical routes exist at startup and crashes boot if any are missing: bulk product import, bulk product delete, bulk product status, and the Shopify product-delete route. If you rename or remove one of these, update the assertion too.
+
+### Permission-rules is live middleware, not a reference table
+A declarative array of path-regex-to-permission rules is mounted as blanket middleware ahead of every route module — it runs in addition to, not instead of, each route's own guard, and a rule keyed on a path prefix also catches self-scoped sub-endpoints beneath it. Tightening a rule's required permission means auditing every sub-path under its regex before shipping the change.

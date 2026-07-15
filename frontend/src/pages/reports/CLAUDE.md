@@ -120,7 +120,7 @@ When adding a new sales or inventory tab, add the component to the underlying `*
 | `ForecastDemandTab` | `GET /api/reports/forecast-demand` | `lookback_days` + category/brand/supplier/search/outlet |
 | `ReplenishmentSmartTab` | `GET /api/reports/replenishment-smart` | `lookback_days`, `forecast_days` + category/brand/supplier/search/outlet |
 
-`ReplenishmentTab` has a "Draft PO" action button that groups suggested-reorder rows by `supplier_id` and posts one `POST /api/purchase-orders` per supplier. `MerchandisingWorkspaceTab` is the only tab in this directory that hits two report endpoints for one view — do not assume every card in it maps to a single request. `PricingMarginTab`, `DeadStockTab`, `StockAgingTab`, `ShrinkageTab` all live in `ReportsInventoryHealth.jsx` and share a local `InventoryHealthStat` stat-card component (not exported, not in `ReportShared`); `ReplenishmentTab`/`StockoutRiskTab`/`ForecastDemandTab`/`ReplenishmentSmartTab` in `ReportsInventoryReplenishment.jsx` share their own local copy of the same-named `InventoryHealthStat` component — two separate, unconnected definitions of the same name.
+`ReplenishmentTab` has a "Draft PO" action button that groups suggested-reorder rows by `supplier_id` and posts one `POST /api/purchase-orders` per supplier via `api.raw`. `MerchandisingWorkspaceTab` is the only tab in this directory that hits two report endpoints for one view — do not assume every card in it maps to a single request. `PricingMarginTab`, `DeadStockTab`, `StockAgingTab`, `ShrinkageTab` all live in `ReportsInventoryHealth.jsx` and share a local `InventoryHealthStat` stat-card component (not exported, not in `ReportShared`); `ReplenishmentTab`/`StockoutRiskTab`/`ForecastDemandTab`/`ReplenishmentSmartTab` in `ReportsInventoryReplenishment.jsx` share their own local copy of the same-named `InventoryHealthStat` component — two separate, unconnected definitions of the same name.
 
 ---
 
@@ -269,7 +269,7 @@ Exports: `AttendanceTab`, `LaborPerformanceTab`, `LaborVsSalesTab`, `StaffAttrib
 
 | Tab | Endpoint | Notes |
 |-----|----------|-------|
-| `AttendanceTab` | `GET /api/attendance` | Uses `parseLocalDate` — LOCAL time, not UTC (clock-in/out are local columns). Fetches from `/api/attendance` directly, NOT `/api/reports/` — then filters client-side by `outletIds` |
+| `AttendanceTab` | `GET /api/attendance` | Uses `parseLocalDate` — LOCAL time, not UTC (clock-in/out are local columns). Fetches from `/api/attendance` directly, NOT `/api/reports/` — sends `outlet_id` in the query too, then ALSO filters the response client-side by `outletIds` |
 | `LaborPerformanceTab` | `GET /api/reports/labor-performance` | Revenue per man-hour |
 | `LaborVsSalesTab` | `GET /api/reports/labor-vs-sales` | Hours + revenue + labor cost per employee |
 | `StaffAttributionTab` | `GET /api/reports/staff-attribution` | Sales, discounts, voids, returns, approvals per employee |

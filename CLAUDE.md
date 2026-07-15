@@ -59,6 +59,7 @@ oneshoppos/
 │   ├── railway.toml              # Dockerfile builder, healthcheck /api/health, restart config, /data volume mount
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Contains inline health check routes, feature-flag routes, middleware wiring, and outlet-assignment enforcement
+│   │   ├── admin.js              # Thin re-export shim — module.exports = require("./admin/index"); the real handlers live in admin/
 │   │   ├── admin/                # /api/admin/* — auth, tenants, monitoring, billing, operations, compliance, messaging, system, module-locks — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
@@ -72,6 +73,7 @@ oneshoppos/
 │   │   ├── grn.js                # GRN + supplier payables
 │   │   ├── setup.js              # /api/setup/* (first-run wizard)
 │   │   ├── receipts.js           # /api/receipts (public shareable receipt)
+│   │   ├── email.js              # /api/email/* (SMTP receipt config/test/send-receipt, send-receipt-v2 with Resend fallback)
 │   │   ├── import.js             # /api/import (bulk CSV/XLSX import)
 │   │   ├── couriers.js           # /api/couriers (delivery dispatch)
 │   │   ├── woocommerce.js        # /api/integrations/woocommerce
@@ -86,32 +88,35 @@ oneshoppos/
 │   │   ├── receipt-templates.js  # /api/receipt-templates
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── customer-display.js   # /api/customer-display
-│   │   ├── country-packs.js      # GET /api/country-packs/:country — no auth, pre-seeded tax rates + flags
+│   │   ├── country-packs.js      # GET /api/country-packs/:country — no auth, pre-seeded tax rates + flags — mounted BEFORE tenant middleware
 │   │   ├── business-modules.js   # /api/business-modules (GET page payload + per-outlet breakdown + setup checklists, GET :key/impact[?outlet_id=], POST :key/toggle company-level, POST :key/outlet-toggle per-outlet) — self-service module toggles. Company toggle = manage_business_modules; read/impact/outlet-toggle also accept manage_outlet_modules (neither has a default role; admins pass via all_access)
 │   │   ├── service-tickets.js    # CRUD workflow tickets (phase4_workflow_tickets gated)
 │   │   ├── rentals.js            # Rental contracts, asset check-out/in (phase4_rentals gated)
 │   │   ├── rooms.js              # Room CRUD, bookings, folio, check-in/check-out (phase4_room_management gated)
 │   │   ├── treatment-plans.js / treatment-plan-templates.js # Clinical treatment plans + reusable templates (phase4_treatment_plans gated)
 │   │   ├── field.js              # Field-rep mobile PWA: check-in/out, GPS+selfie, order capture (wholesale_field_sales gated)
-│   │   ├── manufacturer-partners.js / manufacturer-portal/ # Manufacturer-partner directory (admin CRUD) + parallel manufacturer-portal auth/data routes
-│   │   ├── restaurant.js / restaurant-kiosk.js / restaurant-inbox.js / restaurant/ # Floor plans, KDS, tabs, counter-mode customer kiosk, online ordering inbox
+│   │   ├── manufacturer-partners.js / manufacturer-portal/ # Manufacturer-partner directory (admin CRUD) + parallel manufacturer-portal auth/data routes — manufacturer-portal/ mounted BEFORE tenant middleware
+│   │   ├── restaurant.js / restaurant-kiosk.js / restaurant-inbox.js / restaurant/ # Floor plans, KDS, tabs, counter-mode customer kiosk, online ordering inbox; restaurant/ holds availability, menu-schedules, pay-at-table, reservations, void-comp, waitlist
 │   │   ├── customer-portal/      # Customer self-service portal routes (parallel JWT scope, mounted before tenant middleware)
-│   │   ├── sandbox.js            # Test payment endpoints (sandbox mode only)
-│   │   ├── reports/              # /api/reports/* (modular — includes fbr-export, clinical, multichannel)
+│   │   ├── sandbox.js            # Test payment endpoints (sandbox mode only) — mounted BEFORE tenant middleware
+│   │   ├── storefront.js         # Embedded storefront cart/checkout for the Orders feature — mounted BEFORE tenant middleware
+│   │   ├── gift-cards-public.js  # Public gift-card balance lookup — mounted BEFORE tenant middleware
+│   │   ├── public-bookings.js / public-forms.js / public-inquiries.js / public-rentals.js / public-reservations.js / public-restaurant.js / public-rooms.js # No-auth guest-facing endpoints (appointment booking, tokenized form fill, inquiry-to-lead capture, online rental/room booking, table reservations, restaurant menu) — all mounted BEFORE tenant middleware, tenant resolved via services/public-tenant-context.js:resolvePublicTenantDb() rather than resolveTenant
+│   │   ├── reports/              # /api/reports/* (modular — includes fbr-export, clinical, multichannel, menu-engineering, recipe-costing, kds-analytics, stock-aging)
 │   │   ├── integrations/         # /api/integrations/* (hub, credentials, daraz, facebook, whatsapp, google-merchant)
-│   │   ├── shopify/              # /api/integrations/shopify* (modular)
-│   │   ├── tier4/                # Tier 4 features (accounting, approvals, notifications, crm, hr, commissions, report-builder)
-│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, projects, contracts, bookings, gift-cards(+public), loyalty, holds, tips, modifiers, price-books/price-lists/price-list-assignments, pos-devices, pos-layouts, scheduled-changes, smart-collections, subscriptions, customer-invoices, draft-orders, item-suggestions, inventory-intelligence, risk-controls, approval-policies, override-reasons, return-policies, outlet-tax-profiles, outlet-visibility, storefront.js, marketing.js, messaging.js, printer.js, kds.js, product-serials.js, schedules.js, van.js (wholesale van sales), backorders.js, batches.js (expiry/FEFO), classes.js (gym/studio), client-service-records.js, forms.js, handouts.js, member-kiosk.js, members.js, notification-settings.js, packages.js (prepaid credits), recalls.js, report-builder.js, stock-conversions.js, ai.js (content/invoice generation), commissions.js, etc.
+│   │   ├── shopify/              # /api/integrations/shopify* (modular — config, health, import, mappings, orders, reconciliation, sync, webhooks)
+│   │   ├── tier4/                # accounting, approvals, company-profile, crm, hr, notifications
+│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, projects, contracts, bookings, gift-cards(+public), loyalty, holds, tips, modifiers, price-books/price-lists/price-list-assignments, pos-devices, pos-layouts, scheduled-changes, smart-collections, subscriptions, customer-invoices, draft-orders, item-suggestions, inventory-intelligence, risk-controls, approval-policies, override-reasons, return-policies, outlet-tax-profiles, outlet-visibility, marketing.js, messaging.js, printer.js, kds.js, product-serials.js, schedules.js, van.js (wholesale van sales), backorders.js, batches.js (expiry/FEFO), classes.js (gym/studio), client-service-records.js, forms.js, handouts.js, member-kiosk.js, members.js, notification-settings.js, packages.js (prepaid credits), recalls.js, report-builder.js, stock-conversions.js, ai.js (content/invoice generation), commissions.js, etc.
 │   ├── config/
 │   │   ├── business-modules.js   # Business Modules catalog — every feature flag classified into bucket A/B/C cards, sub_toggles, or UNMANAGED (Bucket D); exports BUSINESS_MODULES, classifyFlag, cardManagedFlags, presetRecommendedModules. Bidirectional drift guard: tests/unit/business-modules-catalog.test.js fails if a DEFAULT_FEATURE_FLAGS key is unclassified.
-│   │   ├── permissions-catalog.js # Registered permission strings (39) grouped for the role editor; exports PERMISSIONS_CATALOG, isKnownPermission. Drift guard: tests/unit/permissions-catalog.test.js scans all requirePerm/requireAnyPerm call sites.
+│   │   ├── permissions-catalog.js # Registered permission strings grouped for the role editor; exports PERMISSIONS_CATALOG, isKnownPermission. Drift guard: tests/unit/permissions-catalog.test.js scans all requirePerm/requireAnyPerm call sites.
 │   │   ├── mode-registry.js      # tenant_modes registry — mode → feature flags mapping
 │   │   └── [country-packs.js, industry-config.js, vertical-usage-sources.js]
 │   ├── middleware/
 │   │   ├── plan-limits.js        # requireActiveSubscription + requirePlanLimit (tenant plan cap + subscription enforcement)
 │   │   ├── rate-limit.js         # Rate limiter config (global, auth, webhook, portal, booking)
-│   │   ├── tenant-auth.js        # loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveContext
-│   │   ├── outlet-context.js     # Shared requested-outlet resolver (PLAN-V2 Step 9) — resolveRequestedOutlet (pure), resolveOutletContext (middleware), enforceOutletAssignment (moved out of registerAllRoutes), invalidateOutletCache. The single x-outlet-id reader; feature-flag gates, resolveContext, and D2 role resolution all consume it
+│   │   ├── tenant-auth.js        # loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveEffectiveRole, resolveContext
+│   │   ├── outlet-context.js     # Shared requested-outlet resolver — resolveRequestedOutlet (pure), resolveOutletContext (middleware), enforceOutletAssignment (moved out of registerAllRoutes), invalidateOutletCache. The single x-outlet-id reader; feature-flag gates, resolveContext, and per-outlet role resolution all consume it
 │   │   ├── permissions.js        # requirePerm, requireAnyPerm, requireContextOutlet, PERMISSION_RULES, role defaults
 │   │   ├── feature-flags.js      # requireFeature, requireMode, flag cache, notification helpers
 │   │   ├── validate.js           # Zod validation helper — validate(schema) middleware factory
@@ -137,15 +142,15 @@ oneshoppos/
 │   │   ├── geo.js                # Geocoding + geofence distance helpers (wholesale field-sales check-in)
 │   │   ├── manager-pin.js        # Manager PIN override verification (void/comp/price-override flows)
 │   │   ├── moq.js                # Minimum-order-qty + case-pack enforcement (portal + field-rep order capture; POS bypasses)
-│   │   ├── product-visibility.js # Customer-group catalog visibility resolution (wholesale Option C/C2)
+│   │   ├── product-visibility.js # Customer-group catalog visibility resolution (wholesale)
 │   │   ├── phase4-polling.js     # Shared polling helpers for phase4 vertical workers
-│   │   ├── public-tenant-context.js # resolvePublicTenantDb() — tenant routing for portal auth modules (customer + manufacturer), bypasses resolveTenant
-│   │   ├── business-modules.js   # Module toggle engine: atomic flag+mode writes, saved_flags snapshot/restore on disable/re-enable, depends_on cascade (Bucket C dependents left connected), platform-lock enforcement, first-mode-row drift backfill, action_history audit, rejectCatalogManagedFlagWrites (legacy PUT lockdown). v2 adds per-outlet resolution — effective(outlet) = company AND (override ?? default_outlet_enabled ?? TRUE); only scope:"outlet" cards participate (tenant/device/hybrid → 409 TENANT_SCOPED); setOutletModuleState (override + default write paths), getDisabledOutletIds (worker deny-list), computeChecklists (D6 setup checklists, one batched EXISTS query)
+│   │   ├── public-tenant-context.js # resolvePublicTenantDb() — tenant routing for portal auth modules and all public/no-auth route files, bypasses resolveTenant
+│   │   ├── business-modules.js   # Module toggle engine: atomic flag+mode writes, saved_flags snapshot/restore on disable/re-enable, depends_on cascade (Bucket C dependents left connected), platform-lock enforcement, first-mode-row drift backfill, action_history audit, rejectCatalogManagedFlagWrites (legacy PUT lockdown). Per-outlet resolution: effective(outlet) = company AND (override ?? default_outlet_enabled ?? TRUE); only scope:"outlet" cards participate (tenant/device/hybrid → 409 TENANT_SCOPED); setOutletModuleState (override + default write paths), getDisabledOutletIds (worker deny-list), computeChecklists (setup checklists, one batched EXISTS query)
 │   │   ├── stock-ledger.js       # decrementStock/incrementStock — the ONE shared "move on-hand stock" implementation (POS sale, quotation-convert, transfers, supplier returns, PO receive, stock count all funnel through it). Must run inside caller's deps.db.transaction(...); takes FOR UPDATE.
 │   │   ├── tax-snapshot.js       # resolveTaxSnapshot() — the ONE shared per-line tax cascade (outlet tax profile → product tax_id → legacy gst → category-inherited → 0) every sale writer applies
-│   │   ├── outlet-copy.js        # D8 "copy settings from" — COPY_SPECS is the single allowlist AND a column-classification contract (scope/copy/stamp/skip), drift-tested so a new migration column can't be silently dropped. 6 copyable tables (outlet_business_modules, pos_layouts, outlet_product_visibility, price_list_assignments, tip_pool_distribution_rules, kds_stations); tax profiles/floor plans/devices/kiosk tokens/staff schedules deliberately NEVER copy. Runs inside the caller's outlet-creation transaction
+│   │   ├── outlet-copy.js        # The "copy settings from" feature — COPY_SPECS is the single allowlist AND a column-classification contract (scope/copy/stamp/skip), drift-tested so a new migration column can't be silently dropped. 6 copyable tables (outlet_business_modules, pos_layouts, outlet_product_visibility, price_list_assignments, tip_pool_distribution_rules, kds_stations); tax profiles/floor plans/devices/kiosk tokens/staff schedules deliberately NEVER copy. Runs inside the caller's outlet-creation transaction
 │   │   └── [restaurant/clinic/rental/room/booking services] # restaurant-checks, restaurant-floor, restaurant-kds, modifiers, tips, booking-availability, booking-services, booking-reminders, rental-service, room-service, room-deposits, room-channel-sync, room-night-audit, treatment-plan-service, treatment-plan-deposits, service-tickets, contracts, projects, project-billing, customer-invoicing, quote.js, pricing.js, allocation.js, approval-policy.js, inventory-intelligence.js, catalog-scheduler.js, online-inbox.js, menu-schedule-resolver.js, marketing.js, messaging.js, sms.js, subscriptions.js, storefront-cart.js, reservation.js, retail-flag-preset.js, batch-stock.js, kit-engine.js, preset-apply.js, lifecycle-events.js, embedded-barcode.js, aggregator-orders.js, credit.js, backorder.js, commission-calc.js, promo-engine.js, recall-service.js, deposit-engine.js, waitlist.js, members.js, class-bookings.js, packages.js, forms.js, client-service-records.js, sms-templates.js, customer-notify.js, admin-login-alert.js, admin-totp.js, ai.js, import/
-│   ├── workers/                  # pg-boss workers, one file per background job, each `<name>-worker-boss.js`. Covers email, FBR, cleanup, marketplace sync, rental/room overdue checks, subscription grace transitions, treatment plan reminders, ABC classification, anomaly detection, attendance auto-close, course release, hold expiry, KDS load snapshot, orphan schema scan, reservation + reservation-reminder, retail digest, shift auto-close. `tenant-job-context.js` exports withTenantContext() — prefer this over raw schema-string interpolation for new tenant-scoped workers.
+│   ├── workers/                  # pg-boss workers, one file per background job, each `<name>-worker-boss.js`. Covers email, FBR, cleanup, marketplace sync, rental/room overdue checks, subscription grace + dunning transitions, treatment plan reminders, ABC classification, anomaly detection, attendance auto-close, course release, hold expiry, deposit-hold expiry, KDS load snapshot, orphan schema scan, reservation + reservation-reminder, retail digest, shift auto-close, adoption snapshot, expiry alerts, recalls, night audit. `tenant-job-context.js` exports withTenantContext() — prefer this over raw schema-string interpolation for new tenant-scoped workers.
 │   ├── tenant-db-proxy-pg.js     # Primary MT proxy — AsyncLocalStorage + Proxy. exports: asyncStore, createDbProxy, getCurrentDb. Proxies query/transaction/getClient.
 │   ├── tenant-db-manager-pg.js   # Per-tenant DB manager with short-lived cache, per-query search_path reset. exports: init, getDb, healthCheck, clearCache, closeDb, closeAll
 │   ├── tenant-db-pg.js           # Older ALS proxy — checks out ONE pool client per request via runWithTenant. exports: asyncStore, getProxy, getStore, runWithTenant
@@ -193,7 +198,13 @@ oneshoppos/
     │   ├── categoryTree.js       # Category tree UI helpers
     │   ├── offlineQueue.js       # IndexedDB-backed offline queue (sale/return/check_in/field_order types)
     │   ├── chunkReload.js        # Stale-chunk recovery — reloads on vite:preloadError / unhandledrejection
-    │   └── csvExport.js          # downloadCsv(headers, rows, filename) — use for all new pages, not inline Blob
+    │   ├── csvExport.js          # downloadCsv(headers, rows, filename) — use for all new pages, not inline Blob
+    │   ├── embeddedBarcode.js    # Frontend mirror of backend/services/embedded-barcode.js — same pure price/weight-embedded EAN-13 decode algorithm, for instant on-screen POS feedback (backend scan endpoint remains the authoritative decoder)
+    │   ├── imageCompress.js      # Canvas-based image compression (max 800px wide, JPEG quality 0.7) — used by the wholesale field-rep selfie check-in before upload
+    │   ├── paperSizes.js         # Shared thermal-printer paper-width definitions, consumed by Printer Settings and Receipt Templates so both stay in sync
+    │   ├── publicReceipt.js      # Builds the public shareable receipt URL (/receipt/:invoiceNumber)
+    │   ├── scale.js              # Lane-scale integration — reads a live weight from a serial bench scale over the Web Serial API for the POS
+    │   └── errorLog.js           # POSTs a row to /api/action-history for every POS recovery path (receipt retry, shift recovery, refund collision, cart resume, barcode miss, insufficient stock)
     └── pages/
         ├── redesign/             # Most active tenant UI pages (*Redesign.jsx)
         │   ├── POSRedesign.jsx
@@ -201,7 +212,7 @@ oneshoppos/
         │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
         │   ├── pos/cartMath.js        # Pure cart calculation functions (extracted for testability)
         │   ├── ProfileRedesign.jsx    # Employee profile page (PIN/password change)
-        │   ├── BusinessModulesRedesign.jsx # /settings/business-modules — self-service module toggles (bucket-grouped cards, enable/disable confirm dialogs, Bucket C setup buttons); refreshes nav in-place via refreshFeatureFlags() + refreshPreset(). v2 adds, on MULTI-outlet tenants only, an "On at N of M locations" line + "Manage locations" Drawer (per-outlet matrix, Inherited/Override badges, reset-to-default, new-locations default control) and a "Get started — N of M done" setup checklist; single-outlet tenants render the v1 page unchanged (backend omits outlets[]). Pure helpers in redesign/businessModules.js
+        │   ├── BusinessModulesRedesign.jsx # /settings/business-modules — self-service module toggles (bucket-grouped cards, enable/disable confirm dialogs, Bucket C setup buttons); refreshes nav in-place via refreshFeatureFlags() + refreshPreset(). On MULTI-outlet tenants only, also renders an "On at N of M locations" line + "Manage locations" Drawer (per-outlet matrix, Inherited/Override badges, reset-to-default, new-locations default control) and a "Get started — N of M done" setup checklist; single-outlet tenants render the base page unchanged (backend omits outlets[]). Pure helpers in redesign/businessModules.js
         │   ├── MyTicketsRedesign.jsx  # Tenant-side support ticket viewer (/my-tickets)
         │   ├── BillingRedesign.jsx    # Trial countdown, Pay Now (gateway), payment history, upgrade requests
         │   ├── ImportRedesign.jsx     # Bulk CSV/XLSX import (products, customers, suppliers)
@@ -216,15 +227,16 @@ oneshoppos/
         │   ├── RoomManagementRedesign.jsx # Room CRUD, bookings, folio, check-in/check-out
         │   ├── ServiceTicketsRedesign.jsx # Workflow ticket board
         │   ├── TreatmentPlansRedesign.jsx # Clinical treatment plan management
-        │   ├── field/                  # Field-rep mobile PWA pages (check-in, order capture, visit log)
-        │   └── treatment/              # Treatment plan sub-pages (templates, per-patient views)
-        ├── reports/              # Report domain modules (includes FBRExportTab, ReportsMultichannel)
-        ├── dashboard/            # Dashboard components (includes InsightCards, AIChatPanel, BackupStatusCard, InfrastructurePanel)
+        │   ├── field/                  # Field-rep mobile PWA pages (check-in, order capture, visit log, van, routes admin)
+        │   └── treatment/              # Treatment plan sub-pages (templates, per-patient views, body chart, dental chart, vaccination card, allergy banner)
+        ├── reports/              # Report domain modules (includes FBRExportTab, ReportsMultichannel, MenuEngineeringTab, KdsAnalyticsTab, ARAgingTab)
+        ├── dashboard/            # Dashboard components (includes InsightCards, AIChatPanel, BackupStatusCard, DashboardWholesale, FieldSummaryCards)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (AdminLogin, AdminLayout, AdminDashboard, AdminTenantList, AdminTenantDetail, AdminActivity, AdminEmails, AdminSupportTickets, AdminDeadLetters, AdminTaxRates)
+        ├── admin/                # Super-admin panel (AdminLogin, AdminLayout, AdminDashboard, AdminTenantList, AdminTenantDetail, AdminActivity, AdminEmails, AdminSupportTickets, AdminDeadLetters, AdminTaxRates, AdminModuleLocks, AdminSecurity, AdminStuckPayments, AdminAdoption)
         ├── portal/               # Customer self-service portal (separate auth via PortalAuthProvider)
         ├── storefront/           # Embedded storefront for Orders feature
-        ├── LandingPage.jsx       # Public landing page (competitive positioning, pricing, login)
+        ├── marketing/            # Public marketing site — HomePage.jsx (the actual public landing page, mounted at "/"), IndustriesIndexPage.jsx, IndustryPage.jsx, PricingPage.jsx, WhySanoPosPage.jsx, plus components.jsx, Seo.jsx, content/
+        ├── public/               # Other no-auth pages: FormFillPublic, MemberCheckinKiosk, Privacy, PublicBookingPage, PublicInquiryPage, PublicRestaurantMenuPage, PublicRoomBookingPage, ReservationBookingPage, RestaurantPayPage, Terms
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
@@ -232,12 +244,14 @@ oneshoppos/
         └── [*Route.jsx]          # Thin wrappers — never edit
 ```
 
+> **Note**: there is no `pages/LandingPage.jsx`. The public landing page is `pages/marketing/HomePage.jsx`, lazy-loaded from `frontend/src/routes/publicRoutes.jsx`.
+
 ## Key Architecture Facts
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` contains inline health check routes, feature-flag routes, middleware wiring, and outlet-assignment enforcement — not a pure orchestrator
-- **Super-admin routes** (`routes/admin/`), **webhook routes** (`webhooks.js`), **customer portal routes** (`customer-portal/`), and **manufacturer portal routes** (`manufacturer-portal/`) are all mounted BEFORE `loadTenantAndPerms`/`resolveTenant` — none of them see `req.employee` or the ALS-proxied `deps.db`. Portal routes get `req.db` set directly by their own auth middleware.
-- **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
+- **Mounted BEFORE tenant middleware** (no `req.employee`, no ALS-proxied `deps.db`): `routes/admin/` (super-admin), `webhooks.js`, `customer-portal/`, `manufacturer-portal/`, `receipts.js`, `storefront.js`, `sandbox.js`, `country-packs.js`, `gift-cards-public.js`, and the public no-auth route files (`public-bookings.js`, `public-forms.js`, `public-inquiries.js`, `public-rentals.js`, `public-reservations.js`, `public-restaurant.js`, `public-rooms.js`). Portal and public routes resolve their tenant manually via `services/public-tenant-context.js:resolvePublicTenantDb()` and get `req.db` set directly by their own auth middleware rather than the AsyncLocalStorage-proxied `deps.db`.
+- **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveEffectiveRole` → `resolveContext`
 - **`backend/schemas/`**: a few Zod schema files may not be wired to any live route (e.g. `pos-devices.js` looked unused on last check) and `admin.js` has some schemas that look like placeholders — grep for the schema name's usage in `routes/` before assuming it's enforced.
 - Internal product categories are hierarchical; leaf-only assignment
 - Frontend: port 5173 (Vite dev), Backend: port 5000
@@ -260,13 +274,14 @@ oneshoppos/
 --- webhook routes (routes/webhooks.js) mount here — NO auth; only `/api/webhooks/xpay` is HMAC/signature verified via `paymentGateway.verifyWebhook`; Meta, WhatsApp, and Daraz POST handlers are rate-limited but not signature-verified ---
 --- customer portal routes mount here — customerPortalAuthLimiter/customerPortalOtpLimiter/customerPortalDataLimiter → loadCustomerAuth(deps) → handler ---
 --- manufacturer portal routes mount here — manufacturerPortalAuthLimiter/manufacturerPortalDataLimiter → loadManufacturerAuth(deps) → handler ---
+--- public no-auth routes (storefront.js, sandbox.js, country-packs.js, gift-cards-public.js, public-*.js) mount here — tenant resolved via resolvePublicTenantDb / ?tenant= slug ---
 
 11. loadTenantAndPerms  — decode JWT, look up tenant, attach req.employee + req.employeePerms + req.tenantId
 12. resolveTenant       — SET search_path to tenant schema, attach deps.db proxy
 13. tenant /uploads     — serve tenant-specific uploaded files
 14. loadCompanyProfile  — cache company_profile row → req.company (currency, timezone, FBR config)
 14b. resolveOutletContext — the ONLY interpreter of outlet context (middleware/outlet-context.js): validated x-outlet-id → JWT oid → none → req.outletContext. Malformed → 400 INVALID_OUTLET_CONTEXT; foreign/inactive → 403 (same code, no existence leak); unassigned non-all_access → 403 OUTLET_NOT_ASSIGNED. Also carries overrideRoleId (employee_outlets.role_id at the resolved outlet, v137)
-14c. resolveEffectiveRole — per-outlet role resolution (middleware/tenant-auth.js, Step 13 D2a). Preserves req.baseEmployeePerms; swaps req.employeePerms to the outlet's override role when one applies (else effective = base, zero extra queries). Outlet REACH keys on base perms, CAPABILITY on effective — an override never widens outlet reach. One retry then 503 PERM_LOAD_FAILED
+14c. resolveEffectiveRole — per-outlet role resolution (middleware/tenant-auth.js). Preserves req.baseEmployeePerms; swaps req.employeePerms to the outlet's override role when one applies (else effective = base, zero extra queries). Outlet REACH keys on base perms, CAPABILITY on effective — an override never widens outlet reach. One retry then 503 PERM_LOAD_FAILED
 15. resolveContext      — attach req.context (consumes req.outletContext + x-company-id/x-scope-mode headers)
 
 --- all tenant routes mount here ---
@@ -316,9 +331,9 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - **Restaurant**: Floor plans, KDS, tabs, tip capture/pooling, split bills, modifiers, course timing, online ordering inbox, counter-mode customer kiosk. Feature-flagged (`phase4_restaurant`, `phase4_restaurant_kds`, etc.).
 - **Inventory intelligence**: ABC class (`product_abc_class`), cycle count schedules/sessions, lead-time/safety-stock columns, background `abc-worker-boss.js` classification job.
 - **Fulfillment (shipping automation)**: Picklists, loadsheets, COD settlements, order shipments + tracking events. Feature-flagged (`phase5_shipping_automation`, `phase5_cod_reconciliation`).
-- **Wholesale / B2B distribution** (Pakistan-market wedge, built in tiers, extends existing retail schema rather than a parallel stack):
+- **Wholesale / B2B distribution** (Pakistan-market wedge, extends the existing retail schema rather than a parallel stack):
   - **Credit & AR**: customer credit limits, block modes, payment terms, on-account sales linked via `sales.customer_invoice_id`, AR aging buckets, statements.
-  - **Field sales**: mobile PWA at a field-rep route (`routes/field.js`, `pages/redesign/field/`) for GPS+selfie check-in/out against `field_visits`/`field_rep_routes`, geofenced via `services/geo.js` + `company_profile.field_geofence_meters`. "Field Rep" role has a minimal `execute_field_sales`-only permission set (PLAN-V2 Step 2 split; owner surfaces like all-reps visit log + route planning stay on `manage_field_sales`). Order capture posts to `POST /api/sales` with `field_visit_id` linking the sale back to the visit — scoped to the rep's own visit (403 `FIELD_VISIT_NOT_OWN` otherwise).
+  - **Field sales**: mobile PWA at a field-rep route (`routes/field.js`, `pages/redesign/field/`) for GPS+selfie check-in/out against `field_visits`/`field_rep_routes`, geofenced via `services/geo.js` + `company_profile.field_geofence_meters`. The Field Rep role has a minimal `execute_field_sales`-only permission set (rep-self surfaces; owner surfaces like all-reps visit log + route planning stay on `manage_field_sales`). Order capture posts to `POST /api/sales` with `field_visit_id` linking the sale back to the visit — scoped to the rep's own visit (403 `FIELD_VISIT_NOT_OWN` otherwise).
   - **Schemes/promotions**: `promotions` table extended with `slab_percent` type + `tier_rules` JSONB + brand scope + priority; `sale_promotion_applications` audit table freezes the applied snapshot.
   - **Secondary sales / manufacturer portal**: `manufacturer_partners` directory (brand-scoped, NOT customers — manufacturers monitor onward sales, they don't buy) with its own auth scope, JWT secret (`MANUFACTURER_PORTAL_JWT_SECRET`), session store, and portal UI at `/manufacturer-portal/:slug`. Admin CRUD at `/settings/manufacturer-partners`. Only `customers.city` is ever exposed to a manufacturer partner (PII invariant).
   - **Reorder + catalog rules**: portal/storefront reorder flow (web + in-store sales UNION, cart handoff via `?adopt=` URL param), MOQ + case-pack enforcement (`services/moq.js` — portal + field-rep only, POS bypasses), customer-group catalog visibility (`services/product-visibility.js`, `products.visibility` + `customer_group_products` — ungrouped customers see only `visibility='all'` products).
@@ -333,7 +348,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - **Uptime monitoring**: UptimeRobot pings `/api/health` every 5 min, emails on downtime.
 - **Support tickets**: `POST /api/support/tickets` + `POST /api/support/upload` (R2). Floating widget on all authenticated pages. Admin viewer at `/admin/support`.
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
-- **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — short-lived JWT with a per-token `jti` and hard-revoke support, amber banner, audit trail in `impersonation_sessions` table (now with `token_jti`/`revoked_at` columns). Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
+- **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — short-lived JWT with a per-token `jti` and hard-revoke support, amber banner, audit trail in `impersonation_sessions` table (`token_jti`/`revoked_at` columns). Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
 - **Admin activity logging**: Most admin mutations call `logAdminAction()`, but some routes (tax/compliance mutations, email queue retry, announcement updates, backup verify) do not. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
 - **Worker monitoring**: `GET /api/admin/worker-status` (in `routes/admin/system.js`) reads heartbeat globals (`global.__<name>WorkerStatus`) exposed by each pg-boss worker. `queueDepth` is a real `SELECT COUNT(*)` from the queue table. Dashboard shows running/stopped status, real queue depth, processed today.
 - **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Removes tenants with no setup after 7 days.
@@ -376,7 +391,7 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 
 - **Dashboard login**: password-based (`POST /api/auth/login` or `/api/auth/mt-login` with `{ username, password }`)
 - **Graceful fallback**: if no `password_hash` set, the password field is treated as a PIN (transition period)
-- **Kiosk clock-in**: PIN-only via `POST /api/attendance/pin-checkin?tenant=<slug>` (unauthenticated, `?tenant=`-scoped). The old `POST /api/auth/kiosk-login` endpoint (which minted an 8h `kiosk`-scoped JWT) was **removed 2026-07-12** — it had zero callers; the kiosk page is stateless PIN check-in
+- **Kiosk clock-in**: PIN-only via `POST /api/attendance/pin-checkin?tenant=<slug>` (unauthenticated, `?tenant=`-scoped). The old `POST /api/auth/kiosk-login` endpoint (which minted an 8h `kiosk`-scoped JWT) has been removed — it had zero callers; the kiosk page is stateless PIN check-in
 - **POS session re-auth**: PIN-only via `/api/employees/validate-pin` — NOT `/api/auth/login`
 - **Forgot password**: `POST /api/auth/forgot-password` → sends Resend email → `POST /api/auth/reset-password`
 - **Reset page**: `/reset-password?token=xxx&tenant=slug` (public, no auth)
@@ -388,15 +403,15 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 
 ## Permission System
 
-- **Roles**: Administrator (`all_access`), Manager (broad permission set), Cashier (view_sales_reports, pos_discount, pos_park — since the PLAN-V2 Step 4 `view_reports` split, migration v134), Field Rep (`execute_field_sales` only — rep-self surfaces; PLAN-V2 Step 2 split from `manage_field_sales`, migration v133)
+- **Roles**: Administrator (`all_access`), Manager (broad permission set), Cashier (view_sales_reports, pos_discount, pos_park — since the `view_reports` split, migration v134), Field Rep (`execute_field_sales` only — rep-self surfaces, split from `manage_field_sales`, migration v133)
 - **Middleware**: `requirePerm("perm")` and `requireAnyPerm(["perm1", "perm2"])` in route handlers
-- **Per-outlet role overrides** (PLAN-V2 Step 13/14, v137): `employee_outlets.role_id` (NULL = inherit `employees.role_id`) lets one employee hold a different role per outlet. `middleware/tenant-auth.js:resolveEffectiveRole` (chain step 14c) resolves it from the outlet the Step 9 resolver settled on and swaps `req.employeePerms`. **The invariant**: outlet *reach* keys on BASE perms (`req.baseEmployeePerms`), *capability* keys on effective perms — an override grants capability at an outlet, never widens which outlets a principal reaches. There is **no permission cache** in this chain (per-request loads), so add/remove takes effect on the very next request. An `all_access` override at any one outlet ≡ tenant admin. Set via `PUT /api/employees/:id/outlets` with an `outlet_roles` map; surfaced to the frontend through `GET /api/context/bootstrap`
-- **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission. Outlet-context-dependent since Step 14: boot loads base-role perms, then `PresetContext` overlays the bootstrap's effective set via `applyEffectiveSession()`
+- **Per-outlet role overrides** (v137): `employee_outlets.role_id` (NULL = inherit `employees.role_id`) lets one employee hold a different role per outlet. `middleware/tenant-auth.js:resolveEffectiveRole` (chain step 14c) resolves it from the outlet the resolver settled on and swaps `req.employeePerms`. **The invariant**: outlet *reach* keys on BASE perms (`req.baseEmployeePerms`), *capability* keys on effective perms — an override grants capability at an outlet, never widens which outlets a principal reaches. There is **no permission cache** in this chain (per-request loads), so add/remove takes effect on the very next request. An `all_access` override at any one outlet ≡ tenant admin. Set via `PUT /api/employees/:id/outlets` with an `outlet_roles` map; surfaced to the frontend through `GET /api/context/bootstrap`
+- **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission. Outlet-context-dependent: boot loads base-role perms, then `PresetContext` overlays the bootstrap's effective set via `applyEffectiveSession()`
 - **Admin-only routes**: employees CRUD, outlets, email config, printer config, roles, action-history logging
 - **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`), service tickets (`manage_tickets`), rentals (`manage_rentals`), room management (`manage_rooms`), treatment plans (`manage_treatment_plans`), tips (`manage_tips`), void/comp override (`override_void_comp`), gift cards (`manage_gift_cards`), price override (`override_price`), credit-limit override (`override_credit_limit`), field-sales management (`manage_field_sales`)
 - **All authenticated**: view reports, read-only data, send receipts, POS operations
 - **All GET routes require auth** — `requirePerm` or `requireAnyPerm` on every data-returning GET
-- **Permission catalog**: `backend/config/permissions-catalog.js` registers every live permission string (39 — the original 29 plus PLAN-V2 delegation perms `manage_integrations`/`manage_roles`/`manage_outlet_modules`, the Field Rep `execute_field_sales` split, and the D4 `view_reports`→`view_sales_reports`/`view_inventory_reports`/`view_financial_reports`/`view_hr_reports`/`view_customer_reports` split plus `manage_finance`/`manage_reports`); `PUT /api/roles/:id/permissions` rejects unregistered strings (400) and the role editor reads `GET /api/permissions-catalog` (no more hardcoded frontend list). `manage_business_modules` gates the company-level `/api/business-modules` toggle, while `manage_outlet_modules` is the narrower delegation that reaches the page read, impact preview, and per-outlet toggle only (wired in PLAN-V2 Step 10 — note the blanket `PERMISSION_RULES` entry on the `/api/business-modules` prefix admits both, and it runs BEFORE the per-route guard); `manage_integrations` (Integrations Hub/FBR/courier config writes) and `manage_roles` (role editing) are also delegable. All four are granted to NO default role (Administrators pass via `all_access`). `GET /api/roles` and `GET /api/permissions-catalog` require `manage_roles` (was all_access; Administrators still pass); `GET /api/roles/:id/permissions` is self-or-admin (every employee reads their own role's perms on boot)
+- **Permission catalog**: `backend/config/permissions-catalog.js` registers every live permission string — the original set plus delegation perms `manage_integrations`/`manage_roles`/`manage_outlet_modules`, the Field Rep `execute_field_sales` split, and the `view_reports`→`view_sales_reports`/`view_inventory_reports`/`view_financial_reports`/`view_hr_reports`/`view_customer_reports` split plus `manage_finance`/`manage_reports`. `PUT /api/roles/:id/permissions` rejects unregistered strings (400) and the role editor reads `GET /api/permissions-catalog` (no more hardcoded frontend list). `manage_business_modules` gates the company-level `/api/business-modules` toggle, while `manage_outlet_modules` is the narrower delegation that reaches the page read, impact preview, and per-outlet toggle only — note the blanket `PERMISSION_RULES` entry on the `/api/business-modules` prefix admits both, and it runs BEFORE the per-route guard; `manage_integrations` (Integrations Hub/FBR/courier config writes) and `manage_roles` (role editing) are also delegable. All four are granted to NO default role (Administrators pass via `all_access`). `GET /api/roles` and `GET /api/permissions-catalog` require `manage_roles` (was all_access; Administrators still pass); `GET /api/roles/:id/permissions` is self-or-admin (every employee reads their own role's perms on boot)
 
 ## Migrations
 
@@ -406,13 +421,10 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - Restaurant expansion wave: infra_cache, split-bill, modifiers, course timing, KDS routing rules, online ordering inbox, tip capture/pooling, several restaurant waves
 - Retail/inventory hardening wave: gift cards/loyalty, manager price override, variant outlet stock, serialized inventory, return reason codes, schema hygiene, inventory intelligence hub (ABC class + cycle counts), layaway/holds, per-device quick grid, anti-theft shrinkage tracking, refund idempotency, merchant home preference, receipt designer + shift auto-close
 - Retail launch + dedup wave: retail launch flags, email verification columns, loyalty-tier/chart-of-accounts/courier-integration dedup fixes, products.sku partial unique index, tax_mode + per-line tax snapshot, backup_log column union
-- Restaurant kiosk + wholesale wave: customer order kiosk (counter-mode tablet), tenant legal-consent tracking, Tier 0 wholesale foundation (AR aging), Tier 0.1 wholesale (credit limits/payment terms + hotfix), Tier 1.1 wholesale field sales (geocoding, geofence, field visits/routes, Field Rep role + hotfix), Tier 1.2 field sales (sale↔visit link), Tier 1.3 wholesale schemes (slab_percent promotions + audit table), Tier 1.4 wholesale secondary sales (manufacturer partners), Tier 2.2 MOQ, Tier 2.11 catalog visibility, impersonation jti/revocation columns, and the public-schema RLS enablement sweep
+- Restaurant kiosk + wholesale wave: customer order kiosk (counter-mode tablet), tenant legal-consent tracking, wholesale AR aging foundation, credit limits/payment terms, wholesale field sales (geocoding, geofence, field visits/routes, Field Rep role), sale↔visit linking, wholesale schemes (slab_percent promotions + audit table), wholesale secondary sales (manufacturer partners), MOQ enforcement, customer-group catalog visibility, impersonation jti/revocation columns, and the public-schema RLS enablement sweep
 - Business Modules wave: v131 (`public.platform_module_locks` super-admin enable-lock table + per-tenant `tenant_business_modules` with `saved_flags` snapshot), v132 (serial-sequence repair — wizard-seeded explicit ids on roles/outlets/receipt_templates left nextval() behind MAX(id), breaking the first POST /api/roles on every seeded tenant)
-- Business Modules v2 wave (most recent): v133 (Field Rep `manage_field_sales`→`execute_field_sales` split — pristine roles convert, customized grandfather), v134 (`view_reports`→5 `view_*_reports` splits — pristine Cashiers go sales-only, every other role grandfathers to all splits), v135 (full `tenant_modes` materialization — every tenant gets a row per registry mode, retiring the empty→enforcing trap), v136 (per-outlet module activation data model: `tenant_business_modules.default_outlet_enabled` + the `outlet_business_modules` override table), v137 (per-outlet roles: `employee_outlets.role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL` — NULL = inherit `employees.role_id`; `ON DELETE SET NULL` degrades a deleted role's overrides to inherit rather than making the role undeletable). v133–v136 are deployed (all 29 prod tenants at v136, 0 outlet-override rows written — v136 remains inert in practice); **v137 ships with Gate 3 and is inert until a `PUT /api/employees/:id/outlets` writes an `outlet_roles` entry**
-- **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all `status='active'` tenant schemas sequentially
-- **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run — otherwise migrate sees version 0 and tries to re-apply v1 (idempotent but slow)
-- **Per-tenant failures**: caught and logged per-tenant — one failed tenant doesn't block others
-- **Every-deploy RLS sweep**: `migrateAllTenants()` unconditionally re-runs `enableRlsOnPublicTables()` against the public schema on every boot, independent of version gating — see the RLS note under Reliability & Monitoring
+- Business Modules v2 wave (most recent): v133 (Field Rep `manage_field_sales`→`execute_field_sales` split — pristine roles convert, customized grandfather), v134 (`view_reports`→5 `view_*_reports` splits — pristine Cashiers go sales-only, every other role grandfathers to all splits), v135 (full `tenant_modes` materialization — every tenant gets a row per registry mode, retiring the empty→enforcing trap), v136 (per-outlet module activation data model: `tenant_business_modules.default_outlet_enabled` + the `outlet_business_modules` override table), v137 (per-outlet roles: `employee_outlets.role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL` — NULL = inherit `employees.role_id`; `ON DELETE SET NULL` degrades a deleted role's overrides to inherit rather than making the role undeletable)
+- v137 is the current migration head. The per-outlet-role feature it enables is schema-only until a `PUT /api/employees/:id/outlets` call actually writes an `outlet_roles` entry — don't assume outlet-level role overrides are in use on a given tenant just because the migration has run
 
 ## Live API Contracts (check actual route files for current behavior)
 
@@ -424,9 +436,9 @@ Full per-file behavior (cache TTLs, error codes, retry semantics) is documented 
 - **Action history**: `date_from`/`date_to` params
 - **Notifications mark-read**: `PUT /api/notifications/read-all` (not POST)
 - **Feature flags**: `PUT /api/feature-flags/:key` 409s (`MANAGED_BY_BUSINESS_MODULES`) for module primary/bundle flags — those toggle via `POST /api/business-modules/:key/toggle`; sub_toggles and unmanaged (Bucket D) keys still accepted. `GET /api/feature-flags` rows carry `enabled` (company truth, for the admin editor) plus `effective` (outlet overlay, only when a validated outlet resolved) — UI gates read `effective ?? enabled`
-- **Employee outlets PUT**: `PUT /api/employees/:id/outlets` is **bulk-replace** and accepts an optional `outlet_roles` map (`{ outlet_id: role_id | null }`, D2a) — omitting it clears every existing override, so clients must round-trip the full map. Keys must be in `outlet_ids` (400 otherwise); unknown `role_id` → 400. The old "Manager/Cashier must be assigned to exactly one outlet" rule is **gone** — multi-outlet assignment is legal for every role now that outlet-assignment enforcement and per-outlet roles cover the intent. `GET /api/employees/:id/outlets` returns `role_id`/`role_name` per row (the override; null = inherit) plus a top-level `base_role_id`
+- **Employee outlets PUT**: `PUT /api/employees/:id/outlets` is **bulk-replace** and accepts an optional `outlet_roles` map (`{ outlet_id: role_id | null }`) — omitting it clears every existing override, so clients must round-trip the full map. Keys must be in `outlet_ids` (400 otherwise); unknown `role_id` → 400. The old "Manager/Cashier must be assigned to exactly one outlet" rule is **gone** — multi-outlet assignment is legal for every role now that outlet-assignment enforcement and per-outlet roles cover the intent. `GET /api/employees/:id/outlets` returns `role_id`/`role_name` per row (the override; null = inherit) plus a top-level `base_role_id`
 - **Context bootstrap**: `GET /api/context/bootstrap`'s `employee` payload carries `base_role_id`, `effective_role_id`, `effective_role_name` and the outlet-**effective** `permissions` array; each row in `outlets[]` carries its `role_id` override (null = inherit). This is the only path by which the frontend learns its effective permission set
-- **Outlets POST**: `POST /api/outlets` accepts optional `copy_from_outlet_id` (D8) — clones the source's copyable settings inside the creation transaction; omit it (or send `""`/null) to start fresh and inherit each module's `default_outlet_enabled`. Vans are neither valid sources nor valid copy targets (400)
+- **Outlets POST**: `POST /api/outlets` accepts optional `copy_from_outlet_id` — clones the source's copyable settings inside the creation transaction; omit it (or send `""`/null) to start fresh and inherit each module's `default_outlet_enabled`. Vans are neither valid sources nor valid copy targets (400)
 - **Kiosk MT mode**: `/kiosk?tenant=<slug>` required for unauthenticated endpoints
 - **Reports that exist**: `item-wise`, `inventory-dump`, `product-movement`, `cash-flow`, `shift-summary` (needs `session_id`), `shrinkage`
 - **Quotations**: must PUT status to `accepted` before `convert` works
@@ -513,7 +525,7 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 - **Manufacturer portal**: `manufacturer_partners`, brand mapping, refresh tokens — isolated from `customers`
 - **Encrypted credentials** (AES-256-GCM in DB): Shopify tokens, Daraz/Facebook/WooCommerce API keys, courier API keys — format: `enc:v1:{iv}:{tag}:{ciphertext}`
 - **Background queues** (public schema, cross-tenant): `email_queue` (full HTML body stored until sent), `fbr_invoices` (FBR API payloads), `pgboss` job tables, `public.infra_cache`
-- **Logs**: `admin_activity_log`, `admin_security_log`, `action_history`, `impersonation_sessions` (now with `token_jti`/`revoked_at`), `backup_log` (metadata only)
+- **Logs**: `admin_activity_log`, `admin_security_log`, `action_history`, `impersonation_sessions` (`token_jti`/`revoked_at`), `backup_log` (metadata only)
 - **JSONB blobs**: `support_tickets.screenshots` (R2 URLs), `fbr_invoices.payload/fbr_response`, `web_orders.raw_payload`, `integration_settings.config_json`, `promotions.tier_rules` (wholesale slab schemes)
 
 ### Cloudflare R2 — binary files only
@@ -555,4 +567,3 @@ Fires and forgets. Email HTML is stored in `email_queue` (Postgres) pre-send, th
 | Payment card data | Never touched — handled entirely by xPay gateway |
 | Raw passwords/PINs | bcrypt hashes only |
 | Resend email history | Not archived — `email_queue` is pre-send only |
-</content>
