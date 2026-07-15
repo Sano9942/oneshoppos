@@ -77,7 +77,7 @@
 | 13 | D2a — Per-outlet roles backend (investigate → pause → implement) | ☑ done (verified) — v137 + resolver override + `resolveEffectiveRole` (14c), `a0b20e02` + fix `c5eb81bd`; verifier SHIP, 20/20 matrix, zero new failures | **PAUSE mid-step** — ✅ cleared (owner approved all 3 Phase-1 proposals) |
 | 14 | D2b — Per-outlet roles frontend (bootstrap-driven perms) + role-surface audit + C8 refresh | ☑ done (verified) — `applyEffectiveSession` overlay + editor override Selects + C8 hooks; both-direction browser audit green; 199/199 unit tests | — |
 | 15 | End-to-end verification (fresh-context verifier + full v1+v2 regression + prod read-only + audit-disposition sweep) | ☑ done (verified) — **VERDICT: SHIP** ([VERIFICATION-V2.md](VERIFICATION-V2.md); 153/153 v2 suites + 17/17 W0a fresh, 49 live probes, prod RO all-green incl. Gate-3 preconditions; 0 blocking findings, 2 doc notes carried into Step 16) | **PAUSE after** (owner reviews VERIFICATION-V2.md) — ✅ cleared |
-| 16 | Docs, memory, final review — **GATE 3: merge + deploy D2 slice** | ◐ **in progress** — review clean (0 blocking; 3 accepted notes), docs swept + verified against source, 4 new memory files + 1 updated. **Awaiting owner go for Gate 3** (push → merge → deploy watch → post-deploy live check) | **PAUSE** (push/merge owner-gated) — ⏸ NOW |
+| 16 | Docs, memory, final review — **GATE 3: merge + deploy D2 slice** | ☑ done (verified) — review clean (0 blocking; 3 accepted), 11 CLAUDE.md swept, 4 new memory files + 1 updated. **GATE 3 EXECUTED + DEPLOYED 2026-07-15** (owner go given): merged `c5db95c6`, Railway 30/30 schemas v136→**v137** 0 failures, Vercel production READY same SHA, post-deploy live check green **both directions on prod** — see the Gate 3 deploy record | **PAUSE — cleared (owner go given)** |
 
 Status values: `☐ not started` / `◐ in progress` / `☑ done (verified)` / `⊘ skipped`. Update this table at the start and end of every session.
 
@@ -1286,7 +1286,26 @@ Targeted suites re-run green: `tenant-auth-effective-role` 3/3, `outlet-role-ove
 
 **Memory: 4 new files + 1 updated**, one-lesson-per-file with MEMORY.md pointers — `outlet_context_shared_resolver.md` (shared resolver + fail-closed + `companyLevel`), `business_modules_d1_outlet_resolution.md` (the `??` inherit chain, outlet-scope-only, hide-not-delete, bulk-read budget), `business_modules_d2_effective_roles.md` (reach-vs-capability, no perm cache, DB-not-`rid` base truth, bootstrap contract), `permissions_catalog_drift_enforcement.md` (delete-the-string-first as the D4 technique), `feedback_verifier_env_traps.md` (Step 15 lessons); `business_modules_refresh_path.md` extended with the 4th payload — `refreshPreset()` is now also the perm-refresh path.
 
-**Gate 3 remains unexecuted — awaiting explicit owner go.** Branch is clean, 5 commits ahead of `main`, nothing pushed beyond `464e0a97`. History left as-is (each commit is a coherent step; no tidy needed).
+### GATE 3 — EXECUTED + DEPLOYED 2026-07-15 (owner go given)
+
+Merged `feat/business-modules-v2` → `main` as **`c5db95c6`** (no PR, per the git-workflow rule). **This closes the Business Modules v2 build: all 16 steps and all 4 gates are done.**
+
+**Railway**: container rolled `17e7ad30c465` → `1b73c77ecf1c`. `"v137: applied"` ×**30** (29 tenants + public — the expected count), **0 migration failures, 0 `[ERROR]` lines, 0 empty-modes warns** (D5 telemetry stays clean). Workers re-registered; `/api/health` 200 through the roll. **Vercel**: production `dpl_5oEZ5Wza…` **READY** on the same SHA `c5db95c631420f05061fa1f92efa742278d677cd`.
+
+**Post-deploy read-only**: 29/29 tenant schemas at **v137**, 29/29 carry `employee_outlets.role_id` (integer, nullable, no default) **with the `ON DELETE SET NULL` FK**, and **0 override rows** — the migration landed inert exactly as designed.
+
+**Live check — both directions, on production** (`golv_general_retail`, a synthetic test tenant). Deliberately run on a **temporary Manager**, not the Owner: overriding the sole admin to a lesser role at their only outlet would revoke the very `all_access` that `PUT /api/employees/:id/outlets` requires to undo it — a self-lockout recoverable only by direct DB surgery. Worth stating as a real operational hazard of this feature, and the mirror image of finding #11.
+
+| Stage | Evidence (prod, live) |
+|---|---|
+| Baseline (no override) | `base_role_id:2`, `effective_role_id:2` Manager; `GET /api/price-lists` (`manage_inventory`) **200**; `GET /api/products` **200** |
+| **Override applied** (outlet 1 → role 3) | PUT echoed `outlet_roles:{"1":3}`; GET assignments showed `role_id:3, role_name:"Cashier"` + `base_role_id:2` |
+| **Direction 1 — override active** | Bootstrap on an **unchanged token still carrying `rid:2`**: `base_role_id:2` / `effective_role_id:3` / `effective_role_name:"Cashier"`, `permissions` collapsed to exactly the D4 sales-only Cashier set `["pos_discount","pos_park","view_sales_reports"]`, `outlets[0].role_id:3`. Capability: price-lists **403** (Manager capability revoked at that outlet), products **200** (the POS-adjacency composite accepting `view_sales_reports` — behaving as documented). The stale-`rid` token proves resolution comes from the DB row, not the JWT — finding #6's fix, live. |
+| **Direction 2 — override removed** | PUT `outlet_roles:{"1":null}` → **the very next request** returned `effective_role_id:2` Manager with the full Manager set, and price-lists went **403 → 200**. Confirms in production the "no perm cache anywhere in this chain" claim that Step 13 discharged by analysis. |
+
+**Cleanup**: override removed (verified NULL in the DB), probe employee deleted via the API. `DELETE /api/employees/:id` is an **archive** (soft delete via `deleted_at`), so the probe row persists as archived-and-invisible with its assignment row and **no override** — the product's own delete semantics, not an artifact of this feature. Left as-is deliberately: hand-deleting rows and `action_history` audit entries from the production database is a worse trade than one invisible archived row in a synthetic tenant. Final prod-wide state: **29 active tenants, 29/29 at v137, 0 live override rows**; deep health ok (database 59ms, resend 383ms); `sanopos.com` 200; 0 errors post-check.
+
+**Rollback** = `git revert c5db95c6`. The v137 column is additive and nullable, so a revert needs no down-migration — with the code gone, `role_id` is simply never read.
 
 ---
 
