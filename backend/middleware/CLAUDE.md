@@ -111,7 +111,18 @@ If `req.context?.outletId` is set and `req.query.outlet_id` is absent, backfills
 Async. Looks up the `roles` table, and for each role name present in `DEFAULT_ROLE_PERMISSIONS`, inserts each permission via `INSERT ... ON CONFLICT DO NOTHING`. Idempotent — safe to call repeatedly (tenant provisioning, role backfills). Logs and swallows errors rather than throwing.
 
 ### `PERMISSION_RULES`
-A declarative array of `{ methods: [...], path: /regex/, anyPerms: [...] }` entries covering common route-level guards — reports, attendance, categories/brands/products/attribute-sets/barcode templates/expenses, outlets, receipt templates, suppliers/supplier-returns/supplier-invoices, returns, approvals, PO/transfer submit+approve, parked sales, and each Phase-4 vertical (restaurant, KDS, bookings/appointments, projects, contracts, service tickets, rentals, room management, treatment plans + clinical sub-resources, tips). This is a reference table consumed by tests / documentation — it is **not** auto-applied to routes; each route still calls `requirePerm`/`requireAnyPerm` directly in its handler chain.
+A declarative array of `{ methods: [...], path: /regex/, anyPerms: [...] }` entries covering common route-level guards — reports, attendance, categories/brands/products/attribute-sets/barcode templates/expenses, outlets, receipt templates, suppliers/supplier-returns/supplier-invoices, returns, approvals, PO/transfer submit+approve, parked sales, business-modules, and each Phase-4 vertical (restaurant, KDS, bookings/appointments, projects, contracts, service tickets, rentals, room management, treatment plans + clinical sub-resources, tips).
+
+**This is LIVE middleware, not a reference table.** `registerAllRoutes.js:~284` mounts it as a blanket `app.use()` over every request whose path starts with `/api/`, positioned after `enforceOutletAssignment` and before every route module. Mechanics:
+
+- `PERMISSION_RULES.find(r => r.methods.includes(req.method) && r.path.test(req.path))` — **first match wins**; no matching rule → `next()` (the array is an allowlist of guarded prefixes, not a deny-by-default gate).
+- Passes if `req.employeePerms` includes `all_access`, or any one of the rule's `anyPerms`. Otherwise 403 `{ error: "Forbidden: insufficient permissions" }`.
+- It reads **effective** perms (`resolveEffectiveRole` runs earlier in the chain), so a per-outlet role override is honoured here.
+- It does **not** replace per-route `requirePerm`/`requireAnyPerm` — routes still call those, so both layers apply and **the blanket rule runs first**. A route's own guard can therefore never be *looser* than the blanket rule covering its prefix.
+
+**Two traps that follow from "prefix regex + runs first":**
+1. **Self-scoped sub-endpoints get caught.** A rule on `/^\/api\/attendance(\/|$)/` also matches `attendance/my-status`, so tightening the prefix perm 403s an endpoint that was meant to be self-serve — this is exactly how the POS shift gate broke once. When changing a rule's `anyPerms`, enumerate every sub-path under the regex and exempt deliberately. See the `feedback_blanket_rule_self_endpoint` memory.
+2. **"Public" GETs under a guarded prefix silently 403 for unauthenticated callers.** This is why the kiosk endpoints under `/api/attendance` (`pin-status`, `pin-checkin`, `pin-outlets`) are all **POST** — the rule only lists `GET`. Easy to miss when testing while logged in.
 
 **`req.*` read:** `req.employeePerms`, `req.context`
 
