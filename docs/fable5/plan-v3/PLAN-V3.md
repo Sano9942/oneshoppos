@@ -40,8 +40,8 @@
 | Step | Title | Wave | Pause? | Status |
 |---|---|---|---|---|
 | 0 | Reconcile tree + commit plan & amended source docs + capture exact test baseline (to main) | — | — | ✅ `42642323` (docs) + `ec3e6eaf` (baseline artifact + `check-baseline.js` gate) |
-| W0a | 4.1 delete `ADMIN_ALLOWED_IPS` (commit 1) + 4.5 in-memory-state docs (commit 2) | 0 | **before** (security → main) | ☐ |
-| W0a2 | 4.2 webhook signature verification — provider-specific contracts (commit 3) | 0 | — | ☐ |
+| W0a | 4.1 delete `ADMIN_ALLOWED_IPS` (commit 1) + 4.5 in-memory-state docs (commit 2) | 0 | **before** (security → main) | ☑ `b7de8255` + `6434a12a` |
+| W0a2 | 4.2 webhook signature verification — provider-specific contracts (commit 3) | 0 | — | ☑ `a4a65655` — **Meta/WhatsApp only; Daraz split → V4-3** (owner-ruled 2026-07-16, see §W0a2 outcome) |
 | W0b | Frontend correctness: POSContext session-expired flow + KDS chrome escape | 0 | — | ☐ |
 | W0c | OG social-preview middleware (brand bucket only, deny-list-first) | 0 | — | ☐ |
 | W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☐ |
@@ -267,6 +267,37 @@ Report: outcome first — the requireAllowedIp removal file list, then the docs 
 - **Done when:** ☐ three POST endpoints fail-closed on bad signature with the **correct per-provider
   format**; ☐ GET bypass closed; ☐ secret-source documented per provider; ☐ replay window applied
   only where a signed timestamp exists; ☐ activation blocked without a verifiable secret.
+
+> **OUTCOME 2026-07-16 — `a4a65655`. Rescoped mid-step by owner ruling: 2 of 3 providers, not 3.**
+> The step's STOP condition fired exactly as written ("if Daraz's push contract can't be pinned from
+> docs, STOP and report rather than guessing a format") — it could not be pinned, so Daraz split to
+> **V4-3** and the other three goals shipped. Done-when as delivered: ☑ **two** POST endpoints
+> (meta/whatsapp) fail-closed with Meta's real format (`sha256=` + **hex** over the raw body — NOT the
+> aggregator's base64, confirming the step's own warning was justified); ☑ GET bypass closed
+> (live-verified 403 + `no_verify_token_configured`, with the old expression demonstrated returning
+> `true`); ☑ secret source documented per provider (`routes/CLAUDE.md` table); ☑ **no** replay window —
+> correct, not skipped: Meta sends no signed timestamp, which is precisely the conditional the step
+> specified; ☑ activation guard (409 `WEBHOOK_SECRET_NOT_CONFIGURED`, before the insert).
+>
+> Three things a later reader needs:
+> (a) **Two new deploy-critical env vars**: `META_APP_SECRET` (+ optional `WHATSAPP_APP_SECRET`).
+> Unset → the activation guard refuses Meta channels. That is the intended safe failure, but it is
+> also the exact [[feedback_worker_env_var_drift]] shape (code ships, var forgotten, feature silently
+> never works) — set them at Gate 0.
+> (b) **Verification ran before tenant resolution**, which is only sound because Meta signs with OUR
+> app secret. The aggregator's inverse (per-tenant secret → route first) is not a stylistic
+> difference; swapping the two orders breaks either key lookup or fail-closure.
+> (c) **One existing test changed**: `pg-step2`'s "Administrator unaffected" used `whatsapp` as an
+> incidental vehicle for a *permissions* assertion and began 409-ing on the new guard. Switched to
+> `daraz` (as its whole block uses) to keep the permission concern isolated — the 409 was correct, the
+> vehicle was not. The whatsapp path is covered both directions by
+> `tests/unit/integrations-activation-guard.test.js`.
+>
+> Verification trap hit and worth remembering: the first "bypass closed" proof was a **false
+> positive** — a stale `node index.js` still owned port 5000 and served the curls with the token
+> **set**, so the 403 meant nothing. `pkill -f "node index.js"` did not kill it. The honest test
+> requires asserting the port is **dead** (`curl` → `000`) *before* booting, and matching the pino pid
+> in the log against the port owner. Same family as [[feedback_verifier_env_traps]].
 
 **Prompt:**
 ```
@@ -663,9 +694,16 @@ inside-an-allowed-file swap.
 Follow the Gate protocol. Slice verification subset: W0a + W0a2 + W0b + W0c + W0d verify lists +
 baseline-artifact diff. **Deploy-day notes: NO migrations.** Behavioural changes at deploy: (a) `/admin` loses
 the (already-inert) IP allowlist — zero functional change in prod since it was failing open, but the
-boot warning disappears; (b) the three webhook endpoints now fail-closed on bad signatures — before
-deploy, note that 0 tenants have active channel configs (verified 2026-07-16), so blast radius is
-nil; (c) `/kds` re-mounts on the escaped shell — post-deploy, load `/kds` on a restaurant `golv_*`
+boot warning disappears; (b) **two** webhook endpoints (meta + whatsapp — **not** daraz, split to V4-3)
+now fail-closed on bad signatures, and their GET handshakes stop echoing the challenge to
+unauthenticated callers — before deploy, note that 0 tenants have active channel configs (verified
+2026-07-16), so blast radius is nil. **(b2) SET `META_APP_SECRET` ON RAILWAY AT THIS GATE** (plus
+`WHATSAPP_APP_SECRET` if WhatsApp Business is a separate Meta app; it falls back to `META_APP_SECRET`
+otherwise). Without it the W0a2 activation guard 409s any attempt to connect a Meta channel — the
+intended safe failure, but it is silent until someone tries, which is the
+[[feedback_worker_env_var_drift]] pattern; diff `railway variables` against the two names as part of
+this gate rather than discovering it from a support ticket. Setting them changes no behaviour for the
+0 existing configs. (c) `/kds` re-mounts on the escaped shell — post-deploy, load `/kds` on a restaurant `golv_*`
 tenant and confirm bare chrome + auth still enforced; (d) the OG middleware goes live on Vercel —
 post-deploy, curl a brand route and a no-preview route with a crawler UA on production. 4.4 (R2) is
 an independent ops action, not gated by this merge. Owner go → merge `fix/v3-wave0`, watch Railway +
@@ -1221,7 +1259,9 @@ any feature wave). Source key: `R§n` = REPORT.md section; `PV2` = PLAN-V2 defer
 | Item | Source | Disposition |
 |---|---|---|
 | 4.1 `ADMIN_ALLOWED_IPS` fails open | R§4.1 | **Step W0a — DELETE the allowlist, helper, boot warning (D3/D4); do NOT set the var** |
-| 4.2 unsigned meta/whatsapp/daraz webhooks + `undefined===undefined` bypass | R§4.2 | **Step W0a2 — PROVIDER-SPECIFIC signature verification (Meta/WhatsApp `x-hub-signature-256` hex; Daraz its own contract; NOT the aggregator verbatim) + GET-bypass fix + activation guard; latent (0 active configs)** |
+| 4.2a `undefined===undefined` GET verify-token bypass | R§4.2 | **Step W0a2 — DONE `a4a65655`.** Handshake refuses when the expected token is unset; constant-time compare. Live-verified 403 (was 200 + challenge to anyone). |
+| 4.2b unsigned meta/whatsapp webhooks | R§4.2 | **Step W0a2 — DONE `a4a65655`.** `x-hub-signature-256` hex HMAC over raw body, app-level secret, fail-closed 401 + alert, verified before tenant resolution. Activation guard blocks connecting a Meta channel with no app secret. |
+| 4.2c unsigned **daraz** webhook | R§4.2 | **Deferred → V4-3 (owner-ruled 2026-07-16).** BLOCKED: the inbound push contract is unpublished (Lazada's documented `_sign` is parameter-based and outbound-only; the Open Platform push docs serve no fetchable content). Cannot distinguish "signed scheme X" from "unsigned"; a wrong guess fail-closes a tenant's first real webhook. Left at pre-existing trust-the-payload. **Latent** (0 active configs) — see the shared TRIGGER below. |
 | 4.3 manufacturer JWT shares secret + no scope check | R§4.3 | Step 1 / **Release A (own)** — set the secret + scope-gate `loadTenantAndPerms` + prod boot assertion (close the recurrence) |
 | 4.4 grey-cloud R2 proxy on origin | R§4.4 | **Step W0-ops — R2 custom domain + `R2_PUBLIC_URL`; do NOT flip orange cloud (owner ops)** |
 | 4.5 in-memory process state | R§4.5 | **Step W0a — DOCS ONLY in backend/CLAUDE.md** |
@@ -1255,7 +1295,10 @@ any feature wave). Source key: `R§n` = REPORT.md section; `PV2` = PLAN-V2 defer
 
 ## Deferred to v4 (running list — add here during execution, never silently drop)
 
-Carrying forward every still-open v2 deferral so the chain is unbroken, plus the two v3 spin-offs.
+Carrying forward every still-open v2 deferral so the chain is unbroken, plus the v3 spin-offs
+(V4-1/V4-2 planned at authoring; V4-3/V4-4 added during execution — V4-3 is a scope split ruled
+mid-step, V4-4 a new finding, and both are recorded here rather than in a chip or a memory note so
+Step V's ledger walk can actually see them).
 
 | # | Item | Source |
 |---|---|---|
@@ -1267,6 +1310,17 @@ Carrying forward every still-open v2 deferral so the chain is unbroken, plus the
 | E8 | Preset-specific operator roles | PLAN-V2 E8 |
 | V4-1 | Generated 1200×630 OG card (Vercel OG / satori) composing logo + shop name | REPORT §Part 3 (W0c defers) |
 | V4-2 | Env-var URL fallback hardening — throw-on-misconfig for the 37 link-building sites (model: `r2.js:74`) | REPORT §Part 3 |
+| V4-3 | **Daraz inbound push signature verification** — blocked on the contract | REPORT §4.2 (W0a2 splits) |
+| V4-4 | **WhatsApp inbound `external_id` idempotency** — needs a migration, so structurally impossible in v3 | Found during W0a2 |
+
+### ⚠️ SHARED TRIGGER for V4-3 + V4-4 — before any tenant activates a channel integration
+
+Both are latent for exactly one reason: **zero tenants have an active channel `integration_settings` row** (verified 2026-07-16 via Supabase; only `tenant_livetest1` has one, `is_active=false`). That is the same latency that made W0a2 hardening-before-anyone-connects rather than a live-fire fix. Both become real the moment a tenant connects. Re-verify the zero-active-config claim before relying on it — this is the tripwire, not a schedule.
+
+Deliberately **documentation-only, not a code gate**: blocking Daraz activation was considered and owner-ruled against on 2026-07-16 (the ruling was "split and defer", explicitly not "fail-closed Daraz"). Do not add that gate without a fresh ruling. Pattern mirrors the E9 kiosk-slots trigger in `business_modules_v2_open_decisions`.
+
+- **V4-3 (Daraz)** — unblock is an **owner action**, not a code task: obtain the push-notification signing contract from the Daraz seller/partner portal, **or** capture one live push and read its headers. Until then any implementation is a guess. The full research trail (what was checked and why it dead-ends) is in the comment above the handler in `routes/webhooks.js` and the table in `routes/CLAUDE.md` — read those before re-litigating; the docs route has already been exhausted. Risk while deferred: a forged status push could upsert `web_orders`/`daraz_order_map` for a known order id (status corruption, not money movement).
+- **V4-4 (WhatsApp)** — `services/messaging.js:addMessage` plain-INSERTs `external_id`; `message_entries` has **no** unique constraint on it (only `idx_message_entries_thread`), so `ON CONFLICT` needs a migration → v3 ships zero migrations by design. Fix: partial unique index on `external_id WHERE direction='inbound' AND external_id IS NOT NULL` (**partial** — outbound sends legitimately carry a null `external_id`, so a naive unique index breaks them) + `ON CONFLICT DO NOTHING`. **Do NOT substitute a code-only guarded insert** (`INSERT … SELECT WHERE NOT EXISTS`): it is racy without the index and would provide the feeling of idempotency while still duplicating under the exact concurrent-redelivery case it is meant to stop. Note Meta retries on non-2xx, so duplicates do not require an attacker — and W0a2 adds no replay window (Meta sends no signed timestamp), so signature verification narrows this but cannot close it.
 
 **Note on E5/E6/E9/`approval_policies`:** all four are RESOLVED in V3 (E5 built in Step 3; E9 shipped
 as Release B; E6 and `approval_policies` ruled at Steps 6/5) — they leave the deferred chain rather
