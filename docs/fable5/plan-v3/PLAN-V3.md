@@ -42,7 +42,7 @@
 | 0 | Reconcile tree + commit plan & amended source docs + capture exact test baseline (to main) | — | — | ✅ `42642323` (docs) + `ec3e6eaf` (baseline artifact + `check-baseline.js` gate) |
 | W0a | 4.1 delete `ADMIN_ALLOWED_IPS` (commit 1) + 4.5 in-memory-state docs (commit 2) | 0 | **before** (security → main) | ☑ `b7de8255` + `6434a12a` |
 | W0a2 | 4.2 webhook signature verification — provider-specific contracts (commit 3) | 0 | — | ☑ `a4a65655` — **Meta/WhatsApp only; Daraz split → V4-3** (owner-ruled 2026-07-16, see §W0a2 outcome) |
-| W0b | Frontend correctness: POSContext session-expired flow + KDS chrome escape | 0 | — | ☐ |
+| W0b | Frontend correctness: POSContext session-expired flow + KDS chrome escape | 0 | — | ☑ `45cf66bb` — both park branches (`draft_orders` **and** `parked_sales`) browser-verified; see §W0b outcome |
 | W0c | OG social-preview middleware (brand bucket only, deny-list-first) | 0 | — | ☐ |
 | W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☐ |
 | W0-ops | 4.4 R2 custom domain + `R2_PUBLIC_URL` (owner ops, no commit) | 0 | **owner-executed** | ☐ |
@@ -434,6 +434,32 @@ verified. Do not push.
 Report: outcome first — the session-expired both-paths evidence + a KDS before/after screenshot, then
 the parkSale caller audit.
 ```
+
+### §W0b outcome (done `45cf66bb`, 2026-07-16)
+
+No owner ruling arose. Recording only what the commit and the code docs don't already carry:
+
+- **"Verify the parked-sale row exists" is ambiguous — park has TWO destinations.** `parkSale`
+  branches on `posFlags.phase2_draft_orders`: on → `draft_orders`, off → `parked_sales`. The verify
+  step named only the latter, and the first check ran against an *empty* `parked_sales` — which is
+  indistinguishable from "the fix reports success but persists nothing," i.e. exactly the bug under
+  repair. Check the flag before trusting the table. **Both branches are now verified** (draft_orders
+  first, then `parked_sales` after toggling the module off), so `parkSale`'s new boolean contract
+  rests on evidence for both paths, not a structural argument for the second.
+- **The flag was flipped through `/settings/business-modules`, not SQL** — `phase2_draft_orders` is
+  the primary flag of the catalog-managed **Draft Orders** card, so `PUT /api/feature-flags/:key`
+  409s it and a hand-written `UPDATE` would desync `tenant_business_modules` + skip the `saved_flags`
+  snapshot. Toggling via the UI produced the correct engine state (row created `enabled=false`,
+  `saved_flags={phase2_draft_orders:true}`, `updated_by=Owner`; restored + snapshot cleared to `null`
+  on re-enable). **For any future step that needs a module flag flipped, use the product surface.**
+- **The step's Breadcrumbs SKIP entry is inert, deliberately kept.** Once `/kds` leaves
+  `AppLayoutRedesign`, `Breadcrumbs` never mounts there at all — the SKIP entry does no work today.
+  Kept as a guard if the route is ever moved back under the shell; noted in `ui/CLAUDE.md` so it
+  isn't later mistaken for the mechanism doing the work.
+- **Verification-tooling note (not a plan issue):** the in-app browser's `screenshot` action times
+  out environment-wide — reproduced on a static `/login` with no polling, while clicks and
+  `read_page` worked on the same tab. The Playwright MCP screenshots fine and produced the
+  before/after. Reach for Playwright for any future step whose verify list names a screenshot.
 
 ---
 
