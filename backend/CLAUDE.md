@@ -42,7 +42,12 @@ Orchestrator, not a place to add domain logic. Key responsibilities:
 10. requestId            — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
---- webhook routes (routes/webhooks.js) mount here — NO auth by default; only the payment-gateway webhook is HMAC-verified; the marketplace-channel webhooks are rate-limited but not signature-verified ---
+--- webhook routes (routes/webhooks.js) mount here — NO auth; a signature is the only
+    authenticity gate. Verified + fail-closed: payment gateway, Meta, WhatsApp, and the
+    delivery aggregators. NOT verified: Daraz (deliberately deferred — its inbound push
+    contract is unpublished). Each provider's scheme differs (hex vs base64, env app-secret
+    vs encrypted per-tenant secret) — see routes/CLAUDE.md "Webhook signature verification"
+    before touching one ---
 --- customer portal routes: dedicated rate limiters → customer auth middleware → handler ---
 --- manufacturer portal routes: dedicated rate limiters → manufacturer auth middleware → handler ---
 

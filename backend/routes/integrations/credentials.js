@@ -2,6 +2,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
   const { db, requireAnyPerm, requireFeature, encryptSecret, decryptSecret, maskSecret } = deps;
   const { validate } = require("../../middleware/validate");
   const { connectProviderSchema, disconnectProviderSchema } = require("../../schemas/integrations");
+  const { META_PROVIDERS, resolveAppSecret } = require("../../services/meta-webhook");
 
   // POST /api/integrations/connect — save encrypted credentials
   // PLAN-V2 Step 2 / D7: credential writes are delegable via
@@ -14,6 +15,23 @@ module.exports = function registerCredentialRoutes(router, deps) {
     async (req, res) => {
       try {
         const { provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, webhook_secret, config_json } = req.body;
+
+        // W0a2 activation guard: a channel whose inbound webhooks are
+        // signature-verified must not go active while the verifying secret is
+        // missing. Verification is fail-closed, so activating without it means
+        // every delivery 401s and the tenant's orders/messages silently vanish —
+        // the connection would look healthy and do nothing.
+        //
+        // For the Meta channels the verifying secret is OURS (an app-level env
+        // var — see services/meta-webhook.js), never the tenant's, so this is a
+        // platform-config check rather than a request-body check. That is also
+        // why it can't be fixed by the tenant retrying with more fields.
+        if (META_PROVIDERS.includes(provider) && !resolveAppSecret(provider)) {
+          return res.status(409).json({
+            error: `${provider} cannot be connected right now: this deployment has no Meta app secret configured, so incoming webhooks could not be verified and every order would be dropped. Contact support.`,
+            code: "WEBHOOK_SECRET_NOT_CONFIGURED",
+          });
+        }
 
         const encKey = api_key ? encryptSecret(api_key) : null;
         const encSecret = api_secret ? encryptSecret(api_secret) : null;
