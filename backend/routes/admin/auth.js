@@ -43,7 +43,7 @@ function adminCookieOpts() {
 
 module.exports = function registerAuthRoutes(app, deps) {
   const {
-    db, masterDb, jwt, requireAllowedIp, requireSuperAdmin,
+    db, masterDb, jwt, requireSuperAdmin,
     authLimiter, bcrypt, logSecurityEvent, logAdminAction,
   } = deps;
 
@@ -78,7 +78,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   }
 
   // ── Step 1: password ────────────────────────────────────────────────────
-  app.post("/api/admin/auth/login", requireAllowedIp, authLimiter, async (req, res) => {
+  app.post("/api/admin/auth/login", authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
@@ -126,7 +126,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Step 2: TOTP / recovery code ────────────────────────────────────────
-  app.post("/api/admin/auth/totp", requireAllowedIp, adminTotpLimiter, async (req, res) => {
+  app.post("/api/admin/auth/totp", adminTotpLimiter, async (req, res) => {
     const { pending_token, code } = req.body || {};
     if (!pending_token || !code) {
       return res.status(400).json({ error: "pending_token and code are required" });
@@ -184,7 +184,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Enrollment: generate secret + QR ────────────────────────────────────
-  app.post("/api/admin/auth/totp/setup", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/auth/totp/setup", requireSuperAdmin, async (req, res) => {
     try {
       await masterDb.init(db);
       const { rows } = await db.query(
@@ -209,7 +209,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Enrollment: confirm first code, enable, return recovery codes ───────
-  app.post("/api/admin/auth/totp/verify", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/auth/totp/verify", requireSuperAdmin, async (req, res) => {
     const { code } = req.body || {};
     if (!code) return res.status(400).json({ error: "code is required" });
     try {
@@ -239,7 +239,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Disable 2FA (requires a current code) ───────────────────────────────
-  app.post("/api/admin/auth/totp/disable", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/auth/totp/disable", requireSuperAdmin, async (req, res) => {
     const { code } = req.body || {};
     if (!code) return res.status(400).json({ error: "code is required" });
     try {
@@ -272,7 +272,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Status (drives the /admin/security UI) ──────────────────────────────
-  app.get("/api/admin/auth/totp/status", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/auth/totp/status", requireSuperAdmin, async (req, res) => {
     try {
       await masterDb.init(db);
       const { rows } = await db.query(
@@ -291,7 +291,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   // Mirrors POST /api/auth/refresh: each refresh consumes the presented token
   // and issues a fresh one. A revoked token presented again is reuse — every
   // session for that admin is killed, forcing a full re-login.
-  app.post("/api/admin/auth/refresh", requireAllowedIp, async (req, res) => {
+  app.post("/api/admin/auth/refresh", async (req, res) => {
     const refreshToken = req.cookies?.[REFRESH_COOKIE];
     if (!refreshToken) return res.status(401).json({ error: "Refresh token missing" });
     let decoded;
@@ -345,7 +345,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Logout — revoke the current session + clear the cookie ──────────────
-  app.post("/api/admin/auth/logout", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/auth/logout", requireSuperAdmin, async (req, res) => {
     try {
       await masterDb.init(db);
       if (req.admin.sid) {
@@ -362,7 +362,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Active sessions list ────────────────────────────────────────────────
-  app.get("/api/admin/auth/sessions", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/auth/sessions", requireSuperAdmin, async (req, res) => {
     try {
       await masterDb.init(db);
       const { rows } = await db.query(
@@ -387,7 +387,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // ── Revoke all other sessions ───────────────────────────────────────────
-  app.post("/api/admin/auth/sessions/revoke-others", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/auth/sessions/revoke-others", requireSuperAdmin, async (req, res) => {
     try {
       await masterDb.init(db);
       const { rowCount } = await db.query(

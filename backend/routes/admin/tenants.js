@@ -47,10 +47,10 @@ function buildTenantScopedDb(pool, schemaName) {
 }
 
 module.exports = function registerTenantRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
+  const { db, masterDb, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
 
   // ── List tenants ───────────────────────────────────────────────────────
-  app.get("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: tenants } = await db.query(
         `SELECT id, slug, name, owner_email, status, plan, timezone,
@@ -100,7 +100,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Create tenant ──────────────────────────────────────────────────────
-  app.post("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, validate(CreateTenantSchema), async (req, res) => {
+  app.post("/api/admin/tenants", requireSuperAdmin, validate(CreateTenantSchema), async (req, res) => {
     const { slug, name, owner_email, timezone, pin, plan } = req.body || {};
     if (!slug || !name || !pin) {
       return res.status(400).json({ error: "slug, name, and pin are required" });
@@ -150,7 +150,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Get tenant detail ──────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT id, slug, name, owner_email, status, plan, timezone,
@@ -176,7 +176,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Update tenant ──────────────────────────────────────────────────────
-  app.put("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
     const { name, owner_email, plan, timezone, max_employees, max_outlets, max_products } = req.body || {};
     try {
       const { rows } = await db.query("SELECT id, plan, name FROM tenants WHERE id = $1", [req.params.id]);
@@ -240,7 +240,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Suspend ────────────────────────────────────────────────────────────
-  app.post("/api/admin/tenants/:id/suspend", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/suspend", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;
@@ -262,7 +262,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Activate ───────────────────────────────────────────────────────────
-  app.post("/api/admin/tenants/:id/activate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/activate", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;
@@ -285,7 +285,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Delete ─────────────────────────────────────────────────────────────
-  app.delete("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;
@@ -320,7 +320,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   // the fleet goes through POST /api/admin/tenants/bulk-lifecycle.
   const FLEET_PREFIX_RE = /^[a-z0-9_]{2,40}$/;
 
-  app.get("/api/admin/test-fleet", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/test-fleet", requireSuperAdmin, async (req, res) => {
     try {
       const prefix = String(req.query.prefix || "golv_");
       if (!FLEET_PREFIX_RE.test(prefix)) return res.status(400).json({ error: "Invalid prefix" });
@@ -337,7 +337,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/test-fleet/delete", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/test-fleet/delete", requireSuperAdmin, async (req, res) => {
     try {
       const prefix = String(req.body?.prefix || "");
       const confirm = String(req.body?.confirm || "");
@@ -384,7 +384,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Tenant Stats ───────────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/stats", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT id, slug, status, max_employees, max_products, max_outlets FROM tenants WHERE id = $1",
@@ -461,7 +461,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Feature Usage ──────────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id/feature-usage", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/feature-usage", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT slug, status FROM tenants WHERE id = $1 AND deleted_at IS NULL",
@@ -489,7 +489,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   // domain table, each individually try/caught (missing table ⇒ row omitted).
   const { VERTICAL_USAGE_SOURCES } = require("../../config/vertical-usage-sources");
 
-  app.get("/api/admin/tenants/:id/vertical-usage", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/vertical-usage", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: [tenant] } = await db.query(
         "SELECT slug, status FROM tenants WHERE id = $1 AND deleted_at IS NULL",
@@ -545,7 +545,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Setup Token ────────────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id/setup-token", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/setup-token", requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterDb.getTenantById(req.params.id);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -570,7 +570,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/tenants/:id/regenerate-setup-token", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/regenerate-setup-token", requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterDb.getTenantById(req.params.id);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -597,12 +597,12 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Plan defaults (read-only) ──────────────────────────────────────────
-  app.get("/api/admin/plan-defaults", requireAllowedIp, requireSuperAdmin, (req, res) => {
+  app.get("/api/admin/plan-defaults", requireSuperAdmin, (req, res) => {
     res.json({ plans: PLAN_DEFAULTS });
   });
 
   // ── Feature Flags (per-tenant schema) ──────────────────────────────────
-  app.get("/api/admin/tenants/:id/feature-flags", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/feature-flags", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -627,7 +627,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/tenants/:id/feature-flags", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tenants/:id/feature-flags", requireSuperAdmin, async (req, res) => {
     try {
       const { key, enabled } = req.body;
       if (!key) return res.status(400).json({ error: "key is required" });
@@ -658,7 +658,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Modes (per-tenant tenant_modes) ────────────────────────────────────
-  app.get("/api/admin/tenants/:id/modes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/modes", requireSuperAdmin, async (req, res) => {
     try {
       const { VALID_MODES, MODE_REGISTRY } = require("../../config/mode-registry");
       const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
@@ -683,7 +683,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/tenants/:id/modes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tenants/:id/modes", requireSuperAdmin, async (req, res) => {
     try {
       const { VALID_MODES, getFeatureFlagsForModes } = require("../../config/mode-registry");
       const { invalidateModeCache } = require("../../middleware/feature-flags");
@@ -724,7 +724,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   // (drift worth fixing). `extra` = ON but not expected and not a
   // default-true platform flag — usually a legitimate manual opt-in, shown
   // as informational only.
-  app.get("/api/admin/tenants/:id/flag-drift", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/flag-drift", requireSuperAdmin, async (req, res) => {
     try {
       const { expectedFlagsForPreset } = require("../../services/preset-apply");
       const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
@@ -756,7 +756,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Re-apply preset (repair action) ────────────────────────────────────
-  app.post("/api/admin/tenants/:id/reapply-preset", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/reapply-preset", requireSuperAdmin, async (req, res) => {
     try {
       const { applyPreset } = require("../../services/preset-apply");
       const { invalidateModeCache } = require("../../middleware/feature-flags");
@@ -789,7 +789,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Tenant Notes ───────────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id/notes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/notes", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT * FROM tenant_notes WHERE tenant_id = $1 ORDER BY created_at DESC",
@@ -801,7 +801,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/tenants/:id/notes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/notes", requireSuperAdmin, async (req, res) => {
     try {
       const { note } = req.body;
       if (!note || !note.trim()) return res.status(400).json({ error: "Note is required" });
@@ -817,7 +817,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/admin/tenants/:id/notes/:noteId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/tenants/:id/notes/:noteId", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
         "DELETE FROM tenant_notes WHERE id = $1 AND tenant_id = $2",
@@ -835,7 +835,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   // Both routes invoke `runMigrate` from `migrate-pg.js`, which is the same
   // function the Railway boot sequence uses. `runMigrate` is idempotent —
   // it reads `schema_version` and only applies pending migrations.
-  app.post("/api/admin/tenants/:id/migrate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/migrate", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;
@@ -863,7 +863,7 @@ module.exports = function registerTenantRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/migrate-all", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/migrate-all", requireSuperAdmin, async (req, res) => {
     try {
       // Always migrate the public (master) schema first — same order as Railway boot.
       let publicResult;
@@ -913,7 +913,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── PIN Reset ──────────────────────────────────────────────────────────
-  app.post("/api/admin/tenants/:id/reset-pin", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/reset-pin", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;

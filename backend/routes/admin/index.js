@@ -15,7 +15,7 @@
  *   system.js      — worker status, orphaned schemas, backup
  *   module-locks.js — Business Modules platform locks (self-enable backstop)
  */
-const { bcrypt, BCRYPT_ROUNDS, createRequireAllowedIp, createRequireSuperAdmin, createLoggers } = require("./helpers");
+const { bcrypt, BCRYPT_ROUNDS, createRequireSuperAdmin, createLoggers } = require("./helpers");
 
 const registerAuthRoutes = require("./auth");
 const registerTenantRoutes = require("./tenants");
@@ -38,14 +38,13 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   tenantDbManager.init(db);
 
   // Create shared middleware and helpers
-  const requireAllowedIp = createRequireAllowedIp();
   const requireSuperAdmin = createRequireSuperAdmin(verifyAccessToken);
   const { auditLog, logAdminAction, logSecurityEvent } = createLoggers(db, masterDb);
 
   // Shared deps object passed to all domain modules
   const deps = {
     db, masterDb, jwt, jwtDefaults, tenantDbManager,
-    requireAllowedIp, requireSuperAdmin, authLimiter,
+    requireSuperAdmin, authLimiter,
     bcrypt, BCRYPT_ROUNDS,
     provision, PLAN_DEFAULTS,
     auditLog, logAdminAction, logSecurityEvent,

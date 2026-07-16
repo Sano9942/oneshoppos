@@ -5,10 +5,10 @@ const { validate } = require("../../middleware/validate");
 const { CreateTaxRateSchema } = require("../../schemas/admin");
 
 module.exports = function registerComplianceRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
+  const { db, masterDb, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
 
   // ── Tax Rate Reference CRUD (public schema) ────────────────────────────
-  app.get("/api/admin/tax-rates", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tax-rates", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM public.tax_rate_reference ORDER BY hs_code");
       res.json({ rates: rows });
@@ -17,7 +17,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/tax-rates", requireAllowedIp, requireSuperAdmin, validate(CreateTaxRateSchema), async (req, res) => {
+  app.post("/api/admin/tax-rates", requireSuperAdmin, validate(CreateTaxRateSchema), async (req, res) => {
     try {
       const { hs_code, description_en, description_ur, federal_gst, punjab_pra, sindh_srb, kpk_kpra, balochistan_bra, exemption_notes } = req.body;
       if (!hs_code || !description_en) return res.status(400).json({ error: "hs_code and description_en are required" });
@@ -34,7 +34,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/tax-rates/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tax-rates/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { hs_code, description_en, description_ur, federal_gst, punjab_pra, sindh_srb, kpk_kpra, balochistan_bra, exemption_notes } = req.body;
@@ -56,7 +56,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/admin/tax-rates/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/tax-rates/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query("DELETE FROM public.tax_rate_reference WHERE id = $1", [req.params.id]);
       if (!rowCount) return res.status(404).json({ error: "Rate not found" });
@@ -68,7 +68,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
   });
 
   // ── Tax Rate Suggestions Review ────────────────────────────────────────
-  app.get("/api/admin/tax-rate-suggestions", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tax-rate-suggestions", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: tenants } = await masterDb.query("SELECT id, slug, name FROM tenants WHERE status = 'active'");
       const suggestions = [];
@@ -86,7 +86,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/tax-rate-suggestions/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tax-rate-suggestions/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { status, tenant_slug } = req.body;
@@ -118,7 +118,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
   });
 
   // ── FBR Health (cross-tenant) ──────────────────────────────────────────
-  app.get("/api/admin/fbr-health", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/fbr-health", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: tenants } = await masterDb.query("SELECT id, slug, name FROM tenants WHERE status = 'active'");
       const health = [];

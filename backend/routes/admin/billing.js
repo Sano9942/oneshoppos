@@ -4,10 +4,10 @@
 const { recordLifecycleEvent } = require("../../services/lifecycle-events");
 
 module.exports = function registerBillingRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, auditLog, logAdminAction } = deps;
+  const { db, masterDb, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, auditLog, logAdminAction } = deps;
 
   // ── Plan Pricing CRUD ──────────────────────────────────────────────────
-  app.get("/api/admin/plan-pricing", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/plan-pricing", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await masterDb.query(
         "SELECT * FROM plan_pricing ORDER BY plan, cycle"
@@ -18,7 +18,7 @@ module.exports = function registerBillingRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/plan-pricing/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/plan-pricing/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { price, is_active } = req.body;
@@ -61,7 +61,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   // (current trial end or now) and puts the tenant back in 'trial' state.
   // expire_now: payment_status='expired' — requireActiveSubscription blocks
   // writes on next request (free-plan tenants stay usable by design).
-  app.post("/api/admin/tenants/bulk-lifecycle", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/bulk-lifecycle", requireSuperAdmin, async (req, res) => {
     try {
       const { tenant_ids, action } = req.body || {};
       const days = Number(req.body?.days) || 30;
@@ -115,7 +115,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Global payments list ───────────────────────────────────────────────
-  app.get("/api/admin/payments", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/payments", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -135,7 +135,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Record Payment ─────────────────────────────────────────────────────
-  app.post("/api/admin/tenants/:id/record-payment", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/record-payment", requireSuperAdmin, async (req, res) => {
     try {
       const tenantId = parseInt(req.params.id, 10);
       const { plan, cycle, amount, payment_method, reference_note } = req.body;
@@ -220,7 +220,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Payment History ────────────────────────────────────────────────────
-  app.get("/api/admin/tenants/:id/payments", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/payments", requireSuperAdmin, async (req, res) => {
     try {
       const tenantId = parseInt(req.params.id, 10);
       const { rows } = await masterDb.query(
@@ -234,7 +234,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Upgrade Requests ───────────────────────────────────────────────────
-  app.get("/api/admin/upgrade-requests", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/upgrade-requests", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await masterDb.query(
         `SELECT ur.*, t.slug, t.name AS tenant_name, t.plan AS current_plan
@@ -249,7 +249,7 @@ module.exports = function registerBillingRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/upgrade-requests/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/upgrade-requests/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -281,7 +281,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Billing Attention ──────────────────────────────────────────────────
-  app.get("/api/admin/billing-attention", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/billing-attention", requireSuperAdmin, async (req, res) => {
     try {
       const now = new Date().toISOString();
       const sevenDays = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -337,7 +337,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   // ── Stuck Payment Intents ──────────────────────────────────────────────
   // Returns payment_intents that have been in 'pending' state longer than
   // the threshold (default 2 hours). Used by AdminStuckPayments.jsx.
-  app.get("/api/admin/payment-intents/stuck", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/payment-intents/stuck", requireSuperAdmin, async (req, res) => {
     try {
       const hours = Math.max(0, Number(req.query.hours || 2));
       const { rows } = await masterDb.query(

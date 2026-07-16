@@ -10,10 +10,10 @@
 const { BUSINESS_MODULES } = require("../../config/business-modules");
 
 module.exports = function registerModuleLockRoutes(app, deps) {
-  const { db, requireAllowedIp, requireSuperAdmin, logAdminAction } = deps;
+  const { db, requireSuperAdmin, logAdminAction } = deps;
 
   // List all locks (global + per-tenant, with tenant slug for display).
-  app.get("/api/admin/module-locks", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/module-locks", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT l.id, l.module_key, l.tenant_id, t.slug AS tenant_slug, t.name AS tenant_name,
@@ -29,7 +29,7 @@ module.exports = function registerModuleLockRoutes(app, deps) {
   });
 
   // Create/refresh a lock. Body: { tenant_id?: number|null, reason?: string }.
-  app.put("/api/admin/module-locks/:moduleKey", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/module-locks/:moduleKey", requireSuperAdmin, async (req, res) => {
     try {
       const { moduleKey } = req.params;
       if (!BUSINESS_MODULES[moduleKey]) {
@@ -87,7 +87,7 @@ module.exports = function registerModuleLockRoutes(app, deps) {
   });
 
   // Remove a lock. Query: ?tenant_id=<id> for a per-tenant lock; omit for global.
-  app.delete("/api/admin/module-locks/:moduleKey", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/module-locks/:moduleKey", requireSuperAdmin, async (req, res) => {
     try {
       const { moduleKey } = req.params;
       const tenantId = req.query.tenant_id ? Number(req.query.tenant_id) : null;

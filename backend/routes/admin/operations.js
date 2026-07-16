@@ -4,10 +4,10 @@
 const crypto = require("crypto");
 
 module.exports = function registerOperationsRoutes(app, deps) {
-  const { db, masterDb, jwt, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
+  const { db, masterDb, jwt, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
   // ── Support Tickets (cross-tenant) ─────────────────────────────────────
-  app.get("/api/admin/support-tickets", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/support-tickets", requireSuperAdmin, async (req, res) => {
     try {
       const status = req.query.status || null;
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
@@ -46,7 +46,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId", requireSuperAdmin, async (req, res) => {
     try {
       const { status } = req.body || {};
       if (!status || !["open", "acknowledged", "resolved"].includes(status)) {
@@ -97,7 +97,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   });
 
   // Reply with notification (consolidated from two duplicate handlers in original admin.js)
-  app.put("/api/admin/support-tickets/:tenantId/:ticketId/reply", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId/reply", requireSuperAdmin, async (req, res) => {
     try {
       const { reply } = req.body || {};
       if (!reply || !reply.trim()) {
@@ -133,7 +133,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/support-tickets/:tenantId/:ticketId", requireSuperAdmin, async (req, res) => {
     try {
       const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
       const { rowCount } = await tenantDb.query(
@@ -149,7 +149,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   });
 
   // ── Impersonation ──────────────────────────────────────────────────────
-  app.post("/api/admin/impersonate/:tenantId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/impersonate/:tenantId", requireSuperAdmin, async (req, res) => {
     try {
       const tenantId = parseInt(req.params.tenantId, 10);
 
@@ -208,7 +208,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/impersonate/:sessionId/end", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/impersonate/:sessionId/end", requireSuperAdmin, async (req, res) => {
     try {
       const sessionId = parseInt(req.params.sessionId, 10);
       // Look up the session's jti + tenant so we can blacklist the token
@@ -248,7 +248,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   // ?active=1 → only sessions still usable (not ended, not revoked, within the
   // 1h token TTL). Otherwise → recent history (default 20). Revoke reuses the
   // existing POST /api/admin/impersonate/:sessionId/end route.
-  app.get("/api/admin/impersonation-sessions", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/impersonation-sessions", requireSuperAdmin, async (req, res) => {
     try {
       const activeOnly = req.query.active === "1" || req.query.active === "true";
       const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
@@ -275,7 +275,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   });
 
   // ── Dead Letter Queue (cross-tenant) ───────────────────────────────────
-  app.get("/api/admin/dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/dead-letters", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
 
@@ -310,7 +310,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/dead-letters/:tenantId/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/dead-letters/:tenantId/:id/retry", requireSuperAdmin, async (req, res) => {
     try {
       const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
       const { rows } = await tenantDb.query(
@@ -333,7 +333,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   // V03 delivery-aggregator order injection (foodpanda/Careem) dead-letters
   // land in each tenant's external_sync_events with status='dead_letter'.
   // Same fanout pattern as the Shopify list above.
-  app.get("/api/admin/dead-letters/aggregator", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/dead-letters/aggregator", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const { rows: tenants } = await db.query(
@@ -371,7 +371,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   // Dismiss: mark 'failed' so the 30-day sync-event cleanup reaps it. There
   // is deliberately no admin-side retry — re-injecting an aggregator order
   // must go through the webhook path with its idempotency key.
-  app.post("/api/admin/dead-letters/aggregator/:tenantId/:id/dismiss", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/dead-letters/aggregator/:tenantId/:id/dismiss", requireSuperAdmin, async (req, res) => {
     try {
       const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
       const { rows } = await tenantDb.query(
@@ -388,7 +388,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   });
 
   // ── Channel-sync dead-letters (V10 lodging OTA conflicts) ───────────────
-  app.get("/api/admin/dead-letters/channel-sync", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/dead-letters/channel-sync", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const { rows: tenants } = await db.query(
@@ -423,7 +423,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/dead-letters/channel-sync/:tenantId/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/dead-letters/channel-sync/:tenantId/:id", requireSuperAdmin, async (req, res) => {
     try {
       const status = req.body?.status;
       if (!["resolved", "dismissed"].includes(status)) {
@@ -447,7 +447,7 @@ module.exports = function registerOperationsRoutes(app, deps) {
   // Returns recent payment webhook events from the public schema. Used by
   // AdminStuckPayments.jsx to surface unprocessed or anomalous webhooks.
   // Joins across tenants via masterDb (public schema). Last 7 days, newest first.
-  app.get("/api/admin/webhooks/payment-dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/webhooks/payment-dead-letters", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const { rows } = await masterDb.query(

@@ -72,7 +72,7 @@ Customer portal and manufacturer portal routes are structurally separate chains 
 
 **Boot-time assertions:**
 - A startup check verifies a handful of critical routes are registered (bulk product import, bulk product delete, bulk product status, the Shopify product-delete route) — crashes boot if any are missing
-- An unset IP allowlist for the admin panel in production logs a loud security warning at boot
+- There is no longer an admin IP-allowlist boot warning. The allowlist it warned about was deleted rather than configured — it failed open, so the warning was correct but the layer was inert. The `/admin` gate is password + TOTP + super-admin token; see `routes/admin/CLAUDE.md`.
 
 ---
 
