@@ -8,6 +8,20 @@ whether the Pakistan framing in CLAUDE.md / memory should be changed.
 asked whether it's decided-and-dated or direction-of-travel and did not get an answer before this
 was written — so nothing here asserts a commitment. Treat as "direction stated, PK-first today."
 
+> **ANSWERED 2026-07-15, after this file was written.**
+> `docs/fable5/ai-platform-strategy/PLAN.md` D1: the global pivot is **direction-of-travel, not
+> committed** — keep shipping PK-first. The question this file asked is closed, and it was closed
+> the conservative way. **Consequences for this file: (1) §6's ordering does NOT supersede
+> `REPORT.md`'s — that supersession was explicitly conditional on the pivot being confirmed, and it
+> was not; (2) everything in §4 stays a coupling *inventory*, not a worklist — it is debt behind a
+> single trigger (the first non-PK tenant), not scheduled work; (3) §3's open question about
+> `ADMIN_ALLOWED_IPS` was separately ruled — see §3.**
+> The reasoning is worth reading (PLAN.md §1 "Why D1 is coherent"): every coupling catalogued below
+> is *correct behaviour* for a Pakistan-only product, which makes global one blocking epic gated on
+> one event rather than a scatter of fixes. **This file keeps its value under D1** — it is the
+> pre-written scope for that epic, and §4.6's non-PK test tenant remains the move that would make
+> the whole class visible on day one.
+
 Same method/caveats as `REPORT.md`. Everything below marked ✅ was verified in source; the docs
 were NOT trusted as evidence.
 
@@ -44,7 +58,14 @@ a genuine decision, not a default:
 - keep the allowlist and accept the ops burden, **or**
 - lean on TOTP + something like SSO and stop pretending the allowlist is the layer.
 
-**Owner input needed.** Do not just set the var without deciding this.
+~~**Owner input needed.** Do not just set the var without deciding this.~~
+
+> **DECIDED 2026-07-15 — `ai-platform-strategy/PLAN.md` D3 + D4, and it went further than either
+> option above.** D3: **drop `ADMIN_ALLOWED_IPS` entirely** — remove it rather than keep false
+> confidence. D4: **TOTP alone, no SSO** — solo operator, TOTP already enrolled; an identity
+> provider is a new dependency and a new failure mode for no gain at one admin, revisit on the
+> first admin hire. So this section's framing was right (it *was* a real decision, not a default)
+> and the answer is the second bullet minus the SSO half. **Do not set the var; delete the layer.**
 
 ---
 
@@ -165,7 +186,14 @@ identity.
 
 ## 6. Suggested order (global lens)
 
-This **supersedes** `REPORT.md`'s ordering if the global pivot is confirmed:
+~~This **supersedes** `REPORT.md`'s ordering if the global pivot is confirmed:~~
+
+> **DORMANT — the condition did not hold.** The pivot was ruled direction-of-travel-only (D1, see
+> the note at the top), so **this ordering does not supersede `REPORT.md`'s** and is not the current
+> plan. Read it as **the pre-written running order for the global epic, to be picked up whole on the
+> trigger** (`ai-platform-strategy/PLAN.md` §6 — the first non-PK tenant). Item 1 is the exception
+> worth considering early even under PK-first: a non-PK test tenant is cheap and converts an
+> invisible class into visible failures before it is expensive.
 
 1. **A non-PK test tenant** (negative UTC offset, USD) — makes the rest visible instead of theoretical.
 2. **Night audit cron** — an actual correctness bug for any non-PK lodging tenant.

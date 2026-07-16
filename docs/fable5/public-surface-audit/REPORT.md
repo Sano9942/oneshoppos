@@ -19,8 +19,13 @@ generated links exist", then a check of four recommendations.
   verticals (it mostly does — the blocker is one `CHECK` constraint).
 - `GLOBAL-READINESS.md` — the owner stated on 2026-07-15 that the aim is now global software, not
   Pakistan-only. That file re-scores every finding below under a global lens (two get stronger,
-  one flips) and inventories the verified PK coupling. **If the global pivot is confirmed, that
-  file's ordering supersedes the "Recommended order" at the bottom of this one.**
+  one flips) and inventories the verified PK coupling. It says its ordering supersedes the
+  "Recommended order" at the bottom of this one **if the global pivot is confirmed**.
+  **RESOLVED 2026-07-15 — it was not confirmed.** `docs/fable5/ai-platform-strategy/PLAN.md` D1
+  ruled the global pivot **direction-of-travel, not committed**: keep shipping PK-first, and record
+  the PK coupling as debt behind a single trigger rather than scheduled work. **The supersession
+  therefore never fires — the "Recommended order" below stands** (as amended for `ADMIN_ALLOWED_IPS`;
+  see §4.1).
 
 ---
 
@@ -287,7 +292,15 @@ It `console.error`s and continues. Two boot checks ~5 lines apart have opposite 
 
 **Mitigation in place**: password + TOTP (2FA enrolled per [[admin_refresh_audit_jul2026]]). So not
 open — but the intended defense-in-depth layer is off, and has been shouting into the logs on
-every deploy. **Fix = one env var.**
+every deploy. ~~**Fix = one env var.**~~
+
+> **RULED 2026-07-15 — do NOT set the var.** `docs/fable5/ai-platform-strategy/PLAN.md` D3: **drop
+> `ADMIN_ALLOWED_IPS` entirely** rather than keep false confidence — remove the allowlist code and
+> the boot warning, don't activate them. D4 closes the follow-on question `GLOBAL-READINESS.md` §3
+> raised (allowlist vs SSO): **TOTP alone for `/admin`, no SSO** — solo operator, TOTP already
+> enrolled, an identity provider adds a dependency and a failure mode for no gain at one admin.
+> Revisit on the first admin hire. So the finding stands as *diagnosis*, but the fix inverted:
+> deletion, not configuration.
 
 ### 4.2 — Meta/WhatsApp/Daraz webhooks unsigned, plus an `undefined === undefined` bypass
 
@@ -440,7 +453,12 @@ absent.
 
 ## Recommended order
 
-1. **`ADMIN_ALLOWED_IPS`** — one env var; stops your own boot log from being right about you.
+**Still current as of 2026-07-15** — `GLOBAL-READINESS.md` §6's competing order does not supersede
+this one, because the global pivot it was conditional on was ruled direction-of-travel-only (D1).
+Item 1 is amended by the D3/D4 rulings; the rest are unchanged.
+
+1. ~~**`ADMIN_ALLOWED_IPS`** — one env var~~ → **AMENDED: delete it** (D3 — the fix is removal, not
+   configuration; TOTP is the layer, per D4). See §4.1.
 2. **`MANUFACTURER_PORTAL_JWT_SECRET`** + a scope check in `loadTenantAndPerms` — both cheap.
 3. **Signature-verify meta/whatsapp/daraz** — before any tenant connects a channel.
 4. **OG middleware** — product-visible; do the privacy split first.
