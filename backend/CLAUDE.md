@@ -295,6 +295,29 @@ Integration credentials are stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64
 
 ---
 
+## Horizontal-scaling preconditions
+
+**This is a precondition, not a bug list.** Every item below is *correct* at one Railway instance, which is what runs today. All of them fail **quietly** at two or more — wrong answers, no error, no log line. Nothing here needs fixing while the deploy is single-instance; all of it must be resolved *before* a second instance, a replica, or an autoscaler is switched on. Treat "add a second instance" as a change that is blocked on this list.
+
+Each entry is process-local state in a `Map` that a second instance would neither see nor be told about:
+
+| State | Where | Lifetime | What breaks at 2+ instances |
+|---|---|---|---|
+| `displayStore` cart Map | `routes/customer-display.js` (in the route factory) | until restart | Customer-facing display shows a cart only if the POS write and the display poll land on the *same* instance. Otherwise the display is blank or stale. Keyed per tenant+shift, so it is a correctness bug, not a leak. |
+| Alerting sliding windows + tenant `Set`s | `services/alerting.js` (`windows`) | rolling window | Error-spike thresholds count per instance, so an N-instance deploy needs N× the errors to fire an alert — alerts silently under-trigger. Deduplication across instances is lost too. |
+| Menu-schedule per-outlet cache | `services/menu-schedule-resolver.js` (`_cache`, 60s) | 60s | A menu/day-part change applies on the instance that served the write and lags up to 60s elsewhere — QR diners can see different menus concurrently. |
+| Feature-flag bundle cache | `middleware/feature-flags.js` (`_featureFlagCache`, `FEATURE_FLAG_CACHE_MS` 60s, via `_getBundle`) | 60s | A module toggle takes effect immediately on one instance, up to 60s later on the rest. |
+| Mode map cache | `middleware/feature-flags.js` (`_modeCache`, `MODE_CACHE_MS` 60s, via `getModesMap`) | 60s | Same as above for `requireMode` — which is **fail-closed**, so the window is a 403, not a fall-through. |
+| Company profile cache | `middleware/tenant-auth.js` (`_companyCache`, `COMPANY_CACHE_MS` **5 min**) | 5 min | Currency/timezone/tax config changes lag up to 5 minutes per instance — the longest window here, and timezone drift mis-buckets reports. |
+| Context flag cache | `middleware/tenant-auth.js` (`_contextFlagCache`, `CONTEXT_FLAG_CACHE_MS` 30s) | 30s | Outlet-context enforcement flips per instance. |
+| Outlet cache | `middleware/outlet-context.js` (`_outletCache`, `OUTLET_CACHE_MS` 60s) | 60s | A new/renamed/deactivated outlet resolves on one instance and 403s on another for up to 60s. |
+
+**The sharp edge is invalidation, not the TTLs.** `invalidateFeatureFlagCache`, `invalidateModeCache`, `invalidateCompanyProfileCache`, `invalidateOutletCache`, and `invalidateMenuScheduleCache` are all **in-process only** — they clear the `Map` belonging to the instance that happened to serve the request. On a second instance the write is invisible, so the post-write refresh path (which today makes a module toggle feel instant) would leave every *other* instance serving stale state until its TTL lapses. A toggle would appear to work, then appear to revert, depending on which instance answered — the worst kind of bug to diagnose. `displayStore` and the alerting windows have no TTL at all, so they never self-heal.
+
+Note the transaction-pooler constraint interacts with the obvious fix: `LISTEN/NOTIFY` is **not** available on the pooled connection (see `db-pg.js` above), so cross-instance invalidation would need a shared cache (Redis) or a direct non-pooled connection — not a `NOTIFY` broadcast.
+
+---
+
 ## Pointers
 
 - `routes/CLAUDE.md` — full route file table, mounting order, subdirectory summaries
