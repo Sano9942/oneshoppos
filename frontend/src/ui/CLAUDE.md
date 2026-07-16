@@ -135,7 +135,9 @@ When adding a nav-gated feature, add the item here with the right guard combo �
 
 Default export. Auto-derives the breadcrumb trail from `useLocation().pathname`, translating `Customer(s)`/`Product(s)` label substrings via `usePreset().labels` (e.g. restaurant preset → Guest/Menu Item), mirroring the same translation the sidebar nav applies.
 
-**Skipped entirely on:** `/`, `/dashboard`, `/pos`, `/kiosk`, `/customer-display`, `/retail/home`.
+**Skipped entirely on:** `/`, `/dashboard`, `/pos`, `/kiosk`, `/customer-display`, `/kds`, `/retail/home`.
+
+`/kds` is belt-and-suspenders: it no longer renders inside `AppLayoutRedesign` (it moved to the escaped-shell pattern in `publicRoutes.jsx`), so `Breadcrumbs` never mounts there anyway — the SKIP entry just keeps the list honest if the route is ever moved back under the shell.
 
 **Label resolution:** `LABELS[segment]` (a large static map keyed by URL path segment) → falls back to the segment auto-title-cased with hyphens replaced by spaces. New routes work without a `LABELS` entry but look worse (raw segment casing) until one is added.
 

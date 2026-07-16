@@ -100,7 +100,7 @@ const LABELS = {
   "retail-risk": "Retail Risk",
 };
 
-const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display", "/retail/home"];
+const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display", "/kds", "/retail/home"];
 
 export default function Breadcrumbs() {
   const { pathname } = useLocation();

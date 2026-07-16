@@ -26,7 +26,7 @@ import { useCheckout } from "./hooks/useCheckout";
  * WAVE-C SNAPSHOT — usePOS() value object keys (pre-split, for diff verification)
  * Every key below must remain in the orchestrator's `value` object after the split.
  *
- * employee, authHeaders, logout, handleLogout, isLocked, setIsLocked, lockPin,
+ * employee, authHeaders, logout, navigate, handleLogout, isLocked, setIsLocked, lockPin,
  * setLockPin, lockError, setLockError, outlets, customers, selectedOutletId,
  * setSelectedOutletId, activeShift, attendanceStatus, attendanceCode, gateLoading,
  * canOpenShift, canSwitchOutlet, isReadyForCheckout, openingDenoms,
@@ -667,8 +667,15 @@ export const POSProvider = ({ children }) => {
   }, [shift.selectedOutletId]);
 
   // ── Park / restore sale ─────────────────────────────────────────────────
+  // Returns true when the cart is safely off the terminal (parked, or there
+  // was nothing to park) and false when the park failed and the cart is still
+  // live. Callers that navigate away on the strength of a park — the
+  // session-expired modal — MUST check this; dropping the cart because a park
+  // silently 401'd loses the sale. Fire-and-forget callers (F3, the subheader
+  // button, the restaurant table switch) may ignore it: the error is still
+  // surfaced through setError either way.
   const parkSale = useCallback(async () => {
-    if (!cartHook.cart.length || !shift.selectedOutletId) return;
+    if (!cartHook.cart.length || !shift.selectedOutletId) return true;
     const itemPayload = cartHook.cart.map((i) => ({
       product_id: i.id,
       variant_id: i.variant_id || null,
@@ -700,8 +707,10 @@ export const POSProvider = ({ children }) => {
       setSelectedCustomerId("");
       await loadParked(shift.selectedOutletId);
       showNotice("Sale parked successfully.");
+      return true;
     } catch (e) {
       setError(e.message || "Failed to park sale");
+      return false;
     }
   }, [cartHook, shift.selectedOutletId, posFlags, selectedCustomerId, employee?.id, loadParked, showNotice]);
 
@@ -964,6 +973,12 @@ export const POSProvider = ({ children }) => {
     employee,
     authHeaders,
     logout,
+    // Consumed by POSLockScreen ("Sign out completely") and
+    // POSSessionExpiredModal (Cancel) — both call it after logout() so the
+    // cleared session lets /login render instead of bouncing to
+    // /context-select. Was omitted here for a long time; both call sites
+    // destructured it and threw on undefined.
+    navigate,
     handleLogout,
     isLocked,
     setIsLocked,

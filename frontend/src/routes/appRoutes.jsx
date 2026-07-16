@@ -113,7 +113,6 @@ const ReservationsRoute = lazy(() => import("../pages/ReservationsRoute"));
 const WaitlistRoute = lazy(() => import("../pages/WaitlistRoute"));
 const ModifierGroupsRoute = lazy(() => import("../pages/ModifierGroupsRoute"));
 const RestaurantInboxRoute = lazy(() => import("../pages/RestaurantInboxRoute"));
-const KDSRoute = lazy(() => import("../pages/KDSRoute"));
 const AppointmentServicesRoute = lazy(() => import("../pages/AppointmentServicesRoute"));
 const AppointmentsCalendarRoute = lazy(() => import("../pages/AppointmentsCalendarRoute"));
 const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
@@ -281,7 +280,6 @@ export const appRoutes = [
     <Route path="/restaurant/waitlist" element={perm("manage_restaurant", wrap(WaitlistRoute))} />
     <Route path="/restaurant/modifiers" element={perm("manage_restaurant", wrap(ModifierGroupsRoute))} />
     <Route path="/restaurant/inbox" element={perm("manage_restaurant", wrap(RestaurantInboxRoute))} />
-    <Route path="/kds" element={perm("manage_kds", wrap(KDSRoute))} />
     <Route path="/order-kiosks" element={perm("manage_restaurant", wrap(OrderKiosksRoute))} />
     {/* Phase 4 — Appointments */}
     <Route path="/appointments/services" element={perm("manage_bookings", wrap(AppointmentServicesRoute))} />

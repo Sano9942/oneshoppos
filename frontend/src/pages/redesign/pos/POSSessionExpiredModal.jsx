@@ -9,6 +9,7 @@ export default function POSSessionExpiredModal() {
     setSessionExpired,
     retryPendingSale,
     parkSale,
+    logout,
     navigate,
     employee,
     authHeaders,
@@ -17,6 +18,7 @@ export default function POSSessionExpiredModal() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   if (!sessionExpired) return null;
 
@@ -43,10 +45,31 @@ export default function POSSessionExpiredModal() {
     }
   };
 
+  // Order matters. The park runs on the already-expired token, so it can fail;
+  // if it does, the cart is still live and leaving would silently lose the
+  // sale. So: park first, and only once it's confirmed safe do we tear the
+  // session down. logout() before navigate() is what makes /login actually
+  // render — while isAuthenticated is still true, LoginPage bounces straight
+  // to /context-select, which strands the cashier on a dead token.
   const handleCancel = async () => {
-    setSessionExpired(false);
-    await parkSale();
-    navigate("/login", { replace: true });
+    setError("");
+    setCancelling(true);
+    try {
+      const parked = await parkSale();
+      if (!parked) {
+        setError(
+          "Couldn't park the sale — it's still on this terminal. Try again, or enter your PIN above to complete it.",
+        );
+        return;
+      }
+      setSessionExpired(false);
+      await logout();
+      navigate("/login", { replace: true });
+    } catch {
+      setError("Couldn't park the sale — it's still on this terminal. Try again.");
+    } finally {
+      setCancelling(false);
+    }
   };
 
   return (
@@ -88,9 +111,10 @@ export default function POSSessionExpiredModal() {
           <button
             type="button"
             onClick={handleCancel}
-            className="text-center text-sm text-(--ui-text-muted) hover:text-(--ui-text)"
+            disabled={cancelling || loading}
+            className="text-center text-sm text-(--ui-text-muted) hover:text-(--ui-text) disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Park sale &amp; go to login
+            {cancelling ? "Parking sale…" : "Park sale & go to login"}
           </button>
         </form>
       </div>
