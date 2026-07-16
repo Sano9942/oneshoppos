@@ -39,7 +39,7 @@
 
 | Step | Title | Wave | Pause? | Status |
 |---|---|---|---|---|
-| 0 | Reconcile tree + commit plan & amended source docs + capture exact test baseline (to main) | — | — | ☐ |
+| 0 | Reconcile tree + commit plan & amended source docs + capture exact test baseline (to main) | — | — | ✅ `42642323` (docs) + `ec3e6eaf` (baseline artifact + `check-baseline.js` gate) |
 | W0a | 4.1 delete `ADMIN_ALLOWED_IPS` (commit 1) + 4.5 in-memory-state docs (commit 2) | 0 | **before** (security → main) | ☐ |
 | W0a2 | 4.2 webhook signature verification — provider-specific contracts (commit 3) | 0 | — | ☐ |
 | W0b | Frontend correctness: POSContext session-expired flow + KDS chrome escape | 0 | — | ☐ |
@@ -105,6 +105,22 @@ Two actions, both to `main`, docs-only, no code:
    CHANGED failure, not on a higher total.** Note the known-red set explicitly (pg-batch2/3/8 ~12
    sales-need-open-shift failures; `smoke-gate.test.js` — do not investigate). This artifact
    replaces the "~57 baseline" language everywhere below.
+
+> **DONE 2026-07-16** — `42642323` (docs) + `ec3e6eaf` (baseline). Every "diff against
+> baseline-tests.json" below is **executable**, not prose: from `backend/` cwd run the artifact's
+> exact `run.command`, then `node ../docs/fable5/plan-v3/check-baseline.js <report.json>` (exit 0 =
+> green, 1 = new/changed). **Reuse `run.command` verbatim** — `--no-file-parallelism` is load-bearing;
+> concurrent vitest emits environmental hook-timeouts that poison the diff in both directions.
+> Actual baseline @ `42642323`: **70 failing entries — 31 test-level + 39 file-level** (load/hook
+> crashes report zero failing tests yet are still red). Two corrections to this plan's assumptions:
+> (a) the known-red set is **larger and different** than "pg-batch2/3/8 + smoke-gate" — the biggest
+> family is **37 legacy pre-Postgres suites** whose helpers (`createTestApp`, `master-db`,
+> `schema-full`) are verified absent, so they cannot run and carry zero signal; (b) **17 entries match
+> no documented family** and are flagged `other` for triage — several are explained by
+> [[followup_main_integration_baseline]] (`503`-vs-`403` `requireFeature` drift, open-shift fixture
+> cascades, env-sensitive `payment-gateway`/worker-status units), none by this plan. The gate was
+> verified against injected NEW and CHANGED regressions that both sat at **70-vs-70 identical
+> totals** — a count-based check would have passed both.
 
 ---
 
