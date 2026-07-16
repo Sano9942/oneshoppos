@@ -1,0 +1,602 @@
+{
+  "$schema": "sanopos/plan-v3/baseline-tests@1",
+  "purpose": "Exact regression gate reference for PLAN-V3. Gates diff BY TEST ID and fail on any NEW or CHANGED failure. A total-count comparison is NOT a valid gate: one pre-existing failure can vanish while a new one appears, leaving the total unchanged.",
+  "generated_at": "2026-07-16T10:42:18.149Z",
+  "git_commit": "426423231e54ae88c18c73a4ff18cf8388e68e79",
+  "run": {
+    "command": "npx vitest run --reporter=json --outputFile=<path> --no-file-parallelism --testTimeout=60000 --hookTimeout=120000",
+    "cwd": "backend/",
+    "note": "Gates MUST use this exact command. --no-file-parallelism is load-bearing: concurrent vitest processes produce hook-timeout failures that are environmental, not real, and would poison the diff in both directions.",
+    "database": "local postgres (backend/.env.test -> sanopos_test, PG 17.5, session TZ UTC, migration head v137)",
+    "session_timezone": "UTC"
+  },
+  "counts": {
+    "total": 2430,
+    "passed": 2358,
+    "failed": 31,
+    "skipped": 41,
+    "files": 247
+  },
+  "known_red_families": {
+    "legacy pre-Postgres suites — require modules deleted in the SQLite->PG migration ('../helpers/createTestApp' -> only createTestApp-pg.js survives; '../../master-db' -> master-db-pg.js; '../../schema-full'). Verified absent on disk: these files cannot run at all, so they are permanently red and carry ZERO signal. CLAUDE.md: legacy SQLite tests, do not use unless explicitly asked.": [
+      "backend/tests/integration/attendance.test.js :: <file-level>",
+      "backend/tests/integration/auditability.test.js :: <file-level>",
+      "backend/tests/integration/auth-jwt.test.js :: <file-level>",
+      "backend/tests/integration/auth.test.js :: <file-level>",
+      "backend/tests/integration/compliance.test.js :: <file-level>",
+      "backend/tests/integration/concurrency.test.js :: <file-level>",
+      "backend/tests/integration/context-enforcement.test.js :: <file-level>",
+      "backend/tests/integration/crud_employees.test.js :: <file-level>",
+      "backend/tests/integration/crud_inventory.test.js :: <file-level>",
+      "backend/tests/integration/crud_operations.test.js :: <file-level>",
+      "backend/tests/integration/crud_settings.test.js :: <file-level>",
+      "backend/tests/integration/customers.test.js :: <file-level>",
+      "backend/tests/integration/data-integrity.test.js :: <file-level>",
+      "backend/tests/integration/email.test.js :: <file-level>",
+      "backend/tests/integration/failure-handling.test.js :: <file-level>",
+      "backend/tests/integration/feature-flags.test.js :: <file-level>",
+      "backend/tests/integration/health.test.js :: <file-level>",
+      "backend/tests/integration/hr_approvals.test.js :: <file-level>",
+      "backend/tests/integration/inventory.test.js :: <file-level>",
+      "backend/tests/integration/negative-cases.test.js :: <file-level>",
+      "backend/tests/integration/po-credit-limit.test.js :: <file-level>",
+      "backend/tests/integration/printer.test.js :: <file-level>",
+      "backend/tests/integration/promotions.test.js :: <file-level>",
+      "backend/tests/integration/purchase-orders.test.js :: <file-level>",
+      "backend/tests/integration/rbac.test.js :: <file-level>",
+      "backend/tests/integration/reports_accuracy.test.js :: <file-level>",
+      "backend/tests/integration/reports_governance.test.js :: <file-level>",
+      "backend/tests/integration/returns-exchange.test.js :: <file-level>",
+      "backend/tests/integration/returns.test.js :: <file-level>",
+      "backend/tests/integration/saas-phase1.test.js :: master-db.js > initMasterDb creates all 4 master tables",
+      "backend/tests/integration/saas-phase1.test.js :: schema-full.js > extractSchema returns a string with 80+ CREATE TABLE statements",
+      "backend/tests/integration/sales.test.js :: <file-level>",
+      "backend/tests/integration/security.test.js :: <file-level>",
+      "backend/tests/integration/shift-linkage.test.js :: <file-level>",
+      "backend/tests/integration/shift-report-attribution.test.js :: <file-level>",
+      "backend/tests/integration/shifts.test.js :: <file-level>",
+      "backend/tests/integration/supplier-payables.test.js :: <file-level>"
+    ],
+    "other — NOT a documented known-red family. Triage before treating as acceptable.": [
+      "backend/tests/integration/cod-settlements.test.js :: COD settlements — /resolve extension > full flow > import → match → manual match unmatched → approve",
+      "backend/tests/integration/pg-batch-2g15-error-states.test.js :: 2-G.15 Day 3 — refund idempotency > different idempotency_key on the same sale still succeeds",
+      "backend/tests/integration/pg-batch-2g15-error-states.test.js :: 2-G.15 Day 3 — refund idempotency > legacy callers (no idempotency_key) are not blocked by the partial index",
+      "backend/tests/integration/pg-batch-2g17-risk-controls.test.js :: 2-G.17 Risk controls — refund threshold > refund BELOW threshold does not require manager_pin",
+      "backend/tests/integration/pg-batch10-wave2.test.js :: Batch 10 — Wave 2 tests: support, FBR, import (Postgres) > Import routes > POST /api/import/products — preview mode validates rows",
+      "backend/tests/integration/pg-batch11-admin.test.js :: Batch 11 — Admin routes (Postgres, public schema) > Stats & monitoring > GET /api/admin/infra — returns infrastructure metrics",
+      "backend/tests/integration/pg-batch13-restaurant.test.js :: Batch 13 — Phase 4A Restaurant (Postgres) > feature flag gating > returns 503 when phase4_restaurant feature flag is disabled",
+      "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > appointments > POST /api/appointments/:id/reschedule updates time (200)",
+      "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > availability > blocked time does not appear in available slots",
+      "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > feature flag gating > returns 503 when phase4_appointments feature flag is disabled",
+      "backend/tests/integration/pg-restaurant-reservations.test.js :: Phase 2-R.4 — Reservations + waitlist > Feature flag off returns 503",
+      "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > decimal quantity rounds UP on stock deduction (prevents overselling)",
+      "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > non-weighted sale leaves tare=0 and gross null (backward compat)",
+      "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > persists decimal quantity + gross/tare for weighted sale",
+      "backend/tests/unit/routes-admin-worker-status.test.js :: GET /api/admin/worker-status > reports all three pre-existing workers alongside the new ones",
+      "backend/tests/unit/routes-admin-worker-status.test.js :: GET /api/admin/worker-status > returns all worker slots, all disabled when no globals set",
+      "backend/tests/unit/services.test.js :: payment-gateway — isEnabled() > returns true when PAYMENT_GATEWAY=xpay"
+    ],
+    "Jest-syntax files run under Vitest — backend is Vitest, these use Jest globals. CLAUDE.md flags this for reports_accuracy.test.js (run with npx jest).": [
+      "backend/tests/integration/pg-batch12-billing.test.js :: <file-level>",
+      "backend/tests/integration/pg-batch13-catalog-scheduler.test.js :: <file-level>",
+      "backend/tests/integration/public-bookings.test.js :: <file-level>"
+    ],
+    "pg-batch2/3/8 — stale fixtures; sales need an open shift (known-red per stale_pg_batch_fixtures).": [
+      "backend/tests/integration/pg-batch2-medium.test.js :: Batch 2 — Medium complexity routes (Postgres) > returns > POST /api/returns rejects excess return quantity",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards lists gift cards",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards/:code returns card details",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards creates a gift card",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards/:code/redeem redeems amount",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > GET /api/sales lists sales",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > GET /api/sales/:id returns sale details",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales creates a sale",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales deducts stock",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales rejects duplicate idempotency_key",
+      "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > serial-numbers > GET /api/products/1/serials returns empty list initially",
+      "backend/tests/integration/pg-batch8-middleware.test.js :: Batch 8 — Middleware & startup hooks (Postgres) > notifyLowStockForSale > creates notifications for low-stock products"
+    ],
+    "smoke-gate.test.js — legacy SQLite, pre-existing red on main. CLAUDE.md: DO NOT investigate.": [
+      "backend/tests/integration/smoke-gate.test.js :: <file-level>"
+    ]
+  },
+  "failing_tests": [
+    {
+      "id": "backend/tests/integration/attendance.test.js :: <file-level>",
+      "file": "backend/tests/integration/attendance.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/auditability.test.js :: <file-level>",
+      "file": "backend/tests/integration/auditability.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/auth-jwt.test.js :: <file-level>",
+      "file": "backend/tests/integration/auth-jwt.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/auth.test.js :: <file-level>",
+      "file": "backend/tests/integration/auth.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/cod-settlements.test.js :: COD settlements — /resolve extension > full flow > import → match → manual match unmatched → approve",
+      "file": "backend/tests/integration/cod-settlements.test.js",
+      "name": "COD settlements — /resolve extension > full flow > import → match → manual match unmatched → approve",
+      "signature": "AssertionError: expected 500 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/compliance.test.js :: <file-level>",
+      "file": "backend/tests/integration/compliance.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/concurrency.test.js :: <file-level>",
+      "file": "backend/tests/integration/concurrency.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/context-enforcement.test.js :: <file-level>",
+      "file": "backend/tests/integration/context-enforcement.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/crud_employees.test.js :: <file-level>",
+      "file": "backend/tests/integration/crud_employees.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/crud_inventory.test.js :: <file-level>",
+      "file": "backend/tests/integration/crud_inventory.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/crud_operations.test.js :: <file-level>",
+      "file": "backend/tests/integration/crud_operations.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/crud_settings.test.js :: <file-level>",
+      "file": "backend/tests/integration/crud_settings.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/customers.test.js :: <file-level>",
+      "file": "backend/tests/integration/customers.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/data-integrity.test.js :: <file-level>",
+      "file": "backend/tests/integration/data-integrity.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/email.test.js :: <file-level>",
+      "file": "backend/tests/integration/email.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/failure-handling.test.js :: <file-level>",
+      "file": "backend/tests/integration/failure-handling.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/feature-flags.test.js :: <file-level>",
+      "file": "backend/tests/integration/feature-flags.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/health.test.js :: <file-level>",
+      "file": "backend/tests/integration/health.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/hr_approvals.test.js :: <file-level>",
+      "file": "backend/tests/integration/hr_approvals.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/inventory.test.js :: <file-level>",
+      "file": "backend/tests/integration/inventory.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/negative-cases.test.js :: <file-level>",
+      "file": "backend/tests/integration/negative-cases.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch-2g15-error-states.test.js :: 2-G.15 Day 3 — refund idempotency > different idempotency_key on the same sale still succeeds",
+      "file": "backend/tests/integration/pg-batch-2g15-error-states.test.js",
+      "name": "2-G.15 Day 3 — refund idempotency > different idempotency_key on the same sale still succeeds",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch-2g15-error-states.test.js :: 2-G.15 Day 3 — refund idempotency > legacy callers (no idempotency_key) are not blocked by the partial index",
+      "file": "backend/tests/integration/pg-batch-2g15-error-states.test.js",
+      "name": "2-G.15 Day 3 — refund idempotency > legacy callers (no idempotency_key) are not blocked by the partial index",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch-2g17-risk-controls.test.js :: 2-G.17 Risk controls — refund threshold > refund BELOW threshold does not require manager_pin",
+      "file": "backend/tests/integration/pg-batch-2g17-risk-controls.test.js",
+      "name": "2-G.17 Risk controls — refund threshold > refund BELOW threshold does not require manager_pin",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch10-wave2.test.js :: Batch 10 — Wave 2 tests: support, FBR, import (Postgres) > Import routes > POST /api/import/products — preview mode validates rows",
+      "file": "backend/tests/integration/pg-batch10-wave2.test.js",
+      "name": "Batch 10 — Wave 2 tests: support, FBR, import (Postgres) > Import routes > POST /api/import/products — preview mode validates rows",
+      "signature": "TypeError: actual value must be number or bigint, received \"undefined\"",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch11-admin.test.js :: Batch 11 — Admin routes (Postgres, public schema) > Stats & monitoring > GET /api/admin/infra — returns infrastructure metrics",
+      "file": "backend/tests/integration/pg-batch11-admin.test.js",
+      "name": "Batch 11 — Admin routes (Postgres, public schema) > Stats & monitoring > GET /api/admin/infra — returns infrastructure metrics",
+      "signature": "Error: STACK_TRACE_ERROR",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch12-billing.test.js :: <file-level>",
+      "file": "backend/tests/integration/pg-batch12-billing.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "jest is not defined",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch13-catalog-scheduler.test.js :: <file-level>",
+      "file": "backend/tests/integration/pg-batch13-catalog-scheduler.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "jest is not defined",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch13-restaurant.test.js :: Batch 13 — Phase 4A Restaurant (Postgres) > feature flag gating > returns 503 when phase4_restaurant feature flag is disabled",
+      "file": "backend/tests/integration/pg-batch13-restaurant.test.js",
+      "name": "Batch 13 — Phase 4A Restaurant (Postgres) > feature flag gating > returns 503 when phase4_restaurant feature flag is disabled",
+      "signature": "AssertionError: expected 403 to be 503 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > appointments > POST /api/appointments/:id/reschedule updates time (200)",
+      "file": "backend/tests/integration/pg-batch14-bookings.test.js",
+      "name": "Batch 14 — Phase 4B Bookings (Postgres) > appointments > POST /api/appointments/:id/reschedule updates time (200)",
+      "signature": "AssertionError: expected '<ISO>' to contain '12:00'",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > availability > blocked time does not appear in available slots",
+      "file": "backend/tests/integration/pg-batch14-bookings.test.js",
+      "name": "Batch 14 — Phase 4B Bookings (Postgres) > availability > blocked time does not appear in available slots",
+      "signature": "AssertionError: expected true to be false // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > feature flag gating > returns 503 when phase4_appointments feature flag is disabled",
+      "file": "backend/tests/integration/pg-batch14-bookings.test.js",
+      "name": "Batch 14 — Phase 4B Bookings (Postgres) > feature flag gating > returns 503 when phase4_appointments feature flag is disabled",
+      "signature": "AssertionError: expected 403 to be 503 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch2-medium.test.js :: Batch 2 — Medium complexity routes (Postgres) > returns > POST /api/returns rejects excess return quantity",
+      "file": "backend/tests/integration/pg-batch2-medium.test.js",
+      "name": "Batch 2 — Medium complexity routes (Postgres) > returns > POST /api/returns rejects excess return quantity",
+      "signature": "AssertionError: expected 'Cannot refund 99 units of product 1; …' to contain 'exceeds'",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards lists gift cards",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards lists gift cards",
+      "signature": "AssertionError: expected 404 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards/:code returns card details",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > gift-cards > GET /api/gift-cards/:code returns card details",
+      "signature": "AssertionError: expected 404 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards creates a gift card",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards creates a gift card",
+      "signature": "AssertionError: expected 404 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards/:code/redeem redeems amount",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > gift-cards > POST /api/gift-cards/:code/redeem redeems amount",
+      "signature": "AssertionError: expected 404 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > GET /api/sales lists sales",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > sales > GET /api/sales lists sales",
+      "signature": "AssertionError: expected 0 to be greater than or equal to 1",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > GET /api/sales/:id returns sale details",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > sales > GET /api/sales/:id returns sale details",
+      "signature": "AssertionError: expected 500 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales creates a sale",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > sales > POST /api/sales creates a sale",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales deducts stock",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > sales > POST /api/sales deducts stock",
+      "signature": "AssertionError: expected '50.000' to be 48 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > sales > POST /api/sales rejects duplicate idempotency_key",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > sales > POST /api/sales rejects duplicate idempotency_key",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch3-complex.test.js :: Batch 3 — Complex routes (Postgres) > serial-numbers > GET /api/products/1/serials returns empty list initially",
+      "file": "backend/tests/integration/pg-batch3-complex.test.js",
+      "name": "Batch 3 — Complex routes (Postgres) > serial-numbers > GET /api/products/1/serials returns empty list initially",
+      "signature": "AssertionError: expected 404 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch8-middleware.test.js :: Batch 8 — Middleware & startup hooks (Postgres) > notifyLowStockForSale > creates notifications for low-stock products",
+      "file": "backend/tests/integration/pg-batch8-middleware.test.js",
+      "name": "Batch 8 — Middleware & startup hooks (Postgres) > notifyLowStockForSale > creates notifications for low-stock products",
+      "signature": "AssertionError: expected '5.000' to be 5 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-restaurant-reservations.test.js :: Phase 2-R.4 — Reservations + waitlist > Feature flag off returns 503",
+      "file": "backend/tests/integration/pg-restaurant-reservations.test.js",
+      "name": "Phase 2-R.4 — Reservations + waitlist > Feature flag off returns 503",
+      "signature": "AssertionError: expected 403 to be 503 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/po-credit-limit.test.js :: <file-level>",
+      "file": "backend/tests/integration/po-credit-limit.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/printer.test.js :: <file-level>",
+      "file": "backend/tests/integration/printer.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/promotions.test.js :: <file-level>",
+      "file": "backend/tests/integration/promotions.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/public-bookings.test.js :: <file-level>",
+      "file": "backend/tests/integration/public-bookings.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "jest is not defined",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/purchase-orders.test.js :: <file-level>",
+      "file": "backend/tests/integration/purchase-orders.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/rbac.test.js :: <file-level>",
+      "file": "backend/tests/integration/rbac.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/reports_accuracy.test.js :: <file-level>",
+      "file": "backend/tests/integration/reports_accuracy.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/reports_governance.test.js :: <file-level>",
+      "file": "backend/tests/integration/reports_governance.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/returns-exchange.test.js :: <file-level>",
+      "file": "backend/tests/integration/returns-exchange.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/returns.test.js :: <file-level>",
+      "file": "backend/tests/integration/returns.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/saas-phase1.test.js :: master-db.js > initMasterDb creates all 4 master tables",
+      "file": "backend/tests/integration/saas-phase1.test.js",
+      "name": "master-db.js > initMasterDb creates all 4 master tables",
+      "signature": "Error: Cannot find module '../../master-db'",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/saas-phase1.test.js :: schema-full.js > extractSchema returns a string with 80+ CREATE TABLE statements",
+      "file": "backend/tests/integration/saas-phase1.test.js",
+      "name": "schema-full.js > extractSchema returns a string with 80+ CREATE TABLE statements",
+      "signature": "Error: Cannot find module '../../schema-full'",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > decimal quantity rounds UP on stock deduction (prevents overselling)",
+      "file": "backend/tests/integration/sales-decimal-quantity.test.js",
+      "name": "M5 — Decimal quantity sales (Postgres) > decimal quantity rounds UP on stock deduction (prevents overselling)",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > non-weighted sale leaves tare=0 and gross null (backward compat)",
+      "file": "backend/tests/integration/sales-decimal-quantity.test.js",
+      "name": "M5 — Decimal quantity sales (Postgres) > non-weighted sale leaves tare=0 and gross null (backward compat)",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/sales-decimal-quantity.test.js :: M5 — Decimal quantity sales (Postgres) > persists decimal quantity + gross/tare for weighted sale",
+      "file": "backend/tests/integration/sales-decimal-quantity.test.js",
+      "name": "M5 — Decimal quantity sales (Postgres) > persists decimal quantity + gross/tare for weighted sale",
+      "signature": "AssertionError: expected 400 to be 200 // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/sales.test.js :: <file-level>",
+      "file": "backend/tests/integration/sales.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/security.test.js :: <file-level>",
+      "file": "backend/tests/integration/security.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/shift-linkage.test.js :: <file-level>",
+      "file": "backend/tests/integration/shift-linkage.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/shift-report-attribution.test.js :: <file-level>",
+      "file": "backend/tests/integration/shift-report-attribution.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/shifts.test.js :: <file-level>",
+      "file": "backend/tests/integration/shifts.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/smoke-gate.test.js :: <file-level>",
+      "file": "backend/tests/integration/smoke-gate.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/integration/supplier-payables.test.js :: <file-level>",
+      "file": "backend/tests/integration/supplier-payables.test.js",
+      "name": "<file-level failure (load/hook)>",
+      "signature": "Cannot find module '../helpers/createTestApp'",
+      "kind": "file"
+    },
+    {
+      "id": "backend/tests/unit/routes-admin-worker-status.test.js :: GET /api/admin/worker-status > reports all three pre-existing workers alongside the new ones",
+      "file": "backend/tests/unit/routes-admin-worker-status.test.js",
+      "name": "GET /api/admin/worker-status > reports all three pre-existing workers alongside the new ones",
+      "signature": "AssertionError: expected false to be true // Object.is equality",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/unit/routes-admin-worker-status.test.js :: GET /api/admin/worker-status > returns all worker slots, all disabled when no globals set",
+      "file": "backend/tests/unit/routes-admin-worker-status.test.js",
+      "name": "GET /api/admin/worker-status > returns all worker slots, all disabled when no globals set",
+      "signature": "AssertionError: expected { Object (enabled, running, ...) } to deeply equal { enabled: false, running: false }",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/unit/services.test.js :: payment-gateway — isEnabled() > returns true when PAYMENT_GATEWAY=xpay",
+      "file": "backend/tests/unit/services.test.js",
+      "name": "payment-gateway — isEnabled() > returns true when PAYMENT_GATEWAY=xpay",
+      "signature": "AssertionError: expected false to be true // Object.is equality",
+      "kind": "test"
+    }
+  ],
+  "gate_protocol": [
+    "Re-run the exact command in run.command from backend/ cwd.",
+    "Build the same {id, signature} set from the fresh report.",
+    "FAIL if any id is failing that is not in failing_tests (NEW failure).",
+    "FAIL if any id in failing_tests is failing with a different signature (CHANGED failure).",
+    "A previously-failing id that now passes is an improvement, not a gate failure — but note it, and if it was fixed deliberately, regenerate this artifact.",
+    "Do NOT compare totals."
+  ]
+}
