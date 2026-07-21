@@ -688,6 +688,11 @@ inside-an-allowed-file swap.
 
 ## Step W0-ops — 4.4: R2 custom domain + `R2_PUBLIC_URL` (owner ops, no commit)
 
+> ⚠️ **Verification note (2026-07-22) — do NOT execute as an env-only change; two blockers found in code.** The "nothing to build / no backfill" framing below is wrong:
+> 1. **Legacy image URLs will 404.** The `/r2/*key` proxy is mounted only `if (!process.env.R2_PUBLIC_URL)` (`index.js:154`), so setting the var *un-mounts* it on restart. `image_url` is a **stored** column written at upload time — old rows (`https://api.sanopos.com/r2/<key>`) do NOT recompute. Fix: either make the proxy mount unconditional (delete the guard at `index.js:154` — a small commit, so this step isn't truly "no code") **or** backfill `products.image_url` / company logos / `support_tickets.screenshots` across all tenant schemas.
+> 2. **A public R2 custom domain exposes the WHOLE bucket** (`sanopos-uploads`), bypassing the backend's `PUBLIC_R2_PREFIXES` allowlist — publicly serving `backups/` (full pg_dumps of every tenant), `treatment-plans/` (clinical PHI), `reports/governance` exports, `field/` selfies, etc. Fix: a Cloudflare WAF **default-deny allowlist** on `cdn.sanopos.com` (block any path not under `/products/`, `/company/`, `/support/`) — write it as an allowlist so future private prefixes aren't silently exposed — **or** split public assets into a dedicated public bucket (code). Minimum-viable ops path = keep-proxy-mounted **+** WAF allowlist.
+> Not gated by Gate 0 (see gate note) — safe to defer; re-scope before executing.
+
 - **Goal:** `api.sanopos.com` is grey-cloud (verified `CNAME proxied=False`, REPORT §4.4) and
   `R2_PUBLIC_URL` is unset, so `backend/utils/r2.js:71` routes every product image / logo / support
   screenshot through the single Railway Node process via `/r2/<key>` (unthrottled — the proxy mounts
