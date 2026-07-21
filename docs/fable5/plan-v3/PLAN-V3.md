@@ -46,7 +46,7 @@
 | W0c | OG social-preview middleware (brand bucket only, deny-list-first) | 0 | — | ☑ `7309cf5f` — see §W0c outcome |
 | W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☑ `8ee9ab1a` — see §W0d outcome |
 | W0-ops | 4.4 R2 custom domain + `R2_PUBLIC_URL` (owner ops, no commit) | 0 | **owner-executed** | ☐ |
-| — | **GATE 0 — merge Wave 0 to `main`** | 0 | **owner-gated** | ☐ |
+| — | **GATE 0 — merge Wave 0 to `main`** | 0 | **owner-gated** | ☑ DEPLOYED `57be9133` (2026-07-22) — see banner |
 | 1 | 4.3 — `MANUFACTURER_PORTAL_JWT_SECRET` set + scope check in `loadTenantAndPerms` | A (own release) | **before** (every-request auth) | ☐ |
 | — | **GATE 1 — merge + deploy Release A** | A | **owner-gated** | ☐ |
 | 2 | E9 — AND company `restaurant` flag into `kioskOrderingOff` + stale-token test | B (own release) | **if surprised** | ☐ |
@@ -755,6 +755,25 @@ No separate outcome was recorded when the commit landed; this closes that gap at
 ---
 
 ## GATE 0 — Merge Wave 0 to `main`
+
+> **✅ GATE 0 DEPLOYED 2026-07-22 — merged `57be9133`, prod green.** Owner gave the go; merged
+> `fix/v3-wave0` (12 commits) into main via `--no-ff` and pushed (`741012ae..57be9133`, 16 commits incl.
+> the 3 Step-0 docs foundation). **NO migrations.** Deploys: Vercel production READY on `57be9133`
+> (`dpl_CAokpjjE…`); Railway backend healthy (deep health ok — db 59ms, resend 389ms), confirmed on the
+> new code by the webhook behaviour below.
+> **Pre-merge gate:** `/code-review` PASS (one cosmetic `x-og-mw` label nit deferred, §W0c); W0a–W0d
+> verify subsets green; baseline diff GREEN after a proven-benign refresh (`3832365c` — the 3 flagged
+> failures reproduce identically on pre-Wave-0 main, i.e. date drift, not a regression); frontend units
+> 199/199; completeness ledger fully accounted, zero unaccounted.
+> **Post-deploy live checks — all green:** (a) boot clean, no `[SECURITY]` line (removed by construction,
+> healthy boot); (b) Meta + WhatsApp webhook GET handshakes now **403** without a set verify token (was
+> 200 + challenge echo) and a bad-signature POST **401**s — fail-closed; (c) unauthenticated `/kds`
+> redirects to login (auth enforced on the escaped shell, no merchant chrome leaked); (d) `/store/<slug>`
+> crawler-UA → `x-og-mw: brand` stamping the tenant's real name, `/receipt` crawler-UA → `x-og-mw:
+> no-preview` generic (no tenant leak), real-browser UA → `x-og-mw: bypass-ua`.
+> **Owner follow-up (safe, deferred):** set `META_APP_SECRET` on Railway before connecting any Meta
+> channel — still unset; 0 active channel configs, so nil impact today. **Release A may now branch off
+> this merged main.**
 
 Follow the Gate protocol. Slice verification subset: W0a + W0a2 + W0b + W0c + W0d verify lists +
 baseline-artifact diff. **Deploy-day notes: NO migrations.** Behavioural changes at deploy: (a) `/admin` loses
