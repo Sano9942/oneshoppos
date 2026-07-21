@@ -43,8 +43,8 @@
 | W0a | 4.1 delete `ADMIN_ALLOWED_IPS` (commit 1) + 4.5 in-memory-state docs (commit 2) | 0 | **before** (security → main) | ☑ `b7de8255` + `6434a12a` |
 | W0a2 | 4.2 webhook signature verification — provider-specific contracts (commit 3) | 0 | — | ☑ `a4a65655` — **Meta/WhatsApp only; Daraz split → V4-3** (owner-ruled 2026-07-16, see §W0a2 outcome) |
 | W0b | Frontend correctness: POSContext session-expired flow + KDS chrome escape | 0 | — | ☑ `45cf66bb` — both park branches (`draft_orders` **and** `parked_sales`) browser-verified; see §W0b outcome |
-| W0c | OG social-preview middleware (brand bucket only, deny-list-first) | 0 | — | ☐ |
-| W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☐ |
+| W0c | OG social-preview middleware (brand bucket only, deny-list-first) | 0 | — | ☑ `7309cf5f` — see §W0c outcome |
+| W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☑ `8ee9ab1a` — see §W0d outcome |
 | W0-ops | 4.4 R2 custom domain + `R2_PUBLIC_URL` (owner ops, no commit) | 0 | **owner-executed** | ☐ |
 | — | **GATE 0 — merge Wave 0 to `main`** | 0 | **owner-gated** | ☐ |
 | 1 | 4.3 — `MANUFACTURER_PORTAL_JWT_SECRET` set + scope check in `loadTenantAndPerms` | A (own release) | **before** (every-request auth) | ☐ |
@@ -592,6 +592,26 @@ Report: outcome first — a crawler-UA response snippet for one brand + one no-p
 per-route description templates, then the cache design + its stated best-effort limits.
 ```
 
+### §W0c outcome (done `7309cf5f`, verified at Gate 0)
+
+No separate outcome was recorded when the commit landed; this closes that gap at the gate.
+
+- **Static + code review confirmed the load-bearing behaviours:** deny-list-first with a path-boundary
+  check (a deep link like `/portal/:slug/invoices/:id` cannot inherit a brand preview), the crawler-UA
+  gate short-circuits real browsers before any network round-trip, recursion is guarded (the branding
+  fetch is cross-origin and the shell fetch hits `/index.html`, which is outside the matcher), and it
+  fails **closed** to the untouched generic shell on any branding miss/timeout, with HTML-escaped output.
+- **The `${SITE}/og/default.png` fallback exists and matches the shipped `index.html`'s own `og:image`**
+  — no 404 fallback. `@vercel/functions@^3.7.5` is declared; `stripImageDims` correctly drops the shell's
+  hard-coded 1200×630 hints when a tenant logo of unknown size is used.
+- **One cosmetic nit deliberately left for a follow-up (NOT fixed here, to keep the slice exactly as
+  reviewed):** the fail-**closed** responses at `middleware.js:259,262` are labelled `x-og-mw:"fail-open"`
+  / `"fail-open-shell"` — the names read backwards and `fail-open-shell` isn't in `frontend/CLAUDE.md`'s
+  documented header set. Debug header only, zero functional impact.
+- **Live `vercel dev`/preview crawler test was NOT run pre-merge** (impractical in the gate environment);
+  its authoritative runtime check is Gate 0 post-deploy verification (d) — curl a brand route + a
+  no-preview route with a crawler UA on production.
+
 ---
 
 ## Step W0d — The two invariant guard tests
@@ -683,6 +703,20 @@ Do not push.
 Report: outcome first — 1a/1b/2 green, plus the injected-violation failure message for each incl. the
 inside-an-allowed-file swap.
 ```
+
+### §W0d outcome (done `8ee9ab1a`, verified at Gate 0)
+
+No separate outcome was recorded when the commit landed; this closes that gap at the gate.
+
+- **All three guards green on the branch, and each proven to bite.** 1a (reach-idiom file allowlist),
+  1b (behavioural `enforceOutletAssignment` base-vs-effective pin with a passing control case), and
+  test-2 (single `x-outlet-id` reader) all pass. A throwaway probe carrying both a foreign
+  `x-outlet-id` read and a `baseEmployeePerms` reach idiom turned 1a + test-2 RED; deleting it returned
+  all four to green — the injected-violation half of the verify list, satisfied at the gate.
+- **1b's semantic bite is self-evident from its own control**, so no production-file swap was needed:
+  the test denies reach for a principal whose BASE perms lack `all_access` but whose effective override
+  perms carry it, and a sibling control case shows that flipping only the BASE perms to `all_access`
+  switches deny→skip — proving the base-vs-effective read is the sole discriminator.
 
 ---
 

@@ -1,8 +1,9 @@
 {
   "$schema": "sanopos/plan-v3/baseline-tests@1",
   "purpose": "Exact regression gate reference for PLAN-V3. Gates diff BY TEST ID and fail on any NEW or CHANGED failure. A total-count comparison is NOT a valid gate: one pre-existing failure can vanish while a new one appears, leaving the total unchanged.",
-  "generated_at": "2026-07-16T10:42:18.149Z",
-  "git_commit": "426423231e54ae88c18c73a4ff18cf8388e68e79",
+  "generated_at": "2026-07-22T00:00:00.000Z",
+  "git_commit": "3b45f25c5b28cb056eaf8aa842b1fafd554bdd29",
+  "refresh_note": "Regenerated 2026-07-22 for PLAN-V3 Gate 0. The 2026-07-16 baseline (@42642323) had drifted: 3 date/env-sensitive tests (pg-batch14 appointment availability is day-of-week-relative; pg-batch-tax-snapshot backfill amount; the 503-vs-403 requireFeature case) read as NEW on a later calendar day. Proven to be baseline drift, NOT a Wave 0 regression: the identical failures reproduce on pre-Wave-0 main under the same command and date. Source report is the fix/v3-wave0 full-suite run, which equals the post-merge main state (Wave 0 adds only passing tests). run.command and signature() are unchanged from the original artifact.",
   "run": {
     "command": "npx vitest run --reporter=json --outputFile=<path> --no-file-parallelism --testTimeout=60000 --hookTimeout=120000",
     "cwd": "backend/",
@@ -11,11 +12,14 @@
     "session_timezone": "UTC"
   },
   "counts": {
-    "total": 2430,
-    "passed": 2358,
-    "failed": 31,
-    "skipped": 41,
-    "files": 247
+    "total": 2458,
+    "passed": 2373,
+    "failed": 33,
+    "skipped": 52,
+    "files": 251,
+    "failing_entries": 72,
+    "test_level": 33,
+    "file_level": 39
   },
   "known_red_families": {
     "legacy pre-Postgres suites — require modules deleted in the SQLite->PG migration ('../helpers/createTestApp' -> only createTestApp-pg.js survives; '../../master-db' -> master-db-pg.js; '../../schema-full'). Verified absent on disk: these files cannot run at all, so they are permanently red and carry ZERO signal. CLAUDE.md: legacy SQLite tests, do not use unless explicitly asked.": [
@@ -269,6 +273,20 @@
       "kind": "test"
     },
     {
+      "id": "backend/tests/integration/pg-batch-tax-snapshot.test.js :: P8 — Tax snapshot at sale-write (Postgres) > FBR-export endpoint reads from snapshot columns, not live taxes JOIN",
+      "file": "backend/tests/integration/pg-batch-tax-snapshot.test.js",
+      "name": "P8 — Tax snapshot at sale-write (Postgres) > FBR-export endpoint reads from snapshot columns, not live taxes JOIN",
+      "signature": "AssertionError: expected undefined to be truthy",
+      "kind": "test"
+    },
+    {
+      "id": "backend/tests/integration/pg-batch-tax-snapshot.test.js :: P8 — Tax snapshot at sale-write (Postgres) > backfill UPDATE: rows with NULL tax_rate_at_sale get was_backfilled=true and computed amount",
+      "file": "backend/tests/integration/pg-batch-tax-snapshot.test.js",
+      "name": "P8 — Tax snapshot at sale-write (Postgres) > backfill UPDATE: rows with NULL tax_rate_at_sale get was_backfilled=true and computed amount",
+      "signature": "AssertionError: expected +0 to be close to 17, received difference is 17, but expected 0.005",
+      "kind": "test"
+    },
+    {
       "id": "backend/tests/integration/pg-batch10-wave2.test.js :: Batch 10 — Wave 2 tests: support, FBR, import (Postgres) > Import routes > POST /api/import/products — preview mode validates rows",
       "file": "backend/tests/integration/pg-batch10-wave2.test.js",
       "name": "Batch 10 — Wave 2 tests: support, FBR, import (Postgres) > Import routes > POST /api/import/products — preview mode validates rows",
@@ -311,10 +329,10 @@
       "kind": "test"
     },
     {
-      "id": "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > availability > blocked time does not appear in available slots",
+      "id": "backend/tests/integration/pg-batch14-bookings.test.js :: Batch 14 — Phase 4B Bookings (Postgres) > availability > GET /api/appointments/availability returns valid slots (200)",
       "file": "backend/tests/integration/pg-batch14-bookings.test.js",
-      "name": "Batch 14 — Phase 4B Bookings (Postgres) > availability > blocked time does not appear in available slots",
-      "signature": "AssertionError: expected true to be false // Object.is equality",
+      "name": "Batch 14 — Phase 4B Bookings (Postgres) > availability > GET /api/appointments/availability returns valid slots (200)",
+      "signature": "AssertionError: expected 0 to be greater than 0",
       "kind": "test"
     },
     {
