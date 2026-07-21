@@ -114,6 +114,18 @@ CurrencyProvider → ToastProvider → AuthProvider → PresetProvider
 
 ---
 
+## Social-preview middleware (`frontend/middleware.js`) — Vercel edge, NOT in the bundle
+
+`frontend/middleware.js` is a **Vercel Routing Middleware** (edge runtime). It lives at the frontend root because that is the Vercel **project root** — it is a deploy-level file, not part of the Vite bundle, and nothing in `src/` imports it. Its one job: shareable tenant links previewed poorly on WhatsApp/Facebook because social crawlers don't run JS, so `Seo.jsx`'s client-side tags never applied and every link showed the generic SanoPOS ad. For **crawler User-Agents only**, on a short allow-list of *broadcast* links, it resolves the tenant slug, fetches branding from the no-auth `GET /api/storefront/config`, and stamps real `og:title`/`og:description`/`og:image` into the served shell (same string-replace shape as `scripts/prerender-meta.mjs`'s `rewrite()`, which is the sibling **build-time** mechanism for the 13 marketing routes). A **real browser short-circuits before any network call** — the SPA + `Seo.jsx` behave exactly as before; the crawler is the only consumer of these static tags.
+
+Rules if you touch it:
+- **Deny-list FIRST, allow-list SECOND (privacy).** BRAND set (safe — name + logo leak nothing): `/store`, `/book`, `/book-room`, `/reserve`, `/menu`, `/inquire`. NO-PREVIEW set (must stay the generic shell): `/receipt`, `/portal`, `/gift-card`, `/pay`. The no-preview set is matched first with a path-boundary check so a deep link like `/portal/:slug/invoices/:id` can **never** inherit a brand preview via a loose prefix. "No preview" returns the untouched shell = the generic SanoPOS card, which leaks nothing tenant-specific (that's the accepted outcome, not a bug). `/receipt` is `wa.me`-forwarded + WhatsApp caches previews; `/gift-card/:code` is a bearer secret — both must never preview tenant data.
+- **Best-effort cache caveat.** Branding + the shell are cached in module-level `Map`s that are **per-edge-isolate only** (Vercel runs many isolates) — there is **no cross-isolate invalidation**; a branding change propagates within the TTL (10 min). Fine because the only consumer is a crawler.
+- **Fail-closed.** On a branding lookup miss/non-200/timeout, it serves the untouched shell (generic), never a broken/partial tag set. Backend origin comes from the edge-visible `APP_PUBLIC_BASE_URL` env (falls back to the prod API host). Descriptions are **synthesized** per-route (the config endpoint returns name + logo, no description).
+- **Testing.** `vite preview` / a local build does **NOT** execute Routing Middleware. Test with `vercel dev` (run it from the **repo root**, not `frontend/` — the linked project's Root Directory is already `frontend`, so running inside `frontend/` doubles the path) or a preview deploy, then `curl -A "facebookexternalhit/1.1" …`. Every response carries an `x-og-mw` header (`brand` / `no-preview` / `bypass-ua` / `passthrough` / `fail-open`) for quick verification. Passthrough uses `next()` from `@vercel/functions` (a frontend dependency added for this).
+
+---
+
 ## Where To Go Next
 
 | Topic | Doc |
