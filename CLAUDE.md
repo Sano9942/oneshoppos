@@ -2,6 +2,8 @@
 
 > **Note**: This guide is accurate as of the last update, but code evolves fast. When in doubt, check actual source files (`backend/migrate-pg.js` for migrations, `package.json` for test tools, route files for API contracts). Always verify against code before making critical implementation decisions.
 
+> **Architecture docs — aspirational vs current (read before trusting either):** `docs/fable5/platform-architecture-vnext/` (incl. its `adrs/`) describes a **Proposed target** architecture — only ADR-002 is Accepted (2026-07-17); ADR-001 and 003–012 are Proposed. It is **NOT** how the code works today; never implement from it or cite it as current behaviour. For verified current-state, use `docs/fable5/technical-architecture-report/`. When they disagree with each other or with the code, **source wins**, then this guide, then the current-state report; the vNext package is direction-of-travel only.
+
 ## What This Is
 
 A full-stack, multi-tenant Point of Sale (POS) system with Shopify/marketplace integrations, wholesale/B2B distribution features, and vertical presets (retail, restaurant, clinic, rental, salon/rooms).
