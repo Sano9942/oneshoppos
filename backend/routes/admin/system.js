@@ -2,7 +2,7 @@
  * Admin system — worker status, orphaned schemas, backup.
  */
 module.exports = function registerSystemRoutes(app, deps) {
-  const { db, requireAllowedIp, requireSuperAdmin, logAdminAction } = deps;
+  const { db, requireSuperAdmin, logAdminAction } = deps;
 
   // ── Worker Status ──────────────────────────────────────────────────────
   //
@@ -55,7 +55,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     report_schedule: null, // setInterval
   };
 
-  app.get("/api/admin/worker-status", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/worker-status", requireSuperAdmin, async (req, res) => {
     try {
       const emailStatus = global.__emailWorkerStatus || null;
       const fbrStatus = global.__fbrWorkerStatus || null;
@@ -248,7 +248,7 @@ module.exports = function registerSystemRoutes(app, deps) {
   // Reads public.infra_cache (key: 'feature_adoption') populated by the
   // adoption-snapshot worker (every 6h). ?force=1 recomputes live — a full
   // cross-tenant fanout, so avoid forcing without reason.
-  app.get("/api/admin/adoption", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/adoption", requireSuperAdmin, async (req, res) => {
     try {
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -282,7 +282,7 @@ module.exports = function registerSystemRoutes(app, deps) {
   // in prod (up to 104s p100). ?force=1 falls back to a live scan when the
   // cache is missing or you really need fresh data; the route never blocks
   // on the live scan unless explicitly asked.
-  app.get("/api/admin/orphaned-schemas", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/orphaned-schemas", requireSuperAdmin, async (req, res) => {
     try {
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -315,7 +315,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/orphaned-schemas/cleanup", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/orphaned-schemas/cleanup", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: schemas } = await db.query(
         `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%' ORDER BY schema_name`
@@ -339,7 +339,7 @@ module.exports = function registerSystemRoutes(app, deps) {
   });
 
   // ── Backup ─────────────────────────────────────────────────────────────
-  app.post("/api/admin/backup", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/backup", requireSuperAdmin, async (req, res) => {
     try {
       const { isPgDumpAvailable, backupAllSchemas } = require("../../utils/backup-pg");
       const { uploadToR2 } = require("../../utils/r2");
@@ -398,7 +398,7 @@ module.exports = function registerSystemRoutes(app, deps) {
   });
 
   // ── Backup Verification ─────────────────────────────────────────────────
-  app.post("/api/admin/backup/verify", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/backup/verify", requireSuperAdmin, async (req, res) => {
     try {
       const { listSchemasInBackup } = require("../../utils/backup-pg");
       const { filePath } = req.body;
@@ -429,7 +429,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     }
   });
 
-  app.get("/api/admin/backup-history", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/backup-history", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 20"

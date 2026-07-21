@@ -198,8 +198,16 @@ describe("Step 2 — delegation perms + field split (Postgres)", () => {
     });
 
     it("Administrator unaffected (all_access bypass)", async () => {
+      // Vehicle is `daraz` (matching the rest of this block), NOT a Meta channel.
+      // This case asserts a PERMISSION property — that all_access bypasses the
+      // manage_integrations gate — and connecting facebook/whatsapp now carries a
+      // second, unrelated gate: the W0a2 activation guard 409s a Meta channel when
+      // the deployment has no META_APP_SECRET (unset here, as in any test env), so
+      // using one as the vehicle would conflate the two concerns and fail for a
+      // reason that has nothing to do with permissions. The Meta guard itself is
+      // covered in both directions by tests/unit/integrations-activation-guard.test.js.
       const res = await as(ADMIN).post("/api/integrations/connect", {
-        provider: "whatsapp",
+        provider: "daraz",
         api_key: "admin-key",
       });
       expect(res.status).toBe(200);

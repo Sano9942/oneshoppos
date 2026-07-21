@@ -10,10 +10,10 @@ const INFRA_CACHE_TTL_MS = 5 * 60 * 1000;
 let _infraCache = null; // { data, timestamp }
 
 module.exports = function registerMonitoringRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
+  const { db, masterDb, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
 
   // ── Global Stats ───────────────────────────────────────────────────────
-  app.get("/api/admin/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/stats", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: totalsRows } = await db.query(
         `SELECT
@@ -44,7 +44,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
   });
 
   // ── Attention Dashboard ────────────────────────────────────────────────
-  app.get("/api/admin/attention", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/attention", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: tenants } = await db.query(
         "SELECT id, slug, name, plan, max_employees, max_products, max_outlets, created_at FROM tenants WHERE status = 'active'"
@@ -108,7 +108,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
   });
 
   // ── Dead Tenant Cleanup ────────────────────────────────────────────────
-  app.get("/api/admin/cleanup-preview", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/cleanup-preview", requireSuperAdmin, async (req, res) => {
     try {
       const { cleanupDeadTenants } = require("../../jobs/cleanup-dead-tenants");
       const results = await cleanupDeadTenants({ dryRun: true });
@@ -118,7 +118,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/cleanup-run", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/cleanup-run", requireSuperAdmin, async (req, res) => {
     try {
       const { cleanupDeadTenants } = require("../../jobs/cleanup-dead-tenants");
       const results = await cleanupDeadTenants({ dryRun: false });
@@ -130,7 +130,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
   });
 
   // ── Revenue Stats ──────────────────────────────────────────────────────
-  app.get("/api/admin/revenue-stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/revenue-stats", requireSuperAdmin, async (req, res) => {
     try {
       const { rows: [pricing] } = await db.query(
         "SELECT price FROM plan_pricing WHERE plan = 'pro' AND cycle = 'monthly' LIMIT 1"
@@ -173,7 +173,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
   });
 
   // ── Infrastructure ─────────────────────────────────────────────────────
-  app.get("/api/admin/infra", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/infra", requireSuperAdmin, async (req, res) => {
     try {
       const force = req.query.force === "1" || req.query.force === "true";
       if (!force && _infraCache && (Date.now() - _infraCache.timestamp) < INFRA_CACHE_TTL_MS) {

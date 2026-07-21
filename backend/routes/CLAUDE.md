@@ -9,7 +9,7 @@ Express route handlers for the backend API. Most files mount after tenant middle
 Each subdirectory has its own CLAUDE.md with full detail. Summary:
 
 ### admin/
-Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Most routes require `requireAllowedIp` + `requireSuperAdmin`; exceptions are the login/2FA-exchange/refresh endpoints (which mint the session) and `GET /api/announcements/active` (fully public). Uses `db` (direct pool, schema-qualified queries) for cross-tenant fanout and `masterDb` for public-schema-only tables; `tenantDbManager.getDb(tenantId)` for single-tenant-scoped work. Sub-modules: `auth.js` (login, TOTP, sessions), `tenants.js` (CRUD, flags, modes, notes, migration, PIN reset, flag-drift repair), `monitoring.js` (global stats, infra introspection, cleanup), `billing.js` (plan pricing, payments, trial lifecycle), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue reads the pg-boss job table directly, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup), `module-locks.js` (platform-level module enable locks). Cross-tenant fanout is the dominant pattern here — always wrapped in a per-tenant try/catch so one tenant with a missing table doesn't break the whole response. Not every mutation calls the audit-log helper — verify per-route. Frontend uses `adminFetch()` (not `api.js`), token in `adminAuthStore.js`.
+Routes at `/api/admin/*`. Mounted **before** tenant middleware — no `deps.db` proxy, no `req.company`, no `req.employee`. Most routes require `requireSuperAdmin`; exceptions are the login/2FA-exchange/refresh endpoints (which mint the session) and `GET /api/announcements/active` (fully public). There is deliberately no IP allowlist — the `ADMIN_ALLOWED_IPS` layer was deleted rather than configured (it failed open); password + TOTP + `requireSuperAdmin` is the gate. See `admin/CLAUDE.md`. Uses `db` (direct pool, schema-qualified queries) for cross-tenant fanout and `masterDb` for public-schema-only tables; `tenantDbManager.getDb(tenantId)` for single-tenant-scoped work. Sub-modules: `auth.js` (login, TOTP, sessions), `tenants.js` (CRUD, flags, modes, notes, migration, PIN reset, flag-drift repair), `monitoring.js` (global stats, infra introspection, cleanup), `billing.js` (plan pricing, payments, trial lifecycle), `operations.js` (support tickets, impersonation, dead letters), `compliance.js` (tax rates, FBR health), `messaging.js` (email queue reads the pg-boss job table directly, broadcast, announcements), `system.js` (worker status, orphaned schemas, backup), `module-locks.js` (platform-level module enable locks). Cross-tenant fanout is the dominant pattern here — always wrapped in a per-tenant try/catch so one tenant with a missing table doesn't break the whole response. Not every mutation calls the audit-log helper — verify per-route. Frontend uses `adminFetch()` (not `api.js`), token in `adminAuthStore.js`.
 
 ### integrations/
 Routes at `/api/integrations/*`. Every sub-module is `(router, deps) => {}` receiving the shared router. `requireFeature("marketplace_integrations")` is applied per-route (not centrally) except the SMS test-send route, gated by a separate SMS-provider flag. Sub-modules: `hub.js` (unified dashboard aggregating channels/payment/sms/couriers/shopify/woocommerce), `credentials.js` (generic BYOK connect/disconnect/test/status — `/test` is DB-only, never calls the live API), `daraz.js`, `facebook.js`, `whatsapp.js`, `google-merchant.js` (one file per channel, each with its own local client-getter, no caching). Credentials are AES-256-GCM encrypted in `integration_settings` via `services/crypto.js`. Inbound webhooks (Meta, Daraz, WhatsApp) are handled in `routes/webhooks.js` (mounted before tenant middleware), not here — this directory is outbound-only. The DB provider key for Google Merchant uses an underscore; the URL path segment uses a hyphen — don't conflate them.
@@ -101,7 +101,7 @@ Routes backing a brand-scoped manufacturer partner portal. Mounted **before** te
 | `promotions.js` | `/api/promotions` | Promotion/discount rules, including slab-percent wholesale schemes. |
 | `customer-invoices.js` | `/api/customer-invoices` | Accounts receivable invoices. |
 | `billing.js` | `/api/billing` | Subscription billing status, pricing, checkout, payment history, upgrade requests. |
-| `webhooks.js` | `/api/webhooks` | **Mounted before tenant middleware** — payment gateway webhooks (HMAC-verified) plus inbound Meta/WhatsApp/Daraz webhooks. |
+| `webhooks.js` | `/api/webhooks` | **Mounted before tenant middleware** — payment gateway webhooks plus inbound Meta/WhatsApp/Daraz and delivery-aggregator webhooks. Signature verification differs per provider and one provider is deliberately unverified — see "Webhook signature verification" below before touching any handler here. |
 
 ### Reporting & Analytics
 | File | Mount prefix | What it does |
@@ -202,6 +202,29 @@ Apply `requireFeature("<flag>")` as middleware, sometimes combined with `require
 
 ### Boot guard
 A boot-time assertion verifies four critical routes exist at startup and crashes boot if any are missing: bulk product import, bulk product delete, bulk product status, and the Shopify product-delete route. If you rename or remove one of these, update the assertion too.
+
+### Webhook signature verification — per-provider, NOT one shared scheme
+
+There are **four different inbound-webhook verification contracts** in this codebase and they are not interchangeable. Reusing the wrong one does not throw — it silently rejects every real delivery, and a rejected webhook just vanishes. Check this table before adding or "unifying" a verifier.
+
+| Endpoint | Verified? | Signature header | Digest | Secret source | Verify before or after tenant resolution? |
+|---|---|---|---|---|---|
+| `/api/webhooks/xpay` | yes | gateway adapter's own | adapter | env (gateway API key) | before — no tenant needed |
+| `/api/webhooks/meta` | yes | `x-hub-signature-256` | **hex**, `sha256=` prefix | **env app secret** (`META_APP_SECRET`) | **before** — secret is app-level |
+| `/api/webhooks/whatsapp` | yes | `x-hub-signature-256` | **hex**, `sha256=` prefix | **env app secret** (`WHATSAPP_APP_SECRET`, falls back to `META_APP_SECRET`) | **before** — secret is app-level |
+| `/api/webhooks/{foodpanda,careem}` | yes | aggregator-specific | **base64** | **encrypted per-tenant** (`integration_settings.webhook_secret`) | **after** — must route by store id first to find the secret |
+| `/api/webhooks/daraz` | **no — deferred** | — | — | — | — |
+| `/api/integrations/shopify/webhooks/*` | yes | `X-Shopify-Hmac-Sha256` | **base64** | encrypted per-connection | after |
+
+**The secret-source split is the load-bearing distinction.** Meta signs with the app secret of *our* Meta app (tenants connect their Page/WABA to it), so the key is knowable without knowing the tenant — which is why verification runs first. The aggregators sign with a per-tenant secret, so routing must precede verification. Get this backwards and you either can't find the key or you process an unverified payload.
+
+Implementations: `services/meta-webhook.js` (Meta/WhatsApp), `services/aggregator-orders.js:verifyWebhook` (aggregators), `shopify/utils.js:verifyWebhookSignature` (Shopify). All three return `{ ok, reason }` and compare in constant time.
+
+**Replay windows are conditional.** Only apply one where the provider actually sends a *signed* timestamp — the aggregators do, Meta does not. Meta authenticity therefore rests on the signature alone; duplicate suppression rests on the handler's own idempotency (`web_orders` upserts `ON CONFLICT`). Note WhatsApp inbound messages have **no** idempotency on `external_id` — a replayed, validly-signed delivery would duplicate inbox rows.
+
+**Daraz is deliberately unverified**, not overlooked. Its *outbound* scheme (`services/marketplace/daraz-client.js:_sign`) is parameter-based (sorted concat, hex, uppercased, `sign` param) and does not describe inbound pushes; the inbound contract is not published in any reachable doc. Guessing a format would fail-close a tenant's first real webhook, so it stays as-is pending the contract. Full rationale is in the comment above the handler — read it before "fixing" this.
+
+**The `undefined === undefined` trap** (fixed, don't reintroduce): the Meta/WhatsApp GET handshakes compared `token === process.env.X`. With the env var unset — its actual state — omitting `hub.verify_token` made both sides `undefined` and the handshake echoed the challenge to anyone. Any secret/token comparison must first refuse when the expected value is **unset**, never compare two absent values. `tests/unit/meta-webhook.test.js` pins this.
 
 ### Permission-rules is live middleware, not a reference table
 A declarative array of path-regex-to-permission rules is mounted as blanket middleware ahead of every route module — it runs in addition to, not instead of, each route's own guard, and a rule keyed on a path prefix also catches self-scoped sub-endpoints beneath it. Tightening a rule's required permission means auditing every sub-path under its regex before shipping the change.

@@ -50,6 +50,9 @@ A registry mapping email type string to a `{ subject, html }` builder function. 
 ### `payment-gateway.js`
 Adapter pattern for payment processing. Exports: `createCheckout()`, `createInvoiceCheckout()`, `verifyWebhook()`, `isEnabled()`, `refund()`, `processInlinePayment()`, `tokenize()`, `chargeSavedInstrument()`, `getPaymentAdapter()`, `BasePaymentAdapter`, `ADAPTERS`. The active adapter is chosen by env config (manual/no gateway is the default). `isEnabled()` checks for a live gateway API key specifically, not just that a gateway name is configured — always gate payment UI behind `isEnabled()`. The manual adapter throws on checkout creation.
 
+### `meta-webhook.js`
+Inbound-webhook verification for the two Meta-signed channels (Facebook/Instagram Commerce + WhatsApp Cloud API). Exports `verifySignature`, `verifyHandshake`, `resolveAppSecret`, `resolveVerifyToken`, `META_PROVIDERS`, `SIGNATURE_HEADER`, `signBody` (test helper). Contract: `x-hub-signature-256` = `sha256=` + **hex** HMAC-SHA256 of the raw body — **not** the base64 digest used by `aggregator-orders.js` and `shopify/utils.js`; the three verifiers are not interchangeable. The secret is **app-level** (`META_APP_SECRET`, with an optional `WHATSAPP_APP_SECRET` override) because Meta signs with *our* app's secret, not the tenant's — which is what allows verification to run before tenant resolution. Returns `{ ok, reason }`; an unconfigured secret returns `no_app_secret_configured` and callers must fail closed. No replay window: Meta sends no signed timestamp. Consumed by `routes/webhooks.js` (the request gate) and `routes/integrations/credentials.js` (the activation guard).
+
 ### `printer.js`
 Factory export: `makePrinterService(db)` → `{ printReceipt, printerStatus, printTest, printToNetwork, openDrawer }`. Supports USB (ESC/POS) and raw TCP socket printing. Paper width read from DB config drives receipt layout.
 

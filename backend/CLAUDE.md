@@ -42,7 +42,12 @@ Orchestrator, not a place to add domain logic. Key responsibilities:
 10. requestId            — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
---- webhook routes (routes/webhooks.js) mount here — NO auth by default; only the payment-gateway webhook is HMAC-verified; the marketplace-channel webhooks are rate-limited but not signature-verified ---
+--- webhook routes (routes/webhooks.js) mount here — NO auth; a signature is the only
+    authenticity gate. Verified + fail-closed: payment gateway, Meta, WhatsApp, and the
+    delivery aggregators. NOT verified: Daraz (deliberately deferred — its inbound push
+    contract is unpublished). Each provider's scheme differs (hex vs base64, env app-secret
+    vs encrypted per-tenant secret) — see routes/CLAUDE.md "Webhook signature verification"
+    before touching one ---
 --- customer portal routes: dedicated rate limiters → customer auth middleware → handler ---
 --- manufacturer portal routes: dedicated rate limiters → manufacturer auth middleware → handler ---
 
@@ -72,7 +77,7 @@ Customer portal and manufacturer portal routes are structurally separate chains 
 
 **Boot-time assertions:**
 - A startup check verifies a handful of critical routes are registered (bulk product import, bulk product delete, bulk product status, the Shopify product-delete route) — crashes boot if any are missing
-- An unset IP allowlist for the admin panel in production logs a loud security warning at boot
+- There is no longer an admin IP-allowlist boot warning. The allowlist it warned about was deleted rather than configured — it failed open, so the warning was correct but the layer was inert. The `/admin` gate is password + TOTP + super-admin token; see `routes/admin/CLAUDE.md`.
 
 ---
 
@@ -292,6 +297,29 @@ Integration credentials are stored as `enc:v1:{iv_b64}:{tag_b64}:{ciphertext_b64
 ### Production
 - Backend runs on Railway; database is Supabase Postgres reached through the transaction pooler
 - `start.sh` — the platform entrypoint: sets the timezone, runs the migration CLI, then execs the server
+
+---
+
+## Horizontal-scaling preconditions
+
+**This is a precondition, not a bug list.** Every item below is *correct* at one Railway instance, which is what runs today. All of them fail **quietly** at two or more — wrong answers, no error, no log line. Nothing here needs fixing while the deploy is single-instance; all of it must be resolved *before* a second instance, a replica, or an autoscaler is switched on. Treat "add a second instance" as a change that is blocked on this list.
+
+Each entry is process-local state in a `Map` that a second instance would neither see nor be told about:
+
+| State | Where | Lifetime | What breaks at 2+ instances |
+|---|---|---|---|
+| `displayStore` cart Map | `routes/customer-display.js` (in the route factory) | until restart | Customer-facing display shows a cart only if the POS write and the display poll land on the *same* instance. Otherwise the display is blank or stale. Keyed per tenant+shift, so it is a correctness bug, not a leak. |
+| Alerting sliding windows + tenant `Set`s | `services/alerting.js` (`windows`) | rolling window | Error-spike thresholds count per instance, so an N-instance deploy needs N× the errors to fire an alert — alerts silently under-trigger. Deduplication across instances is lost too. |
+| Menu-schedule per-outlet cache | `services/menu-schedule-resolver.js` (`_cache`, 60s) | 60s | A menu/day-part change applies on the instance that served the write and lags up to 60s elsewhere — QR diners can see different menus concurrently. |
+| Feature-flag bundle cache | `middleware/feature-flags.js` (`_featureFlagCache`, `FEATURE_FLAG_CACHE_MS` 60s, via `_getBundle`) | 60s | A module toggle takes effect immediately on one instance, up to 60s later on the rest. |
+| Mode map cache | `middleware/feature-flags.js` (`_modeCache`, `MODE_CACHE_MS` 60s, via `getModesMap`) | 60s | Same as above for `requireMode` — which is **fail-closed**, so the window is a 403, not a fall-through. |
+| Company profile cache | `middleware/tenant-auth.js` (`_companyCache`, `COMPANY_CACHE_MS` **5 min**) | 5 min | Currency/timezone/tax config changes lag up to 5 minutes per instance — the longest window here, and timezone drift mis-buckets reports. |
+| Context flag cache | `middleware/tenant-auth.js` (`_contextFlagCache`, `CONTEXT_FLAG_CACHE_MS` 30s) | 30s | Outlet-context enforcement flips per instance. |
+| Outlet cache | `middleware/outlet-context.js` (`_outletCache`, `OUTLET_CACHE_MS` 60s) | 60s | A new/renamed/deactivated outlet resolves on one instance and 403s on another for up to 60s. |
+
+**The sharp edge is invalidation, not the TTLs.** `invalidateFeatureFlagCache`, `invalidateModeCache`, `invalidateCompanyProfileCache`, `invalidateOutletCache`, and `invalidateMenuScheduleCache` are all **in-process only** — they clear the `Map` belonging to the instance that happened to serve the request. On a second instance the write is invisible, so the post-write refresh path (which today makes a module toggle feel instant) would leave every *other* instance serving stale state until its TTL lapses. A toggle would appear to work, then appear to revert, depending on which instance answered — the worst kind of bug to diagnose. `displayStore` and the alerting windows have no TTL at all, so they never self-heal.
+
+Note the transaction-pooler constraint interacts with the obvious fix: `LISTEN/NOTIFY` is **not** available on the pooled connection (see `db-pg.js` above), so cross-instance invalidation would need a shared cache (Redis) or a direct non-pooled connection — not a `NOTIFY` broadcast.
 
 ---
 

@@ -304,6 +304,36 @@ every deploy. ~~**Fix = one env var.**~~
 
 ### 4.2 — Meta/WhatsApp/Daraz webhooks unsigned, plus an `undefined === undefined` bypass
 
+> **RESOLUTION 2026-07-16 (PLAN-V3 W0a2, `a4a65655`) — this finding SPLIT; it is neither wholly
+> resolved nor wholly open. Do not cite "4.2" as a single status.**
+> - **4.2a — the `undefined === undefined` bypass: FIXED.** The handshake now refuses when the
+>   expected token is **unset** and compares in constant time. Live-verified: 403 with
+>   `no_verify_token_configured`, where the old expression was demonstrated to evaluate `true`.
+> - **4.2b — meta + whatsapp POSTs: FIXED.** Signature-verified fail-closed (401 + alerting record),
+>   `x-hub-signature-256` = `sha256=` + **hex** HMAC-SHA256 over the raw body, keyed on an **app-level**
+>   `META_APP_SECRET` — so verification runs *before* tenant resolution. Plus an activation guard: a
+>   Meta channel cannot be connected while that secret is missing (it would otherwise look connected
+>   in the hub and drop every delivery). Implementation: `services/meta-webhook.js`.
+> - **4.2c — daraz POST: STILL OPEN, deferred to V4-3 by owner ruling.** Its inbound push contract is
+>   unpublished and could not be pinned; guessing a format would fail-close a tenant's first real
+>   webhook. Left at its pre-existing trust-the-payload behaviour — **the unauthenticated
+>   order-injection exposure described below remains true for `/api/webhooks/daraz` only.**
+>
+> **The "not verified" caveat at the end of this section is now RESOLVED, and it decided the
+> severity**: 0 tenants have an active channel `integration_settings` row (verified 2026-07-16 via
+> Supabase; only `tenant_livetest1` has one, `is_active=false`). So this was
+> hardening-before-anyone-connects, not a live-fire fix — which is exactly why getting Meta's format
+> *right* mattered, and why guessing Daraz's was worse than waiting. The daraz gap and a WhatsApp
+> idempotency gap found during the same step now sit behind **one shared trigger** in PLAN-V3:
+> *before any tenant activates a channel integration*.
+>
+> One correction to this section's own premise: the aggregator verifier praised below as "the good
+> pattern already exists in this file" is **not** a drop-in. It is **base64**, with
+> aggregator-specific headers and a **per-tenant** secret; Meta is **hex** with an **app-level** one.
+> Reusing it verbatim would have silently rejected every real Meta webhook. Reuse its *shape*
+> (verify-before-process, constant-time, fail-closed + alert), never its algorithm — see the
+> per-provider table in `backend/routes/CLAUDE.md`.
+
 Verified split in `backend/routes/webhooks.js`:
 - `/api/webhooks/xpay` (559) — `paymentGateway.verifyWebhook`, 400 on bad signature. ✅
 - Aggregator webhooks (foodpanda/Careem, ~808) — HMAC **plus replay window**, fail-closed 401 +
@@ -446,7 +476,10 @@ absent.
 **Verified by Cloudflare DNS API** (2026-07-15): `api.sanopos.com CNAME proxied=False`.
 
 **NOT verified — check before acting**:
-- Whether any tenant has Meta/WhatsApp/Daraz configured (decides 4.2's real exploitability).
+- ~~Whether any tenant has Meta/WhatsApp/Daraz configured (decides 4.2's real exploitability).~~
+  **RESOLVED 2026-07-16: none do** — 0 active channel `integration_settings` rows (only
+  `tenant_livetest1`, `is_active=false`). 4.2 was latent, not live. Re-verify before relying on it;
+  it is the tripwire for V4-3/V4-4 (see PLAN-V3's shared trigger).
 - Whether `/pay/:token` and `/gift-card/:code` carry `?tenant=` (affects OG middleware scope).
 - Whether grey-cloud on `api.sanopos.com` is deliberate.
 - Nothing was browser-verified, including the session-expired modal break.

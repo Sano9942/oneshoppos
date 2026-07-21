@@ -534,6 +534,7 @@ function extractMetaOrder(change) {
 
 module.exports = function registerWebhookRoutes(app, deps) {
   const paymentGateway = require("../services/payment-gateway");
+  const metaWebhook = require("../services/meta-webhook");
   const logger = _logger;
   const { z } = require("zod");
 
@@ -589,22 +590,60 @@ module.exports = function registerWebhookRoutes(app, deps) {
     }
   });
 
+  // ── Meta-signed channels (Facebook/Instagram Commerce + WhatsApp) ──
+  // Both are signed by the same contract with an APP-LEVEL secret (ours, not the
+  // tenant's), so verification runs BEFORE tenant resolution. See
+  // services/meta-webhook.js for the contract and why it is NOT the aggregator's.
+
+  /**
+   * Fail-closed signature gate. Returns true when the request is authentic;
+   * otherwise responds 401 and returns false (caller must `return` immediately).
+   */
+  function metaSignatureGate(req, res, provider) {
+    const result = metaWebhook.verifySignature({
+      rawBody: req.rawBody,
+      headers: req.headers,
+      secret: metaWebhook.resolveAppSecret(provider),
+    });
+    if (result.ok) return true;
+
+    // Fail-closed is security-correct but must not be OPERATIONALLY silent: a
+    // missing or rotated app secret would reject every legitimate delivery and
+    // the orders/messages would simply vanish. Feed the alerting sliding window
+    // so a spike of rejections pages ops instead. Same rationale as the
+    // aggregator path below — but note we cannot tag a tenant here, because
+    // verification deliberately precedes tenant resolution.
+    logger.warn({ provider, reason: result.reason }, "Meta webhook signature rejected");
+    try {
+      require("../services/alerting").recordError({
+        message: `meta webhook signature rejected (${provider}): ${result.reason}`,
+        reqId: req.id,
+      });
+    } catch { /* alerting is best-effort */ }
+    res.status(401).json({ error: "Invalid signature", reason: result.reason });
+    return false;
+  }
+
   // GET /api/webhooks/meta — Facebook/Instagram webhook verification
   app.get("/api/webhooks/meta", (req, res) => {
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
-
-    if (mode === "subscribe" && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
-      logger.info("Meta webhook verified");
-      return res.status(200).send(challenge);
+    const result = metaWebhook.verifyHandshake({
+      provider: "facebook",
+      mode: req.query["hub.mode"],
+      token: req.query["hub.verify_token"],
+    });
+    if (!result.ok) {
+      logger.warn({ reason: result.reason }, "Meta webhook handshake rejected");
+      return res.sendStatus(403);
     }
-    return res.sendStatus(403);
+    logger.info("Meta webhook verified");
+    return res.status(200).send(req.query["hub.challenge"]);
   });
 
   // POST /api/webhooks/meta — Facebook/Instagram order webhooks
   app.post("/api/webhooks/meta", webhookLimiter, async (req, res) => {
     try {
+      if (!metaSignatureGate(req, res, "facebook")) return;
+
       const { object, entry } = req.body || {};
       const entries = Array.isArray(entry) ? entry : [];
       logger.info({ object, entries: entries.length }, "Meta webhook received");
@@ -659,20 +698,24 @@ module.exports = function registerWebhookRoutes(app, deps) {
 
   // GET /api/webhooks/whatsapp — WhatsApp webhook verification
   app.get("/api/webhooks/whatsapp", (req, res) => {
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
-
-    if (mode === "subscribe" && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-      logger.info("WhatsApp webhook verified");
-      return res.status(200).send(challenge);
+    const result = metaWebhook.verifyHandshake({
+      provider: "whatsapp",
+      mode: req.query["hub.mode"],
+      token: req.query["hub.verify_token"],
+    });
+    if (!result.ok) {
+      logger.warn({ reason: result.reason }, "WhatsApp webhook handshake rejected");
+      return res.sendStatus(403);
     }
-    return res.sendStatus(403);
+    logger.info("WhatsApp webhook verified");
+    return res.status(200).send(req.query["hub.challenge"]);
   });
 
   // POST /api/webhooks/whatsapp — receive WhatsApp messages
   app.post("/api/webhooks/whatsapp", webhookLimiter, async (req, res) => {
     try {
+      if (!metaSignatureGate(req, res, "whatsapp")) return;
+
       const { entry } = req.body || {};
       const entries = Array.isArray(entry) ? entry : [];
 
@@ -736,6 +779,25 @@ module.exports = function registerWebhookRoutes(app, deps) {
   });
 
   // POST /api/webhooks/daraz — Daraz order status push notifications
+  //
+  // NOT signature-verified — deliberately DEFERRED, not overlooked (PLAN-V3 W0a2,
+  // owner-ruled 2026-07-16). Daraz/Lazada's documented signing scheme (see
+  // services/marketplace/daraz-client.js `_sign`) is PARAMETER-based — sorted
+  // key/value concatenation, hex, uppercased, sent as a `sign` request param —
+  // and it governs OUTBOUND calls we make to Lazada. Their inbound push contract
+  // is a separate thing that is not published in any reachable doc: the Open
+  // Platform "Push Mechanism" and "Webhook API Trade Order Notifications" pages
+  // are JS-rendered and serve no content to a fetch, and the signing-requests doc
+  // states it covers outbound requests only. So we cannot currently distinguish
+  // "signed with some scheme X" from "signed with the param scheme" from "not
+  // signed at all" — and each demands a different implementation.
+  //
+  // Guessing is strictly worse than waiting: a wrong format fail-closes the first
+  // real webhook a tenant ever sends, and that order silently vanishes. Blocked
+  // on the contract, obtainable from the Daraz seller/partner portal or from a
+  // captured live push. Until then this keeps its pre-existing trust-the-payload
+  // behaviour (rate-limited only) — unchanged risk, and no tenant has an active
+  // daraz integration today.
   app.post("/api/webhooks/daraz", webhookLimiter, async (req, res) => {
     try {
       const body = req.body || {};

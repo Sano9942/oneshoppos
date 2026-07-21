@@ -4,6 +4,8 @@ import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { IS_MULTI_TENANT, API_BASE } from "../config";
 import RequireAuth from "../components/RequireAuth";
+import RequireContext from "../components/RequireContext";
+import RequirePerm from "../components/RequirePerm";
 import SetupWizard from "../pages/SetupWizard";
 import AccessDenied from "../pages/AccessDenied";
 import ContextSelect from "../pages/ContextSelect";
@@ -18,6 +20,7 @@ const MarketingPricing = lazy(() => import("../pages/marketing/PricingPage"));
 const MarketingWhy = lazy(() => import("../pages/marketing/WhySanoPosPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
+const KDSRoute = lazy(() => import("../pages/KDSRoute"));
 const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
 const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
 const GiftCardBalancePage = lazy(() => import("../pages/GiftCardBalancePage"));
@@ -164,6 +167,27 @@ export const publicRoutes = [
       <ErrorBoundary level="page">
         <Suspense fallback={<RouteLoading />}>
           <RequireAuth><KioskRedesign /></RequireAuth>
+        </Suspense>
+      </ErrorBoundary>
+    }
+  />,
+  /* KDS is a wall-mounted kitchen screen, not a merchant page — it lives here
+     to escape AppLayoutRedesign's sidebar/top bar/breadcrumbs/SupportWidget,
+     the same reason POS and the kiosk do. Unlike /customer-display it is NOT
+     public: it reads real ticket data, so it keeps the auth + outlet-context
+     + manage_kds guards it inherited from appRoutes, spelled out here since
+     there's no shared parent route to inherit them from. */
+  <Route
+    key="kds"
+    path="/kds"
+    element={
+      <ErrorBoundary level="page">
+        <Suspense fallback={<RouteLoading />}>
+          <RequireAuth>
+            <RequireContext>
+              <RequirePerm perm="manage_kds"><KDSRoute /></RequirePerm>
+            </RequireContext>
+          </RequireAuth>
         </Suspense>
       </ErrorBoundary>
     }

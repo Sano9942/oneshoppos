@@ -6,7 +6,7 @@ const { validate } = require("../../middleware/validate");
 const { CreateAnnouncementSchema } = require("../../schemas/admin");
 
 module.exports = function registerMessagingRoutes(app, deps) {
-  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
+  const { db, masterDb, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
   // ── Targeted-announcement audience helpers ─────────────────────────────
   // audience_plan / audience_industry are NULL (= everyone) or a comma-separated
@@ -85,7 +85,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
       LEFT JOIN tenants t ON t.id = (j.data->>'tenantId')::int
      WHERE j.name = 'email'`;
 
-  app.get("/api/admin/email-queue", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/email-queue", requireSuperAdmin, async (req, res) => {
     try {
       const { status, limit: lim } = req.query;
       const limit = Math.min(parseInt(lim, 10) || 100, 500);
@@ -126,7 +126,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   // Retry: revive a failed/cancelled job by resetting state to 'created'
   // and clearing retry_count + output. pg-boss will pick it up on the
   // next fetch.
-  app.post("/api/admin/email-queue/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/email-queue/:id/retry", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
         `UPDATE pgboss.job
@@ -149,7 +149,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
 
   // Send-now: bring forward `start_after` for a pending job so the next
   // fetch picks it up immediately. No-op for already-sent jobs.
-  app.post("/api/admin/email-queue/:id/send-now", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/email-queue/:id/send-now", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
         `UPDATE pgboss.job
@@ -167,7 +167,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
 
   // NOTE: purge-deleted must be registered BEFORE the :id param route to
   // avoid Express matching "purge-deleted" as :id.
-  app.delete("/api/admin/email-queue/purge-deleted", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/email-queue/purge-deleted", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
         `DELETE FROM pgboss.job
@@ -184,7 +184,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
 
   // Delete: only allow removing non-completed jobs. completed jobs are
   // archived by pg-boss after `keep_until` and shouldn't be hand-deleted.
-  app.delete("/api/admin/email-queue/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/email-queue/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query(
         `DELETE FROM pgboss.job
@@ -200,7 +200,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Broadcast ──────────────────────────────────────────────────────────
-  app.post("/api/admin/email/broadcast", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/email/broadcast", requireSuperAdmin, async (req, res) => {
     try {
       const { type, subject, message } = req.body || {};
       if (!type || !["downtime", "announcement"].includes(type)) {
@@ -255,7 +255,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Broadcast History ──────────────────────────────────────────────────
-  app.get("/api/admin/broadcast-history", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/broadcast-history", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM broadcast_log ORDER BY created_at DESC LIMIT 50");
       return res.json(rows);
@@ -265,7 +265,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Activity Log ───────────────────────────────────────────────────────
-  app.get("/api/admin/activity-log", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/activity-log", requireSuperAdmin, async (req, res) => {
     try {
       const { action, limit: lim, offset: off } = req.query;
       const limit = Math.min(parseInt(lim, 10) || 50, 200);
@@ -297,7 +297,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Security Log ───────────────────────────────────────────────────────
-  app.get("/api/admin/security-log", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/security-log", requireSuperAdmin, async (req, res) => {
     try {
       const { event_type, limit: lim, offset: off } = req.query;
       const limit = Math.min(parseInt(lim, 10) || 50, 200);
@@ -329,7 +329,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Cross-Tenant Activity ──────────────────────────────────────────────
-  app.get("/api/admin/tenant-activity", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenant-activity", requireSuperAdmin, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const { rows: tenants } = await db.query(
@@ -359,7 +359,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
   });
 
   // ── Announcements ──────────────────────────────────────────────────────
-  app.get("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/announcements", requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query("SELECT * FROM announcements ORDER BY created_at DESC LIMIT 50");
       return res.json(rows);
@@ -368,7 +368,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, validate(CreateAnnouncementSchema), async (req, res) => {
+  app.post("/api/admin/announcements", requireSuperAdmin, validate(CreateAnnouncementSchema), async (req, res) => {
     try {
       const { message, type = "info", ends_at, audience_plan, audience_industry } = req.body;
       if (!message || !message.trim()) return res.status(400).json({ error: "Message is required" });
@@ -387,7 +387,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
-  app.put("/api/admin/announcements/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/announcements/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { message, type, active, ends_at, audience_plan, audience_industry } = req.body;
       const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k);
@@ -417,7 +417,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/admin/announcements/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/announcements/:id", requireSuperAdmin, async (req, res) => {
     try {
       const { rowCount } = await db.query("DELETE FROM announcements WHERE id = $1", [req.params.id]);
       if (rowCount === 0) return res.status(404).json({ error: "Announcement not found" });

@@ -5,50 +5,7 @@ const bcrypt = require("bcryptjs");
 
 const BCRYPT_ROUNDS = 10;
 
-// ── IP Allowlist helpers ────────────────────────────────────────────────
-
-function ipToInt(ip) {
-  const clean = ip.replace(/^::ffff:/, "");
-  const parts = clean.split(".");
-  if (parts.length !== 4) return null;
-  return parts.reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-}
-
-function ipInCidr(ip, cidr) {
-  const [network, bitsStr] = cidr.includes("/") ? cidr.split("/") : [cidr, "32"];
-  const bits = parseInt(bitsStr, 10);
-  if (bits < 0 || bits > 32) return false;
-
-  const ipInt = ipToInt(ip);
-  const netInt = ipToInt(network);
-  if (ipInt === null || netInt === null) return false;
-
-  if (bits === 0) return true;
-  const mask = (~0 << (32 - bits)) >>> 0;
-  return (ipInt & mask) === (netInt & mask);
-}
-
-function parseAllowedIps() {
-  const raw = (process.env.ADMIN_ALLOWED_IPS || "").trim();
-  if (!raw) return null;
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
 // ── Middleware factories ────────────────────────────────────────────────
-
-function createRequireAllowedIp() {
-  return function requireAllowedIp(req, res, next) {
-    const allowedIps = parseAllowedIps();
-    if (!allowedIps) return next();
-
-    const clientIp = req.ip || "";
-    const matches = allowedIps.some((entry) => ipInCidr(clientIp, entry));
-    if (!matches) {
-      return res.status(403).json({ error: "IP not allowed" });
-    }
-    next();
-  };
-}
 
 function createRequireSuperAdmin(verifyAccessToken) {
   return function requireSuperAdmin(req, res, next) {
@@ -108,10 +65,6 @@ function createLoggers(db, masterDb) {
 module.exports = {
   BCRYPT_ROUNDS,
   bcrypt,
-  ipToInt,
-  ipInCidr,
-  parseAllowedIps,
-  createRequireAllowedIp,
   createRequireSuperAdmin,
   createLoggers,
 };
