@@ -77,6 +77,12 @@ if (IS_MULTI_TENANT) {
   masterDbPgBoot.init(db);
 }
 
+// Production boot guard — fail-closed if a required portal JWT secret is unset,
+// shared with JWT_SECRET, or too weak (no-op outside production). Runs before
+// anything else so the deploy fails fast rather than booting with a manufacturer
+// portal that silently shares the employee-token secret. See boot/assert-secrets.js.
+require("./boot/assert-secrets").assertProductionSecrets();
+
 // Initialize extracted modules with shared deps
 const mtDeps = { db, IS_MULTI_TENANT, dbProxy, tenantDbManager, asyncStore };
 tenantAuth.init(mtDeps);
