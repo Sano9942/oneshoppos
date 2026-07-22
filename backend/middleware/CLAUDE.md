@@ -198,7 +198,7 @@ One 60s-cached (`FEATURE_FLAG_CACHE_MS`) fetch per tenant that loads **three** t
 Applies the per-outlet overlay: for every flag mapped to an outlet-scoped card, if the flag is company-`true` but resolves `false` at `outletId` (via `_outletResolved`: `override ?? default_outlet_enabled ?? true`), the effective value flips to `false`. No `outletId` → returns the plain company-level map unchanged. Used by `GET /api/feature-flags`'s `effective` field, context bootstrap, and outlet-bound public surfaces.
 
 ### `isModuleOffAtOutlet(tenantId, cardKey, outletId)`
-Pure per-outlet resolution for one card (override ?? default ?? true), deliberately **not** composed with company-level state — for outlet-bound public surfaces (e.g. a QR kiosk) that must go dark when the outlet itself is switched off, independent of whatever the company-level gate decides. Returns `false` immediately if the card isn't `scope: "outlet"` or doesn't exist.
+Pure per-outlet resolution for one card (override ?? default ?? true), deliberately **not** composed with company-level state — the caller composes the company flag itself. Returns `false` immediately if the card isn't `scope: "outlet"` or doesn't exist. Its one consumer, `public-restaurant.js:kioskOrderingOff()`, ANDs the company-level `phase4_restaurant` flag with this so the QR kiosk goes dark when Restaurant is off **either** company-wide **or** at the outlet (PLAN-V3 E9).
 
 ### `getEffectiveModesMap(tenantId, outletId)` / `outletCardForFlag(flagKey)`
 `getEffectiveModesMap` mirrors `getEffectiveFlagsMap` for the outlet-scoped Bucket-A modes. `outletCardForFlag` is a plain lookup into `OUTLET_FLAG_TO_CARD`.

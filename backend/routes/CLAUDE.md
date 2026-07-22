@@ -126,7 +126,7 @@ Routes backing a brand-scoped manufacturer partner portal. Mounted **before** te
 | `restaurant.js` | `/api/restaurant` | Floor plan, table management, tabs, kitchen order tickets. |
 | `restaurant-inbox.js` | `/api/restaurant-inbox` | Restaurant order inbox. |
 | `restaurant-kiosk.js` | `/api/restaurant/kiosk-tokens` | QR self-order kiosk token issue/list. |
-| `public-restaurant.js` | `/api/public-restaurant` | **Mounted before tenant middleware** — QR menu public endpoint. |
+| `public-restaurant.js` | `/api/public-restaurant` | **Mounted before tenant middleware** — QR menu public endpoint. `kioskOrderingOff()` composes the **company-level `phase4_restaurant` flag** with the **per-outlet** module resolution — company-off OR outlet-off ⇒ the view/add/submit endpoints 404 ("Ordering is not available at this location"), so an already-issued kiosk token stops ordering when Restaurant is disabled either company-wide or at its outlet (PLAN-V3 E9). Lookup errors fail open. |
 | `kds.js` | `/api/kds` | Kitchen display system. |
 
 ### Bookings & Services

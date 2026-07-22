@@ -43,7 +43,9 @@ describe("Phase 2-R.1 — 86'd items (availability)", () => {
       ON CONFLICT (mode) DO UPDATE SET enabled = true
     `);
     await db.query(`
-      INSERT INTO feature_flags (key, enabled) VALUES ('phase4_restaurant_86', true)
+      INSERT INTO feature_flags (key, enabled) VALUES
+        ('phase4_restaurant', true),
+        ('phase4_restaurant_86', true)
       ON CONFLICT (key) DO UPDATE SET enabled = true
     `);
     featureFlags.invalidateFeatureFlagCache();
