@@ -25,10 +25,21 @@ let _secretWarned = false;
 function getSecret() {
   const explicit = process.env.MANUFACTURER_PORTAL_JWT_SECRET;
   if (explicit) return explicit;
+  // Production: NO fallback. Sharing JWT_SECRET means a manufacturer token and
+  // an employee token are signed with the same key — the exact config error
+  // that recurs in any environment that forgets to set this var. boot/assert-secrets.js
+  // makes an unset/weak secret fatal at boot in production, so we should never
+  // reach here in prod; if we somehow do, fail loudly rather than silently
+  // sharing the employee secret. (This relaxes the "no portal-auth changes"
+  // fence for exactly this file, per PLAN-V3 Step 4.3.)
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("MANUFACTURER_PORTAL_JWT_SECRET is required in production");
+  }
+  // Dev/test only — one-time warning, then fall back so local runs work.
   if (!_secretWarned) {
     _secretWarned = true;
     // eslint-disable-next-line no-console
-    console.warn("[SECURITY] MANUFACTURER_PORTAL_JWT_SECRET unset, falling back to JWT_SECRET");
+    console.warn("[SECURITY] MANUFACTURER_PORTAL_JWT_SECRET unset (dev/test) — falling back to JWT_SECRET");
   }
   return process.env.JWT_SECRET || "dev-insecure-secret";
 }

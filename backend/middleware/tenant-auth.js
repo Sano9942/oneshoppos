@@ -91,6 +91,25 @@ async function loadTenantAndPerms(req, res, next) {
     const { verifyAccessToken } = require("../jwt-auth");
     const decoded = verifyAccessToken(authHeader.slice(7), process.env.JWT_SECRET);
 
+    // Scope gate — must run BEFORE any req.tenantId/req.employee assignment.
+    // Every legitimate token that reaches this employee middleware carries
+    // scope "full": jwt-auth.js:signAccessToken defaults scope to "full" (login,
+    // refresh, update-context) and the impersonation mint in
+    // routes/admin/operations.js also uses "full". The customer/manufacturer
+    // portals carry scope "customer"/"manufacturer" and — when their dedicated
+    // portal secret is unset — are signed with JWT_SECRET too, so they verify
+    // here. Without this check, req.tenantId would be set from a portal token's
+    // tid, attaching tenant DB context; guarded routes 403 (no eid → empty
+    // perms) but any UNGUARDED tenant route would be reachable. Reject any
+    // EXPLICIT non-"full" scope (portal "customer"/"manufacturer", admin
+    // "admin"/"admin_totp_pending") before context attaches — mirroring the
+    // scope rejection the portal auth modules already do. A missing scope is
+    // tolerated as legacy-employee (portal tokens ALWAYS set scope, so this
+    // does not reopen the hole) to avoid 401ing any in-flight scope-less token.
+    if (decoded.scope && decoded.scope !== "full") {
+      return res.status(401).json({ error: "Invalid token scope", code: "INVALID_TOKEN_SCOPE" });
+    }
+
     req.tenantId = decoded.tid;
     req.employee = { id: decoded.eid, role_id: decoded.rid };
     req.isImpersonating = !!decoded.impersonating;

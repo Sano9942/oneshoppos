@@ -39,7 +39,11 @@ Header-only fallback path (no JWT). Reads `x-employee-id`; must parse as an inte
 ### `loadTenantAndPerms(req, res, next)`
 Primary JWT auth. No `Authorization: Bearer` header → `req.employeePerms = []`, calls `next()` without rejecting (many routes rely on this fall-through and gate themselves via their own `requirePerm`).
 
-With a token, verifies via `jwt-auth.js:verifyAccessToken(token, process.env.JWT_SECRET)` and sets:
+With a token, verifies via `jwt-auth.js:verifyAccessToken(token, process.env.JWT_SECRET)`.
+
+**Scope gate (PLAN-V3 Step 4.3)** — runs *immediately after* verify and *before* any `req.tenantId`/`req.employee` assignment: a token with an explicit non-`"full"` scope → 401 `{ code: "INVALID_TOKEN_SCOPE" }`, and **no tenant context attaches**. Every legitimate employee token carries scope `"full"` (`jwt-auth.js:signAccessToken` defaults it; login/refresh/update-context and the impersonation mint in `routes/admin/operations.js` all produce `"full"`). Portal tokens carry `"customer"`/`"manufacturer"` and share `JWT_SECRET` when their dedicated portal secret is unset, so they verify here — the gate stops a portal token's `tid` from attaching tenant DB context to an *unguarded* tenant route (guarded routes already 403 because a portal token has no `eid` → empty perms). The check is `decoded.scope && decoded.scope !== "full"`: a **missing** scope is tolerated as legacy-employee (portal tokens always set scope, so tolerating absent scope doesn't reopen the hole), which avoids 401ing any in-flight scope-less token. This lands *before* `PERMISSION_RULES` (the blanket middleware) — verify a normal employee/impersonation token is unaffected before touching it. Mirror of the scope rejection the portal auth modules already do.
+
+Then sets:
 - `req.tenantId` (`decoded.tid`), `req.employee = { id, role_id }` (name/email backfilled below), `req.isImpersonating` + `req.impersonatedBy` (only when true)
 - `req.jwtOid` — the JWT `oid` claim or `null`. This is the *only* remaining place that surfaces the JWT outlet claim; `outlet-context.js` is the sole consumer/interpreter of it plus the `x-outlet-id` header.
 - `req.headers["x-employee-id"]` backfilled from `decoded.eid` — a compatibility bridge for any code still reading the header directly.
@@ -371,7 +375,7 @@ Mirrors `loadCustomerAuth`'s structure exactly (bearer required, scope must be `
 ### `signManufacturerTokens(partner, tenant)`
 Same shape as `signCustomerTokens` but payload key is `mid` (not `cid`) and `scope: "manufacturer"`.
 
-**Env vars:** `MANUFACTURER_PORTAL_JWT_SECRET` (falls back to `JWT_SECRET`), `MANUFACTURER_PORTAL_ACCESS_TTL` (default `"15m"` — deliberately shorter than the customer portal's 30m, since manufacturer reports expose aggregate revenue/scheme data), `MANUFACTURER_PORTAL_REFRESH_TTL` (default `"30d"`)
+**Env vars:** `MANUFACTURER_PORTAL_JWT_SECRET` — **required in production** (PLAN-V3 4.3): `getSecret()` throws when it's unset under `NODE_ENV === "production"` instead of silently falling back to `JWT_SECRET`, and `boot/assert-secrets.js` refuses to boot production unless it's set, distinct from `JWT_SECRET`, and non-trivial. The `JWT_SECRET`/`dev-insecure-secret` fallback survives **only** under `NODE_ENV !== "production"` (dev/test), with a one-time `[SECURITY]` warning. `MANUFACTURER_PORTAL_ACCESS_TTL` (default `"15m"` — deliberately shorter than the customer portal's 30m, since manufacturer reports expose aggregate revenue/scheme data), `MANUFACTURER_PORTAL_REFRESH_TTL` (default `"30d"`). **Note the drift from `customer-auth.js`**: the customer portal still falls back to `JWT_SECRET` in production — the same latent issue, an intentional 4.3 follow-up, not yet fixed.
 
 **Gotcha:** `customer-auth.js` and `manufacturer-auth.js` share the same token shape (principal id + `tid` + `tslug` + `scope` + `jti`), the same `resolvePublicTenantDb()` cross-tenant check, and the same revocation-cursor pattern — but they've drifted apart on TTL defaults and status-check details (only the manufacturer variant checks a `status` column). If you fix a bug in one — especially anything touching the `?tenant=` cross-tenant lockdown or revocation logic — check whether the same bug exists in the other.
 
