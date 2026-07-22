@@ -47,8 +47,8 @@
 | W0d | The two invariant guard tests (base-perm reach + single `x-outlet-id` reader) | 0 | — | ☑ `8ee9ab1a` — see §W0d outcome |
 | W0-ops | 4.4 R2 custom domain + `R2_PUBLIC_URL` (owner ops, no commit) | 0 | **owner-executed** | ☐ |
 | — | **GATE 0 — merge Wave 0 to `main`** | 0 | **owner-gated** | ☑ DEPLOYED `57be9133` (2026-07-22) — see banner |
-| 1 | 4.3 — `MANUFACTURER_PORTAL_JWT_SECRET` set + scope check in `loadTenantAndPerms` | A (own release) | **before** (every-request auth) | ☐ |
-| — | **GATE 1 — merge + deploy Release A** | A | **owner-gated** | ☐ |
+| 1 | 4.3 — `MANUFACTURER_PORTAL_JWT_SECRET` set + scope check in `loadTenantAndPerms` | A (own release) | **before** (every-request auth) | ☑ `65d4f9bc` |
+| — | **GATE 1 — merge + deploy Release A** | A | **owner-gated** | ☑ DEPLOYED `09fa5e63` (2026-07-22) — see banner |
 | 2 | E9 — AND company `restaurant` flag into `kioskOrderingOff` + stale-token test | B (own release) | **if surprised** | ☐ |
 | — | **GATE 2 — merge + deploy Release B** | B | **owner-gated** | ☐ |
 | 3 | E5 — setup checklists for the 7 uncovered Bucket A cards | 3 | — | ☐ |
@@ -911,6 +911,31 @@ fallback stops the same day the scope check lands). NO migrations. Post-deploy l
 a normal tenant login still works on a `golv_*` tenant; the manufacturer portal login still works on
 `tenant_wholesalewalktest1778451` (the one tenant with a manufacturer partner, verified 2026-07-16).
 Owner go → merge, watch deploys, live check, **walk the ledger.** Release B branches after.
+
+> **OUTCOME 2026-07-22 — DEPLOYED.** Merge `09fa5e63` (`--no-ff`) → main; Railway `8e44f2e6` SUCCESS
+> (old `cd75204e` removed — clean cutover); Vercel frontend 200. Owner set
+> `MANUFACTURER_PORTAL_JWT_SECRET` on Railway prod pre-merge (`--skip-deploys`, activated on this
+> deploy) — the real boot-assertion predicate was run against live prod env before merge (`problems: []`,
+> `NODE_ENV=production`) and boot logs post-deploy are clean (no assertion abort, **no** `[SECURITY]`
+> fallback warning → the secret is dedicated now).
+>
+> **Live check — both directions, all green:** deep health ok (DB 22ms); `mt-login` (livetestauto,
+> normal tenant) → 200 and the resulting **`"full"`-scope token replayed through `/api/context/bootstrap`
+> → 200 with no `INVALID_TOKEN_SCOPE`** (the every-request scope gate passes legitimate employee tokens);
+> bad-cred `mt-login` → 401; manufacturer-portal `/login` on `wholesalewalktest1778451` → **200, token
+> issued on the rotated dedicated secret** (bad-cred → 401). (golv_* not used — no creds; livetestauto
+> proves the identical normal-auth path.)
+>
+> **Baseline diff:** `check-baseline.js` exited RED on ONE test (`pg-batch14-bookings` "blocked time does
+> not appear in available slots") — **proven NOT a Release-A regression**: it fails identically on `main`
+> (date-relative test, `new Date()`-derived "next Monday"; baseline captured 2026-07-16, ran 2026-07-22);
+> 3 sibling booking/tax tests flipped green for the same calendar reason. Slice's own 3 unit files 22/22.
+> The [[followup_main_integration_baseline]] "check main-vs-branch before calling a RED a regression" trap.
+>
+> **Ledger walk:** item **4.3** LANDED (dedicated secret + scope-gate + prod boot assertion). Release A was
+> deliberately only 4.3 (own release). Accounted follow-up (not a gap): `CUSTOMER_PORTAL_JWT_SECRET` has the
+> identical latent fallback — explicitly out of 4.3 scope, documented in `middleware/CLAUDE.md`. Zero
+> unaccounted. **Release B (`fix/v3-restaurant-company-gate`) branches off this merged main next.**
 
 ---
 
