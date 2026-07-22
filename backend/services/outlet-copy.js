@@ -23,9 +23,14 @@
  *       physical Shopify location.
  *   restaurant_kiosk_slots    — slot_token is a live capability token.
  *   pos_device_registry       — device_uuid is physical hardware.
- *   approval_policies         — parked until after D2 (Steps 13-14 rewire the
- *       (outlet, role) grain it keys on).
  *   modifier_groups           — needs a groups→options→links deep copy (E6).
+ *
+ * approval_policies WAS parked here "until after D2"; D2 landed (v137) and the
+ * owner ruled COPY (PLAN-V3 Step 5, 2026-07-23) — it is now in COPY_SPECS below.
+ * Its role_id is a tenant-global roles(id) ref (per-outlet roles live in
+ * employee_outlets, not here), so a copied policy resolves cleanly at the new
+ * outlet; only outlet-specific rows copy (outlet_id = source), and global
+ * (outlet_id IS NULL) rows already cover the new outlet so they are left alone.
  *
  * COPY_SPECS is also a CONTRACT: every column of every listed table must appear
  * in exactly one of scope/copy/stamp/skip. tests/unit/outlet-copy-drift.test.js
@@ -92,6 +97,20 @@ const COPY_SPECS = [
       printer_id: "binds to a physical printer at the source outlet",
       last_assigned_at: "runtime load-balancing state, not configuration",
     },
+  },
+  {
+    // PLAN-V3 Step 5 (owner ruling COPY, 2026-07-23). Approval thresholds are
+    // per-outlet loss-prevention CONFIG a new location wants a sane default of —
+    // like outlet_business_modules. role_id → roles(id) is TENANT-GLOBAL (per-
+    // outlet roles live in employee_outlets, never here), so a copied policy
+    // resolves at the new outlet unchanged. Only outlet-specific rows copy
+    // (WHERE outlet_id = source); global (outlet_id IS NULL) policies already
+    // apply everywhere and are deliberately not duplicated.
+    table: "approval_policies",
+    scope: "outlet_id",
+    copy: ["action_type", "role_id", "policy", "threshold_value", "threshold_type", "is_active"],
+    stamp: { created_at: "now", updated_at: "now" },
+    skip: { id: "serial" },
   },
 ];
 

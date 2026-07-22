@@ -156,3 +156,188 @@ trimmed baseline, `node --check` clean on both edited route files, baseline JSON
 
 Browser check intentionally skipped: RETIRE is a pure removal (the URL now falls through to the SPA
 catch-all) with nothing new to render — the build + drift test + grep are the proof of a clean deletion.
+
+---
+
+## Step 5 — `approval_policies` copy-on-new-outlet: COPY vs NEVER
+
+**Status:** ⏸ INVESTIGATION FILED — awaiting owner ruling. Recommendation: **COPY**.
+**Date filed:** 2026-07-22
+**Scope:** exactly `approval_policies`. Not `modifier_groups` (Step 6), not any other copy candidate.
+
+### Why this is answerable now (the parking is discharged)
+
+`outlet-copy.js:26-27` parked this verbatim: *"approval_policies — parked until after D2 (Steps
+13-14 rewire the (outlet, role) grain it keys on)."* D2 landed at **v137** (Steps 13-14 shipped
+per-outlet roles: `employee_outlets.role_id`, NULL = inherit). The postponed question is now on the
+table: **should a new outlet inherit the source outlet's `approval_policies`, and does the copy
+handle the (outlet, role) grain safely now that per-outlet roles exist?**
+
+### The schema and its grain
+
+`approval_policies` ([schema-pg.sql:2748-2760](../../../backend/schema-pg.sql)):
+
+| Column | Type | Classification intent |
+|---|---|---|
+| `id` | SERIAL PK | identity → **skip** |
+| `action_type` | TEXT NOT NULL | config → copy |
+| `outlet_id` | INTEGER → outlets(id), **NULL = all outlets** | **scope** (rewritten source→target) |
+| `role_id` | INTEGER → roles(id), **NULL = all roles** | config → copy (**tenant-global** ref) |
+| `policy` | TEXT (`allowed`/`denied`/`approval_required`) | config → copy |
+| `threshold_value` | NUMERIC(12,2) | config → copy |
+| `threshold_type` | TEXT (`amount`/`percent`) | config → copy |
+| `is_active` | BOOLEAN | config → copy (soft-delete flag) |
+| `created_at` / `updated_at` | TIMESTAMPTZ | **stamp** (NOW()) |
+
+**Grain = `(action_type, outlet_id, role_id)`** (the UNIQUE constraint). Both `outlet_id` and
+`role_id` are optional wildcards. `evaluatePolicy` ([approval-policy.js:9-38](../../../backend/services/approval-policy.js))
+resolves **most-specific-first**: `outlet+role > outlet > role > global`, matching
+`(outlet_id = $outlet OR outlet_id IS NULL) AND (role_id = $role OR role_id IS NULL)`.
+
+### The (outlet, role) grain question — does D2 break the copy? **No.**
+
+Per-outlet role overrides live entirely in `employee_outlets.role_id`. `approval_policies.role_id`
+is still a plain **tenant-global** `roles(id)` FK — roles are not outlet-scoped. D2 changed only
+*which* `role_id` is resolved for an employee at a given outlet at **evaluation** time
+(`resolveEffectiveRole` → passed into `evaluatePolicy`); it did **not** change the storage grain of
+`approval_policies`. So a policy row is still "*(at outlet X, for effective-role Y, action Z) →
+decision*", and copying it to a new outlet Z' merely rewrites `outlet_id` X→Z'; `role_id`
+(tenant-global) resolves identically at the new outlet.
+
+- **No per-employee reference** in the table. **No per-outlet-physical reference** other than
+  `outlet_id` itself — which is the scope column that gets rewritten, exactly like every other
+  `COPY_SPECS` entry.
+- The copy WHERE is `outlet_id = source`, so it copies only **outlet-specific** rows. **Global rows
+  (`outlet_id IS NULL`) already apply to the new outlet** and are correctly left untouched. The copy
+  therefore means precisely: *give the new location the same outlet-specific approval overrides its
+  sibling has.*
+- **UNIQUE collision risk: none.** The target outlet is brand-new/empty, and rewriting
+  `outlet_id`→target preserves each `(action_type, role_id)`'s uniqueness.
+
+### COPY vs NEVER — applying the ruling's real three-part test
+
+The NEVER list ([outlet-copy.js:9-28](../../../backend/services/outlet-copy.js)) is **not** "any
+table with an outlet_id column" — every COPY table (outlet_business_modules, pos_layouts,
+outlet_product_visibility, price_list_assignments, tip_pool_distribution_rules, kds_stations) is
+outlet-scoped too. The real discriminators for NEVER are:
+
+1. **Physical/personal reality** — floor plan (`layout_json` = a physical room), device
+   (`device_uuid`), kiosk (`slot_token` = live capability token), availability rules (`employee_id`
+   = staff), shopify map (physical Shopify location).
+2. **Silent harm on wrong inheritance** — tax profiles (silently mischarge, FBR exposure; absent =
+   safe cascade fallback), menu schedules (restrictions that silently *hide* sellable items; absent
+   = always available).
+3. **A required D6 setup-checklist item a copy would falsely satisfy** — booking services/resources,
+   room types, rental items.
+
+`approval_policies` is **none of the three**:
+
+1. **Not physical/personal** — no device/token/layout/employee reference. `role_id` is
+   tenant-global; `outlet_id` is the rewritten scope column.
+2. **Not silent-harm — and the harm direction is inverted.** A wrongly-inherited approval policy
+   surfaces **immediately** as a manager-PIN / approval prompt (visible, and correctable in the
+   `/api/approval-policies` UI), and it errs in the **conservative** direction: it makes the new
+   outlet *more* controlled, never less. This is the opposite of the two silent-harm cases — tax
+   over-inheritance silently mischarges, menu-schedule over-inheritance silently hides revenue. A
+   merchant who set "void > 1000 needs manager approval" at outlet A almost certainly wants it at
+   outlet B.
+3. **Not a required checklist item** — no setup checklist references `approval_policies`; with zero
+   rows, `evaluatePolicy` returns `allowed` for everything (a valid permissive default). A copy
+   cannot falsely satisfy a checklist that does not exist.
+
+Positively, it sits squarely in the **COPY** set: per-outlet **governance/config** a sibling
+location reasonably starts from — directly analogous to `outlet_business_modules` (which modules are
+on) and `tip_pool_distribution_rules` (payout config).
+
+### Recommendation: **COPY**
+
+Add to `COPY_SPECS` with this exhaustive classification (the drift contract requires every column in
+exactly one bucket):
+
+```js
+{
+  table: "approval_policies",
+  scope: "outlet_id",
+  copy: ["action_type", "role_id", "policy", "threshold_value", "threshold_type", "is_active"],
+  stamp: { created_at: "now", updated_at: "now" },
+  skip: { id: "serial" },
+},
+```
+
+Notes on two judgment calls inside the classification:
+- **`role_id` → copy** (not skip): it's a tenant-global role reference, carries as-is, resolves at
+  the new outlet. This is the whole reason the parking could be discharged post-D2.
+- **`is_active` → copy**: matches the existing convention — `pos_layouts`,
+  `tip_pool_distribution_rules`, and `price_list_assignments` all copy `is_active` as-is.
+  `buildCopySql`'s WHERE has no `is_active` filter, so soft-deleted (`is_active = FALSE`) source rows
+  would copy too, but they are harmless: `evaluatePolicy` filters `is_active = TRUE`, and the empty
+  target outlet cannot collide on the UNIQUE key. Not worth extending the generic builder with a
+  per-spec predicate.
+
+### Execution surface (if COPY is ruled)
+
+1. **`backend/services/outlet-copy.js`** — add the spec above to `COPY_SPECS`; remove the
+   "approval_policies — parked until after D2" line from the deliberately-absent comment block (it is
+   now a copied table, no longer parked).
+2. **`backend/tests/integration/pg-step12-outlet-copy-drift.test.js`** — the `"only lists tables the
+   owner ruled copyable"` test (lines 92-99) has a **hardcoded sorted allowlist** that must gain
+   `"approval_policies"`. *(NB: PLAN-V3 Step 5's "touches" names `tests/unit/outlet-copy-drift.test.js`
+   — that path does not exist; the real drift guard is this integration file, and its companion
+   behaviour test is `pg-step12-outlet-copy-settings.test.js`.)*
+3. **`backend/tests/integration/pg-step12-outlet-copy-settings.test.js`** — add a copy-behaviour
+   case: seed an outlet-1 `approval_policies` row (a role-scoped one, to prove `role_id` carries and
+   resolves), assert the copied outlet gets it with `outlet_id` rewritten and `role_id` intact, and
+   that a global (`outlet_id IS NULL`) row is *not* duplicated onto the new outlet.
+4. **`backend/services/CLAUDE.md`** — add `approval_policies` to the `outlet-copy.js` copyable-tables
+   list.
+
+### If NEVER is ruled instead
+
+Add `approval_policies` to the documented never-copy comment block in `outlet-copy.js` with the
+reason (e.g. "approval thresholds are a per-outlet loss-prevention decision an operator should set
+deliberately, not inherit silently"), update `services/CLAUDE.md`'s never-copy list, and leave
+`COPY_SPECS` / new-outlet creation untouched.
+
+### ✅ Owner ruling — **COPY** (2026-07-23)
+
+Owner ruled **COPY** at the gate. `approval_policies` is added to `COPY_SPECS` with the exhaustive
+classification above; a new outlet created with `copy_from_outlet_id` inherits the source's
+outlet-specific approval rules. See the Execution record below.
+
+### Execution record
+
+Executed on `feat/v3-remainder`.
+
+- **`backend/services/outlet-copy.js`** — added the `approval_policies` spec to `COPY_SPECS`
+  (`scope: outlet_id`; `copy: action_type, role_id, policy, threshold_value, threshold_type,
+  is_active`; `stamp: created_at/updated_at = NOW()`; `skip: id`). Removed the "parked until after
+  D2" line from the deliberately-absent comment block and added a one-line note recording the
+  post-D2 COPY ruling.
+- **`backend/tests/integration/pg-step12-outlet-copy-drift.test.js`** — added `"approval_policies"`
+  to the hardcoded copyable-table allowlist (kept sorted).
+- **`backend/tests/integration/pg-step12-outlet-copy-settings.test.js`** — seeded outlet 1 with two
+  `approval_policies` rows (one role-scoped outlet-specific, one **global** `outlet_id IS NULL`) and
+  added a case asserting the copy carries the outlet-specific row with `outlet_id` rewritten +
+  `role_id` intact, and does **not** duplicate the global row onto the new outlet.
+- **`backend/services/CLAUDE.md`** — added `approval_policies` to the `outlet-copy.js`
+  copyable-tables list.
+
+**Verification (2026-07-23, local Postgres `sanopos_test`, migration head v137):**
+- Targeted, serial (`--no-file-parallelism`): `pg-step12-outlet-copy-drift.test.js` +
+  `pg-step12-outlet-copy-settings.test.js` → **21 passed** (drift 3/3 incl. the updated table
+  allowlist + full column classification; settings 18/18 incl. the new "copies an outlet-specific
+  approval policy (role_id intact) but NOT a global one" case). The end-to-end path is real: the
+  settings test drives `POST /api/outlets` with `copy_from_outlet_id`, and the new outlet gets the
+  source's outlet-specific `void` policy with `outlet_id` rewritten + `role_id` (Manager, tenant-
+  global) intact, while the global `manual_discount` policy is not duplicated — proving the copy runs
+  inside the creation transaction and the (outlet, role) grain survives post-D2.
+- Full suite vs baseline: ran the pinned baseline command (`npx vitest run --reporter=json
+  --no-file-parallelism --testTimeout=60000 --hookTimeout=120000`, `backend/` cwd) → `check-baseline.js`
+  reports **GATE GREEN** (72 known-red @ `3b45f25c`, 72 fresh-red, **0 new / 0 changed**). In that
+  full run both step12 files passed (drift 3/3, settings 18/18, new test green). No regression.
+- `node --check` clean on `outlet-copy.js` and both edited test files.
+
+Note: the first targeted run (with default file parallelism) hit a Postgres `deadlock detected` inside
+`seedSchema` during two schemas' concurrent DDL — an environmental concurrency artifact, not a code
+failure; it cleared on the serial re-run, which is exactly why the baseline command mandates
+`--no-file-parallelism`.
