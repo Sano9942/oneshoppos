@@ -118,7 +118,8 @@ function buildSteps(data, onNavigate, presetSteps, labelFn, checklistDone) {
       navigate: () => onNavigate("/service-tickets"),
     },
     // `membership` step removed (D6): it was a hardcoded `done:false` proxy that
-    // could never complete. Memberships get a real checklist in v3 (E5).
+    // could never complete. Memberships now surface through the Business Modules
+    // setup checklist instead (subscriptions_memberships card, E5).
     rental_item: {
       id: "rental_item",
       label: `Add your first ${labelFn("product").toLowerCase()}`,

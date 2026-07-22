@@ -116,4 +116,113 @@ describe("business modules setup checklists (Postgres)", () => {
     const kds = resto.checklist.find((i) => i.id === "kds_station");
     expect(kds).toMatchObject({ required: false, done: false });
   });
+
+  // ── E5 (PLAN-V3 Step 3): the seven remaining Bucket A cards ────────────────
+  // The six moded cards are already enabled (the harness seeds every registry
+  // mode on); field_sales is mode-null → enabled via its flag. Each carries a
+  // single required item (plus, for a few, an optional). Prove attention→clear
+  // both directions, and that projects' one scope:"outlet" item is outlet-aware.
+  describe("E5 — the seven remaining Bucket A cards", () => {
+    // key → { required item id, a fn that creates its prerequisite row }.
+    const E5 = [
+      {
+        key: "subscriptions_memberships",
+        item: "plan",
+        make: () => db.query(`INSERT INTO subscription_plans (name, price) VALUES ('Gold', 100)`),
+      },
+      {
+        key: "clinical",
+        item: "template",
+        make: () => db.query(`INSERT INTO treatment_plan_templates (name) VALUES ('Root canal')`),
+      },
+      {
+        key: "service_tickets",
+        item: "ticket_type",
+        make: () => db.query(`INSERT INTO ticket_types (name) VALUES ('Screen repair')`),
+      },
+      {
+        key: "projects_contracts",
+        item: "contract_template", // the REQUIRED item; `project` is optional
+        make: () => db.query(`INSERT INTO contract_templates (name) VALUES ('MSA')`),
+      },
+      {
+        key: "commissions",
+        item: "plan",
+        make: () => db.query(`INSERT INTO commission_plans (name) VALUES ('Standard')`),
+      },
+      {
+        key: "wholesale_credit",
+        item: "credit_limit",
+        make: () =>
+          db.query(
+            `UPDATE customers SET credit_limit = 5000 WHERE id = (SELECT id FROM customers ORDER BY id LIMIT 1)`
+          ),
+      },
+      {
+        key: "field_sales",
+        item: "field_rep",
+        make: () =>
+          db.query(
+            `UPDATE employees SET employee_type = 'field_rep' WHERE id = (SELECT id FROM employees ORDER BY id DESC LIMIT 1)`
+          ),
+      },
+    ];
+
+    beforeAll(async () => {
+      // field_sales is flag-gated (mode is null → isCardEnabled keys on the flag).
+      await db.query(
+        `INSERT INTO feature_flags (key, enabled) VALUES ('wholesale_field_sales', true)
+         ON CONFLICT (key) DO UPDATE SET enabled = true`
+      );
+      // Guarantee the "prerequisite absent" starting state for every card.
+      await db.query(`DELETE FROM subscription_plans`);
+      await db.query(`DELETE FROM treatment_plan_templates`);
+      await db.query(`DELETE FROM ticket_types`);
+      await db.query(`DELETE FROM contract_templates`);
+      await db.query(`DELETE FROM service_projects`);
+      await db.query(`DELETE FROM commission_plans`);
+      await db.query(`UPDATE customers SET credit_limit = 0, payment_terms_days = 0`);
+      await db.query(`UPDATE employees SET employee_type = 'in_store' WHERE employee_type = 'field_rep'`);
+    }, 30000);
+
+    it("each of the 7 cards is enabled and reads attention_required with its required item un-done", async () => {
+      const res = await getModules();
+      expect(res.status).toBe(200);
+      for (const { key, item } of E5) {
+        const card = findCard(res.body, key);
+        expect(card, `${key} present`).toBeTruthy();
+        expect(Array.isArray(card.checklist), `${key} has a checklist`).toBe(true);
+        expect(card.state, `${key} state`).toBe("attention_required");
+        const req = card.checklist.find((i) => i.id === item);
+        expect(req, `${key}.${item}`).toMatchObject({ required: true, done: false });
+      }
+    });
+
+    it("creating each prerequisite flips its required item done and clears the card to `on`", async () => {
+      for (const { make } of E5) await make();
+      const res = await getModules();
+      for (const { key, item } of E5) {
+        const card = findCard(res.body, key);
+        const req = card.checklist.find((i) => i.id === item);
+        expect(req.done, `${key}.${item} done`).toBe(true);
+        expect(card.state, `${key} cleared`).toBe("on");
+      }
+    });
+
+    it("projects' scope:outlet `project` item completes at outlet 1 only (independence)", async () => {
+      await db.query(`INSERT INTO service_projects (name, outlet_id) VALUES ('Fitout', 1)`);
+      const flags = await loadLiveFlags(db);
+      const modes = await loadLiveModes(db);
+
+      const at1 = await computeChecklists(db, { flags, modes, outletId: 1 });
+      const at2 = await computeChecklists(db, { flags, modes, outletId: 2 });
+      const tenantWide = await computeChecklists(db, { flags, modes, outletId: null });
+
+      const projAt = (r) =>
+        r.projects_contracts.checklist.find((i) => i.id === "project").done;
+      expect(projAt(at1)).toBe(true); // outlet 1 has the project
+      expect(projAt(at2)).toBe(false); // outlet 2 does NOT — the independence guarantee
+      expect(projAt(tenantWide)).toBe(true); // any-outlet roll-up
+    });
+  });
 });
