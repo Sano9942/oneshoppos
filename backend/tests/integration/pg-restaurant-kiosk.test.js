@@ -37,9 +37,13 @@ describe("Customer order kiosk", () => {
       next();
     });
 
-    // Enable the kiosk feature flag + restaurant mode.
+    // Enable the kiosk feature flag + the company-level Restaurant module flag
+    // (kioskOrderingOff now composes company `phase4_restaurant` with the
+    // per-outlet resolution — PLAN-V3 E9) + restaurant mode.
     await db.query(`
-      INSERT INTO feature_flags (key, enabled) VALUES ('phase4_restaurant_qr', true)
+      INSERT INTO feature_flags (key, enabled) VALUES
+        ('phase4_restaurant', true),
+        ('phase4_restaurant_qr', true)
       ON CONFLICT (key) DO UPDATE SET enabled = true
     `);
     await db.query(`
@@ -340,5 +344,87 @@ describe("Customer order kiosk", () => {
 
     const { rows } = await db.query("SELECT status FROM draft_orders WHERE id = $1", [draftId]);
     expect(rows[0].status).toBe("cancelled");
+  });
+
+  // ── Company-level module gate (PLAN-V3 E9) ───────────────────
+  //
+  // An already-issued kiosk token must stop ordering when the Restaurant
+  // module is switched OFF company-wide. kioskOrderingOff() composes the
+  // company-level `phase4_restaurant` flag with the per-outlet resolution, so
+  // company-off OR outlet-off both go dark.
+
+  it("stale kiosk token 404s on view/add/submit when Restaurant is disabled company-wide", async () => {
+    const featureFlags = require("../../middleware/feature-flags");
+
+    // Mint a counter token + prime a live draft while Restaurant is ON, so the
+    // 404 below is unambiguously the company gate, not an absent session.
+    const mint = await request(app)
+      .post("/api/restaurant/kiosk-tokens")
+      .set("x-employee-id", "1")
+      .send({ outlet_id: 1 });
+    const token = mint.body.token;
+
+    // Baseline: ordering works while the module is ON company-wide.
+    const menuOn = await request(app).get(`/api/public/restaurant/menu/${token}`);
+    expect(menuOn.status).toBe(200);
+    const { rows: [product] } = await db.query("SELECT id FROM products LIMIT 1");
+    const addOn = await request(app)
+      .post(`/api/public/restaurant/checks/${token}/items`)
+      .send({ product_id: product.id, quantity: 1 });
+    expect(addOn.status).toBe(201);
+
+    // Disable Restaurant company-wide + bust the flag cache.
+    await db.query("UPDATE feature_flags SET enabled = false WHERE key = 'phase4_restaurant'");
+    featureFlags.invalidateFeatureFlagCache();
+
+    try {
+      const menuOff = await request(app).get(`/api/public/restaurant/menu/${token}`);
+      expect(menuOff.status).toBe(404);
+      expect(menuOff.body.error).toMatch(/not available at this location/i);
+
+      const addOff = await request(app)
+        .post(`/api/public/restaurant/checks/${token}/items`)
+        .send({ product_id: product.id, quantity: 1 });
+      expect(addOff.status).toBe(404);
+      expect(addOff.body.error).toMatch(/not available at this location/i);
+
+      const submitOff = await request(app)
+        .post(`/api/public/restaurant/checks/${token}/submit`)
+        .send({});
+      expect(submitOff.status).toBe(404);
+      expect(submitOff.body.error).toMatch(/not available at this location/i);
+    } finally {
+      // Restore so any later test / re-run sees Restaurant ON again.
+      await db.query("UPDATE feature_flags SET enabled = true WHERE key = 'phase4_restaurant'");
+      featureFlags.invalidateFeatureFlagCache();
+    }
+  });
+
+  it("outlet-level gate stays independent: company-ON + outlet-OFF still 404s", async () => {
+    const featureFlags = require("../../middleware/feature-flags");
+    const mint = await request(app)
+      .post("/api/restaurant/kiosk-tokens")
+      .set("x-employee-id", "1")
+      .send({ outlet_id: 1 });
+    const token = mint.body.token;
+
+    // Company flag stays ON (default in this suite); switch the outlet OFF.
+    await db.query(
+      `INSERT INTO outlet_business_modules (outlet_id, module_key, enabled)
+       VALUES (1, 'restaurant', false)
+       ON CONFLICT (outlet_id, module_key) DO UPDATE SET enabled = false`
+    );
+    featureFlags.invalidateFeatureFlagCache();
+
+    try {
+      const menu = await request(app).get(`/api/public/restaurant/menu/${token}`);
+      expect(menu.status).toBe(404);
+      expect(menu.body.error).toMatch(/not available at this location/i);
+    } finally {
+      await db.query(
+        "DELETE FROM outlet_business_modules WHERE outlet_id = 1 AND module_key = 'restaurant'"
+      );
+      featureFlags.invalidateFeatureFlagCache();
+    }
   });
 });

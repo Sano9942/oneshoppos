@@ -7,17 +7,28 @@ const {
 const { getFeatureFlagsMap, isModuleOffAtOutlet } = require("../middleware/feature-flags");
 
 /**
- * Step 9 (D1c): kiosk tokens bind an outlet, so this public surface is
- * outlet-gated — QR ordering goes dark at an outlet where the Restaurant
- * module is switched off, even though old tokens survive. Deliberately
- * checks ONLY the per-outlet resolution (override ?? default ?? TRUE):
- * company-level gating of stale tokens is a separate pre-existing gap, and
- * composing it here would change behavior for tenants that never touch
- * per-outlet state. Lookup errors fail open (an availability glitch
- * shouldn't kill live table service — matches the day-parting fallthrough).
+ * Step 9 (D1c) + PLAN-V3 E9: kiosk ordering is gated on BOTH the company-level
+ * Restaurant module flag AND the per-outlet resolution — company-off OR
+ * outlet-off ⇒ ordering off.
+ *
+ * kiosk tokens bind an outlet, so this public surface goes dark at an outlet
+ * where the Restaurant module is switched off, even though old tokens survive.
+ * But an already-issued token must ALSO stop ordering when Restaurant is turned
+ * off company-wide. `isModuleOffAtOutlet` deliberately checks ONLY the
+ * per-outlet half (override ?? default ?? TRUE) and leaves company state
+ * "checked separately by the caller" (feature-flags.js:307-308, :341-354) — so
+ * we compose the company-level `phase4_restaurant` flag with it here. (E9's
+ * earlier deferral of company-level gating was scoped to a v2 step gate that no
+ * longer exists; a tenant with Restaurant OFF getting a 404 on its QR menu is
+ * the correct outcome.)
+ *
+ * Lookup errors fail open (an availability glitch shouldn't kill live table
+ * service — matches the day-parting fallthrough).
  */
 async function kioskOrderingOff(tenant, ctx) {
   try {
+    const flags = await getFeatureFlagsMap(tenant?.id);
+    if (!flags.phase4_restaurant) return true; // Restaurant module off company-wide
     return await isModuleOffAtOutlet(tenant?.id, "restaurant", ctx.outletId || null);
   } catch {
     return false;

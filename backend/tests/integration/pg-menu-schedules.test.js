@@ -57,7 +57,9 @@ describe("Phase 2-R.6 — Day-parting / menu schedules", () => {
        ON CONFLICT (mode) DO UPDATE SET enabled = true`
     );
     await db.query(
-      `INSERT INTO feature_flags (key, enabled) VALUES ('phase4_restaurant_day_parting', true)
+      `INSERT INTO feature_flags (key, enabled) VALUES
+         ('phase4_restaurant', true),
+         ('phase4_restaurant_day_parting', true)
        ON CONFLICT (key) DO UPDATE SET enabled = true`
     );
     featureFlags.invalidateFeatureFlagCache();
