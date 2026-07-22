@@ -49,8 +49,8 @@
 | — | **GATE 0 — merge Wave 0 to `main`** | 0 | **owner-gated** | ☑ DEPLOYED `57be9133` (2026-07-22) — see banner |
 | 1 | 4.3 — `MANUFACTURER_PORTAL_JWT_SECRET` set + scope check in `loadTenantAndPerms` | A (own release) | **before** (every-request auth) | ☑ `65d4f9bc` |
 | — | **GATE 1 — merge + deploy Release A** | A | **owner-gated** | ☑ DEPLOYED `09fa5e63` (2026-07-22) — see banner |
-| 2 | E9 — AND company `restaurant` flag into `kioskOrderingOff` + stale-token test | B (own release) | **if surprised** | ☐ |
-| — | **GATE 2 — merge + deploy Release B** | B | **owner-gated** | ☐ |
+| 2 | E9 — AND company `restaurant` flag into `kioskOrderingOff` + stale-token test | B (own release) | **if surprised** | ☑ `cc6a2360` |
+| — | **GATE 2 — merge + deploy Release B** | B | **owner-gated** | ☑ DEPLOYED `55e08170` (2026-07-22) — see banner |
 | 3 | E5 — setup checklists for the 7 uncovered Bucket A cards | 3 | — | ☐ |
 | 4 | Dead portal `wallet` tab — WIRE-vs-RETIRE ruling | 3 | **mid-step** (owner rules) | ☐ |
 | 5 | `approval_policies` copy-on-new-outlet — investigate → ruling | 3 | **mid-step** (owner rules) | ☐ |
@@ -1025,6 +1025,41 @@ on all real tenants) so the blast radius is confirmed nil at deploy time. Post-d
 token exists on a real tenant to spot-check, so the deploy is safe by construction; confirm
 `/api/health` deep ok and Sentry clean. Owner go → merge, watch deploys, **walk the ledger.** Wave 3
 branches after.
+
+> **OUTCOME 2026-07-22 — DEPLOYED.** Merge `55e08170` (`--no-ff`) → main; Railway deploy `6121445b`
+> SUCCESS on `55e08170` (healthcheck-gated cutover). NO migrations — boot log shows `[migrate-pg]
+> Schema is up to date (version 137)` per tenant, all ~30 pg-boss workers registered, **no boot-assertion
+> abort, no `[SECURITY]` fallback warning, zero `[ERROR]`**, adoption snapshot `tenant_count=29`. Deep
+> health 200 (DB 26ms, Resend 381ms). Release B was **backend-only** (6 files, all `backend/`), so the
+> Vercel frontend bundle is byte-identical to GATE 1's READY deploy; `sanopos.com` serves 200 (the Vercel
+> deployment record wasn't pulled — MCP rate-limited — but with an empty frontend diff it's immaterial).
+>
+> **Pre-deploy blast-radius (re-verified live at deploy time via Supabase):** `restaurant_kiosk_slots`
+> = **0 on all 29 real tenants**; only the test tenant `sanoposlivetest1778021564659` has rows (7). The
+> E9 refusal change is unreachable in prod — safe by construction, matching PLAN-V2's Gate-2 measurement.
+>
+> **Step 2 verify list — 24/24 (3 touched files):** with Restaurant company-ON a valid kiosk token
+> orders (200); company-OFF ⇒ the same token's view/add/submit all 404 ("not available at this
+> location"); the outlet gate stays independent (company-ON + outlet-OFF → 404); fail-open-on-lookup-error
+> preserved. The only breakage class was the 3 fixtures that minted kiosk tokens without seeding
+> `phase4_restaurant` — now seeded, exactly as predicted.
+>
+> **Baseline diff:** `check-baseline.js` flagged 1 NEW (`pg-batch14-bookings` "blocked time does not
+> appear in available slots") + 3 NOW-PASSING (2 tax-snapshot, 1 bookings "valid slots") — **all four
+> reproduced identically on the clean base `99b7e4bb` at today's date** (ran the two files on base and
+> branch side by side): day-of-week-relative availability + env-sensitive tax tests, zero shared path with
+> restaurant. **Zero new/changed failures attributable to E9.** The [[followup_main_integration_baseline]]
+> "check main-vs-branch before calling a RED a regression" trap — same one GATE 1 hit.
+>
+> **Sentry clean:** `node-express` (backend, the only project E9 touches) — no unresolved issues;
+> `sanopos-frontend`'s single unresolved issue last-seen `2026-07-11` (11 days stale, unrelated to a
+> backend-only change).
+>
+> **Ledger walk:** item **E9** LANDED (company `phase4_restaurant` ANDed into `kioskOrderingOff` at all
+> three call sites; company-off OR outlet-off ⇒ 404). Release B was deliberately only E9 (own release).
+> Completeness table: every row accounted — Wave 0 DEPLOYED (GATE 0), 4.3 (GATE 1), E9 (this gate),
+> Steps 3–6 → Wave 3 (open), OUT/Deferred-v4 rows unchanged. **Zero unaccounted.** Wave 3
+> (`feat/v3-remainder`) branches off this merged main next.
 
 ---
 
