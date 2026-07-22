@@ -307,6 +307,55 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
         expect({ table, copied: rows[0].c }).toEqual({ table, copied: 0 });
       }
     });
+
+    it("never copies modifier groups, options or product links (PLAN-V3 Step 6, ruled NEVER 2026-07-23)", async () => {
+      // modifier_groups is de-facto tenant-global: the POS per-product path
+      // (getModifierTreeForProduct) and the back-office list both ignore
+      // outlet_id, and the create form never sets it. Seed outlet 1 with a full
+      // tree — an outlet-specific group (the only kind a copy could target), an
+      // option under it, and a product link — plus a tenant-wide (outlet_id
+      // NULL) group. A copy must add NO modifier rows: the new outlet already
+      // sees every product's modifier tree, and copying would double-display.
+      const { rows: g1 } = await db.query(
+        `INSERT INTO modifier_groups (outlet_id, name, selection_type)
+         VALUES (1, 'Step6 Milk', 'single') RETURNING id`
+      );
+      await db.query(
+        `INSERT INTO modifier_options (group_id, name, price_delta) VALUES ($1, 'Oat', 50)`,
+        [g1[0].id]
+      );
+      await db.query(
+        `INSERT INTO product_modifier_group_links (product_id, group_id) VALUES (1, $1)`,
+        [g1[0].id]
+      );
+      await db.query(
+        `INSERT INTO modifier_groups (outlet_id, name, selection_type)
+         VALUES (NULL, 'Step6 Size', 'single')`
+      );
+
+      const totals = () =>
+        db.query(
+          `SELECT
+             (SELECT COUNT(*)::int FROM modifier_groups) AS groups,
+             (SELECT COUNT(*)::int FROM modifier_options) AS options,
+             (SELECT COUNT(*)::int FROM product_modifier_group_links) AS links`
+        );
+      const before = (await totals()).rows[0];
+
+      const res = await post({ name: N("ModifierNever"), copy_from_outlet_id: 1 });
+      expect(res.status).toBe(200);
+
+      // Not one modifier group is scoped to the new outlet…
+      const scoped = await db.query(
+        "SELECT COUNT(*)::int AS c FROM modifier_groups WHERE outlet_id = $1",
+        [res.body.id]
+      );
+      expect(scoped.rows[0].c).toBe(0);
+
+      // …and the copy created zero new modifier rows of any kind.
+      const after = (await totals()).rows[0];
+      expect(after).toEqual(before);
+    });
   });
 
   describe("inherit-by-default path (no copy_from)", () => {

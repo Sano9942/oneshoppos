@@ -23,7 +23,16 @@
  *       physical Shopify location.
  *   restaurant_kiosk_slots    — slot_token is a live capability token.
  *   pos_device_registry       — device_uuid is physical hardware.
- *   modifier_groups           — needs a groups→options→links deep copy (E6).
+ *   modifier_groups           — de-facto tenant-global (PLAN-V3 Step 6, owner
+ *       ruled NEVER 2026-07-23). Its outlet_id column is vestigial: the POS
+ *       per-product path (services/modifiers.js:getModifierTreeForProduct) and
+ *       the back-office list both IGNORE outlet_id, and the create form never
+ *       sets it — so a new outlet already sees every product's full modifier
+ *       tree with zero copy. A per-outlet copy would either double-display a
+ *       modifier at EVERY outlet (copying the product links, since the tree
+ *       query is outlet-blind) or leave dead unreferenced rows (not copying
+ *       them); there is nothing it can correctly add. No UNIQUE key on the
+ *       table means a copy would also silently double groups on re-run.
  *
  * approval_policies WAS parked here "until after D2"; D2 landed (v137) and the
  * owner ruled COPY (PLAN-V3 Step 5, 2026-07-23) — it is now in COPY_SPECS below.

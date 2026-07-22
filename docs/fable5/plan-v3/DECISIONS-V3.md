@@ -341,3 +341,132 @@ Note: the first targeted run (with default file parallelism) hit a Postgres `dea
 `seedSchema` during two schemas' concurrent DDL — an environmental concurrency artifact, not a code
 failure; it cleared on the serial re-run, which is exactly why the baseline command mandates
 `--no-file-parallelism`.
+
+---
+
+## Step 6 — E6: `modifier_groups` copy-on-new-outlet: COPY vs NEVER
+
+**Status:** ✅ RULED **NEVER** + EXECUTED. 2026-07-23, `feat/v3-remainder`, local commit, not pushed.
+**Date filed:** 2026-07-23
+**Scope:** exactly `modifier_groups` (+ its `modifier_options` / `product_modifier_group_links` children). The last unruled of the 13 D8 copy candidates. Not `approval_policies` (Step 5, already ruled COPY).
+
+### Why this was parked, and why it's answerable now
+
+`outlet-copy.js:26` parked it verbatim: *"modifier_groups — needs a groups→options→links deep copy (E6)."* Unlike every shipped `COPY_SPECS` entry (a flat single-table `INSERT … SELECT`), a modifier copy would have to clone a **three-table tree** and remap serial ids — it never fit the flat spec shape, so it was deferred rather than ruled. This step scopes that deep copy and rules on it.
+
+### The schema — a three-table tree, no natural key
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `modifier_groups` ([schema-pg.sql:2679](../../../backend/schema-pg.sql)) | `id SERIAL PK`, `outlet_id INTEGER → outlets(id)` **nullable**, `name` (NOT unique), `selection_type`, `min_select`, `max_select`, `is_required`, `display_order`, `is_active` | **No UNIQUE constraint anywhere** — confirmed by a full scan of `schema-pg.sql` (nothing references `modifier_groups`). `name` is plain TEXT. |
+| `modifier_options` ([:2709](../../../backend/schema-pg.sql)) | `id SERIAL PK`, `group_id → modifier_groups(id) ON DELETE CASCADE`, `name`, `price_delta`, `is_default`, … | Child of a group. |
+| `product_modifier_group_links` ([:2720](../../../backend/schema-pg.sql)) | `PRIMARY KEY (product_id, group_id)`, `product_id → products(id)`, `group_id → modifier_groups(id)`, `display_order` | Join table. `product_id` is **tenant-global** (products aren't outlet-scoped). |
+
+### Outlet-scoped or tenant-global? **Schema says outlet-scoped; the running code says tenant-global.**
+
+The DDL gives `modifier_groups` an `outlet_id` column, and `outlet_id IS NULL` is documented as "tenant-wide, visible to all outlets" ([modifiers.js:13-19](../../../backend/services/modifiers.js)) — the same nullable-wildcard shape as `approval_policies`. On that basis alone, "copy per outlet" would *look* legitimate (copy `outlet_id = source` rows, leave NULLs).
+
+But `outlet_id` on this table is **vestigial** — no live surface writes it, and no consumption path scopes by it:
+
+1. **The POS product→modifier consumption path is outlet-blind.** `getModifierTreeForProduct` ([modifiers.js:137-158](../../../backend/services/modifiers.js)) is the query the POS uses to fetch a product's modifiers — `FROM product_modifier_group_links pmgl JOIN modifier_groups mg … WHERE pmgl.product_id = $1 AND mg.is_active = true`. **There is no `outlet_id` predicate.** The POS calls it with the product id alone ([POSContext.jsx:471](../../../frontend/src/pages/redesign/pos/POSContext.jsx), `GET /api/products/:id/modifier-tree`). So a product's modifier set is identical at every outlet.
+2. **The back-office group list is called without an outlet.** `listGroups(db, outletId)` is the *only* reader that honours `outlet_id` (`WHERE outlet_id IS NULL OR outlet_id = $1`) — but it only applies the filter `if (outletId)`, and the sole caller, `ModifierGroupsRedesign` ([:26](../../../frontend/src/pages/redesign/ModifierGroupsRedesign.jsx)), fetches `/api/modifiers/groups` with **no `outlet_id` query param** → `listGroups(db, null)` → the filter branch is skipped → every group is listed tenant-wide.
+3. **The create form never sets `outlet_id`.** `saveGroup` ([:38](../../../frontend/src/pages/redesign/ModifierGroupsRedesign.jsx)) builds `{ name, selection_type, min_select, max_select, is_required, display_order }` — **no `outlet_id`** — so `createGroup`'s `data.outlet_id || null` always stores `NULL`. Every group created through the UI is tenant-wide.
+
+**Net:** on any real tenant, *every* `modifier_groups` row has `outlet_id IS NULL`, and even a hand-inserted outlet-specific row would be ignored by both the POS tree query and the (param-less) back-office list. Modifier groups are **de-facto tenant-global**. The plan's own "if tenant-global, copy-per-outlet is a category error → NEVER by construction" test is met — not by the DDL, but by every live read and write path.
+
+### What a COPY would actually do — harm or dead rows, never benefit
+
+A copy's WHERE would be `outlet_id = source` (mirroring `approval_policies`, which is the only correct filter — NULL/tenant-wide rows already apply everywhere and must not be duplicated). Trace it through:
+
+- **On a real tenant it matches zero rows** (every group is `outlet_id IS NULL`). The deep copy would be dead code — a three-table remap that never fires. Shipping it means writing, drift-testing, and maintaining a structural extension to `outlet-copy.js` that copies nothing on any tenant that exists.
+- **If an outlet-specific group `G` (outlet_id = source) somehow existed and we copied it** to `G'` (outlet_id = target) with its option `O'` and its product link `(P, G')`: product `P` would now carry **both** `(P, G)` and `(P, G')`. Because `getModifierTreeForProduct` is outlet-blind, the POS would show that modifier group **twice for product P at every outlet — including the source outlet**. The copy corrupts the source, not just the target.
+- **If we copied groups + options but *not* the links** to dodge the double-display: `G'` would be an unreferenced group — invisible at the POS (nothing links to it), clutter in the back-office list. Dead rows.
+- **If we copied nothing (NEVER):** the new outlet, via the outlet-blind tree query, already sees exactly the same per-product modifier set as every other outlet. **A new outlet already inherits the full effective modifier behaviour with zero copy.**
+
+There is no copy variant that adds correct value: links → duplicate-display everywhere; no links → dead rows; nothing → already correct.
+
+### The deep-copy design (scoped for completeness, as the plan requires even for a NEVER ruling)
+
+Had the model been genuinely outlet-scoped, a correct COPY would have been a **structural extension of `outlet-copy.js`, not another `COPY_SPECS` row** — a groups→options→links id-remap can't be expressed as a flat column classification. The shape:
+
+```
+for each source group where outlet_id = sourceOutletId:      -- tenant-wide (NULL) rows skipped: already apply
+  INSERT modifier_groups (outlet_id=target, name, selection_type, …) RETURNING id  → newGroupId
+  INSERT modifier_options (group_id=newGroupId, …) SELECT … FROM modifier_options WHERE group_id = oldGroupId
+  INSERT product_modifier_group_links (product_id, group_id=newGroupId, display_order)
+         SELECT product_id, newGroupId, display_order FROM product_modifier_group_links WHERE group_id = oldGroupId
+```
+
+Row-by-row in JS (groups per outlet are few) to capture each old→new id — `INSERT … RETURNING id` can't correlate a set-based remap because the table has no column to carry the source id. `product_id` carries verbatim (tenant-global). All inside the caller's outlet-creation transaction.
+
+**Dedup guard (there is no DB constraint to lean on — `modifier_groups` has no UNIQUE key):** the target outlet is brand-new during creation so it starts empty, but to make the path idempotent/safe the guard would be *skip the whole copy if the target already has any `modifier_groups` row* (keyed on `outlet_id = target`, not on `name` — name isn't unique and re-keying on it would wrongly merge distinct same-named groups). This is exactly the hazard the plan flagged: without such a guard, a re-run or a copy into an already-populated outlet would silently double every group.
+
+This design is recorded to show the COPY branch was fully scoped — but it is moot given the tenant-global finding above.
+
+### Recommendation: **NEVER**
+
+Add `modifier_groups` to the deliberately-absent (never-copy) comment block in `outlet-copy.js` with the reason. Rationale, strongest-first:
+
+1. **Modifier groups are de-facto tenant-global.** Both the POS consumption path (`getModifierTreeForProduct`, outlet-blind) and the back-office list (called without `outlet_id`) ignore the `outlet_id` column, and the create form never sets it. A new outlet already sees every product's full modifier tree with zero copy — copying per outlet is a category error.
+2. **Every copy variant is harmful or useless** — copying links double-displays modifiers at *every* outlet (source included, because the tree query is outlet-blind); copying without links leaves dead unreferenced rows; the WHERE `outlet_id = source` matches zero rows on any real tenant regardless.
+3. **The dedup hazard is real and unguarded** (no UNIQUE on `modifier_groups`), and it would have to be hand-built into a bespoke deep-copy path — cost with no upside given (1) and (2).
+4. **NEVER keeps `outlet-copy.js` a single flat `COPY_SPECS` contract.** COPY would bolt a three-table id-remapping deep-copy path beside the flat loop and need its own drift coverage (the `COPY_SPECS` column-classification drift test can't see a hand-rolled remap) — real structural and maintenance cost to copy nothing.
+
+This closes the 13-candidate D8 ledger: **6 COPY** (the 5 shipped at Step 12 + `approval_policies` at Step 5) / **7 NEVER** (the 6 ruled at Step 12 + `modifier_groups` here).
+
+### Execution surface
+
+**If NEVER is ruled (recommended):**
+1. **`backend/services/outlet-copy.js`** — change the `modifier_groups` line in the deliberately-absent block from *"needs a groups→options→links deep copy (E6)"* to a real NEVER reason: modifier groups are de-facto tenant-global (both the outlet-blind `getModifierTreeForProduct` POS path and the param-less back-office list ignore `outlet_id`, which the UI never sets), so a new outlet already inherits every product's modifier tree; a per-outlet copy would double-display modifiers at every outlet (links) or create dead rows (no links).
+2. **`backend/services/CLAUDE.md`** — add `modifier_groups` to the `outlet-copy.js` never-copy list (alongside tax profiles, floor plans, devices, kiosk tokens, staff schedules).
+3. **No `COPY_SPECS` change, no new drift-test allowlist entry, no new-outlet-creation change** — the drift test's copyable-table allowlist stays at the 7 Step-5 tables. Optionally add a small regression assertion to `pg-step12-outlet-copy-settings.test.js`: seed a source-outlet modifier group + option + product link, create a copied outlet, assert **zero** `modifier_groups`/`modifier_options`/`product_modifier_group_links` rows reference the new outlet (mirrors the existing NEVER-copy block for tax profiles/floor plans/kiosk tokens).
+
+**If COPY is ruled instead:** implement the deep-copy path above (distinct function beside the `COPY_SPECS` loop, invoked in the same transaction, with the target-already-populated skip guard), add the three modifier tables to the drift test's column-classification coverage (they can't ride the flat `COPY_SPECS` allowlist — the remap needs its own guard), add a copy-behaviour case to `pg-step12-outlet-copy-settings.test.js` proving group/option/link id-remap + the re-run/already-populated skip, and update `services/CLAUDE.md`. **Note the caveat:** this ships a bespoke deep-copy that, on the current outlet-blind consumption model, would double-display modifiers — COPY should not be ruled without also making `getModifierTreeForProduct` outlet-aware, which is well outside this step.
+
+### Owner ruling — **NEVER** (2026-07-23)
+
+Owner accepted the recommendation at the gate after a plain-language walkthrough of *why* it's not a real
+choice: modifier groups already behave tenant-wide (every outlet sees every product's modifiers), so a
+per-outlet copy can only duplicate a shared list or create dead rows. "Let's go with your recommendation."
+The owner also confirmed no current need for genuinely per-outlet modifier menus; if that need ever
+arises it is a separate feature (make `getModifierTreeForProduct` outlet-aware first), not a copy step.
+
+### Execution record
+
+Executed on `feat/v3-remainder`. NEVER branch — no `COPY_SPECS` change, no deep-copy path, no
+new-outlet-creation change:
+
+- **`backend/services/outlet-copy.js`** — rewrote the `modifier_groups` line in the deliberately-absent
+  (never-copy) comment block: from *"needs a groups→options→links deep copy (E6)"* to the real NEVER
+  reason (de-facto tenant-global; `outlet_id` vestigial — the outlet-blind `getModifierTreeForProduct`
+  POS path and the param-less back-office list both ignore it and the create form never sets it; a copy
+  would double-display at every outlet or leave dead rows; no UNIQUE key → silent doubling on re-run).
+- **`backend/services/CLAUDE.md`** — added `modifier_groups` to the `outlet-copy.js` never-copy list with
+  the one-line reason.
+- **`backend/tests/integration/pg-step12-outlet-copy-settings.test.js`** — added a regression case to the
+  "NEVER-copy ruling holds" block: seeds outlet 1 with a full modifier tree (an outlet-specific group +
+  option + product link) plus a tenant-wide group, creates a copied outlet, and asserts (a) **zero**
+  `modifier_groups` scoped to the new outlet and (b) the copy created **zero** new rows across all three
+  modifier tables (before/after totals identical).
+- **No drift-test change.** The `pg-step12-outlet-copy-drift.test.js` copyable-table allowlist stays at
+  the 7 Step-5 tables — `modifier_groups` is deliberately absent, exactly as intended.
+
+**Verification (2026-07-23, local Postgres, migration head v137):**
+- Targeted, serial (`--no-file-parallelism`): `pg-step12-outlet-copy-drift.test.js` +
+  `pg-step12-outlet-copy-settings.test.js` → **22 passed** (was 21 — the +1 is the new
+  "never copies modifier groups, options or product links" case). The drift guard's copyable-table
+  allowlist is **unchanged** (7 tables, `modifier_groups` correctly absent) and still passes.
+- The new NEVER case drives the real end-to-end path: it seeds outlet 1 with an outlet-specific
+  modifier group + option + product link (plus a tenant-wide group), creates an outlet via
+  `POST /api/outlets` with `copy_from_outlet_id`, and asserts **zero** modifier groups scoped to the
+  new outlet and **zero** new rows across all three modifier tables (before/after totals identical) —
+  proving new-outlet creation never touches the modifier tables.
+- Full suite vs baseline: pinned command (`npx vitest run --reporter=json --no-file-parallelism
+  --testTimeout=60000 --hookTimeout=120000`, `backend/` cwd; 2485 tests, 2411 passed) →
+  `check-baseline.js` reports **GATE GREEN** (72 known-red @ `3b45f25c`, 72 fresh-red,
+  **0 new / 0 changed**). In that full run the step12 settings file passed, including the new case.
+  No regression.
+- `node --check` clean on `outlet-copy.js` and the edited test file.
+
+**D8 ledger closed:** **6 COPY** (5 shipped at Step 12 + `approval_policies` at Step 5) / **7 NEVER**
+(6 ruled at Step 12 + `modifier_groups` here). No candidate remains unruled.
