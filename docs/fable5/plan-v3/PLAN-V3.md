@@ -51,11 +51,11 @@
 | — | **GATE 1 — merge + deploy Release A** | A | **owner-gated** | ☑ DEPLOYED `09fa5e63` (2026-07-22) — see banner |
 | 2 | E9 — AND company `restaurant` flag into `kioskOrderingOff` + stale-token test | B (own release) | **if surprised** | ☑ `cc6a2360` |
 | — | **GATE 2 — merge + deploy Release B** | B | **owner-gated** | ☑ DEPLOYED `55e08170` (2026-07-22) — see banner |
-| 3 | E5 — setup checklists for the 7 uncovered Bucket A cards | 3 | — | ☐ |
-| 4 | Dead portal `wallet` tab — WIRE-vs-RETIRE ruling | 3 | **mid-step** (owner rules) | ☐ |
-| 5 | `approval_policies` copy-on-new-outlet — investigate → ruling | 3 | **mid-step** (owner rules) | ☐ |
-| 6 | E6 — `modifier_groups` in the D8 copy allowlist — scope → ruling | 3 | **mid-step** (owner rules) | ☐ |
-| — | **GATE 3 — merge + deploy Wave 3** | 3 | **owner-gated** | ☐ |
+| 3 | E5 — setup checklists for the 7 uncovered Bucket A cards | 3 | — | ☑ `846e3e42` |
+| 4 | Dead portal `wallet` tab — WIRE-vs-RETIRE ruling | 3 | **mid-step** (owner rules) | ☑ RETIRE `15c65b5d` + `6c8164ad` |
+| 5 | `approval_policies` copy-on-new-outlet — investigate → ruling | 3 | **mid-step** (owner rules) | ☑ COPY `86648120` |
+| 6 | E6 — `modifier_groups` in the D8 copy allowlist — scope → ruling | 3 | **mid-step** (owner rules) | ☑ NEVER `7ba816c4` |
+| — | **GATE 3 — merge + deploy Wave 3** | 3 | **owner-gated** | ☑ DEPLOYED `4226f1af` (2026-07-23) — see banner |
 | V | End-to-end verification + completeness-ledger walk | — | **after** (owner reviews) | ☐ |
 
 Status: `☐ not started` / `◐ in progress` / `☑ done (verified)`. Update at the start and end of every session.
@@ -1363,6 +1363,39 @@ Report: outcome first — the outlet-scoped-vs-global finding + deep-copy design
 ```
 
 ## GATE 3 — Merge + deploy Wave 3
+
+> **✅ GATE 3 DEPLOYED 2026-07-23 — merged `4226f1af`, prod green.** Owner gave the go; merged
+> `feat/v3-remainder` (5 commits) into main via `--no-ff` and pushed (`9e0e788c..4226f1af`). **NO
+> migrations** (head stays v137). Deploys: Railway `24e60cc2` SUCCESS on `4226f1af` (boot clean —
+> pg-boss + ~26 workers registered, adoption snapshot `tenant_count=29`, **0 [ERROR]**, no
+> boot-assertion abort, no `[SECURITY]` fallback, `Schema is up to date (version 137)` per tenant);
+> Vercel `dpl_Cy1iwmgF…` READY on `4226f1af`. Deep health 200 (DB 37ms, Resend 350ms).
+>
+> **Three owner rulings recorded** in `DECISIONS-V3.md` before merge: wallet **RETIRE** (+ admin
+> top-up follow-up), `approval_policies` **COPY**, `modifier_groups` **NEVER**.
+>
+> **Pre-merge gate:** `/code-review` PASS (no blocking findings — all 7 E5 `done_query` tables+columns
+> verified in schema so a wrong column can't 500 the page; `approval_policies` COPY spec exhaustively
+> classifies all 10 columns; wallet removal leaves zero dangling refs, surviving synchronous top-up +
+> POS tender intact); slice verify subset 40/40 (checklist unit 11/11 + integration 7/7, outlet-copy
+> drift 3/3 + settings 19/19); full-suite baseline diff **GATE GREEN** (72 known-red @ `3b45f25c`,
+> 72 fresh-red, **0 new / 0 changed**; 2485 tests, 2411 passed); affected CLAUDE.md updated.
+>
+> **Post-deploy live checks — both green:** (1) `GET /api/business-modules` on
+> `tenant_wholesalewalktest1778451` (has two NEW covered cards enabled — `wholesale_credit` +
+> `field_sales`; used in place of a `golv_*` tenant, for which no login creds are recorded) returns the
+> new E5 checklists nested per-module with correct `done` states, and correctly **omits** the checklist
+> on the disabled `subscriptions_memberships` card (checklists attach to ENABLED covered cards only).
+> (2) The `copy_from_outlet_id` path (`POST /api/outlets`) re-run on local Postgres (NOT prod) —
+> `pg-step12-outlet-copy-settings` 19/19, incl. "copies an outlet-specific approval policy (role_id
+> intact) but NOT a global one" (the COPY ruling) and "never copies modifier groups, options or product
+> links" (the NEVER ruling), plus atomicity (induced mid-clone failure → no orphan outlet).
+>
+> **Ledger walk:** all four Wave 3 rows LANDED — E5 checklists (Step 3), wallet RETIRE (Step 4),
+> `approval_policies` COPY (Step 5), `modifier_groups` NEVER (Step 6). D8 copy ledger CLOSED: **6 COPY
+> / 7 NEVER**, no candidate unruled. Completeness table: Wave 0 (GATE 0), 4.3 (GATE 1), E9 (GATE 2),
+> Steps 3–6 (this gate) all deployed; OUT/Deferred-v4 rows unchanged. **Zero unaccounted.** Only Step V
+> (end-to-end verification + final ledger walk) remains open.
 
 Gate protocol. Slice subset: Steps 3–6 verify lists + full-suite baseline diff. NO migrations. This
 gate carries three owner rulings (wallet, `approval_policies`, `modifier_groups`) resolved at their
