@@ -90,6 +90,7 @@ describe("D8 copy-spec drift guard (Postgres)", () => {
     // The ruling is the allowlist. Widening it is a decision, not a refactor —
     // this fails if a table is added without the plan being updated first.
     expect(COPY_SPECS.map((s) => s.table).sort()).toEqual([
+      "approval_policies",
       "kds_stations",
       "outlet_business_modules",
       "outlet_product_visibility",

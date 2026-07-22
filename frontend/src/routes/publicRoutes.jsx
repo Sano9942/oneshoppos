@@ -67,7 +67,6 @@ const PortalTickets = lazy(() => import("../pages/portal/PortalTickets"));
 const PortalForms = lazy(() => import("../pages/portal/PortalForms"));
 const PortalOrders = lazy(() => import("../pages/portal/PortalOrders"));
 const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
-const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
 const PortalProfile = lazy(() => import("../pages/portal/PortalProfile"));
 const PortalGallery = lazy(() => import("../pages/portal/PortalGallery"));
 
@@ -279,7 +278,6 @@ export const publicRoutes = [
     <Route path="tickets" element={<Suspense fallback={<RouteLoading />}><PortalTickets /></Suspense>} />
     <Route path="orders" element={<Suspense fallback={<RouteLoading />}><PortalOrders /></Suspense>} />
     <Route path="loyalty" element={<Suspense fallback={<RouteLoading />}><PortalLoyalty /></Suspense>} />
-    <Route path="wallet" element={<Suspense fallback={<RouteLoading />}><PortalWallet /></Suspense>} />
     <Route path="profile" element={<Suspense fallback={<RouteLoading />}><PortalProfile /></Suspense>} />
     <Route path="gallery" element={<Suspense fallback={<RouteLoading />}><PortalGallery /></Suspense>} />
   </Route>,

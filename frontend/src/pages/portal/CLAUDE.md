@@ -40,7 +40,7 @@ Default export wraps an internal `PortalShell` in `<PortalAuthProvider tenantSlu
 - Fetches `GET /api/portal/config` on mount → `{ enabled_tabs, portal_labels, branding, tenant }`. Shows a "Portal unavailable" error state if this fails.
 - Auth guard (runs once `auth.bootstrapping` is false): unauthenticated + non-public path → redirect to `login`. Authenticated + public path → redirect to portal root. Public path segments: `login`, `signup`, `forgot`, `reset`, `verify-otp`.
 - Renders a sticky header (logo/store name/customer name-or-email/sign-out), a tab nav (only when authenticated — Dashboard always first, then `enabled_tabs` in order), and `<Outlet context={{ config, enabledTabs, labels, storeName, tenantSlug }}>`.
-- Full set of recognized tab keys (path segment = key, all flat under `/portal/:slug/`): `invoices`, `orders`, `appointments`, `subscriptions`, `contracts`, `tickets`, `loyalty`, `wallet`, `profile`, `stays`, `treatments`, `packages`, `gallery`. Every one of these has a matching page component in this directory. `profile` is always reachable via the header even if not in `enabled_tabs` — it's not gated the same way as the tab nav.
+- Full set of recognized tab keys (path segment = key, all flat under `/portal/:slug/`): `invoices`, `orders`, `appointments`, `subscriptions`, `contracts`, `tickets`, `loyalty`, `profile`, `stays`, `treatments`, `packages`, `gallery`. Every one of these has a matching page component in this directory. `profile` is always reachable via the header even if not in `enabled_tabs` — it's not gated the same way as the tab nav.
 
 ---
 
@@ -108,9 +108,6 @@ Clinical treatment plan viewer, two-level UI (list → drill-down, no routing �
 ### `PortalStays.jsx`
 Hotel/hospitality stay history. Fetches `GET /api/portal/me/stays` → `data.stays[]`. Client-side filter: All / Upcoming (`check_in_date >= now` and `status !== "cancelled"`) / Past (`check_out_date < now` or `status === "checked_out"`). Columns: booking number, room (number · type), status badge, check-in/out dates (+nights), `folio_grand_total`, invoice link (only when `stay.invoice_id` is set, links to `PortalInvoiceDetail`). Also probes `GET /api/public/rooms/config?tenant=` (raw `fetch`, not `portalApi` — public endpoint) purely to decide whether to show a "Book a stay" CTA linking to the public room-booking engine; a non-ok response just hides the CTA.
 
-### `PortalWallet.jsx`
-Fetches `GET /api/portal/me/wallet` → `{ balance, ledger[] }`. Top-up: toggled inline amount input → `POST /api/portal/me/wallet/top-up-intent` with `{ amount }` → `window.location.href = res.checkout_url`. Ledger rows show date, `note || reference_type`, signed amount (`type === "credit"` → success color `+`, else danger color `−`).
-
 ### `PortalForms.jsx`
 Digital intake/consent forms. List: `GET /api/portal/me/forms` → `res.forms` (each has `status: "pending"|"submitted"`). Detail/fill: `GET /api/portal/me/forms/:id` → fields rendered via `components/forms/FormFieldRenderer` from `fields_snapshot` (a frozen copy of the form's field definitions at share-time). If `active.require_signature`, requires drawing on `components/forms/SignaturePad` (ref-based `isEmpty()`/`clear()`/`toDataURL()`) before submit — converts to base64 via `signatureToBase64()`. Submit: `POST /api/portal/me/forms/:id/submit` with `{ answers, signature_image_base64 }`. Already-submitted forms show a read-only "already submitted" message instead of the form. Uses raw Tailwind slate/emerald/red classes, not `--ui-*` tokens — an outlier vs. the rest of this directory.
 
@@ -133,8 +130,7 @@ Repair/service ticket history (read-only). Reads `labels.tickets_tab` heading ov
 
 ## Gotchas
 
-- **Don't confuse `PortalInvoiceDetail`'s pay endpoint** (`/pay`) with `PortalWallet`'s top-up endpoint (`/wallet/top-up-intent`) — they're not the same pattern; check the actual route file under `backend/routes/customer-portal/` before assuming a naming convention.
-- Every payment-initiating flow here (invoice pay, wallet top-up) follows redirect-to-gateway, not inline card entry — always `window.location.href = res.checkout_url`, never render a card form.
+- Every payment-initiating flow here (invoice pay) follows redirect-to-gateway, not inline card entry — always `window.location.href = res.checkout_url`, never render a card form.
 - `PortalOrders.jsx` is the only page that crosses into the storefront (`redirect_url` handoff via `?adopt=` cart token) — if working on storefront cart adoption, this is the other end of that handshake. It's also the only page here surfacing wholesale backorders.
 - Several pages use `window.confirm`/`alert` for destructive actions (cancel appointment, delete address) instead of the toast/modal system used elsewhere in the app — this is intentional isolation from `ui/primitives`, not an oversight to "fix".
 - Styling is inconsistent across the directory: most pages use `--ui-*` tokens (matching the app's Square design system), but `PortalForms.jsx` and `PortalPackages.jsx` use raw Tailwind slate/emerald/red classes. Match whichever convention the file you're editing already uses — don't silently "fix" one without being asked.

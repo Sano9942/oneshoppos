@@ -47,9 +47,9 @@
  *                 the resolver appends `= $1` to for per-outlet evaluation) },
  *                 route }]. GET /api/business-modules computes each item's done
  *                 state for ENABLED covered cards; an enabled card with ANY
- *                 required item un-done reads state `attention_required`. Only
- *                 the four covered verticals carry this in v2 (E5 defers the
- *                 rest); optional items never hold the state.
+ *                 required item un-done reads state `attention_required`. All
+ *                 eleven Bucket A cards carry this (the first four in v2 Step 11;
+ *                 the remaining seven in E5); optional items never hold the state.
  *   setup_route / connected_check / setup_required_when   Bucket C only
  *
  * State enum (MODULE_STATES) — computed per card by GET /api/business-modules:
@@ -220,6 +220,16 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM customer_subscriptions WHERE status = 'active'",
       },
     },
+    setup_checklist: [
+      {
+        id: "plan",
+        label: "Create a subscription or membership plan",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM subscription_plans WHERE is_active = true" },
+        route: "/subscriptions",
+      },
+    ],
   },
 
   rentals: {
@@ -331,6 +341,16 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM treatment_plans WHERE status IN ('active','on_hold')",
       },
     },
+    setup_checklist: [
+      {
+        id: "template",
+        label: "Create a treatment-plan template",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM treatment_plan_templates WHERE is_archived = false" },
+        route: "/treatment-plans/templates",
+      },
+    ],
   },
 
   service_tickets: {
@@ -349,6 +369,16 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM service_tickets WHERE status IN ('intake','approved','in_progress','on_hold')",
       },
     },
+    setup_checklist: [
+      {
+        id: "ticket_type",
+        label: "Configure a ticket type",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM ticket_types WHERE active = true" },
+        route: "/service-tickets",
+      },
+    ],
   },
 
   projects_contracts: {
@@ -371,6 +401,24 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM contracts WHERE status IN ('draft','sent','viewed')",
       },
     },
+    setup_checklist: [
+      {
+        id: "contract_template",
+        label: "Add a contract template",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM contract_templates WHERE is_active = true" },
+        route: "/contracts",
+      },
+      {
+        id: "project",
+        label: "Start your first project",
+        required: false,
+        scope: "outlet",
+        done_query: { sql: "SELECT 1 FROM service_projects", outlet_column: "outlet_id" },
+        route: "/projects",
+      },
+    ],
   },
 
   commissions: {
@@ -387,6 +435,16 @@ const BUCKET_A = {
     sub_toggles: [],
     depends_on: [],
     impact_queries: {},
+    setup_checklist: [
+      {
+        id: "plan",
+        label: "Create a commission plan",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM commission_plans WHERE is_active = true" },
+        route: "/commissions",
+      },
+    ],
   },
 
   wholesale_credit: {
@@ -430,6 +488,24 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM customers WHERE COALESCE(credit_limit, 0) > 0 AND deleted_at IS NULL",
       },
     },
+    setup_checklist: [
+      {
+        id: "credit_limit",
+        label: "Set a credit limit on a customer",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM customers WHERE COALESCE(credit_limit, 0) > 0 AND deleted_at IS NULL" },
+        route: "/customers",
+      },
+      {
+        id: "payment_terms",
+        label: "Set payment terms on a customer",
+        required: false,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM customers WHERE payment_terms_days > 0 AND deleted_at IS NULL" },
+        route: "/customers",
+      },
+    ],
   },
 
   field_sales: {
@@ -453,6 +529,24 @@ const BUCKET_A = {
         sql: "SELECT COUNT(*)::int AS count FROM field_visits WHERE status IN ('planned','checked_in')",
       },
     },
+    setup_checklist: [
+      {
+        id: "field_rep",
+        label: "Add a field-rep employee",
+        required: true,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM employees WHERE employee_type = 'field_rep' AND deleted_at IS NULL" },
+        route: "/employees",
+      },
+      {
+        id: "route",
+        label: "Plan a route for a rep",
+        required: false,
+        scope: "tenant",
+        done_query: { sql: "SELECT 1 FROM field_rep_routes" },
+        route: "/field/routes",
+      },
+    ],
   },
 };
 

@@ -20,7 +20,7 @@ const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
 describe("D8 copy-settings on outlet creation (Postgres)", () => {
-  let app, db, deps, cleanup, priceListId;
+  let app, db, deps, cleanup, priceListId, managerRoleId;
 
   // Unique per run — outlets.name is UNIQUE, and this file creates several.
   const N = (label) => `Step12 ${label} ${Math.random().toString(16).slice(2, 8)}`;
@@ -87,6 +87,25 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
       `INSERT INTO kds_stations (outlet_id, name, station_role, is_active, balance_strategy, target_prep_seconds, printer_id, last_assigned_at)
        VALUES (1, 'Grill', 'prep', true, 'least_loaded', 300, $1, NOW())`,
       [prRows[0].id]
+    );
+
+    // PLAN-V3 Step 5 (owner ruling COPY, 2026-07-23) — approval_policies. Two
+    // rows: one OUTLET-SPECIFIC + role-scoped (must copy with outlet_id rewritten
+    // and its tenant-global role_id intact), one GLOBAL (outlet_id IS NULL — it
+    // already applies everywhere via the evaluatePolicy wildcard, so it must NOT
+    // be duplicated onto the new outlet).
+    const { rows: mgrRows } = await db.query(
+      "SELECT id FROM roles WHERE name = 'Manager' LIMIT 1"
+    );
+    managerRoleId = mgrRows[0]?.id;
+    await db.query(
+      `INSERT INTO approval_policies (action_type, outlet_id, role_id, policy, threshold_value, threshold_type)
+       VALUES ('void', 1, $1, 'approval_required', 1000, 'amount')`,
+      [managerRoleId]
+    );
+    await db.query(
+      `INSERT INTO approval_policies (action_type, outlet_id, role_id, policy, threshold_value, threshold_type)
+       VALUES ('manual_discount', NULL, NULL, 'approval_required', 20, 'percent')`
     );
   }, 60000);
 
@@ -177,6 +196,41 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
       expect(rows[0].last_assigned_at).toBeNull();
     });
 
+    it("copies an outlet-specific approval policy (role_id intact) but NOT a global one", async () => {
+      const res = await post({ name: N("ApprovalCopy"), copy_from_outlet_id: 1 });
+      expect(res.status).toBe(200);
+      const id = res.body.id;
+
+      // The outlet-specific 'void' policy copies with outlet_id rewritten to the
+      // new outlet and its tenant-global role_id carried verbatim — proving the
+      // (outlet, role) grain survives the copy post-D2.
+      const { rows } = await db.query(
+        `SELECT action_type, outlet_id, role_id, policy, threshold_value, threshold_type, is_active
+           FROM approval_policies WHERE outlet_id = $1 ORDER BY action_type`,
+        [id]
+      );
+      expect(rows).toEqual([
+        {
+          action_type: "void",
+          outlet_id: id,
+          role_id: managerRoleId,
+          policy: "approval_required",
+          threshold_value: "1000.00",
+          threshold_type: "amount",
+          is_active: true,
+        },
+      ]);
+
+      // The GLOBAL 'manual_discount' policy (outlet_id IS NULL) is never given an
+      // outlet_id — it already applies to every outlet, so a copy must not
+      // duplicate it onto the new one.
+      const { rows: globals } = await db.query(
+        "SELECT COUNT(*)::int AS c FROM approval_policies WHERE action_type = 'manual_discount' AND outlet_id = $1",
+        [id]
+      );
+      expect(globals[0].c).toBe(0);
+    });
+
     it("the audit row names every table it copied", async () => {
       const res = await post({ name: N("AuditDetail"), copy_from_outlet_id: 1 });
       const { rows } = await db.query(
@@ -252,6 +306,55 @@ describe("D8 copy-settings on outlet creation (Postgres)", () => {
         );
         expect({ table, copied: rows[0].c }).toEqual({ table, copied: 0 });
       }
+    });
+
+    it("never copies modifier groups, options or product links (PLAN-V3 Step 6, ruled NEVER 2026-07-23)", async () => {
+      // modifier_groups is de-facto tenant-global: the POS per-product path
+      // (getModifierTreeForProduct) and the back-office list both ignore
+      // outlet_id, and the create form never sets it. Seed outlet 1 with a full
+      // tree — an outlet-specific group (the only kind a copy could target), an
+      // option under it, and a product link — plus a tenant-wide (outlet_id
+      // NULL) group. A copy must add NO modifier rows: the new outlet already
+      // sees every product's modifier tree, and copying would double-display.
+      const { rows: g1 } = await db.query(
+        `INSERT INTO modifier_groups (outlet_id, name, selection_type)
+         VALUES (1, 'Step6 Milk', 'single') RETURNING id`
+      );
+      await db.query(
+        `INSERT INTO modifier_options (group_id, name, price_delta) VALUES ($1, 'Oat', 50)`,
+        [g1[0].id]
+      );
+      await db.query(
+        `INSERT INTO product_modifier_group_links (product_id, group_id) VALUES (1, $1)`,
+        [g1[0].id]
+      );
+      await db.query(
+        `INSERT INTO modifier_groups (outlet_id, name, selection_type)
+         VALUES (NULL, 'Step6 Size', 'single')`
+      );
+
+      const totals = () =>
+        db.query(
+          `SELECT
+             (SELECT COUNT(*)::int FROM modifier_groups) AS groups,
+             (SELECT COUNT(*)::int FROM modifier_options) AS options,
+             (SELECT COUNT(*)::int FROM product_modifier_group_links) AS links`
+        );
+      const before = (await totals()).rows[0];
+
+      const res = await post({ name: N("ModifierNever"), copy_from_outlet_id: 1 });
+      expect(res.status).toBe(200);
+
+      // Not one modifier group is scoped to the new outlet…
+      const scoped = await db.query(
+        "SELECT COUNT(*)::int AS c FROM modifier_groups WHERE outlet_id = $1",
+        [res.body.id]
+      );
+      expect(scoped.rows[0].c).toBe(0);
+
+      // …and the copy created zero new modifier rows of any kind.
+      const after = (await totals()).rows[0];
+      expect(after).toEqual(before);
     });
   });
 

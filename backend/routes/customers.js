@@ -839,44 +839,6 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
-  // POST generate wallet top-up payment link
-  app.post("/api/customers/:id/wallet/topup-link", requirePerm("manage_customers"), async (req, res) => {
-    const { id } = req.params;
-    const { amount } = req.body;
-    if (!amount || isNaN(amount) || parseFloat(amount) <= 0)
-      return res.status(400).json({ error: "Valid amount is required" });
-
-    const paymentGateway = require("../services/payment-gateway");
-    if (!paymentGateway.isEnabled()) {
-      return res.status(400).json({ error: "Online payments are not configured" });
-    }
-
-    const amt = parseFloat(amount);
-    try {
-      const { rows: [customer] } = await db.query(
-        "SELECT id, name FROM customers WHERE id = $1",
-        [id]
-      );
-      if (!customer) return res.status(404).json({ error: "Customer not found" });
-
-      const reference = `wallet-topup-${id}-${Date.now()}`;
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-
-      const { checkout_url, gateway_ref } = await paymentGateway.createCheckout({
-        amount: amt,
-        currency: "PKR",
-        reference,
-        description: `Wallet top-up for ${customer.name || "Customer #" + id}`,
-        returnUrl: `${frontendUrl}/wallet-topup-success`,
-        cancelUrl: `${frontendUrl}/wallet-topup-cancelled`,
-      });
-
-      res.json({ checkout_url, gateway_ref, amount: amt });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // PUT blacklist a customer
   app.put("/api/customers/:id/blacklist", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
     const { id } = req.params;

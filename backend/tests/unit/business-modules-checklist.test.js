@@ -4,8 +4,9 @@
  * Setup checklists (Business Modules v2 / D6, PLAN-V2 Step 11).
  *
  * Two concerns:
- *  1. Catalog structure — the four covered Bucket A cards carry a well-formed
- *     setup_checklist; nothing else does (E5 defers the rest).
+ *  1. Catalog structure — all eleven Bucket A cards carry a well-formed
+ *     setup_checklist (four from v2 Step 11, the remaining seven from E5);
+ *     nothing outside Bucket A does.
  *  2. computeChecklists — the read-path helper: batched single query, the
  *     required-items state rule, the tenant/outlet scope dimension, and the
  *     zero-query fast path when no covered card is enabled.
@@ -19,7 +20,39 @@ import { describe, it, expect } from "vitest";
 import { BUSINESS_MODULES } from "../../config/business-modules";
 import { computeChecklists } from "../../services/business-modules";
 
-const COVERED = ["restaurant", "appointments", "rentals", "rooms_lodging"];
+// All eleven Bucket A cards carry a setup_checklist: the first four shipped in
+// v2 Step 11; the remaining seven in E5 (PLAN-V3 Step 3).
+const COVERED = [
+  "restaurant",
+  "appointments",
+  "subscriptions_memberships",
+  "rentals",
+  "rooms_lodging",
+  "clinical",
+  "service_tickets",
+  "projects_contracts",
+  "commissions",
+  "wholesale_credit",
+  "field_sales",
+];
+
+// Enable every covered card (mode row on; field_sales is mode-null → flag on)
+// so the single-batched-query budget can be asserted at full card count.
+const enableAllCovered = {
+  modes: {
+    restaurant: true,
+    appointments: true,
+    subscriptions: true,
+    rentals: true,
+    room_management: true,
+    treatment_plans: true,
+    workflow_tickets: true,
+    service_projects: true,
+    commissions: true,
+    wholesale: true,
+  },
+  flags: { wholesale_field_sales: true },
+};
 
 // Fake db: parse the batched `EXISTS(<body>) AS iN` columns and mark a column
 // done when its FROM table is in `doneTables`. Records every call for budget
@@ -53,7 +86,7 @@ function fakeDb(doneTables, { throwMissingTableOnBatch = false } = {}) {
 const enableRestaurant = { modes: { restaurant: true }, flags: {} };
 
 describe("business-modules setup_checklist — catalog structure", () => {
-  it("exactly the four covered verticals carry a setup_checklist", () => {
+  it("exactly the eleven Bucket A cards carry a setup_checklist", () => {
     const withChecklist = Object.entries(BUSINESS_MODULES)
       .filter(([, c]) => Array.isArray(c.setup_checklist) && c.setup_checklist.length)
       .map(([k]) => k)
@@ -109,6 +142,15 @@ describe("computeChecklists — enablement + query budget", () => {
     ]);
     expect(out.restaurant.checklist.every((i) => i.done)).toBe(true);
     expect(out.restaurant.required_incomplete).toBe(false);
+  });
+
+  it("holds the single-query budget with ALL eleven covered cards enabled", async () => {
+    const db = fakeDb(new Set()); // nothing done — irrelevant to the budget count
+    const out = await computeChecklists(db, enableAllCovered);
+    // The whole point of E5: 11 covered cards, still ONE batched query.
+    expect(db.calls.length).toBe(1);
+    // Every covered card is present in the payload (each contributes ≥1 item).
+    expect(Object.keys(out).sort()).toEqual([...COVERED].sort());
   });
 });
 

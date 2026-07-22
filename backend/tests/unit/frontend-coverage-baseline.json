@@ -60,7 +60,6 @@
     "POST /api/couriers/:id/test-booking",
     "POST /api/customer-invoices/:id/attach-to-project",
     "POST /api/customers/:id/packages",
-    "POST /api/customers/:id/wallet/topup-link",
     "POST /api/draft-orders/:id/claim",
     "POST /api/draft-orders/:id/complete",
     "POST /api/email/send-receipt",
