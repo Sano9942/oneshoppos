@@ -8,7 +8,7 @@ recorded underneath.
 
 ## Step 4 — Dead portal `wallet` tab: WIRE-vs-RETIRE
 
-**Status:** ✅ RULED **RETIRE** + EXECUTED (2026-07-22, `feat/v3-remainder`, committed locally, not pushed)
+**Status:** ✅ RULED **RETIRE** + EXECUTED, incl. the follow-up broken admin online-top-up path (owner extended the ruling "delete it too"). 2026-07-22, `feat/v3-remainder`, two local commits, not pushed.
 **Date filed:** 2026-07-22
 **Scope:** exactly the customer-portal `wallet` tab. No other portal tabs.
 
@@ -134,15 +134,19 @@ Executed on `feat/v3-remainder`. Deletion set applied:
   `wallet` recognized-tab key, and the wallet-specific gotchas), `frontend/src/pages/CLAUDE.md`,
   `frontend/src/routes/CLAUDE.md`.
 
-**Deliberately left as-is (out of the wallet-*tab* scope), now a documented follow-up:**
-The webhook wallet-crediting block (`backend/routes/webhooks.js:478-500`, "Context 5") and the admin
-staff-side link `POST /api/customers/:id/wallet/topup-link` (`customers.js:843`) remain. Both are still
-broken by **Bug A** (no persisted session row → `resolveTenantDbForGatewayRef` returns null → 404 before
-Context 5 runs) — i.e. the admin online top-up link is dead too. The synchronous staff top-up
-`POST /api/customers/:id/wallet/topup` and the POS Wallet tender are unaffected and remain fully
-functional. **Follow-up:** either wire a persisted wallet-topup session (table + tenant-resolver entry +
-regex/reference reconciliation) to make the admin online link work, or retire the admin link + Context 5
-too. Tracked here; not part of Step 4.
+**Follow-up — ALSO RETIRED (owner extended the ruling, same session, second commit).**
+The originally-out-of-scope broken admin path was deleted too, on the owner's instruction ("delete it
+too"). Removed: the admin staff-side link `POST /api/customers/:id/wallet/topup-link` (`customers.js`),
+the now-dead webhook wallet-crediting block (`webhooks.js` "Context 5"), the integration test that
+exercised the link (`pg-sandbox-payment.test.js` "Wallet top-up link" describe block, 3 tests), and the
+`POST /api/customers/:id/wallet/topup-link` entry in `frontend-coverage-baseline.json` (it was an
+orphan — the frontend never called it). No frontend change needed: `CustomersRedesign.jsx` only ever
+called the synchronous `POST /api/customers/:id/wallet/topup`, which **remains** — that instant staff
+top-up and the POS Wallet tender are the surviving, fully-functional wallet surfaces. The only thing
+removed across both commits is the two **online-payment** top-up paths (portal self-service + admin
+link), both of which were broken by Bug A and would have charged without crediting.
+Verified: `pg-sandbox-payment.test.js` 7 passed (was 10), `frontend-coverage-drift` 3 passed with the
+trimmed baseline, `node --check` clean on both edited route files, baseline JSON valid.
 
 **Verification:**
 - `npx vitest run tests/unit/frontend-coverage-drift.test.js tests/unit/portal-presets.test.js tests/unit/industry-config.test.js` → **41 passed**. The drift guard's hard check (no NEW orphan beyond baseline) passes: the two portal endpoints were never in the baseline (PortalWallet.jsx was their caller), and deleting caller + endpoints together adds no orphan. The admin `topup-link` baseline entry is untouched and still matches a live route.

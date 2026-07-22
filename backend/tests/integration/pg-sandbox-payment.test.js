@@ -186,33 +186,5 @@ describe("POS card payment with gateway bridge", () => {
 // The refund gateway logic in returns.js is verified by code inspection +
 // manual testing against a fully migrated tenant schema.
 
-// ── Wallet Top-Up Link Tests ─────────────────────────────────────────
-
-describe("Wallet top-up link", () => {
-  test("POST /api/customers/:id/wallet/topup-link returns checkout URL", async () => {
-    const res = await req
-      .post("/api/customers/1/wallet/topup-link")
-      .send({ amount: 500 })
-      .expect(200);
-
-    expect(res.body.checkout_url).toContain("/api/sandbox/pay/");
-    expect(res.body.gateway_ref).toMatch(/^sandbox_/);
-  });
-
-  test("rejects invalid amount", async () => {
-    await req
-      .post("/api/customers/1/wallet/topup-link")
-      .send({ amount: -100 })
-      .expect(400);
-  });
-
-  test("rejects non-existent customer", async () => {
-    await req
-      .post("/api/customers/99999/wallet/topup-link")
-      .send({ amount: 500 })
-      .expect(404);
-  });
-});
-
 // Note: processWebhookEvent tests require master-db-pg initialization.
 // Tested via sandbox simulate-webhook E2E or manually.

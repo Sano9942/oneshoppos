@@ -475,30 +475,6 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true };
   }
 
-  // ── Context 5: Wallet top-up (tenant schema, reference pattern match) ──
-  if (transaction_id.includes("wallet-topup-") && (status === "completed" || event_type === "payment.completed")) {
-    try {
-      // Extract customer ID from the reference pattern: wallet-topup-{customerId}-{timestamp}
-      const match = transaction_id.match(/wallet-topup-(\d+)-/);
-      if (match && amount > 0) {
-        const customerId = match[1];
-        await db.query(
-          "UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2",
-          [amount, customerId]
-        );
-        await db.query(
-          `INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, note)
-           VALUES ($1, 'credit', $2, 'online_topup', $3)`,
-          [customerId, amount, `Online top-up via ${provider} (ref: ${transaction_id})`]
-        );
-        _logger.info({ customerId, amount, provider }, "Wallet top-up completed via payment");
-        return { ok: true };
-      }
-    } catch (walletErr) {
-      _logger.error({ err: walletErr, transaction_id }, "Wallet top-up processing failed");
-    }
-  }
-
   _logger.warn({ transaction_id, provider }, "Webhook: unknown transaction");
   return { ok: false, statusCode: 404, error: "Unknown transaction" };
 }
