@@ -14,7 +14,6 @@ const TAB_LABELS = {
   contracts: "contracts",
   tickets: "tickets",
   loyalty: "loyalty",
-  wallet: "wallet",
   profile: "account",
   stays: "stays",
   treatments: "treatments",

@@ -688,7 +688,7 @@ const DEFAULT_PUBLIC_BOOKING_LABELS = Object.freeze({
 // routes/customer-portal/data.js TAB_FEATURE_FLAGS map).
 //
 // Valid tab keys: dashboard (implicit), invoices, orders, appointments,
-// subscriptions, contracts, tickets, loyalty, wallet, profile, addresses.
+// subscriptions, contracts, tickets, loyalty, profile, addresses.
 
 const DEFAULT_PORTAL_LABELS = Object.freeze({
   portal_title: "Customer Portal",
@@ -703,7 +703,6 @@ const DEFAULT_PORTAL_LABELS = Object.freeze({
   packages_tab: "My Packages",
   tickets_tab: "Service Tickets",
   loyalty_tab: "Loyalty",
-  wallet_tab: "Wallet",
   profile_tab: "Profile",
   pay_cta: "Pay now",
   book_cta: "Book appointment",
