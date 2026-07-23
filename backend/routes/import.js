@@ -1,4 +1,5 @@
 const XLSX = require("xlsx");
+const { asyncStore } = require("../tenant-db-proxy-pg");
 const {
   getMapper,
   getTemplate,
@@ -7,6 +8,26 @@ const {
   buildColumnMapper,
   suggestColumnMap,
 } = require("../services/import/mappers");
+
+// Multer consumes the multipart request stream via socket-level events, which
+// run in the async context that existed at connection time — BEFORE
+// resolveTenant wrapped the request in asyncStore.run({ db }). That drops the
+// AsyncLocalStorage tenant-DB store, so any deps.db (proxy) query in the handler
+// AFTER the upload throws "[tenant-db-proxy-pg] No tenant DB in async context".
+// This wrapper captures the store while it's still active (upload middleware is
+// invoked synchronously inside the ALS context) and re-establishes it for the
+// rest of the request once multer finishes. No-op in single-tenant mode, where
+// getStore() is undefined and deps.db is the direct pool.
+function withTenantContext(mw) {
+  return (req, res, next) => {
+    const store = asyncStore.getStore();
+    mw(req, res, (err) => {
+      if (err) return next(err);
+      if (store) return asyncStore.run(store, next);
+      next();
+    });
+  };
+}
 
 module.exports = function mountImportRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
@@ -132,7 +153,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/products",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -372,7 +393,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/customers",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -472,7 +493,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/suppliers",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -563,7 +584,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/expenses",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -655,7 +676,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/payments",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -806,7 +827,7 @@ module.exports = function mountImportRoutes(app, deps) {
   app.post(
     "/api/import/:entity/inspect",
     requirePerm("all_access"),
-    upload.single("file"),
+    withTenantContext(upload.single("file")),
     (req, res) => {
       try {
         const { entity } = req.params;
