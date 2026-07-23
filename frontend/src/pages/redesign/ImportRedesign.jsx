@@ -3,7 +3,6 @@ import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, 
 import { PageShell, SectionCard, Button } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
-import { API_BASE } from "../../config";
 
 const TABS = [
   { key: "products", label: "Products" },
@@ -52,6 +51,7 @@ export default function ImportRedesign() {
   const invoiceRef = useRef(null);
   const [scanning, setScanning] = useState(false);
   const [invoiceMarkup, setInvoiceMarkup] = useState(25);
+  const [dlTemplate, setDlTemplate] = useState(false);
   const { success, error: showError } = useToast();
 
   const resetState = useCallback(() => {
@@ -70,6 +70,41 @@ export default function ImportRedesign() {
     },
     [resetState],
   );
+
+  // The template endpoint sits behind tenant auth, and the tenant JWT lives in a
+  // header attached only to fetch() (via AuthProvider's window.fetch patch) — a
+  // plain <a href> browser navigation to the API carries no token and 401s with
+  // AUTH_REQUIRED. Fetch through the authenticated api client instead, then
+  // trigger the download client-side from the blob.
+  const downloadTemplate = useCallback(async () => {
+    setDlTemplate(true);
+    try {
+      const res = await api.raw(`/api/import/template/${activeTab}`);
+      if (!res.ok) {
+        let msg = `Download failed (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${activeTab}_template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showError(err.message || "Could not download the template");
+    } finally {
+      setDlTemplate(false);
+    }
+  }, [activeTab, showError]);
 
   const runPreview = useCallback(
     async (selected, map) => {
@@ -228,14 +263,19 @@ export default function ImportRedesign() {
           <p className="text-sm text-(--ui-text-muted)">
             Download the template to see the expected format, then upload your filled file.
           </p>
-          <a
-            href={`${API_BASE}/api/import/template/${activeTab}`}
-            download
-            className="inline-flex items-center gap-2 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-4 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition shrink-0"
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            disabled={dlTemplate}
+            className="inline-flex items-center gap-2 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-4 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition shrink-0 disabled:opacity-60"
           >
-            <Download className="h-4 w-4" />
+            {dlTemplate ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
             Download Template
-          </a>
+          </button>
         </div>
 
         {/* Supplier-catalog column mapping toggle */}
