@@ -5,27 +5,29 @@
  * posture (throw + kill boot) — deliberately NOT the console.error-and-continue
  * posture, which fails open and only warns.
  *
- * Background (PLAN-V3 Step 4.3): the manufacturer portal signs its JWTs with
- * MANUFACTURER_PORTAL_JWT_SECRET. When that var is unset, middleware/manufacturer-auth.js
- * used to silently fall back to JWT_SECRET — the same key that signs employee
- * access tokens. That both weakens scope isolation and lets the config error
- * recur invisibly in every environment that forgets to set the var. Setting the
- * env var fixes today; this guard makes forgetting it fatal, so the error can't
- * recur silently.
+ * Background (PLAN-V3 Step 4.3): each portal signs its JWTs with a dedicated
+ * secret. When that var is unset, the portal's auth middleware used to silently
+ * fall back to JWT_SECRET — the same key that signs employee access tokens.
+ * That both weakens scope isolation and lets the config error recur invisibly
+ * in every environment that forgets to set the var. Setting the env var fixes
+ * today; this guard makes forgetting it fatal, so the error can't recur
+ * silently.
  *
  * The guard is a no-op outside production (NODE_ENV !== "production"), so the
- * dev/test fallback in manufacturer-auth.js:getSecret() still works.
+ * dev/test fallbacks in manufacturer-auth.js/customer-auth.js:getSecret() still
+ * work.
  *
- * Scope note: this covers only MANUFACTURER_PORTAL_JWT_SECRET (the 4.3 target).
- * CUSTOMER_PORTAL_JWT_SECRET has the same latent fallback and is a known
- * follow-up — deliberately out of this release's scope.
+ * Coverage: BOTH portal secrets. MANUFACTURER_PORTAL_JWT_SECRET landed with 4.3;
+ * CUSTOMER_PORTAL_JWT_SECRET was that release's documented follow-up and is
+ * covered here on the same terms (both vars are set on prod today — this guard
+ * keeps them that way).
  */
 
 const MIN_SECRET_LENGTH = 32;
 const MIN_DISTINCT_CHARS = 12;
 
 // Obvious placeholder values that clear the length bar but carry no real
-// entropy. `dev-insecure-secret` is manufacturer-auth.js's own dev fallback.
+// entropy. `dev-insecure-secret` is the portal middlewares' own dev fallback.
 const WEAK_LITERALS = new Set([
   "dev-insecure-secret",
   "changeme",
@@ -82,11 +84,30 @@ function checkPortalSecret(name, value, employeeSecret) {
 function assertProductionSecrets(env = process.env) {
   if (env.NODE_ENV !== "production") return;
 
-  const problems = checkPortalSecret(
-    "MANUFACTURER_PORTAL_JWT_SECRET",
-    env.MANUFACTURER_PORTAL_JWT_SECRET,
-    env.JWT_SECRET
-  );
+  const problems = [
+    ...checkPortalSecret(
+      "MANUFACTURER_PORTAL_JWT_SECRET",
+      env.MANUFACTURER_PORTAL_JWT_SECRET,
+      env.JWT_SECRET
+    ),
+    ...checkPortalSecret(
+      "CUSTOMER_PORTAL_JWT_SECRET",
+      env.CUSTOMER_PORTAL_JWT_SECRET,
+      env.JWT_SECRET
+    ),
+  ];
+
+  // Two portal secrets sharing ONE value is the same scope-isolation failure as
+  // either sharing JWT_SECRET — checkPortalSecret only compares against
+  // JWT_SECRET, so cross-compare them here.
+  if (
+    env.MANUFACTURER_PORTAL_JWT_SECRET &&
+    env.MANUFACTURER_PORTAL_JWT_SECRET === env.CUSTOMER_PORTAL_JWT_SECRET
+  ) {
+    problems.push(
+      "MANUFACTURER_PORTAL_JWT_SECRET and CUSTOMER_PORTAL_JWT_SECRET must differ from each other"
+    );
+  }
 
   if (problems.length) {
     throw new Error(
