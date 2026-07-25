@@ -56,9 +56,17 @@
 | 5 | `approval_policies` copy-on-new-outlet — investigate → ruling | 3 | **mid-step** (owner rules) | ☑ COPY `86648120` |
 | 6 | E6 — `modifier_groups` in the D8 copy allowlist — scope → ruling | 3 | **mid-step** (owner rules) | ☑ NEVER `7ba816c4` |
 | — | **GATE 3 — merge + deploy Wave 3** | 3 | **owner-gated** | ☑ DEPLOYED `4226f1af` (2026-07-23) — see banner |
-| V | End-to-end verification + completeness-ledger walk | — | **after** (owner reviews) | ☐ |
+| V | End-to-end verification + completeness-ledger walk | — | **after** (owner reviews) | ☑ `VERIFICATION-V3.md` filed 2026-07-23 — GATE GREEN, VERDICT **SHIP**; **owner-reviewed + accepted 2026-07-25 → PLAN-V3 CLOSED** (only owner-ops W0-ops 4.4 stays open by design) |
 
 Status: `☐ not started` / `◐ in progress` / `☑ done (verified)`. Update at the start and end of every session.
+
+> **PLAN-V3 is CLOSED (2026-07-25).** Step V's verification was reviewed and accepted by the owner.
+> Every code/config/docs step is verified done; the sole carried-forward item is the owner-ops
+> **W0-ops (4.4, R2 custom domain)**, deliberately left `☐` — it is not env-only (setting
+> `R2_PUBLIC_URL` un-mounts the `/r2` proxy and a public bucket domain would expose backups/PHI),
+> so it must be re-scoped before execution. The Deferred-to-v4 list below (E1–E4, E7, E8, V4-1…V4-4)
+> carries forward unchanged; **V4-3/V4-4 remain trigger-gated on the first tenant activating a
+> channel integration**, not on a date.
 
 **Commit policy:** approving this plan pre-authorises **local commits** to each wave's branch at the
 end of each verified step. Pushes, merges, deploys, PRs stay owner-gated (the four Gates).
