@@ -8,7 +8,7 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.waitForLoadState("networkidle");
     await expect(page.getByPlaceholder(/aceshardware/i)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByPlaceholder(/employee name/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/employee (username|name)/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
     await ctx.close();
@@ -31,7 +31,7 @@ test.describe("Authentication", () => {
     if (await storeCode.isVisible({ timeout: 3000 }).catch(() => false)) {
       await storeCode.fill(STORE_CODE);
     }
-    await page.getByPlaceholder(/employee name/i).fill(USERNAME);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(USERNAME);
     await page.getByPlaceholder(/password/i).fill("wrongpassword");
     await page.getByRole("button", { name: /sign in/i }).click();
     await expect(page.getByText(/invalid|incorrect|failed|error/i).first()).toBeVisible({ timeout: 10000 });
@@ -47,7 +47,7 @@ test.describe("Authentication", () => {
     if (await storeCode.isVisible({ timeout: 3000 }).catch(() => false)) {
       await storeCode.fill("nonexistent-store-xyz");
     }
-    await page.getByPlaceholder(/employee name/i).fill(USERNAME);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(USERNAME);
     await page.getByPlaceholder(/password/i).fill(PASSWORD);
     await page.getByRole("button", { name: /sign in/i }).click();
     await expect(page.getByText(/not found|invalid|error/i).first()).toBeVisible({ timeout: 10000 });
@@ -92,7 +92,7 @@ test.describe("Authentication", () => {
   });
 
   test("kiosk page loads with PIN pad", async ({ page }) => {
-    await page.goto("/kiosk?tenant=packagesmall");
+    await page.goto(`/kiosk?tenant=${STORE_CODE}`);
     await page.waitForLoadState("networkidle");
     // PIN pad should have numeric buttons
     await expect(

@@ -9,11 +9,11 @@
  * auth.json cookies do NOT leak into the public flow.
  */
 import { test, expect } from "@playwright/test";
+import { STORE_CODE as TENANT } from "../helpers/auth.js";
 import { get, post, put } from "../helpers/api.js";
 import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
 import { prefix } from "./helpers/smokeRunId.js";
 
-const TENANT = "packagesmall";
 const STORE_BASE = `/store/${TENANT}`;
 
 let seededProductId = null;

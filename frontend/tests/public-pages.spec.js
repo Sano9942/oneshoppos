@@ -12,7 +12,7 @@ test.describe("Public Pages", () => {
     await page.waitForLoadState("domcontentloaded");
     // Should see login fields or a CTA
     const loginForm = page.getByPlaceholder(/aceshardware/i)
-      .or(page.getByPlaceholder(/employee name/i))
+      .or(page.getByPlaceholder(/employee (username|name)/i))
       .or(page.getByPlaceholder(/username/i))
       .or(page.getByRole("button", { name: /sign in|login|get started/i }));
     await expect(loginForm.first()).toBeVisible({ timeout: 30000 });
@@ -83,7 +83,7 @@ test.describe("Public Pages", () => {
     // Without auth, the route may also redirect to login — accept either outcome.
     const content = page.getByText(/access denied|forbidden|not authorized|permission/i)
       .or(page.getByRole("heading", { name: /access|denied|forbidden/i }));
-    const loginForm = page.getByPlaceholder(/employee name/i)
+    const loginForm = page.getByPlaceholder(/employee (username|name)/i)
       .or(page.getByRole("button", { name: /sign in|login/i }));
     // Either access denied page or login redirect is acceptable
     await expect(content.first().or(loginForm.first())).toBeVisible({ timeout: 15000 });
@@ -97,7 +97,7 @@ test.describe("Public Pages", () => {
       await storeCode.fill("teststore");
       await expect(storeCode).toHaveValue("teststore");
     }
-    const username = page.getByPlaceholder(/employee name/i);
+    const username = page.getByPlaceholder(/employee (username|name)/i);
     if (await username.isVisible({ timeout: 3000 }).catch(() => false)) {
       await username.fill("testuser");
       await expect(username).toHaveValue("testuser");

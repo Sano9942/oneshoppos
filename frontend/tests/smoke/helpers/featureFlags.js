@@ -1,4 +1,5 @@
 import { get } from "../../helpers/api.js";
+import { STORE_CODE } from "../../helpers/auth.js";
 
 let _cache = null;
 
@@ -33,7 +34,7 @@ export async function skipIfFlagOff(test, specName, ...flagKeys) {
     const enabled = await isFlagEnabled(key);
     if (!enabled) {
       console.log(`SKIP: ${specName} (${key}=false)`);
-      test.skip(true, `Feature flag ${key} is disabled on packagesmall`);
+      test.skip(true, `Feature flag ${key} is disabled on ${STORE_CODE}`);
       return false;
     }
   }

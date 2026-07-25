@@ -1,4 +1,5 @@
 import { del } from "../../helpers/api.js";
+import { STORE_CODE } from "../../helpers/auth.js";
 
 const bag = [];
 
@@ -90,7 +91,7 @@ export async function cleanupAll() {
   }
   if (failures.length) {
     console.warn(
-      `[smoke] cleanup: ${failures.length} resource(s) could not be deleted — search the packagesmall tenant for the SMOKE- prefix to find them.`,
+      `[smoke] cleanup: ${failures.length} resource(s) could not be deleted — search the ${STORE_CODE} tenant for the SMOKE- prefix to find them.`,
       failures,
     );
   }

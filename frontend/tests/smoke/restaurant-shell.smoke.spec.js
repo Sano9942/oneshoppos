@@ -22,7 +22,6 @@ import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
 import { prefix } from "./helpers/smokeRunId.js";
 
 const SPEC = "restaurant-shell.smoke.spec.js";
-const TENANT = "packagesmall";
 
 test.describe("Restaurant POS shell smoke (Phase 2-R.0)", () => {
   test.afterAll(async () => {

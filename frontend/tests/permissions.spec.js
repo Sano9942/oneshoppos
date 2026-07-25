@@ -103,7 +103,7 @@ test.describe("Permissions — Cashier user", () => {
     if (await storeCode.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCode.fill(STORE_CODE);
     }
-    await page.getByPlaceholder(/employee name/i).fill(cashierName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(cashierName);
     await page.getByPlaceholder(/password/i).fill(PIN);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|context/, { timeout: 30000 });
@@ -123,7 +123,7 @@ test.describe("Permissions — Cashier user", () => {
     if (await storeCode.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCode.fill(STORE_CODE);
     }
-    await page.getByPlaceholder(/employee name/i).fill(cashierName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(cashierName);
     await page.getByPlaceholder(/password/i).fill(PIN);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|context/, { timeout: 30000 });

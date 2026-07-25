@@ -5,13 +5,13 @@
  *   - Public QR ordering (`phase4_restaurant_qr`): anonymous public menu → add item
  */
 import { test, expect } from "@playwright/test";
+import { STORE_CODE as TENANT } from "../helpers/auth.js";
 import { get, post, put } from "../helpers/api.js";
 import { softSkip, isFlagEnabled } from "./helpers/featureFlags.js";
 import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
 import { prefix } from "./helpers/smokeRunId.js";
 
 const SPEC = "restaurant.smoke.spec.js";
-const TENANT = "packagesmall";
 
 test.describe("Restaurant smoke", () => {
   test.afterAll(async () => {

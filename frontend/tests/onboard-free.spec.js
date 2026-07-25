@@ -73,7 +73,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
 
@@ -96,7 +96,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -117,7 +117,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -150,7 +150,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -172,7 +172,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -212,7 +212,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -258,7 +258,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -313,7 +313,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -335,7 +335,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -365,7 +365,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
@@ -389,7 +389,7 @@ test.describe.serial("Onboarding — Free Plan", () => {
     if (await storeCodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await storeCodeInput.fill(storeCode);
     }
-    await page.getByPlaceholder(/employee name/i).fill(ownerName);
+    await page.getByPlaceholder(/employee (username|name)/i).fill(ownerName);
     await page.getByPlaceholder(/password/i).fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/dashboard|setup|context/, { timeout: 30000 });
