@@ -142,7 +142,7 @@ export default function NotificationSettingsRedesign() {
             <Bell size={18} className="text-(--ui-text-muted)" />
             <span className="text-sm font-medium text-(--ui-text)">
               Notifications are{" "}
-              <span className={status?.enabled ? "text-(--ui-success-fg)" : "text-amber-500"}>
+              <span className={status?.enabled ? "text-(--ui-success-fg)" : "text-(--ui-warning-fg)"}>
                 {status?.enabled ? "enabled" : "disabled"}
               </span>
             </span>

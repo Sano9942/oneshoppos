@@ -120,7 +120,7 @@ export default function FormFillPublic() {
         {form.require_signature && (
           <div className="mt-5">
             <div className="text-sm font-medium mb-1">
-              Signature <span className="text-red-500">*</span>
+              Signature <span className="text-(--ui-danger)">*</span>
             </div>
             <SignaturePad ref={sigRef} height={140} />
             <button
@@ -132,7 +132,7 @@ export default function FormFillPublic() {
             </button>
           </div>
         )}
-        {errMsg && <p className="text-sm text-red-600 mt-3">{errMsg}</p>}
+        {errMsg && <p className="text-sm text-(--ui-danger) mt-3">{errMsg}</p>}
         <button
           type="button"
           onClick={submit}

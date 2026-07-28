@@ -15,7 +15,7 @@ export default function FormFieldRenderer({ fields = [], values = {}, onChange, 
         const labelEl = (
           <label className="block text-sm font-medium text-(--ui-text) mb-1">
             {f.label}
-            {f.required ? <span className="text-red-500"> *</span> : null}
+            {f.required ? <span className="text-(--ui-danger)"> *</span> : null}
           </label>
         );
         const help = f.help ? (
@@ -71,7 +71,7 @@ export default function FormFieldRenderer({ fields = [], values = {}, onChange, 
                 <div>
                   <span className="text-sm text-(--ui-text)">
                     {f.label}
-                    {f.required ? <span className="text-red-500"> *</span> : null}
+                    {f.required ? <span className="text-(--ui-danger)"> *</span> : null}
                   </span>
                   {help}
                 </div>
