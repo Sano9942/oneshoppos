@@ -37,6 +37,20 @@ export default defineConfig([
     },
   },
   {
+    // Node-context files: build config, edge middleware, scripts, lint rules
+    // and the test runners all execute outside the browser. Without this they
+    // report phantom `no-undef` on process / __dirname / global.
+    files: [
+      "*.{js,mjs,cjs}",
+      "scripts/**/*.{js,mjs,cjs}",
+      "eslint-rules/**/*.js",
+      "tests/**/*.{js,jsx}",
+    ],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
+  {
     files: ["src/pages/redesign/**/*.{js,jsx}"],
     plugins: { sano: sanoPlugin },
     rules: {

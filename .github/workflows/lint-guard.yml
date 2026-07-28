@@ -1,0 +1,39 @@
+# ESLint baseline ratchet (chore/square-reskin-tail, 2026-07).
+#
+# `npm run lint` reports ~1000 problems today, 664 of which are one in-flight
+# migration (sano/no-raw-interactive: raw <button>/<input> -> ui/primitives).
+# Gating on a clean lint would block every deploy on work that touches
+# checkout/POS/shift-close for no user-visible benefit; leaving lint advisory
+# is how 13 files quietly ended up on the retired colour palette.
+#
+# So this freezes the current counts per (file, rule) and fails only on
+# INCREASES — the same NEW-not-totals principle as check-baseline.js for the
+# integration suite. Rules currently at zero (sano/no-raw-palette-color) are
+# therefore hard gates: any new violation is an increase over nothing.
+#
+# To re-freeze after fixing things:  cd frontend && npm run lint:baseline:update
+name: lint-baseline-guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: ESLint baseline ratchet
+        run: npm run lint:baseline
+      - name: Design-system guards (token drift + lint rule unit tests)
+        run: npx vitest run tests/unit/design-token-drift.test.js eslint-rules

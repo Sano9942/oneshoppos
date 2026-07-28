@@ -20,7 +20,9 @@
     "test:smoke:headed": "npx playwright test tests/smoke --headed",
     "test:smoke:storefront": "npx playwright test tests/smoke/storefront-public.smoke.spec.js",
     "test:smoke:phase5": "npx playwright test tests/smoke/phase5-pakistan.smoke.spec.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:baseline": "node scripts/lint-baseline.mjs",
+    "lint:baseline:update": "node scripts/lint-baseline.mjs --update"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
