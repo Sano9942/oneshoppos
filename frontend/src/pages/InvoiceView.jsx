@@ -27,8 +27,8 @@ function buildPrintDocument(doc, { sale, items, payments }, fmt) {
   style.textContent = `
     *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
     body{padding:32px;color:#1e293b;font-size:13px}
-    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:2px solid #7B61FF;padding-bottom:16px}
-    .hdr-title{font-size:28px;font-weight:900;color:#7B61FF;letter-spacing:-1px}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:2px solid #101010;padding-bottom:16px}
+    .hdr-title{font-size:28px;font-weight:900;color:#101010;letter-spacing:-1px}
     .hdr-sub{color:#64748b;font-size:11px;margin-top:2px}
     .meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
     .meta-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px}
@@ -44,8 +44,8 @@ function buildPrintDocument(doc, { sale, items, payments }, fmt) {
     .totals{display:flex;justify-content:flex-end;margin-bottom:24px}
     .totals-inner{width:280px}
     .totals-row{display:flex;justify-content:space-between;font-size:13px;color:#64748b;margin-bottom:4px}
-    .totals-grand{display:flex;justify-content:space-between;font-size:16px;font-weight:900;color:#7B61FF;border-top:2px solid #7B61FF;padding-top:10px;margin-top:8px}
-    .pay-chip{display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:600;margin-right:6px;margin-bottom:4px}
+    .totals-grand{display:flex;justify-content:space-between;font-size:16px;font-weight:900;color:#101010;border-top:2px solid #101010;padding-top:10px;margin-top:8px}
+    .pay-chip{display:inline-block;background:#f5f5f5;color:#101010;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:600;margin-right:6px;margin-bottom:4px}
     .sec-label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
     .payments{margin-bottom:24px}
     .notes{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;font-size:13px;color:#475569;margin-bottom:24px}
@@ -275,7 +275,7 @@ export default function InvoiceView({ saleId, onBack }) {
           </span>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 bg-[#7B61FF] hover:bg-[#6A50E5] text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm shadow-[#7B61FF]/20"
+            className="flex items-center gap-2 bg-(--ui-muted-surface) hover:bg-(--ui-border-strong) text-(--ui-text) px-4 py-2 rounded-full text-sm font-semibold"
           >
             <Printer size={15} /> Print Invoice
           </button>
@@ -291,9 +291,9 @@ export default function InvoiceView({ saleId, onBack }) {
       {/* Invoice preview */}
       <div className="bg-white border border-(--ui-border) rounded-(--ui-radius-lg) p-8 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-start border-b-2 border-[#7B61FF] pb-5">
+        <div className="flex justify-between items-start border-b-2 border-(--ui-primary) pb-5">
           <div>
-            <div className="text-3xl font-black text-[#7B61FF] tracking-tight">INVOICE</div>
+            <div className="text-3xl font-black text-(--ui-text) tracking-tight">INVOICE</div>
             <div className="text-(--ui-text-muted) text-xs mt-1">One Shop — Point of Sale</div>
             {sale.outlet_name && <div className="text-(--ui-text-muted) text-xs">{sale.outlet_name}</div>}
           </div>
@@ -376,7 +376,7 @@ export default function InvoiceView({ saleId, onBack }) {
             {sale.points_redeemed > 0 && (
               <div className="flex justify-between text-sm text-(--ui-text-muted)"><span>Points Redeemed</span><span>- {fmt(sale.points_redeemed)}</span></div>
             )}
-            <div className="flex justify-between pt-3 border-t-2 border-[#7B61FF] font-black text-[#7B61FF] text-lg">
+            <div className="flex justify-between pt-3 border-t-2 border-(--ui-primary) font-black text-(--ui-text) text-lg">
               <span>Total</span><span>{fmt(sale.total_amount)}</span>
             </div>
           </div>

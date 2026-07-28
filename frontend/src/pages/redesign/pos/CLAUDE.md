@@ -136,7 +136,7 @@ F-keys fire even when focus is inside an input — they're checked before the pl
 
 The module uses the same design-system CSS variable tokens as the rest of the app's `redesign/` pages — nearly every top-level component and every cart/checkout/shift/product-entry modal is built on tokens (surface/border/text-muted/etc.), not hardcoded Tailwind color classes or hex values. New work in this directory should follow the same convention.
 
-Known remaining hardcoded-color exceptions (don't use these as a template): `POSAppointmentsModal` (`bg-white`, `text-slate-*`, a hardcoded accent hex) and the appointments-button branch inside `POSSubHeader` (hardcoded hex/emerald/indigo Tailwind classes). If touching either, consider migrating to tokens rather than extending the hardcoded style further.
+The last two known hardcoded-color exceptions — `POSAppointmentsModal` and the appointments-button branch inside `POSSubHeader`, both of which carried a retired `#8066FF` accent — were migrated to tokens in the reskin-tail pass. This directory is now uniformly token-based; don't reintroduce raw Tailwind color classes or brand hexes here.
 
 ## `completeSale` payload (`POST /api/sales`)
 

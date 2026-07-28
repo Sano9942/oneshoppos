@@ -102,13 +102,13 @@ export default function PublicRoomBookingPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-500">Loading…</div>;
+    return <div className="min-h-screen bg-(--ui-muted-surface) flex items-center justify-center text-(--ui-text-muted)">Loading…</div>;
   }
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-8 max-w-md text-center">
-          <p className="text-gray-800 font-medium">{error}</p>
+      <div className="min-h-screen bg-(--ui-muted-surface) flex items-center justify-center p-6">
+        <div className="bg-(--ui-surface) border border-(--ui-border) rounded-(--ui-radius-md) p-8 max-w-md text-center">
+          <p className="text-(--ui-text) font-medium">{error}</p>
         </div>
       </div>
     );
@@ -117,34 +117,34 @@ export default function PublicRoomBookingPage() {
   const bookCta = config?.booking_labels?.booking_cta || "Book a stay";
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-(--ui-muted-surface) py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
         <header className="text-center">
           {config?.logo_url && (
             <img src={config.logo_url} alt="" className="h-14 mx-auto mb-3 object-contain" />
           )}
-          <h1 className="text-2xl font-semibold text-gray-900">{config?.company_name}</h1>
-          <p className="text-sm text-gray-500 mt-1">{bookCta} — pick your dates to see availability</p>
+          <h1 className="text-2xl font-semibold text-(--ui-text)">{config?.company_name}</h1>
+          <p className="text-sm text-(--ui-text-muted) mt-1">{bookCta} — pick your dates to see availability</p>
         </header>
 
         {confirmation ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center space-y-3">
+          <div className="bg-(--ui-surface) border border-(--ui-border) rounded-(--ui-radius-md) p-8 text-center space-y-3">
             <div className="text-4xl">✓</div>
-            <h2 className="text-lg font-semibold text-gray-900">Reservation received</h2>
-            <p className="text-sm text-gray-600">
+            <h2 className="text-lg font-semibold text-(--ui-text)">Reservation received</h2>
+            <p className="text-sm text-(--ui-text-muted)">
               Booking <span className="font-mono font-medium">{confirmation.booking_number}</span> —{" "}
               {dates.from} → {dates.to} ({confirmation.nights} night{confirmation.nights === 1 ? "" : "s"})
             </p>
-            <p className="text-sm text-gray-600">{confirmation.message}</p>
+            <p className="text-sm text-(--ui-text-muted)">{confirmation.message}</p>
             {confirmation.hold_expires_at && !confirmation.deposit_checkout_url && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-(--ui-text-muted)">
                 Your room is held until {new Date(confirmation.hold_expires_at).toLocaleString()}.
               </p>
             )}
             {confirmation.deposit_checkout_url && (
               <a
                 href={confirmation.deposit_checkout_url}
-                className="inline-block mt-2 px-5 py-2.5 rounded-full bg-gray-900 text-white text-sm font-medium"
+                className="inline-block mt-2 px-5 py-2.5 rounded-(--ui-radius-pill) bg-(--ui-primary) text-(--ui-on-primary) text-sm font-medium"
               >
                 Pay deposit to confirm
               </a>
@@ -153,28 +153,28 @@ export default function PublicRoomBookingPage() {
         ) : (
           <>
             {/* Date search */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-(--ui-surface) border border-(--ui-border) rounded-(--ui-radius-md) p-5">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <label className="block">
-                  <span className="text-xs font-medium text-gray-500">Check-in</span>
+                  <span className="text-xs font-medium text-(--ui-text-muted)">Check-in</span>
                   <input
                     type="date" min={todayStr()} value={dates.from}
                     onChange={(e) => setDates((d) => ({ ...d, from: e.target.value }))}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    className="ui-focus-ring mt-1 w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-gray-500">Check-out</span>
+                  <span className="text-xs font-medium text-(--ui-text-muted)">Check-out</span>
                   <input
                     type="date" min={dates.from} value={dates.to}
                     onChange={(e) => setDates((d) => ({ ...d, to: e.target.value }))}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    className="ui-focus-ring mt-1 w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                   />
                 </label>
                 <button
                   onClick={search}
                   disabled={searching || !dates.from || !dates.to || dates.to <= dates.from}
-                  className="px-5 py-2.5 rounded-full bg-gray-900 text-white text-sm font-medium disabled:opacity-40"
+                  className="ui-focus-ring px-5 py-2.5 rounded-(--ui-radius-pill) bg-(--ui-primary) text-(--ui-on-primary) text-sm font-medium disabled:opacity-40"
                 >
                   {searching ? "Searching…" : "Check availability"}
                 </button>
@@ -184,7 +184,7 @@ export default function PublicRoomBookingPage() {
             {/* Room types */}
             {types && (
               types.length === 0 || types.every((t) => t.rooms_available === 0) ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">
+                <div className="bg-(--ui-surface) border border-(--ui-border) rounded-(--ui-radius-md) p-8 text-center text-sm text-(--ui-text-muted)">
                   No rooms available for those dates — try different dates.
                 </div>
               ) : (
@@ -194,27 +194,29 @@ export default function PublicRoomBookingPage() {
                       key={t.id}
                       disabled={t.rooms_available === 0}
                       onClick={() => setSelected(t)}
-                      className={`w-full text-left bg-white border rounded-xl p-5 transition ${
-                        selected?.id === t.id ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200 hover:border-gray-400"
+                      className={`ui-focus-ring w-full text-left bg-(--ui-surface) border rounded-(--ui-radius-md) p-5 transition ${
+                        selected?.id === t.id
+                          ? "border-(--ui-primary) ring-1 ring-(--ui-primary)"
+                          : "border-(--ui-border) hover:border-(--ui-border-strong)"
                       } ${t.rooms_available === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h3 className="font-semibold text-gray-900">{t.name}</h3>
-                          {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
-                          <p className="text-xs text-gray-500 mt-1">
+                          <h3 className="font-semibold text-(--ui-text)">{t.name}</h3>
+                          {t.description && <p className="text-xs text-(--ui-text-muted) mt-0.5">{t.description}</p>}
+                          <p className="text-xs text-(--ui-text-muted) mt-1">
                             Sleeps {t.capacity}
                             {Array.isArray(t.amenities) && t.amenities.length > 0 && ` · ${t.amenities.join(" · ")}`}
                           </p>
-                          <p className={`text-xs mt-1 ${t.rooms_available === 0 ? "text-red-500" : "text-emerald-600"}`}>
+                          <p className={`text-xs mt-1 ${t.rooms_available === 0 ? "text-(--ui-danger)" : "text-(--ui-success-fg)"}`}>
                             {t.rooms_available === 0 ? "Sold out" : `${t.rooms_available} available`}
                           </p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-lg font-semibold text-gray-900">{cur} {Number(t.stay_total).toLocaleString()}</p>
-                          <p className="text-xs text-gray-400">{t.nights} night{t.nights === 1 ? "" : "s"}</p>
+                          <p className="text-lg font-semibold text-(--ui-text)">{cur} {Number(t.stay_total).toLocaleString()}</p>
+                          <p className="text-xs text-(--ui-text-muted)">{t.nights} night{t.nights === 1 ? "" : "s"}</p>
                           {Number(t.deposit_required) > 0 && (
-                            <p className="text-xs text-gray-400">Deposit {cur} {Number(t.deposit_required).toLocaleString()}</p>
+                            <p className="text-xs text-(--ui-text-muted)">Deposit {cur} {Number(t.deposit_required).toLocaleString()}</p>
                           )}
                         </div>
                       </div>
@@ -226,40 +228,40 @@ export default function PublicRoomBookingPage() {
 
             {/* Guest details */}
             {selected && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-                <h3 className="font-semibold text-gray-900">Your details</h3>
+              <div className="bg-(--ui-surface) border border-(--ui-border) rounded-(--ui-radius-md) p-5 space-y-3">
+                <h3 className="font-semibold text-(--ui-text)">Your details</h3>
                 <input
                   placeholder="Full name" value={form.guest_name}
                   onChange={(e) => setForm((f) => ({ ...f, guest_name: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input
                     placeholder="Phone (03xx…)" value={form.guest_phone}
                     onChange={(e) => setForm((f) => ({ ...f, guest_phone: e.target.value }))}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                   />
                   <input
                     placeholder="Email" type="email" value={form.guest_email}
                     onChange={(e) => setForm((f) => ({ ...f, guest_email: e.target.value }))}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                   />
                 </div>
                 <textarea
                   placeholder="Notes (arrival time, requests…)" rows={2} value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) px-3 py-2 text-sm"
                 />
-                {formError && <p className="text-sm text-red-600">{formError}</p>}
+                {formError && <p className="text-sm text-(--ui-danger)">{formError}</p>}
                 <button
                   onClick={book} disabled={submitting}
-                  className="w-full py-3 rounded-full bg-gray-900 text-white text-sm font-medium disabled:opacity-40"
+                  className="ui-focus-ring w-full py-3 rounded-(--ui-radius-pill) bg-(--ui-primary) text-(--ui-on-primary) text-sm font-medium disabled:opacity-40"
                 >
                   {submitting ? "Reserving…" : `Reserve ${selected.name} — ${cur} ${Number(selected.stay_total).toLocaleString()}`}
                 </button>
               </div>
             )}
-            {formError && !selected && <p className="text-sm text-red-600 text-center">{formError}</p>}
+            {formError && !selected && <p className="text-sm text-(--ui-danger) text-center">{formError}</p>}
           </>
         )}
       </div>

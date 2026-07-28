@@ -78,8 +78,8 @@ export default function ContextSelect() {
   // Wait for session restore before deciding redirects
   if (isBootstrapping) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-medium text-slate-500 shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface)">
+        <div className="rounded-(--ui-radius-lg) border border-(--ui-border-strong) bg-(--ui-surface) px-6 py-4 text-sm font-medium text-(--ui-text-muted)">
           Loading...
         </div>
       </div>
@@ -139,8 +139,8 @@ export default function ContextSelect() {
 
   if (flagsLoading || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-medium text-slate-500 shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface)">
+        <div className="rounded-(--ui-radius-lg) border border-(--ui-border-strong) bg-(--ui-surface) px-6 py-4 text-sm font-medium text-(--ui-text-muted)">
           Loading...
         </div>
       </div>
@@ -149,12 +149,12 @@ export default function ContextSelect() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-lg">
-          <p className="text-sm font-medium text-red-600">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface) px-4">
+        <div className="w-full max-w-md rounded-(--ui-radius-lg) border border-(--ui-border-strong) bg-(--ui-surface) p-8">
+          <p className="text-sm font-medium text-(--ui-danger)">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 w-full rounded-lg bg-slate-800 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            className="ui-focus-ring mt-4 w-full rounded-(--ui-radius-pill) bg-(--ui-primary) py-2.5 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong)"
           >
             Retry
           </button>
@@ -164,26 +164,26 @@ export default function ContextSelect() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface) px-4">
+      <div className="w-full max-w-md rounded-(--ui-radius-lg) border border-(--ui-border-strong) bg-(--ui-surface) p-8">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-            <Building2 size={24} className="text-emerald-600" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-(--ui-muted-surface)">
+            <Building2 size={24} className="text-(--ui-text)" />
           </div>
-          <h1 className="text-xl font-bold text-slate-800">Select Your Branch</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-xl font-bold text-(--ui-text)">Select Your Branch</h1>
+          <p className="mt-1 text-sm text-(--ui-text-muted)">
             Choose the branch you&apos;re working at today
           </p>
         </div>
 
         {/* Employee info */}
-        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div className="mb-5 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
             Signed in as
           </p>
-          <p className="mt-0.5 text-sm font-medium text-slate-700">
+          <p className="mt-0.5 text-sm font-medium text-(--ui-text)">
             {employee?.name}{" "}
-            <span className="text-slate-400">
+            <span className="text-(--ui-text-muted)">
               ({bootstrap?.employee?.role_name || "Employee"})
             </span>
           </p>
@@ -196,31 +196,31 @@ export default function ContextSelect() {
               setScopeMode("all_branches");
               setSelectedOutletId("");
             }}
-            className={`mb-3 flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-left transition ${
+            className={`ui-focus-ring mb-3 flex w-full items-center gap-3 rounded-(--ui-radius-md) border-2 px-4 py-3.5 text-left transition ${
               scopeMode === "all_branches"
-                ? "border-emerald-500 bg-emerald-50"
-                : "border-slate-200 hover:border-slate-300"
+                ? "border-(--ui-primary) bg-(--ui-muted-surface)"
+                : "border-(--ui-border-strong) hover:bg-(--ui-muted-surface)"
             }`}
           >
             <div
-              className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+              className={`flex h-9 w-9 items-center justify-center rounded-(--ui-radius-sm) ${
                 scopeMode === "all_branches"
-                  ? "bg-emerald-500 text-white"
-                  : "bg-slate-100 text-slate-400"
+                  ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                  : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
               }`}
             >
               <Building2 size={18} />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-700">
+              <p className="text-sm font-semibold text-(--ui-text)">
                 All Branches
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-(--ui-text-muted)">
                 Consolidated view across all locations
               </p>
             </div>
             {scopeMode === "all_branches" && (
-              <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <div className="h-2.5 w-2.5 rounded-full bg-(--ui-primary)" />
             )}
           </button>
         )}
@@ -228,11 +228,11 @@ export default function ContextSelect() {
         {/* Divider for admin */}
         {isAdmin && (
           <div className="mb-3 flex items-center gap-2">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs font-medium text-slate-400">
+            <div className="h-px flex-1 bg-(--ui-border-strong)" />
+            <span className="text-xs font-medium text-(--ui-text-muted)">
               or select a branch
             </span>
-            <div className="h-px flex-1 bg-slate-200" />
+            <div className="h-px flex-1 bg-(--ui-border-strong)" />
           </div>
         )}
 
@@ -245,41 +245,41 @@ export default function ContextSelect() {
                 setScopeMode("single_branch");
                 setSelectedOutletId(String(outlet.id));
               }}
-              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-left transition ${
+              className={`ui-focus-ring flex w-full items-center gap-3 rounded-(--ui-radius-md) border-2 px-4 py-3.5 text-left transition ${
                 scopeMode === "single_branch" &&
                 selectedOutletId === String(outlet.id)
-                  ? "border-emerald-500 bg-emerald-50"
-                  : "border-slate-200 hover:border-slate-300"
+                  ? "border-(--ui-primary) bg-(--ui-muted-surface)"
+                  : "border-(--ui-border-strong) hover:bg-(--ui-muted-surface)"
               }`}
             >
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                className={`flex h-9 w-9 items-center justify-center rounded-(--ui-radius-sm) ${
                   scopeMode === "single_branch" &&
                   selectedOutletId === String(outlet.id)
-                    ? "bg-emerald-500 text-white"
-                    : "bg-slate-100 text-slate-400"
+                    ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                    : "bg-(--ui-muted-surface) text-(--ui-text-muted)"
                 }`}
               >
                 <MapPin size={18} />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-700">
+                <p className="text-sm font-semibold text-(--ui-text)">
                   {outlet.name}
                 </p>
                 {outlet.address && (
-                  <p className="text-xs text-slate-400">{outlet.address}</p>
+                  <p className="text-xs text-(--ui-text-muted)">{outlet.address}</p>
                 )}
               </div>
               {scopeMode === "single_branch" &&
                 selectedOutletId === String(outlet.id) && (
-                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-(--ui-primary)" />
                 )}
             </button>
           ))}
         </div>
 
         {outlets.length === 0 && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          <div className="rounded-(--ui-radius-sm) bg-(--ui-warning-bg) px-4 py-3 text-sm text-(--ui-warning-fg)">
             No branches assigned. Contact your administrator.
           </div>
         )}
@@ -288,7 +288,7 @@ export default function ContextSelect() {
         <button
           onClick={handleContinue}
           disabled={!canContinue}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#7B61FF] py-2.5 text-sm font-semibold text-white hover:bg-[#6A50E5] disabled:opacity-50"
+          className="ui-focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-(--ui-radius-pill) bg-(--ui-primary) py-2.5 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50"
         >
           Continue
           <ChevronRight size={16} />

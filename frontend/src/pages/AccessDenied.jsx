@@ -13,13 +13,13 @@ export default function AccessDenied() {
   }, [navigate, location.state]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="bg-white border border-red-200 rounded-xl p-6 text-center max-w-md">
-        <h1 className="text-xl font-bold text-slate-800">Access Denied</h1>
-        <p className="text-sm text-slate-600 mt-2">
+    <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) px-4">
+      <div className="bg-(--ui-surface) border border-(--ui-border-strong) rounded-(--ui-radius-md) p-6 text-center max-w-md">
+        <h1 className="text-xl font-bold text-(--ui-text)">Access Denied</h1>
+        <p className="text-sm text-(--ui-text-muted) mt-2">
           You do not have permission for this page.
         </p>
-        <p className="text-xs text-slate-400 mt-3">
+        <p className="text-xs text-(--ui-text-muted) mt-3">
           Redirecting to a safe page...
         </p>
       </div>

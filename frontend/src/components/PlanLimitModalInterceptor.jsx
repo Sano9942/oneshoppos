@@ -35,45 +35,45 @@ export default function PlanLimitModalInterceptor() {
 
   return (
     <div
-      className="fixed inset-0 z-200 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/45 px-4"
       onClick={() => setOpen(false)}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-(--ui-radius-md) bg-(--ui-surface) p-6 shadow-(--ui-shadow-lg)"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Close"
-          className="absolute right-3 top-3 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+          className="ui-focus-ring absolute right-3 top-3 rounded-full p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text) cursor-pointer"
         >
           <X size={18} />
         </button>
 
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-          <AlertTriangle size={24} className="text-amber-600" />
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-(--ui-warning-bg)">
+          <AlertTriangle size={24} className="text-(--ui-warning-fg)" />
         </div>
 
-        <h2 className="mb-2 text-lg font-semibold text-slate-900">
+        <h2 className="mb-2 text-lg font-semibold text-(--ui-text)">
           Plan limit reached
         </h2>
-        <p className="text-sm text-slate-600">{message}</p>
+        <p className="text-sm text-(--ui-text-muted)">{message}</p>
 
         {used != null && limit != null && (
-          <p className="mt-2 text-xs text-slate-500">
-            Currently using <span className="font-semibold text-slate-700">{used} of {limit}</span> on the Free plan.
+          <p className="mt-2 text-xs text-(--ui-text-muted)">
+            Currently using <span className="font-semibold text-(--ui-text)">{used} of {limit}</span> on the Free plan.
           </p>
         )}
 
-        <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="mt-5 rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-(--ui-muted-surface) p-4">
           <div className="flex items-start gap-3">
-            <Sparkles size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+            <Sparkles size={18} className="mt-0.5 shrink-0 text-(--ui-text)" />
             <div>
-              <p className="text-sm font-semibold text-emerald-900">Upgrade to Pro</p>
-              <p className="mt-1 text-xs text-emerald-800">
+              <p className="text-sm font-semibold text-(--ui-text)">Upgrade to Pro</p>
+              <p className="mt-1 text-xs text-(--ui-text-muted)">
                 Unlimited products and employees, plus advanced features. <span className="font-semibold">8000 PKR/month</span> per outlet.
               </p>
             </div>
@@ -84,7 +84,7 @@ export default function PlanLimitModalInterceptor() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className="ui-focus-ring flex-1 rounded-(--ui-radius-pill) border border-(--ui-border-strong) bg-(--ui-surface) px-4 py-2.5 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
           >
             Not now
           </button>
@@ -94,7 +94,7 @@ export default function PlanLimitModalInterceptor() {
               setOpen(false);
               navigate("/billing");
             }}
-            className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+            className="ui-focus-ring flex-1 rounded-(--ui-radius-pill) bg-(--ui-primary) px-4 py-2.5 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) cursor-pointer"
           >
             Upgrade to Pro
           </button>

@@ -112,8 +112,8 @@ function LiveClock({ timezone }) {
   }, [timezone]);
   if (!time) return null;
   return (
-    <p className="mt-1 text-xs text-slate-500">
-      Current time: <span className="font-mono font-semibold text-slate-700">{time}</span>
+    <p className="mt-1 text-xs text-(--ui-text-muted)">
+      Current time: <span className="font-mono font-semibold text-(--ui-text)">{time}</span>
     </p>
   );
 }
@@ -121,8 +121,8 @@ function LiveClock({ timezone }) {
 function Field({ label, children, required }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        {label}{required && <span className="ml-0.5 text-red-500">*</span>}
+      <label className="mb-1 block text-sm font-medium text-(--ui-text)">
+        {label}{required && <span className="ml-0.5 text-(--ui-danger)">*</span>}
       </label>
       {children}
     </div>
@@ -130,7 +130,7 @@ function Field({ label, children, required }) {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition";
+  "w-full rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) outline-none focus:border-(--ui-focus) focus:ring-2 focus:ring-(--ui-focus)/20 transition";
 const selectCls = inputCls;
 
 export default function SetupWizard() {
@@ -391,56 +391,56 @@ export default function SetupWizard() {
   const fiscalMonth = form.fiscal_year_start ? parseInt(form.fiscal_year_start.split("-")[0], 10) : 1;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-indigo-50 via-white to-slate-50 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-(--ui-muted-surface) px-4 py-12">
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-(--ui-radius-lg) bg-(--ui-primary) text-(--ui-on-primary)">
             <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Welcome to SanoPOS</h1>
-          <p className="mt-1 text-sm text-slate-500">Let's get your store set up in a few steps.</p>
+          <h1 className="text-2xl font-bold text-(--ui-text)">Welcome to SanoPOS</h1>
+          <p className="mt-1 text-sm text-(--ui-text-muted)">Let's get your store set up in a few steps.</p>
         </div>
 
         {/* Progress bar */}
         <div className="mb-6">
-          <div className="mb-1 flex items-center justify-between text-xs font-medium text-slate-500">
+          <div className="mb-1 flex items-center justify-between text-xs font-medium text-(--ui-text-muted)">
             <span>Step {step} of 5</span>
             <span>{["Business Type", "Store Identity", "Time & Currency", "First Outlet", "Admin Account"][step - 1]}</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-(--ui-muted-surface)">
             <div
-              className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+              className="h-full rounded-full bg-(--ui-primary) transition-all duration-300"
               style={{ width: `${(step / 5) * 100}%` }}
             />
           </div>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
+        <div className="rounded-(--ui-radius-lg) border border-(--ui-border) bg-(--ui-surface) p-8">
           {done ? (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-(--ui-success-bg) text-(--ui-success-fg)">
                 <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-slate-900">Setup complete!</h2>
-              <p className="text-sm text-slate-500">Redirecting you to login…</p>
+              <h2 className="text-lg font-semibold text-(--ui-text)">Setup complete!</h2>
+              <p className="text-sm text-(--ui-text-muted)">Redirecting you to login…</p>
             </div>
           ) : (
             <>
               {/* Step 1 — Business Type */}
               {step === 1 && (
                 <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-slate-800">What kind of business do you run?</h2>
-                  <p className="text-sm text-slate-500">This customizes your experience. You can change it later in settings.</p>
+                  <h2 className="text-base font-semibold text-(--ui-text)">What kind of business do you run?</h2>
+                  <p className="text-sm text-(--ui-text-muted)">This customizes your experience. You can change it later in settings.</p>
                   <div className="space-y-4">
                     {BUSINESS_TYPE_CATEGORIES.map((cat) => (
                       <div key={cat.label}>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{cat.label}</p>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-(--ui-text-muted)">{cat.label}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {cat.types.map((bt) => {
                             const disabled = Boolean(bt.comingSoon);
@@ -452,25 +452,27 @@ export default function SetupWizard() {
                                 disabled={disabled}
                                 onClick={() => { if (!disabled) set("industry_type", bt.value); }}
                                 title={disabled ? "Coming soon — not yet available" : undefined}
-                                className={`relative flex flex-col items-start gap-2 rounded-xl border-2 p-3 text-left transition ${
+                                className={`ui-focus-ring relative flex flex-col items-start gap-2 rounded-(--ui-radius-md) border-2 p-3 text-left transition ${
                                   disabled
-                                    ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                                    ? "cursor-not-allowed border-(--ui-border) bg-(--ui-muted-surface) opacity-60"
                                     : selected
-                                    ? "cursor-pointer border-indigo-500 bg-indigo-50"
-                                    : "cursor-pointer border-slate-200 hover:border-slate-300"
+                                    ? "cursor-pointer border-(--ui-primary) bg-(--ui-muted-surface)"
+                                    : "cursor-pointer border-(--ui-border-strong) hover:bg-(--ui-muted-surface)"
                                 }`}
                               >
                                 {disabled && (
-                                  <span className="absolute right-2 top-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                                  <span className="absolute right-2 top-2 inline-flex rounded-full bg-(--ui-muted-surface) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                                     Coming soon
                                   </span>
                                 )}
-                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${bt.iconBg} ${disabled ? "grayscale" : ""}`}>
+                                {/* iconBg/iconColor are per-industry identity colors, not chrome —
+                                    deliberately left off the --ui-* palette so the 23 tiles stay scannable. */}
+                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-(--ui-radius-sm) ${bt.iconBg} ${disabled ? "grayscale" : ""}`}>
                                   <bt.icon size={16} className={bt.iconColor} />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium text-slate-800">{bt.label}</p>
-                                  <p className="text-xs leading-tight text-slate-500">{bt.description}</p>
+                                  <p className="text-sm font-medium text-(--ui-text)">{bt.label}</p>
+                                  <p className="text-xs leading-tight text-(--ui-text-muted)">{bt.description}</p>
                                 </div>
                               </button>
                             );
@@ -485,7 +487,7 @@ export default function SetupWizard() {
               {/* Step 2 — Store Identity */}
               {step === 2 && (
                 <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-slate-800">Store Identity</h2>
+                  <h2 className="text-base font-semibold text-(--ui-text)">Store Identity</h2>
                   <Field label="Store Name" required>
                     <input className={inputCls} value={form.company_name} onChange={(e) => set("company_name", e.target.value)} placeholder="e.g. Sunrise Mart" />
                   </Field>
@@ -514,9 +516,9 @@ export default function SetupWizard() {
               {/* Step 3 — Time & Currency */}
               {step === 3 && (
                 <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-slate-800">Time & Currency</h2>
+                  <h2 className="text-base font-semibold text-(--ui-text)">Time & Currency</h2>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700">Timezone</label>
+                    <label className="text-sm font-medium text-(--ui-text)">Timezone</label>
                     <input
                       type="text"
                       placeholder="Search timezones..."
@@ -545,14 +547,14 @@ export default function SetupWizard() {
                     </Field>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700">Cash Denominations</label>
+                    <label className="text-sm font-medium text-(--ui-text)">Cash Denominations</label>
                     <div className="flex flex-wrap gap-2">
                       {(form.denominations || [])
                         .sort((a, b) => b - a)
                         .map((d) => (
-                          <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
+                          <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-(--ui-muted-surface) text-(--ui-text) rounded-full text-sm">
                             {d}
-                            <button type="button" onClick={() => set("denominations", form.denominations.filter(x => x !== d))} className="text-blue-400 hover:text-red-500">&times;</button>
+                            <button type="button" onClick={() => set("denominations", form.denominations.filter(x => x !== d))} className="text-(--ui-text-muted) hover:text-(--ui-danger)">&times;</button>
                           </span>
                         ))}
                     </div>
@@ -565,7 +567,7 @@ export default function SetupWizard() {
                         onChange={(e) => setDenomInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDenom(); } }}
                       />
-                      <button type="button" onClick={addDenom} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add</button>
+                      <button type="button" onClick={addDenom} className="ui-focus-ring px-3 py-1 bg-(--ui-primary) text-(--ui-on-primary) rounded-(--ui-radius-pill) text-sm font-semibold">Add</button>
                     </div>
                   </div>
                   <Field label="Fiscal Year Start">
@@ -586,12 +588,12 @@ export default function SetupWizard() {
                       merchants are NOT registered and cannot legally charge
                       GST — picking "No" sets tax_mode='none' so the POS
                       hides the tax toggle and never enqueues to FBR. */}
-                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <div className="rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-3 space-y-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">
                       Tax & Compliance
                     </p>
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-slate-700">
+                      <p className="text-sm font-medium text-(--ui-text)">
                         Are you a GST-registered business?
                       </p>
                       <div className="flex gap-2">
@@ -610,8 +612,8 @@ export default function SetupWizard() {
                           }
                           className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                             form.is_gst_registered === false
-                              ? "border-blue-500 bg-blue-50 text-blue-700"
-                              : "border-slate-200 bg-white text-slate-600"
+                              ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                              : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted)"
                           }`}
                         >
                           No, not registered
@@ -627,15 +629,15 @@ export default function SetupWizard() {
                           }
                           className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                             form.is_gst_registered === true
-                              ? "border-blue-500 bg-blue-50 text-blue-700"
-                              : "border-slate-200 bg-white text-slate-600"
+                              ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                              : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted)"
                           }`}
                         >
                           Yes, registered
                         </button>
                       </div>
                       {form.is_gst_registered === false && (
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-(--ui-text-muted)">
                           You won&apos;t be charged tax at checkout, and FBR Digital Invoicing will be off. You can switch later under Settings.
                         </p>
                       )}
@@ -652,15 +654,15 @@ export default function SetupWizard() {
                           </Field>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-slate-700">How are your prices listed?</p>
+                          <p className="text-sm font-medium text-(--ui-text)">How are your prices listed?</p>
                           <div className="flex gap-2">
                             <button
                               type="button"
                               onClick={() => set("tax_mode", "inclusive")}
                               className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium transition ${
                                 form.tax_mode === "inclusive"
-                                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                                  : "border-slate-200 bg-white text-slate-600"
+                                  ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                                  : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted)"
                               }`}
                             >
                               Inclusive (sticker price includes GST)
@@ -670,8 +672,8 @@ export default function SetupWizard() {
                               onClick={() => set("tax_mode", "exclusive")}
                               className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium transition ${
                                 form.tax_mode === "exclusive"
-                                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                                  : "border-slate-200 bg-white text-slate-600"
+                                  ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                                  : "border-(--ui-border-strong) bg-(--ui-surface) text-(--ui-text-muted)"
                               }`}
                             >
                               Exclusive (GST added at checkout)
@@ -679,10 +681,10 @@ export default function SetupWizard() {
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          <p className="text-xs font-medium uppercase tracking-wide text-(--ui-text-muted)">
                             Default GST rate (optional)
                           </p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-(--ui-text-muted)">
                             e.g. GST 17% — you can add more rules later under Settings &rarr; Taxes.
                           </p>
                           <div className="grid grid-cols-2 gap-3">
@@ -703,8 +705,8 @@ export default function SetupWizard() {
               {/* Step 4 — First Outlet */}
               {step === 4 && (
                 <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-slate-800">First Outlet</h2>
-                  <p className="text-sm text-slate-500">This will be your main store location. You can add more outlets later.</p>
+                  <h2 className="text-base font-semibold text-(--ui-text)">First Outlet</h2>
+                  <p className="text-sm text-(--ui-text-muted)">This will be your main store location. You can add more outlets later.</p>
                   <Field label="Outlet Name">
                     <input className={inputCls} value={form.outlet_name} onChange={(e) => set("outlet_name", e.target.value)} placeholder="Main Store" />
                   </Field>
@@ -723,8 +725,8 @@ export default function SetupWizard() {
               {/* Step 5 — Admin Account */}
               {step === 5 && (
                 <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-slate-800">Admin Account</h2>
-                  <p className="text-sm text-slate-500">This account will have full Administrator access.</p>
+                  <h2 className="text-base font-semibold text-(--ui-text)">Admin Account</h2>
+                  <p className="text-sm text-(--ui-text-muted)">This account will have full Administrator access.</p>
                   <Field label="Full Name" required>
                     <input className={inputCls} value={form.admin_name} onChange={(e) => set("admin_name", e.target.value)} placeholder="e.g. Hassan Ali" />
                   </Field>
@@ -759,7 +761,7 @@ export default function SetupWizard() {
 
               {/* Error */}
               {error && (
-                <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="mt-4 rounded-(--ui-radius-sm) bg-(--ui-danger-bg) px-3 py-2 text-sm text-(--ui-danger-fg)">
                   {error}
                 </div>
               )}
@@ -767,9 +769,9 @@ export default function SetupWizard() {
               {/* Resend setup link — only shown after a 403 expired-link error.
                   Inline so the merchant can recover without emailing support. */}
               {linkExpired && !resendSent && (
-                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm">
-                  <p className="mb-2 font-medium text-amber-900">Need a fresh link?</p>
-                  <p className="mb-3 text-xs text-amber-800">
+                <div className="mt-3 rounded-(--ui-radius-sm) bg-(--ui-warning-bg) px-3 py-3 text-sm">
+                  <p className="mb-2 font-medium text-(--ui-warning-fg)">Need a fresh link?</p>
+                  <p className="mb-3 text-xs text-(--ui-warning-fg)">
                     Enter the email you signed up with — we&apos;ll send a new setup link valid for 48 hours.
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row">
@@ -778,7 +780,7 @@ export default function SetupWizard() {
                       value={resendEmail}
                       onChange={(e) => setResendEmail(e.target.value)}
                       placeholder="you@example.com"
-                      className="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      className="flex-1 rounded-(--ui-radius-sm) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)/20"
                     />
                     <button
                       type="button"
@@ -795,20 +797,20 @@ export default function SetupWizard() {
                           setResendSubmitting(false);
                         }
                       }}
-                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer"
+                      className="ui-focus-ring rounded-(--ui-radius-pill) bg-(--ui-primary) px-4 py-2 text-sm font-semibold text-(--ui-on-primary) hover:bg-(--ui-primary-strong) disabled:opacity-50 cursor-pointer"
                     >
                       {resendSubmitting ? "Sending…" : "Resend link"}
                     </button>
                   </div>
                   {resendError && (
-                    <p className="mt-2 text-xs text-red-600">{resendError}</p>
+                    <p className="mt-2 text-xs text-(--ui-danger)">{resendError}</p>
                   )}
                 </div>
               )}
               {linkExpired && resendSent && (
-                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm">
-                  <p className="font-medium text-emerald-900">Check your email</p>
-                  <p className="mt-1 text-xs text-emerald-800">
+                <div className="mt-3 rounded-(--ui-radius-sm) bg-(--ui-success-bg) px-3 py-3 text-sm">
+                  <p className="font-medium text-(--ui-success-fg)">Check your email</p>
+                  <p className="mt-1 text-xs text-(--ui-success-fg)">
                     If an unfinished signup exists for that email, a fresh setup link is on its way.
                   </p>
                 </div>
@@ -819,7 +821,7 @@ export default function SetupWizard() {
                 <button
                   onClick={back}
                   disabled={step === 1}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-40"
+                  className="ui-focus-ring rounded-(--ui-radius-pill) border border-(--ui-border-strong) px-4 py-2 text-sm font-medium text-(--ui-text) transition hover:bg-(--ui-muted-surface) disabled:pointer-events-none disabled:opacity-40"
                 >
                   Back
                 </button>
@@ -827,7 +829,7 @@ export default function SetupWizard() {
                   <button
                     onClick={next}
                     disabled={stepInvalid}
-                    className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
+                    className="ui-focus-ring rounded-(--ui-radius-pill) bg-(--ui-primary) px-6 py-2 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-(--ui-primary)"
                   >
                     Next
                   </button>
@@ -835,7 +837,7 @@ export default function SetupWizard() {
                   <button
                     onClick={submit}
                     disabled={submitting || stepInvalid}
-                    className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="ui-focus-ring rounded-(--ui-radius-pill) bg-(--ui-primary) px-6 py-2 text-sm font-semibold text-(--ui-on-primary) transition hover:bg-(--ui-primary-strong) disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? "Setting up…" : "Complete Setup"}
                   </button>

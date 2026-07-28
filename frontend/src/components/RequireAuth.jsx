@@ -7,7 +7,7 @@ export default function RequireAuth({ children }) {
 
   if (isBootstrapping) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-600 text-sm font-medium">
+      <div className="min-h-screen flex items-center justify-center bg-(--ui-muted-surface) text-(--ui-text-muted) text-sm font-medium">
         Loading session...
       </div>
     );

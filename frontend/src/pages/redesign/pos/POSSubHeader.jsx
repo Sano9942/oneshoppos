@@ -115,7 +115,7 @@ export default function POSSubHeader() {
             <button
               onClick={clearActiveAppointment}
               title="Checkout will complete this appointment — click to detach"
-              className="flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-emerald-50 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-100 transition shadow-sm"
+              className="flex items-center gap-1.5 text-(--ui-success-fg) border border-(--ui-success-fg)/20 bg-(--ui-success-bg) px-3 py-1.5 rounded-(--ui-radius-sm) text-xs font-bold transition"
             >
               <CalendarClock size={13} /> Appt #{activeAppointment.id}
               <X size={11} />
@@ -123,7 +123,7 @@ export default function POSSubHeader() {
           ) : (
             <button
               onClick={() => setShowAppointments(true)}
-              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm"
+              className="flex items-center gap-1.5 text-(--ui-text) border border-(--ui-border-strong) bg-(--ui-surface) px-3 py-1.5 rounded-(--ui-radius-sm) text-xs font-bold hover:bg-(--ui-muted-surface) transition"
             >
               <CalendarClock size={13} /> Appointments
             </button>

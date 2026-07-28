@@ -199,14 +199,14 @@ export default function ClassTimetableRedesign() {
                           cancelled
                             ? "opacity-40 line-through border-(--ui-border) cursor-default"
                             : full
-                              ? "border-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10"
+                              ? "border-(--ui-warning-fg)/30 bg-(--ui-warning-bg) hover:border-(--ui-warning-fg)"
                               : "border-(--ui-border) hover:border-(--ui-accent) bg-(--ui-surface-2)"
                         }`}
                       >
                         <div className="font-bold text-(--ui-text) truncate">{fmtTime(s.start_at)} {s.service_name}</div>
                         <div className="flex items-center justify-between text-(--ui-text-muted)">
                           <span className="truncate">{s.employee_name || "—"}</span>
-                          <span className={`font-semibold ${full ? "text-amber-600" : ""}`}>
+                          <span className={`font-semibold ${full ? "text-(--ui-warning-fg)" : ""}`}>
                             {s.confirmed_count}/{s.max_capacity}
                             {waitlistOn && s.waitlist_count > 0 ? ` +${s.waitlist_count}w` : ""}
                           </span>

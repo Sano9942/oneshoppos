@@ -77,41 +77,41 @@ export default function PortalForms() {
     }
   }
 
-  if (loading) return <div className="p-6 text-slate-500">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (loading) return <div className="p-6 text-(--ui-text-muted)">Loading…</div>;
+  if (error) return <div className="p-6 text-(--ui-danger)">{error}</div>;
 
   if (active) {
     return (
       <div className="p-6 max-w-lg mx-auto">
-        <button onClick={() => setActive(null)} className="text-sm text-blue-600 mb-4">
+        <button onClick={() => setActive(null)} className="text-sm text-(--ui-link) mb-4">
           ← Back to forms
         </button>
         <h1 className="text-xl font-bold mb-4">{active.form_name}</h1>
         {active.status === "submitted" ? (
-          <p className="text-emerald-600">This form was already submitted on {fmtDateTime(active.submitted_at)}.</p>
+          <p className="text-(--ui-success-fg)">This form was already submitted on {fmtDateTime(active.submitted_at)}.</p>
         ) : (
           <>
             <FormFieldRenderer fields={active.fields_snapshot || []} values={values} onChange={setValues} />
             {active.require_signature && (
               <div className="mt-5">
                 <div className="text-sm font-medium mb-1">
-                  Signature <span className="text-red-500">*</span>
+                  Signature <span className="text-(--ui-danger)">*</span>
                 </div>
                 <SignaturePad ref={sigRef} height={140} />
                 <button
                   type="button"
-                  className="text-xs text-slate-500 mt-1"
+                  className="text-xs text-(--ui-text-muted) mt-1"
                   onClick={() => sigRef.current?.clear()}
                 >
                   Clear signature
                 </button>
               </div>
             )}
-            {fillError && <p className="text-sm text-red-600 mt-3">{fillError}</p>}
+            {fillError && <p className="text-sm text-(--ui-danger) mt-3">{fillError}</p>}
             <button
               onClick={submit}
               disabled={submitting}
-              className="mt-6 w-full rounded-lg bg-emerald-600 text-white py-3 font-semibold disabled:opacity-60"
+              className="ui-focus-ring mt-6 w-full rounded-(--ui-radius-pill) bg-(--ui-primary) text-(--ui-on-primary) py-3 font-semibold disabled:opacity-60"
             >
               {submitting ? "Submitting…" : "Submit"}
             </button>
@@ -125,17 +125,17 @@ export default function PortalForms() {
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Forms</h1>
       {forms.length === 0 ? (
-        <p className="text-slate-500">You have no forms to complete.</p>
+        <p className="text-(--ui-text-muted)">You have no forms to complete.</p>
       ) : (
         <ul className="space-y-3">
           {forms.map((f) => (
             <li
               key={f.id}
-              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4"
+              className="flex items-center justify-between rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) p-4"
             >
               <div>
                 <div className="font-medium">{f.form_name}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-(--ui-text-muted)">
                   {f.status === "submitted"
                     ? `Submitted ${fmtDateTime(f.submitted_at)}`
                     : "Awaiting your completion"}
@@ -143,8 +143,10 @@ export default function PortalForms() {
               </div>
               <button
                 onClick={() => openForm(f.id)}
-                className={`text-sm font-semibold rounded px-3 py-1.5 ${
-                  f.status === "pending" ? "bg-emerald-600 text-white" : "text-blue-600"
+                className={`ui-focus-ring text-sm font-semibold rounded-(--ui-radius-pill) px-3 py-1.5 ${
+                  f.status === "pending"
+                    ? "bg-(--ui-primary) text-(--ui-on-primary)"
+                    : "text-(--ui-link)"
                 }`}
               >
                 {f.status === "pending" ? "Complete" : "View"}

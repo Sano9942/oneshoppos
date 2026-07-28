@@ -95,16 +95,16 @@ function RestaurantContent() {
   if (isLocked) return <POSLockScreen />;
 
   return (
-    <div className="flex flex-col h-screen bg-[#F8FAFC] overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-(--ui-bg) overflow-hidden font-sans">
       {/* Notice / error banners (mirror POSRedesign) */}
       {notice && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-slate-900/90 text-white px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-md border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-(--ui-primary)/95 text-white px-6 py-3 rounded-2xl backdrop-blur-md border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-2 h-2 rounded-full bg-white/80 animate-pulse" />
           <span className="text-sm font-bold tracking-tight">{notice}</span>
         </div>
       )}
       {error && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-rose-600 text-white px-6 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-(--ui-danger) text-white px-6 py-3 rounded-2xl border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
           <span className="text-sm font-bold tracking-tight">{error}</span>
         </div>
       )}
