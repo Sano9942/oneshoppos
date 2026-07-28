@@ -110,7 +110,7 @@ export default function AdminDeadLetters() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`ui-focus-ring rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-              tab === t.id ? "bg-white text-(--ui-text) shadow-(--ui-shadow-sm)" : "text-(--ui-text-muted) hover:text-(--ui-text)"
+              tab === t.id ? "bg-white text-(--ui-text)" : "text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {t.label}

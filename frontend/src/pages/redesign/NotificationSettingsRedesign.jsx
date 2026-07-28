@@ -8,7 +8,7 @@ import { Bell, Plus, Trash2, Send, CheckCircle2, XCircle } from "lucide-react";
 const CHANNELS = ["email", "sms", "whatsapp"];
 
 const STATUS_STYLE = {
-  sent: "text-(--ui-success)",
+  sent: "text-(--ui-success-fg)",
   queued: "text-(--ui-text-muted)",
   skipped: "text-amber-500",
   failed: "text-(--ui-danger)",
@@ -142,7 +142,7 @@ export default function NotificationSettingsRedesign() {
             <Bell size={18} className="text-(--ui-text-muted)" />
             <span className="text-sm font-medium text-(--ui-text)">
               Notifications are{" "}
-              <span className={status?.enabled ? "text-(--ui-success)" : "text-amber-500"}>
+              <span className={status?.enabled ? "text-(--ui-success-fg)" : "text-amber-500"}>
                 {status?.enabled ? "enabled" : "disabled"}
               </span>
             </span>
@@ -156,7 +156,7 @@ export default function NotificationSettingsRedesign() {
             {CHANNELS.map((ch) => (
               <span key={ch} className="flex items-center gap-1 text-(--ui-text-muted)">
                 {status?.channels?.[ch] ? (
-                  <CheckCircle2 size={14} className="text-(--ui-success)" />
+                  <CheckCircle2 size={14} className="text-(--ui-success-fg)" />
                 ) : (
                   <XCircle size={14} className="text-(--ui-text-muted)" />
                 )}

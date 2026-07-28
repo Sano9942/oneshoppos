@@ -358,7 +358,7 @@ export default function FormsRedesign() {
             <div className="p-6 text-(--ui-text-muted)">No forms yet. Create your first intake form or waiver.</div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-(--ui-surface-2) text-left text-(--ui-text-muted)">
+              <thead className="bg-(--ui-muted-surface) text-left text-(--ui-text-muted)">
                 <tr>
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2">Attach to</th>
@@ -410,7 +410,7 @@ export default function FormsRedesign() {
             <div className="p-6 text-(--ui-text-muted)">No form responses yet.</div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-(--ui-surface-2) text-left text-(--ui-text-muted)">
+              <thead className="bg-(--ui-muted-surface) text-left text-(--ui-text-muted)">
                 <tr>
                   <th className="px-4 py-2">Form</th>
                   <th className="px-4 py-2">Customer</th>

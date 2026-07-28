@@ -130,7 +130,7 @@ export default function AdminSecurity() {
       {recoveryCodes && (
         <div className="mb-4 rounded-(--ui-radius-lg) border border-(--ui-border) bg-(--ui-surface) p-6">
           <div className="mb-2 flex items-center gap-2">
-            <ShieldCheck size={18} className="text-(--ui-success)" />
+            <ShieldCheck size={18} className="text-(--ui-success-fg)" />
             <h2 className="text-base font-bold text-(--ui-text)">Save your recovery codes</h2>
           </div>
           <p className="mb-3 text-sm text-(--ui-text-muted)">
@@ -156,7 +156,7 @@ export default function AdminSecurity() {
         ) : enabled ? (
           <>
             <div className="flex items-center gap-2">
-              <ShieldCheck size={20} className="text-(--ui-success)" />
+              <ShieldCheck size={20} className="text-(--ui-success-fg)" />
               <h2 className="text-base font-bold text-(--ui-text)">Two-factor authentication is on</h2>
             </div>
             <p className="mt-1 text-sm text-(--ui-text-muted)">
@@ -286,7 +286,7 @@ export default function AdminSecurity() {
                   </p>
                 </div>
                 {s.current && (
-                  <span className="ml-3 shrink-0 rounded-full bg-(--ui-success)/15 px-2 py-0.5 text-xs font-semibold text-(--ui-success)">
+                  <span className="ml-3 shrink-0 rounded-full bg-(--ui-success-bg) px-2 py-0.5 text-xs font-semibold text-(--ui-success-fg)">
                     This device
                   </span>
                 )}

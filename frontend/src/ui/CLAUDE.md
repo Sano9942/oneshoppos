@@ -10,7 +10,7 @@ Shared design system components, layout helpers, and theme tokens. This is the *
 - `PwaInstallPrompt.jsx` — hardcoded emerald/slate palette throughout, not tokenized at all.
 - `ImpersonationBanner.jsx` — hardcoded `bg-amber-500` + `bg-white/20`.
 - `StarRating.jsx` — hardcoded `text-yellow-400 fill-yellow-400` / `text-gray-300` in both exports.
-- `ErrorBoundary.jsx` — hardcoded amber/red for the error icon and stack-trace `<pre>`, plus a **separate token namespace** (see below).
+- `ErrorBoundary.jsx` — hardcoded amber/red for the error icon and stack-trace `<pre>`. Its surface/border colors are now canonical `--ui-*` (see below).
 - `SupportWidget.jsx` — mostly tokenized; the floating `?` button and the screenshot remove-icon use a couple of literal colors (`text-white`, `bg-red-500`) alongside `--ui-*` tokens.
 
 Everything else in this directory (`FBRPromptBanner.jsx`, `MultiOutletEnabledBanner.jsx`, `Breadcrumbs.jsx`, `primitives.jsx`) is fully `--ui-*` token-based. The `Modal`/`Drawer` backdrop scrim (`bg-black/45`) is an intentional, deliberate exception, not drift. POS elsewhere in the app uses hardcoded colors by exception.
@@ -160,7 +160,7 @@ Props: `{ level?, onReset?, children }`.
 - Reports to Sentry only if `SENTRY_DSN` is set — `import * as SentryModule from "@sentry/react"` is aliased to `null` when `SENTRY_DSN` is falsy, so `componentDidCatch` is a silent no-op without a DSN.
 - "Try Again" resets local error state and calls `props.onReset` if provided. "Reload"/"Reload Page" calls `window.location.reload()`.
 - In dev (`IS_DEV` from `../config`), renders `error.message` + `error.stack` in a `<pre>` (hardcoded `bg-red-50`/`text-red-800`); hidden in prod.
-- Uses `--border-primary` / `--bg-primary` / `--text-primary` / `--text-secondary` tokens — a **different token namespace** than the rest of `ui/` (`--ui-*`). These two sets are not interchangeable or kept in sync by any tooling.
+- Surfaces/borders use canonical `--ui-surface` / `--ui-bg` / `--ui-border-strong`. It previously referenced `--bg-primary` / `--border-primary`, which were **defined nowhere in the project** — those two rendered transparent/borderless until they were replaced. It still uses `--text-primary` / `--text-secondary`, which *are* defined (legacy aliases in `tokens.css`).
 - Passes `variant="secondary"` to the "Try Again" `Button` — ignored (see `primitives.jsx` notes above); renders as `default` tone.
 - Error/warning icon circles are hardcoded `bg-amber-100 text-amber-600`, not token-driven.
 
@@ -271,7 +271,7 @@ Default export. **Pure presentational — takes all state as props, does no inte
 
 ## Cross-file notes
 
-- **Two token systems coexist:** `--ui-*` (this directory's own components, `tokens.css`) vs `--border-primary`/`--bg-primary`/`--text-primary`/`--text-secondary` (used only by `ErrorBoundary.jsx`, sourced from a separate global stylesheet). Don't assume one covers the other, and don't "fix" `ErrorBoundary.jsx` to use `--ui-*` without checking where the other namespace is actually defined.
+- **There is no "separate global stylesheet."** The project has exactly two CSS files — `src/index.css` and `src/ui/tokens.css` — and every design token the app resolves is defined in `tokens.css`. An earlier version of this doc claimed `ErrorBoundary.jsx`'s `--border-primary`/`--bg-primary` came from another stylesheet; they came from nowhere, so they silently resolved to empty. **Any `--foo` a component references but `tokens.css` doesn't define renders as no value at all — not a fallback.** Before adding a token reference, confirm it exists in `tokens.css`; `tokens.css`'s legacy-alias block is the place to map an old name onto the Square palette if a rename is impractical.
 - **Dismissal persistence varies per banner, deliberately:** `AnnouncementBanner`/`MultiOutletEnabledBanner` use `sessionStorage` (re-nag per tab), `PwaInstallPrompt` uses `localStorage` (permanent, client-only), `FBRPromptBanner` persists server-side (`PUT /api/company-profile/fbr-banner-dismiss`). Match the pattern to the new banner's urgency rather than defaulting to one mechanism.
 - **`Button`'s `tone` vs `variant`** — only `tone` exists. Grep for `variant=` before assuming a `Button` usage does anything with that prop; it's silently dropped (React just leaves it unused — no propTypes warning either).
 - Most banners import `api` from `../api` (authenticated tenant path); `AnnouncementBanner` uses raw `fetch` against `API_BASE` directly because it must also work pre-login. Match whichever pattern fits your banner's auth requirement.

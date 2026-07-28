@@ -200,7 +200,7 @@ export default function ClassTimetableRedesign() {
                             ? "opacity-40 line-through border-(--ui-border) cursor-default"
                             : full
                               ? "border-(--ui-warning-fg)/30 bg-(--ui-warning-bg) hover:border-(--ui-warning-fg)"
-                              : "border-(--ui-border) hover:border-(--ui-accent) bg-(--ui-surface-2)"
+                              : "border-(--ui-border) hover:border-(--ui-accent) bg-(--ui-muted-surface)"
                         }`}
                       >
                         <div className="font-bold text-(--ui-text) truncate">{fmtTime(s.start_at)} {s.service_name}</div>
@@ -264,7 +264,7 @@ export default function ClassTimetableRedesign() {
                       {bookMatches.map((c) => (
                         <button
                           key={c.id}
-                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-(--ui-surface-2) flex justify-between"
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-(--ui-muted-surface) flex justify-between"
                           onClick={() => act(async () => {
                             await api.post(`/api/classes/sessions/${roster.session.id}/book`, { customer_id: c.id });
                             setBookSearch("");

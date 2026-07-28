@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component {
     if (level === "page") {
       return (
         <div className="flex items-center justify-center py-16">
-          <div className="w-full max-w-md rounded-xl border border-(--border-primary) bg-(--bg-primary) p-6 text-center shadow-sm">
+          <div className="w-full max-w-md rounded-(--ui-radius-md) border border-(--ui-border-strong) bg-(--ui-surface) p-6 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-xl font-bold text-amber-600">
               !
             </div>
@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component {
 
     // Global / full-page error
     return (
-      <div className="flex min-h-screen items-center justify-center bg-(--bg-primary) p-4">
+      <div className="flex min-h-screen items-center justify-center bg-(--ui-bg) p-4">
         <div className="w-full max-w-lg text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-2xl font-bold text-amber-600">
             !

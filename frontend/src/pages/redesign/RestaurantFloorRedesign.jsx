@@ -128,7 +128,7 @@ export default function RestaurantFloorRedesign() {
         <div className="flex gap-2 mb-4">
           {plans.map(p => (
             <button key={p.id} onClick={() => setActivePlan(p.id)}
-              className={`px-3 py-1 rounded text-sm ${activePlan === p.id ? "bg-(--color-primary) text-white" : "bg-(--color-surface) text-(--color-text-secondary)"}`}>
+              className={`px-3 py-1 rounded text-sm ${activePlan === p.id ? "bg-(--ui-primary) text-(--ui-on-primary)" : "bg-(--ui-muted-surface) text-(--ui-text-muted)"}`}>
               {p.name} ({p.table_count} tables)
             </button>
           ))}
@@ -162,7 +162,7 @@ export default function RestaurantFloorRedesign() {
           <SectionCard key={t.id}>
             <div className="text-center">
               <div className="font-bold text-lg">{t.label}</div>
-              <div className="text-xs text-(--color-text-secondary)">Cap: {t.capacity}</div>
+              <div className="text-xs text-(--ui-text-muted)">Cap: {t.capacity}</div>
               {t.session_id ? (
                 <>
                   <Badge tone={STATUS_TONES[t.session_status]}>{t.session_status}</Badge>
@@ -234,7 +234,7 @@ export default function RestaurantFloorRedesign() {
 
       {showSeatModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowSeatModal(null)}>
-          <div className="bg-(--color-surface) rounded-lg p-6 w-80" onClick={e => e.stopPropagation()}>
+          <div className="bg-(--ui-surface) rounded-lg p-6 w-80" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold mb-4">Seat Table</h3>
             <label className="block text-sm mb-1">Guests</label>
             <input type="number" min="1" value={seatForm.guest_count} onChange={e => setSeatForm(f => ({ ...f, guest_count: Number(e.target.value) }))} className="w-full border rounded px-2 py-1 mb-3" />

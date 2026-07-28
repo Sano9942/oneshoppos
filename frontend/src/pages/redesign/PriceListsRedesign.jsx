@@ -675,23 +675,23 @@ function AssignmentsPanel({ listId }) {
       {showAdd && (
         <div className="flex items-end gap-2 mb-3">
           <select value={form.scope_type} onChange={e => setForm(f => ({ ...f, scope_type: e.target.value, scope_id: "" }))}
-            className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs">
+            className="rounded border border-(--ui-border-strong) bg-(--ui-surface) px-2 py-1 text-xs">
             {Object.entries(SCOPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           {form.scope_type === "outlet" ? (
             <select value={form.scope_id} onChange={e => setForm(f => ({ ...f, scope_id: e.target.value }))}
-              className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs grow">
+              className="rounded border border-(--ui-border-strong) bg-(--ui-surface) px-2 py-1 text-xs grow">
               <option value="">Select outlet…</option>
               {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           ) : (
             <input type="number" placeholder="Entity ID" value={form.scope_id}
               onChange={e => setForm(f => ({ ...f, scope_id: e.target.value }))}
-              className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs w-24" />
+              className="rounded border border-(--ui-border-strong) bg-(--ui-surface) px-2 py-1 text-xs w-24" />
           )}
           <input type="number" placeholder="Priority" value={form.priority}
             onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-            className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs w-20" />
+            className="rounded border border-(--ui-border-strong) bg-(--ui-surface) px-2 py-1 text-xs w-20" />
           <Button size="sm" tone="primary" onClick={addAssignment}>Add</Button>
         </div>
       )}
