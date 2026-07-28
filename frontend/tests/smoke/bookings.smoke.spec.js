@@ -5,13 +5,13 @@
  * Test B (public): anonymous booking config → availability → create booking.
  */
 import { test, expect } from "@playwright/test";
+import { STORE_CODE as TENANT } from "../helpers/auth.js";
 import { get, post } from "../helpers/api.js";
 import { softSkip, isFlagEnabled } from "./helpers/featureFlags.js";
 import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
 import { prefix } from "./helpers/smokeRunId.js";
 
 const SPEC = "bookings.smoke.spec.js";
-const TENANT = "packagesmall";
 
 test.describe("Bookings smoke", () => {
   test.afterAll(async () => {

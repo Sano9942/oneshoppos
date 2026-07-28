@@ -12,6 +12,7 @@
 import { test, expect } from "@playwright/test";
 import { get, post, put, del } from "../helpers/api.js";
 import { softSkip } from "./helpers/featureFlags.js";
+import { STORE_CODE } from "../helpers/auth.js";
 
 const SPEC = "restaurant-reservations.smoke.spec.js";
 
@@ -90,7 +91,7 @@ test.describe("Reservations smoke (Phase 2-R.4)", () => {
   test("public /reserve/:tenantSlug renders without crashing", async ({ page }) => {
     if (!(await softSkip(test, SPEC, "phase4_restaurant_reservations"))) return;
 
-    await page.goto("https://sanopos.com/reserve/packagesmall", {
+    await page.goto(`https://sanopos.com/reserve/${STORE_CODE}`, {
       waitUntil: "domcontentloaded",
     });
     const body = await page.textContent("body");

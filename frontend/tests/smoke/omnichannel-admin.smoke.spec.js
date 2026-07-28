@@ -9,11 +9,11 @@
  * shipped as core v18 surface.
  */
 import { test, expect } from "@playwright/test";
+import { STORE_CODE as TENANT } from "../helpers/auth.js";
 import { get, post, put } from "../helpers/api.js";
 import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
 import { prefix } from "./helpers/smokeRunId.js";
 
-const TENANT = "packagesmall";
 
 let seededProductId = null;
 let seededCustomerId = null;

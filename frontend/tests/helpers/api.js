@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { BACKEND } from "./auth.js";
+import { BACKEND, STORE_CODE, PIN } from "./auth.js";
 
 const TOKEN_FILE = resolve(import.meta.dirname, "../token.json");
 
@@ -54,8 +54,8 @@ export async function ensurePOSReady(outletId = 1) {
   const statusRes = await get(`/api/attendance/my-status?outlet_id=${outletId}`);
   const code = statusRes.data?.status || statusRes.data?.attendance_code;
   if (code !== "clocked_in") {
-    await post(`/api/attendance/pin-checkin?tenant=packagesmall`, {
-      pin_code: "2580",
+    await post(`/api/attendance/pin-checkin?tenant=${STORE_CODE}`, {
+      pin_code: PIN,
       outlet_id: outletId,
     });
   }

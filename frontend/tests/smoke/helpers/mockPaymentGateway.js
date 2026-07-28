@@ -10,6 +10,7 @@
  *   // ... do the flow ...
  *   expect(payments.at(-1)).toMatchObject({ ... });
  */
+import { STORE_CODE } from "../../helpers/auth.js";
 
 async function stubJson(route, body, status = 200) {
   return route.fulfill({
@@ -36,7 +37,7 @@ export async function mockXPay(page) {
     bag.push(captureBody(route));
     return stubJson(route, {
       intent_id: "xpay_mock_intent_" + Date.now(),
-      redirect_url: "https://sanopos.com/store/packagesmall/order/mock?status=success",
+      redirect_url: `https://sanopos.com/store/${STORE_CODE}/order/mock?status=success`,
       status: "pending",
     });
   });
@@ -46,7 +47,7 @@ export async function mockXPay(page) {
     bag.push(captureBody(route));
     return stubJson(route, {
       intent_id: "xpay_mock_intent_" + Date.now(),
-      redirect_url: "https://sanopos.com/store/packagesmall/order/mock?status=success",
+      redirect_url: `https://sanopos.com/store/${STORE_CODE}/order/mock?status=success`,
       payment_enabled: true,
     });
   });
@@ -60,7 +61,7 @@ export async function mockJazzCash(page) {
     return stubJson(route, {
       pp_ResponseCode: "000",
       pp_TxnRefNo: "JC_" + Date.now(),
-      pp_RedirectURL: "https://sanopos.com/store/packagesmall/order/mock?status=success",
+      pp_RedirectURL: `https://sanopos.com/store/${STORE_CODE}/order/mock?status=success`,
     });
   });
   return bag;
@@ -72,7 +73,7 @@ export async function mockEasypaisa(page) {
     bag.push(captureBody(route));
     return stubJson(route, {
       orderId: "EP_" + Date.now(),
-      redirectUrl: "https://sanopos.com/store/packagesmall/order/mock?status=success",
+      redirectUrl: `https://sanopos.com/store/${STORE_CODE}/order/mock?status=success`,
     });
   });
   return bag;

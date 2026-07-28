@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { STORE_CODE } from "./helpers/auth.js";
 
 test.describe("Admin Panel", () => {
   // Clear tenant auth — admin uses its own login
@@ -61,7 +62,7 @@ test.describe("Admin Panel", () => {
     test("tenant list shows tenant entries", async ({ page }) => {
       await page.goto("/admin/tenants");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText(/packagesmall/i).first()).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(new RegExp(STORE_CODE, "i")).first()).toBeVisible({ timeout: 15000 });
     });
 
     test("support tickets page loads", async ({ page }) => {

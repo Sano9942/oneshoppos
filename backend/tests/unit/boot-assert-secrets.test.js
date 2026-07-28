@@ -1,9 +1,13 @@
 /**
- * PLAN-V3 Step 4.3 — production boot guard for MANUFACTURER_PORTAL_JWT_SECRET.
+ * PLAN-V3 Step 4.3 — production boot guard for the portal JWT secrets.
  *
- * assertProductionSecrets() must throw (kill boot) in production when the
- * manufacturer portal secret is unset, equals JWT_SECRET, or is too weak; and
- * must be a no-op outside production so the dev/test fallback keeps working.
+ * assertProductionSecrets() must throw (kill boot) in production when either
+ * portal secret is unset, equals JWT_SECRET, equals the other portal secret, or
+ * is too weak; and must be a no-op outside production so the dev/test fallbacks
+ * keep working.
+ *
+ * MANUFACTURER_PORTAL_JWT_SECRET shipped with 4.3; CUSTOMER_PORTAL_JWT_SECRET
+ * was that release's documented follow-up, covered here on the same terms.
  */
 const {
   assertProductionSecrets,
@@ -12,8 +16,9 @@ const {
   MIN_DISTINCT_CHARS,
 } = require("../../boot/assert-secrets");
 
-// A strong, distinct secret: >= 32 chars, >= 12 distinct chars, != JWT_SECRET.
+// Strong, mutually distinct secrets: >= 32 chars, >= 12 distinct chars.
 const STRONG = "Zx9-Kp2Qw7Rt4Vb1Nm6Ls3Hg8Dc5Fj0-abcdEFG";
+const STRONG_CUSTOMER = "Qw4-Zn8Xr1Mv6Bt3Kd9Ly2Pc7Hs5Ga0-zyxwVUT";
 const EMPLOYEE_SECRET = "employee-jwt-secret-value-abcdefghijklmnop";
 
 function baseProdEnv(overrides = {}) {
@@ -21,6 +26,7 @@ function baseProdEnv(overrides = {}) {
     NODE_ENV: "production",
     JWT_SECRET: EMPLOYEE_SECRET,
     MANUFACTURER_PORTAL_JWT_SECRET: STRONG,
+    CUSTOMER_PORTAL_JWT_SECRET: STRONG_CUSTOMER,
     ...overrides,
   };
 }
@@ -32,6 +38,7 @@ describe("Step 4.3 — assertProductionSecrets", () => {
         NODE_ENV: "development",
         JWT_SECRET: EMPLOYEE_SECRET,
         MANUFACTURER_PORTAL_JWT_SECRET: undefined,
+        CUSTOMER_PORTAL_JWT_SECRET: undefined,
       })
     ).not.toThrow();
 
@@ -40,6 +47,7 @@ describe("Step 4.3 — assertProductionSecrets", () => {
         NODE_ENV: "test",
         JWT_SECRET: EMPLOYEE_SECRET,
         MANUFACTURER_PORTAL_JWT_SECRET: EMPLOYEE_SECRET, // shared — would fail in prod
+        CUSTOMER_PORTAL_JWT_SECRET: EMPLOYEE_SECRET, // shared — would fail in prod
       })
     ).not.toThrow();
   });
@@ -88,6 +96,51 @@ describe("Step 4.3 — assertProductionSecrets", () => {
     expect(() =>
       assertProductionSecrets(baseProdEnv({ JWT_SECRET: bad, MANUFACTURER_PORTAL_JWT_SECRET: bad }))
     ).toThrow(/insecure portal secret configuration/);
+  });
+
+  // --- CUSTOMER_PORTAL_JWT_SECRET (the 4.3 follow-up) ---
+
+  it("throws in production when CUSTOMER_PORTAL_JWT_SECRET is unset", () => {
+    expect(() =>
+      assertProductionSecrets(baseProdEnv({ CUSTOMER_PORTAL_JWT_SECRET: undefined }))
+    ).toThrow(/CUSTOMER_PORTAL_JWT_SECRET is not set/);
+  });
+
+  it("throws in production when CUSTOMER_PORTAL_JWT_SECRET equals JWT_SECRET", () => {
+    expect(() =>
+      assertProductionSecrets(baseProdEnv({ CUSTOMER_PORTAL_JWT_SECRET: EMPLOYEE_SECRET }))
+    ).toThrow(/CUSTOMER_PORTAL_JWT_SECRET must differ from JWT_SECRET/);
+  });
+
+  it("throws in production when CUSTOMER_PORTAL_JWT_SECRET is too weak", () => {
+    expect(() =>
+      assertProductionSecrets(baseProdEnv({ CUSTOMER_PORTAL_JWT_SECRET: "a".repeat(40) }))
+    ).toThrow(/CUSTOMER_PORTAL_JWT_SECRET has too little entropy/);
+  });
+
+  it("throws when the two portal secrets are the same value", () => {
+    // Each is individually strong and differs from JWT_SECRET, so only the
+    // cross-compare catches this — a customer token would verify as a
+    // manufacturer token and vice versa.
+    expect(() =>
+      assertProductionSecrets(baseProdEnv({ CUSTOMER_PORTAL_JWT_SECRET: STRONG }))
+    ).toThrow(/must differ from each other/);
+  });
+
+  it("reports BOTH portal secrets in one boot error when both are unset", () => {
+    let msg = "";
+    try {
+      assertProductionSecrets(
+        baseProdEnv({
+          MANUFACTURER_PORTAL_JWT_SECRET: undefined,
+          CUSTOMER_PORTAL_JWT_SECRET: undefined,
+        })
+      );
+    } catch (e) {
+      msg = e.message;
+    }
+    expect(msg).toMatch(/MANUFACTURER_PORTAL_JWT_SECRET is not set/);
+    expect(msg).toMatch(/CUSTOMER_PORTAL_JWT_SECRET is not set/);
   });
 });
 

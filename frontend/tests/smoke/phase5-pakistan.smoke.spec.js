@@ -6,6 +6,7 @@
  * Each sub-test is gated behind its own feature flag and skips cleanly when off.
  */
 import { test, expect } from "@playwright/test";
+import { STORE_CODE as TENANT } from "../helpers/auth.js";
 import { get, post } from "../helpers/api.js";
 import { softSkip, isFlagEnabled } from "./helpers/featureFlags.js";
 import { trackForCleanup, cleanupAll } from "./helpers/cleanup.js";
@@ -19,7 +20,6 @@ import {
 } from "./helpers/mockPaymentGateway.js";
 
 const SPEC = "phase5-pakistan.smoke.spec.js";
-const TENANT = "packagesmall";
 
 test.describe("Phase 5 Pakistan integration smoke", () => {
   test.afterAll(async () => {

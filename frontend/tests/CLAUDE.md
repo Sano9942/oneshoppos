@@ -4,7 +4,17 @@
 
 Every spec under `frontend/tests/*.spec.js` and `frontend/tests/smoke/` runs against the **live production site** — `https://sanopos.com` (frontend) and `https://api.sanopos.com` (backend). There is no local/staging Playwright target. Running these creates, mutates, and deletes real data on production. Only `tests/unit/` is safe to run freely (no network, fully mocked).
 
-**Known issue**: the shared test tenant `packagesmall` was deleted from production. `global-setup.js` logs this as a warning and continues (it does not hard-fail the run), but every legacy spec that depends on `auth.json`/`token.json` from that login will fail at the point it needs an authenticated session. Before trusting a "failing" (or a "passing"!) run, check whether it's `packagesmall`-related or a real regression — a green run does not prove the app works, it may just mean specs silently proceeded with no session and skipped/no-op'd. If you need a working authenticated target, either provision a fresh tenant (see `sweep/`) and point the login helper at it, or ask the user for a current test tenant.
+**The suite fails loudly when it cannot authenticate — by design.** `global-setup.js` **throws** if the shared-tenant login fails; it does not warn and continue. A run that cannot get a session proves nothing, so it must not be able to report green.
+
+This replaced a long-lived hole (fixed 2026-07-25): the shared tenant `packagesmall` was deleted from production in Apr 2026, global setup only *warned*, and specs then proceeded with a stale or absent session — assertions no-op'd or skipped and runs looked green while testing nothing. Two changes close it: the tenant slug now lives in exactly one place (`helpers/auth.js:STORE_CODE`, env-overridable), and setup hard-fails.
+
+Both directions are verified: a live tenant → setup logs in and the login specs pass; `E2E_TENANT=packagesmall` (the dead one) → the run aborts with exit 1 and an actionable message.
+
+To point a run at a different tenant, no code change is needed:
+
+```bash
+E2E_TENANT=<slug> E2E_USERNAME="<Employee Name>" E2E_PASSWORD=<pw> E2E_PIN=<pin> npx playwright test
+```
 
 ## Running Tests
 
@@ -33,28 +43,32 @@ cd frontend && npx playwright show-report
 - **Config**: `frontend/playwright.config.js` — single config, no separate live/staging variants. `baseURL: https://sanopos.com`, `storageState: ./tests/auth.json`, `fullyParallel: false`, `workers: 1`, `retries: 0`, `testMatch: "*.spec.js"`, global `timeout: 60000`. Two projects:
   - `chromium` — the default project; `testIgnore: /sweep\//` so it never picks up the sweep spec.
   - `sweep` — matches only `sweep/*.spec.js`; headed-only, `storageState: undefined` (provisions its own tenant instead of reusing the shared session), 4-hour per-spec timeout, `slowMo: 200`, `trace: "on"`, video retained on failure. Must be run explicitly with `--project=sweep`.
-- **Global setup** (`global-setup.js`): runs once before the `chromium` project, logs into `packagesmall` via `helpers/auth.js:loginMT`, and writes `auth.json` (browser storage state) + `token.json` (Bearer token) — both gitignored. If login fails (e.g. tenant deleted), it warns and continues rather than aborting the whole run, so the `sweep` project is never blocked by a dead shared tenant. Skips entirely if the only project requested is `sweep` (detected by matching `--project=sweep` against `process.argv`).
+- **Global setup** (`global-setup.js`): runs once before the `chromium` project, logs into `helpers/auth.js:STORE_CODE` via `loginMT`, and writes `auth.json` (browser storage state) + `token.json` (Bearer token) — both gitignored. **Throws on any failure**, including reaching `/dashboard` but finding no `authSession` token in localStorage (which would leave `helpers/api.js` sending `Bearer null` on every call). Skips entirely if the only project requested is `sweep` (detected by matching `--project=sweep` against `process.argv`) — so a hard failure here can never block the sweep, which provisions its own tenant.
 - **Self-contained specs**: each spec sets up its own data via `helpers/api.js` calls — no shared fixtures beyond the login session.
 - **Unit tests**: colocated under `tests/unit/`, run by Vitest, fully mocked — no server, no network. Environment is `jsdom` (`vite.config.js`'s `test` block), setup file `tests/setup.js` imports `@testing-library/jest-dom` and `fake-indexeddb/auto`.
 
 ## Test Tenant (production)
 
-| Field | Value |
-|-------|-------|
-| Store code | `packagesmall` |
-| Username | `hassan` |
-| Password | `Danish11` |
-| PIN | `2580` |
-| Backend | `https://api.sanopos.com` |
+Defined **only** in `helpers/auth.js` — every value is env-overridable, and no spec should hardcode a tenant slug (import `STORE_CODE` instead).
 
-This tenant has been deleted from production (see warning above) — these credentials are what every legacy spec is hardcoded to use, not a guarantee they currently work.
+| Field | Default | Env override |
+|-------|---------|--------------|
+| Store code | `livetestauto` | `E2E_TENANT` |
+| Username | `Sweep Operator` (full display name, spaces, case-sensitive) | `E2E_USERNAME` |
+| Password | `SweepRun123!` | `E2E_PASSWORD` |
+| PIN | `1234` | `E2E_PIN` |
+| Backend | `https://api.sanopos.com` | `E2E_BACKEND` |
+
+Verified working 2026-07-25 (Administrator role, lands straight on `/dashboard`, no context selection). The previous tenant `packagesmall` was deleted in Apr 2026 — if you see that slug anywhere in this suite again, it's a regression of the single-source-of-truth rule.
 
 ## Helper Files (`tests/helpers/`)
 
 ### `auth.js`
-Exports the credentials above (`STORE_CODE`, `USERNAME`, `PASSWORD`, `PIN`, `BACKEND`) plus `loginMT(page)`: navigates to `/login`, fills store code / employee name / password, clicks Sign In, waits for redirect to `/dashboard`.
+Exports the credentials above (`STORE_CODE`, `USERNAME`, `PASSWORD`, `PIN`, `BACKEND`) plus `loginMT(page)`: navigates to `/login`, fills store code / username / password, clicks Sign In, waits for redirect to `/dashboard`.
 
-Locators (fragile — check these first if login-dependent specs break): store code via `getByPlaceholder(/aceshardware/i)` (falls back to `getByLabel(/store code/i)`), username via `getByPlaceholder(/employee name/i)`, password via `getByPlaceholder(/password/i)`, submit via `getByRole("button", { name: /sign in/i })`.
+Locators (the most fragile part of the suite — check these first if login-dependent specs break; source of truth is `frontend/src/pages/LoginPage.jsx`): store code `getByPlaceholder(/aceshardware/i)` or `getByLabel(/store code/i)`, username `getByPlaceholder(/employee (username|name)/i)` or `getByLabel(/username/i)`, password `getByPlaceholder(/password/i)` or `getByLabel(/password/i)`, submit `getByRole("button", { name: /sign in/i })`. Each field takes `.first()` so a future duplicate match can't throw a strict-mode error mid-run.
+
+**Why the username regex spells both wordings**: the Square reskin renamed that placeholder to "Employee **username**" while every spec still looked for "employee **name**" — 45 call sites across 8 spec files timed out silently for months, invisible because global setup only warned. Widening the regex (rather than pinning the new string) means the next rename degrades to a still-passing match instead of a mass timeout.
 
 ### `api.js`
 Direct REST helper used from spec setup/body code (not routed through the browser). Reads the Bearer token from `tests/token.json` (written by global setup).
@@ -62,7 +76,7 @@ Direct REST helper used from spec setup/body code (not routed through the browse
 - `api(method, path, body?)` → `{ status, ok, data }`
 - `get`/`post`/`put`/`del` — shorthands
 - Every request sends `Authorization: Bearer <token>`, `x-outlet-id: 1`, `x-scope-mode: outlet`
-- `ensurePOSReady(outletId = 1)` — call in `test.beforeAll` before any POS spec. Opens a shift (`POST /api/shifts/open`, float 1000) if none active, then clocks in via `POST /api/attendance/pin-checkin?tenant=packagesmall` (note: NOT `/clock-in`) if not already `clocked_in`.
+- `ensurePOSReady(outletId = 1)` — call in `test.beforeAll` before any POS spec. Opens a shift (`POST /api/shifts/open`, float 1000) if none active, then clocks in via `POST /api/attendance/pin-checkin?tenant=${STORE_CODE}` with `PIN` (note: NOT `/clock-in`) if not already `clocked_in`.
 
 ### `nav.js`
 - `navigateTo(page, path)` — `page.goto` + wait for `networkidle`
@@ -100,7 +114,8 @@ Naming gotcha: `contexts.test.jsx` is misleadingly named — most of its asserti
 ## Common Gotchas
 
 - Clock-in endpoint is `POST /api/attendance/pin-checkin?tenant=<slug>`, never `/clock-in`.
-- Don't assume a failing legacy spec is a new regression — first rule out the `packagesmall` deletion (see top of this file). Conversely, don't assume a passing run proves nothing broke — the warn-and-continue global setup means specs can silently run against no session.
+- A run that reaches the specs at all now has a real session — global setup throws otherwise, so "green" is meaningful again. If setup aborts, read its message: it names the tenant, the employee, the underlying cause, and the env-var override to point elsewhere.
+- Never hardcode a tenant slug, employee name, or PIN in a spec — import from `helpers/auth.js`. That single-source rule is what makes retargeting a one-env-var change instead of a 15-file sweep, and it's why the dead-tenant rot went unnoticed for three months.
 - `fullyParallel: false` / `workers: 1` in the config is deliberate — these tests mutate shared production state; don't override to parallel without understanding the collision risk.
 - The `sweep` project is excluded from default runs (`testIgnore: /sweep\//` on `chromium`) — you must pass `--project=sweep` explicitly, and it ignores `storageState`/`auth.json` entirely.
 - Onboarding specs and the sweep spec both create real production tenants that need manual deletion from `/admin`.

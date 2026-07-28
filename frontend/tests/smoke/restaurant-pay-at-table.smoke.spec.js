@@ -13,6 +13,7 @@
 import { test, expect } from "@playwright/test";
 import { get, post } from "../helpers/api.js";
 import { softSkip } from "./helpers/featureFlags.js";
+import { STORE_CODE } from "../helpers/auth.js";
 
 const SPEC = "restaurant-pay-at-table.smoke.spec.js";
 
@@ -68,7 +69,7 @@ test.describe("Pay-at-table smoke (Phase 2-R.3)", () => {
     // Public bill view — unauthenticated raw fetch because api() adds a
     // bearer token and public endpoints are scoped by tenant slug query.
     const billRes = await fetch(
-      `https://api.sanopos.com/api/public/restaurant/pay/${sessionRes.data.token}?tenant=packagesmall`
+      `https://api.sanopos.com/api/public/restaurant/pay/${sessionRes.data.token}?tenant=${STORE_CODE}`
     );
     // Allow 200 (happy path) or 410 (if the token was somehow already
     // consumed by another test) — the important thing is the route exists.
@@ -78,7 +79,7 @@ test.describe("Pay-at-table smoke (Phase 2-R.3)", () => {
   test("public pay page /pay/:token renders without crashing", async ({ page }) => {
     if (!(await softSkip(test, SPEC, "phase4_restaurant_pay_at_table"))) return;
 
-    await page.goto("https://sanopos.com/pay/nonexistent-token?tenant=packagesmall", {
+    await page.goto(`https://sanopos.com/pay/nonexistent-token?tenant=${STORE_CODE}`, {
       waitUntil: "domcontentloaded",
     });
     // We expect the error state ("can't complete payment" / "expired") — what
