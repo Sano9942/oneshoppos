@@ -15,6 +15,7 @@ An outside-agency assessment of SanoPOS, plus the decisions taken as a result an
 | [`02-decisions-and-rationale.md`](02-decisions-and-rationale.md) | **What was decided and why.** Including what was rejected and the reasoning behind it. Read this before changing course |
 | [`03-action-plan.md`](03-action-plan.md) | The sequenced, hour-budgeted task list. Checkboxes. This is what to work against |
 | [`04-open-questions.md`](04-open-questions.md) | Things not verified, and questions only the owner can answer |
+| [`05-frontend-dependency-audit.md`](05-frontend-dependency-audit.md) | The frontend dep picture Phase 0 never covered. 15 vulnerabilities, **2 of them reach a browser**; `npm audit fix` clears 14 with no manifest edit. Read before reacting to the alert count |
 
 ## Precedence
 
