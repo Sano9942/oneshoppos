@@ -14,24 +14,14 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared'),
     },
   },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-")) {
-            return "recharts";
-          }
-          if (id.includes("node_modules/xlsx") || id.includes("node_modules/codepage")) {
-            return "xlsx";
-          }
-          if (id.includes("/src/pages/reports/") || id.includes("/src/pages/Reports")) {
-            return "reports";
-          }
-          // Let Vite auto-split app code via lazy() — no catch-all vendor chunk
-        },
-      },
-    },
-  },
+  // No manualChunks. A previous attempt grouped recharts/d3, xlsx and the
+  // reports pages into three fixed chunks to "improve caching"; it did the
+  // opposite. Forcing modules into a named chunk defeats Rollup's per-route
+  // splitting, so the entry ended up statically importing both the recharts
+  // and reports chunks — index.html modulepreloaded ~888 kB of charting and
+  // reporting code on every route, including the POS, which uses neither.
+  // Left to itself, Vite splits along the existing React.lazy() route
+  // boundaries and those bytes load only when a report is actually opened.
   test: {
     environment: 'jsdom',
     setupFiles: ['./tests/setup.js'],
