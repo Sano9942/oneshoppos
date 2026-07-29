@@ -95,7 +95,7 @@ The goal is not "more tests." It is *one working feedback loop*, so the next P0 
 - [ ] **Decide on `xlsx`** — no upstream fix exists. Options: sandbox the parse, replace the library, or restrict upload to CSV permanently.
 - [ ] **Graceful shutdown** — capture the server handle, trap SIGTERM/SIGINT, call `server.close()` and the already-written `shutdownBoss()`.
 - [ ] **Pin `{ algorithms: ['HS256'] }`** at all six `jwt.verify` sites.
-- [ ] **Add a boot assertion for `INTEGRATION_SECRET_KEY`** and make `encryptSecret` throw rather than silently store plaintext. Then audit `integration_settings` for unprefixed rows.
+- [ ] **Add a boot assertion for `INTEGRATION_SECRET_KEY`** and make `encryptSecret` throw rather than silently store plaintext. Then audit `integration_settings` for unprefixed rows. **Scope reduced 2026-07-29** — the key IS set in production (64 chars, verified live; open question A2 closed), so this is hardening against future environments where it is absent, not remediation of live plaintext. Any unprefixed rows found would predate the key being set. Keep the fix: a credential-encryption function that silently no-ops is the wrong default whatever today's env says.
 - [ ] **Encrypt `fbr_api_token`** (`routes/fbr.js:48-50` writes it raw — a live national-tax-authority credential in plaintext).
 - [ ] **Add Pino `redact`** to `services/logger.js` and stop logging payment tokens at `payment-gateway.js:245/:256`.
 - [ ] **Decide `POST /api/sales` explicitly** — add `requirePerm`, or a comment recording that open access is intentional. Then decide the same about its rate-limit exemption.

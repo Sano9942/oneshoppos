@@ -23,7 +23,7 @@ A subsequent pass also recovered the one command that had failed for environment
 
 Where a claim originated in a sub-investigation and carried decision weight, it was re-derived at source before being stated here. Anything still unverified is marked ⚠️ and is an open question, not a finding. **One earlier claim in this document was wrong and has been corrected in place** (§4.2 — a deploy runbook does exist); the correction is logged in the appendix rather than quietly edited out.
 
-**Still open, and deliberately not guessed at:** the production value of `R2_PUBLIC_URL` (§3B.1 — one lookup, decides a confidentiality question), whether `INTEGRATION_SECRET_KEY` is set in production, Cloudflare R2 bucket public-access and lifecycle settings, and whether Supabase's automated backups cover `tenant_*` schemas identically to `public`.
+**Still open, and deliberately not guessed at:** Cloudflare R2 bucket public-access and lifecycle settings, and whether Supabase's automated backups cover `tenant_*` schemas identically to `public`. *(Two questions closed 2026-07-29, both favourably — `R2_PUBLIC_URL` is unset, so nothing sensitive is publicly readable, though this confirmed a functional defect in field/clinical media; and `INTEGRATION_SECRET_KEY` is set, so integration credentials are genuinely encrypted. See `04-open-questions.md`.)*
 
 ---
 
