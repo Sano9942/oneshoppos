@@ -9993,6 +9993,41 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 138,
+    description:
+      "action_history gains employee_id / entity_type / entity_id — the columns 46 INSERTs across 21 files have always written to but which have never existed. The table shipped as (user_name, action_type, description, timestamp) and no migration ever touched it, so every one of those writes raised 'column does not exist'; all of them sit inside `try {} catch {}` so the failures were swallowed silently. Net effect: void/comp, appointment, rental, contract, KDS and employee-CRUD actions have NEVER been audited once, in production, since the features shipped. Adding the columns (rather than rewriting 46 call sites down to user_name) is deliberate: employee_id is a stable identity anchor for a theft-audit trail where a renameable name string is not, and the 4 shape-C sites (employees.js x3, POST /api/action-history/log) were already written against exactly this shape — they start working with zero code change. Columns are nullable so existing rows and the 11 already-correct writers stay valid; action_type/description keep their NOT NULL. Tenant + public (public has action_history too via the admin surfaces). Idempotent via ADD COLUMN IF NOT EXISTS. Companion commit normalises the 42 shape-B sites onto action_type/description.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'action_history'`
+      );
+      if (!hasTable.length) {
+        console.log(
+          `[migrate-pg v138] ${schema}: no action_history table — skipped`
+        );
+        return;
+      }
+      await client.query(`
+        ALTER TABLE action_history
+          ADD COLUMN IF NOT EXISTS employee_id INTEGER NULL,
+          ADD COLUMN IF NOT EXISTS entity_type TEXT NULL,
+          ADD COLUMN IF NOT EXISTS entity_id   INTEGER NULL
+      `);
+      // Read path filters/sorts by timestamp and increasingly by actor.
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_action_history_employee
+          ON action_history (employee_id, timestamp DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_action_history_entity
+          ON action_history (entity_type, entity_id)
+      `);
+    },
+  },
 ];
 
 /**

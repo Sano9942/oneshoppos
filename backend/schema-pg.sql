@@ -1083,13 +1083,27 @@ CREATE TABLE IF NOT EXISTS receipt_templates (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Audit trail. employee_id / entity_type / entity_id added in migration v138;
+-- before that they did not exist and ~46 INSERTs wrote to them inside
+-- `try {} catch {}`, so those actions were never recorded at all.
+-- employee_id deliberately carries NO foreign key: an audit row must outlive
+-- the employee it describes, and a FK (even ON DELETE SET NULL) would let a
+-- deletion erase the actor from the trail. user_name is kept alongside as the
+-- human-readable snapshot at the time of the action.
 CREATE TABLE IF NOT EXISTS action_history (
   id SERIAL PRIMARY KEY,
   user_name TEXT,
   action_type TEXT NOT NULL,
   description TEXT NOT NULL,
+  employee_id INTEGER,
+  entity_type TEXT,
+  entity_id INTEGER,
   timestamp TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_action_history_employee
+  ON action_history (employee_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_action_history_entity
+  ON action_history (entity_type, entity_id);
 
 -- ── Notifications ─────────────────────────────────────────────────────
 
