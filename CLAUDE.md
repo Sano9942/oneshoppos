@@ -20,25 +20,14 @@ A full-stack, multi-tenant Point of Sale (POS) system with Shopify/marketplace i
 
 Deeper per-directory `CLAUDE.md` files exist under `backend/routes/`, `backend/services/`, `backend/middleware/`, `backend/workers/`, `backend/schemas/`, `backend/tests/`, `backend/shopify/`, `backend/utils/`, `backend/boot/`, and various `frontend/src/*` subdirectories — read those when working inside the matching directory rather than asking here first.
 
-## Efficiency Rules (Read First)
+## Working Rules
 
-### Model Usage
-- **Default to Sonnet** for all implementation tasks — code edits, file reads, bug fixes, route changes
-- **Switch to Opus only** for architecture decisions, planning multi-step features, or when genuinely stuck on a complex design problem
-- Once a plan is approved and execution starts, stay on Sonnet
+### Verify against source
+This guide is a map, not the territory. **It has been wrong in ways that mattered** — see `docs/fable5/independent-assessment/`. On 2026-07-29 an audit found it claiming a focus trap that doesn't exist, pointing at the wrong file for the Jest exception, and stating a connection limit off by 3×. A planning doc in `docs/` specified a table that was never built, and a webhook was coded against that sentence — a live defect.
 
-### Reading Files
-- **Grep first** — before reading any file, grep for the specific function/route/table name. Only read the file if grep result is insufficient
-- **Read only what's needed** — never read a whole directory; read the single relevant file
-- **No re-read after edit** — after a successful Edit or Write, do not re-read the file. Trust the tool unless it returned an error
-- **One reference rule** — when adding a new route or component, read ONE similar existing file as reference, not multiple
-- **Trust CLAUDE.md** — if the answer is documented here or in sub-guides, don't read source files to verify it
+**Read the source. Especially when this file already gives you an answer.** A confident wrong answer is more expensive than no answer.
 
-### Off-Limits Unless Explicitly Needed
-- `backend/index.js` — middleware order and boot sequence are documented in `backend/CLAUDE.md`; don't read unless task is specifically about server config
-- `backend/routes/registerAllRoutes.js` — route mounting is documented here; never read for domain-level changes
-- `frontend/src/App.jsx` — composition only; route definitions in `frontend/src/routes/*.jsx`. Don't read unless task is about routing guards
-- `backend/schema-pg.sql` — grep for specific table names instead of reading the whole file (it has hundreds of `CREATE TABLE` statements)
+No file in this repo is off-limits. (The previous version of this section named `backend/index.js` and `backend/routes/registerAllRoutes.js` as files not to read. Both contain audit findings.)
 
 ### Response Style
 - No trailing summaries ("Here's what I did...") — the diff speaks for itself
