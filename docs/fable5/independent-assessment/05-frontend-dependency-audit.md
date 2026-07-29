@@ -15,7 +15,7 @@ Phase 0's dependency work was backend-only. The "33 → 4 advisories" figure in 
 | `npm audit` total | **15** (1 critical, 12 high, 2 low) |
 | Dependabot alerts, frontend | **49** |
 | Reachable in a browser | **2** — `react-router`, `xlsx` |
-| Fixed by `npm audit fix`, no manifest edit | **14 of 15** |
+| Cleared by `npm audit fix` (applied, see §5) | **15 → 8 entries / 3 distinct causes** |
 | No fix at any version | **1** — `xlsx` |
 
 The two totals describe the same finding set at different granularity: Dependabot files one alert per advisory per dependency path, `npm audit` collapses them per package. Neither is wrong; quoting them side by side without that sentence is what makes the situation look twice as bad as it is.
@@ -103,15 +103,26 @@ It is still worth patching — 4.0.18 → 4.1.0 is inside `^4.0.18` and free —
 
 ---
 
-## 5. What a plain `npm audit fix` does
+## 5. What `npm audit fix` actually did — applied 2026-07-30
 
-Every fix except `xlsx` lands inside the existing semver ranges. **Lockfile only — no `package.json` edits, no majors, no migrations.**
+**A prediction in the first draft of this file was wrong and is corrected here.** It said `npm audit fix` would take 15 → 2. It took **15 → 8**. The direction was right, the arithmetic was not: I counted advisories that persist post-fix as if they would disappear, and `npm audit` reports the same advisory once per affected package, so a single unfixable issue can surface as several entries.
+
+Applied. Direct deps that moved, all inside their declared ranges: `react-router-dom` 7.13.0 → **7.18.2**, `vite` 7.3.1 → **7.3.6**, `vitest` 4.0.18 → **4.1.x**, `eslint` 9.39.1 → **9.39.3**. Lockfile only.
 
 ```
-15 vulnerabilities  →  2 (both xlsx)
+before   1 critical, 12 high, 2 low   (15 entries)
+after    0 critical,  8 high, 0 low   ( 8 entries, 3 distinct causes)
 ```
 
-Direct deps that move: `react-router-dom` 7.13.0 → 7.18.x, `vite` 7.3.1 → 7.3.5, `vitest` 4.0.18 → 4.1.0. Transitive ones follow. One `react-router` alert (`GHSA-qwww`, needs 8.3.0) will remain open in Dependabot and should be dismissed as not-applicable rather than chased.
+The 8 that remain are the three causes this audit already identified, and **none is browser-reachable**:
+
+| cause | entries | why it survives | reachable? |
+|---|---|---|---|
+| `GHSA-qwww-vcr4-c8h2` — RSC-mode CSRF | 2 (`react-router`, `react-router-dom`) | patched only in **8.3.0**; npm's resolver offers a *downgrade* to 7.11.0 and calls it a major | **no** — RSC mode, this app is `<BrowserRouter>` |
+| `brace-expansion` OOM DoS (`<=5.0.7`) | 5 (`brace-expansion`, `minimatch`, `@eslint/eslintrc`, `@eslint/config-array`, `eslint`) | reachable only through ESLint 9's tree; needs **ESLint 10**, a major | **no** — lint-time, dev-only |
+| `xlsx` prototype pollution + ReDoS | 1 | npm's copy frozen at 0.18.5 | lazy chunk only, on a file the merchant chose |
+
+Every advisory that was both fixable and reachable is gone, including the lone critical. The residue is one major upgrade for a linter, one unreachable advisory awaiting a framework major, and the standing `xlsx` decision.
 
 ---
 
@@ -119,10 +130,11 @@ Direct deps that move: `react-router-dom` 7.13.0 → 7.18.x, `vite` 7.3.1 → 7.
 
 In this order, and none of it is urgent — there are still zero external merchants, and the only browser-reachable applicable issues are two open redirects:
 
-1. **`npm audit fix` in `frontend/`.** 15 → 2. Lockfile only. Then a build and the unit suite, because `vite` 7.3.5 and `vitest` 4.1.0 are the two that could plausibly move something.
-2. **Move `@tailwindcss/vite` and `tailwindcss` to `devDependencies`.** Fixes the scope mislabelling at its source so future alerts are triaged accurately rather than each one re-litigated. Needs a deploy to confirm Vercel is unaffected.
+1. ~~**`npm audit fix` in `frontend/`.**~~ **DONE 2026-07-30.** 15 → 8, see §5. Verified after: production build succeeds (CSS output byte-identical), `tsc --noEmit` clean, unit suite 201/201, ESLint baseline ratchet unchanged at 1007 with none new.
+2. ~~**Move `@tailwindcss/vite` and `tailwindcss` to `devDependencies`.**~~ **DONE 2026-07-30.** The production tree is now exactly the 12 packages that ship — `vite`, `rollup`, `postcss`, `esbuild` and `picomatch` no longer appear under `--omit=dev`, so future alerts against them are labelled dev and triaged correctly instead of being re-litigated each time. Tailwind still compiles from devDependencies: the emitted CSS kept its content hash across the move.
 3. **Dismiss `GHSA-qwww` with a reason** rather than leaving one permanently-open high alert that trains everyone to ignore the list.
 4. **Decide `xlsx` once, for both halves of the codebase.** It is the only genuinely unfixable item and it has been carried for two audits now.
+5. **ESLint 10** whenever convenient. It is the sole remaining fixable cause (5 of the 8 entries), it is lint-time and dev-only, and it is a major — so it belongs in a quiet moment, not in a security batch.
 
 ### Worth doing at the same time, though not a vulnerability
 
