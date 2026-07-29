@@ -1,6 +1,11 @@
-# Stage 1: Build native dependencies (sqlite3 needs python3/make/g++)
+# Stage 1: Install dependencies.
+# python3/make/g++ used to be required here to compile sqlite3 from source.
+# sqlite3 is gone (Postgres-only since the archive), and nothing left needs a
+# native build: bcryptjs is pure JS and sharp ships prebuilt musl binaries
+# (@img/sharp-linuxmusl-x64). If a future dependency does need to compile, the
+# build fails loudly here rather than shipping a broken image — restore
+# `RUN apk add --no-cache python3 make g++` on the line below.
 FROM node:22-alpine AS builder
-RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
@@ -9,7 +14,9 @@ RUN npm ci --omit=dev
 FROM node:22-alpine
 # postgresql17-client provides pg_dump / pg_restore for the /api/admin/backup
 # and /api/backup/download endpoints. Match Supabase server major version (17).
-RUN apk add --no-cache sqlite tzdata postgresql17-client
+# sqlite CLI dropped with the sqlite3 dependency — no active code path reads or
+# writes a SQLite database; the archives under backend/archive/ are historical.
+RUN apk add --no-cache tzdata postgresql17-client
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
