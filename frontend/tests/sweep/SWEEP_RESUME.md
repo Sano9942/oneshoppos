@@ -47,15 +47,18 @@ Expected: POST `/api/outlets` → Pro paywall modal appears
 - Address: `Shop 123 Mall Road, Lahore`
 - Phone: `03001234567`
 - Tenant: `livetestauto` (already logged in)
-- User: `Sweep Operator` (password: `SweepRun123!`)
+- User: `Sweep Operator` — password is **not recorded here**, see below
 
 ---
 
 **If you need to re-login:**
+
+Store Code `livetestauto`, Username `Sweep Operator`, password from your
+`E2E_PASSWORD` environment variable (the same one the sweep spec reads). This
+file used to print the password inline; it is a checked-in document, so that
+made a real production login readable to anyone with the repo.
+
 ```javascript
 window.location.href = '/logout';
-// Then go to https://sanopos.com and log in with:
-// Store Code: livetestauto
-// Username: Sweep Operator
-// Password: SweepRun123!
+// then sign in at https://sanopos.com
 ```

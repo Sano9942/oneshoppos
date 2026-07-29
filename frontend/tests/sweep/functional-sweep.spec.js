@@ -47,8 +47,21 @@ const TENANT_NAME = `Live Test Auto ${ts}`;
 const TENANT_SLUG_EXPECTED = SKIP_SIGNUP ? PRE_PROVISIONED_SLUG : `livetestauto${ts}`;
 const OWNER_NAME = "Sweep Operator";
 const EMAIL = "sano9942@hotmail.com";
-const PASSWORD = "SweepRun123!";
-const ADMIN_PIN = "1234";
+// Secrets come from the environment — see tests/helpers/auth.js for why this
+// file carries none. When SKIP_SIGNUP is set (the default) these authenticate
+// against a real production tenant; when it is not, they are the credentials
+// the sweep provisions with. Same variables either way, so a run cannot half
+// authenticate. MANAGER_PIN/CASHIER_PIN stay literal: the sweep creates those
+// two employees itself, so they are fixtures rather than credentials.
+const PASSWORD = process.env.E2E_PASSWORD;
+const ADMIN_PIN = process.env.E2E_PIN;
+if (!PASSWORD || !ADMIN_PIN) {
+  throw new Error(
+    "E2E_PASSWORD and E2E_PIN must be set — the sweep logs into a real tenant " +
+      "and this repo stores no passwords.\n\n" +
+      "  E2E_PASSWORD=<password> E2E_PIN=<pin> npx playwright test tests/sweep\n"
+  );
+}
 const MANAGER_PIN = "5678";
 const CASHIER_PIN = "9999";
 
