@@ -72,7 +72,7 @@ export default function ActionHistoryRedesign() {
       subtitle="Audit log of all system actions and events."
       right={
         <div className="flex gap-2">
-          <Button onClick={() => downloadCsv(["timestamp","employee","action","entity","details"], logs.map(l => [l.created_at||l.timestamp, l.employee_name||l.performed_by||"System", l.action||"", l.entity_type||"", l.details||l.description||""]), "action_history")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button onClick={() => downloadCsv(["timestamp","employee","action","entity","details"], logs.map(l => [l.created_at||l.timestamp, l.user_name||l.employee_name||l.performed_by||"System", l.action_type||l.action||"", l.entity_type||"", l.details||l.description||""]), "action_history")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
           <Button onClick={() => fetchLogs()}>
             <RefreshCcw size={14} className="mr-1 inline" /> Refresh
           </Button>
@@ -143,11 +143,11 @@ export default function ActionHistoryRedesign() {
                       {fmtDate(log.created_at || log.timestamp)}
                     </td>
                     <td className="px-3 py-2 font-medium text-(--ui-text)">
-                      {log.employee_name || log.performed_by || "System"}
+                      {log.user_name || log.employee_name || log.performed_by || "System"}
                     </td>
                     <td className="px-3 py-2">
                       <span className="rounded-md bg-(--ui-accent)/10 px-1.5 py-0.5 text-xs font-medium text-(--ui-accent)">
-                        {log.action || "—"}
+                        {log.action_type || log.action || "—"}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">

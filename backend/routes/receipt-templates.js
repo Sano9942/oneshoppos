@@ -176,15 +176,31 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
 
   // --- ACTION HISTORY ---
 
+  // Deliberately NOT behind requirePerm. frontend/src/utils/errorLog.js posts
+  // here from 19 POS recovery paths (barcode miss, insufficient stock, receipt
+  // retry, cart resume, stale shift, refund collision) that cashiers reach by
+  // design; any permission gate here silently kills POS error logging for the
+  // role that generates most of it.
+  //
+  // The vulnerability was never the missing permission — it was trusting
+  // req.body.user_name, which let any authenticated employee write an audit row
+  // attributing an action to someone else. Identity is now taken from the
+  // authenticated session only, and the client-supplied value is ignored.
   app.post("/api/action-history", async (req, res) => {
-    const { user_name, action_type, description } = req.body;
+    const { action_type, description } = req.body;
     if (!action_type || !description) {
       return res.status(400).json({ error: "Missing action details" });
     }
     try {
       const { rows } = await db.query(
-        "INSERT INTO action_history (user_name, action_type, description) VALUES ($1, $2, $3) RETURNING id",
-        [user_name || "System", action_type, description]
+        `INSERT INTO action_history (user_name, employee_id, action_type, description)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [
+          req.employee?.name || "System",
+          req.employee?.id || null,
+          action_type,
+          description,
+        ]
       );
       res.json({ id: rows[0].id, message: "Action logged" });
     } catch (err) {
@@ -197,12 +213,23 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     if (!action_type || !description) {
       return res.status(400).json({ error: "action_type and description are required" });
     }
-    const employee_id = req.body.employee_id || req.headers["x-employee-id"] || null;
+    // Identity from the session, never from the body. This endpoint 500'd on
+    // every call until migration v138 created the columns it writes to, so it
+    // goes live for the first time with that fix — it should not go live still
+    // accepting a caller-supplied actor, even behind all_access.
+    const employee_id = req.employee?.id || null;
     try {
       const { rows } = await db.query(
-        `INSERT INTO action_history (action_type, description, entity_id, entity_type, employee_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [action_type, description, entity_id || null, entity_type || null, employee_id ? Number(employee_id) : null]
+        `INSERT INTO action_history (action_type, description, entity_id, entity_type, employee_id, user_name)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [
+          action_type,
+          description,
+          entity_id || null,
+          entity_type || null,
+          employee_id,
+          req.employee?.name || "System",
+        ]
       );
       res.json({ success: true, id: rows[0].id });
     } catch (err) {

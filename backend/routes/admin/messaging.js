@@ -340,9 +340,21 @@ module.exports = function registerMessagingRoutes(app, deps) {
       for (const tenant of tenants) {
         try {
           const tenantDb = await tenantDbManager.getDb(tenant.id);
+          // action_history's real columns are action_type/description/
+          // user_name/timestamp. This query named action/details/performed_by/
+          // created_at — none of which exist — so it threw for every tenant
+          // into the catch below and this endpoint returned an empty list on
+          // every call it has ever served. Aliased rather than renamed because
+          // the caller (AdminActivity.jsx) shares this response shape with
+          // admin_activity_log, which genuinely has created_at/performed_by.
           const { rows } = await tenantDb.query(
-            `SELECT action, entity_type, entity_id, details, performed_by, created_at
-             FROM action_history ORDER BY created_at DESC LIMIT $1`,
+            `SELECT action_type AS action,
+                    entity_type,
+                    entity_id,
+                    description AS details,
+                    user_name   AS performed_by,
+                    timestamp   AS created_at
+             FROM action_history ORDER BY timestamp DESC LIMIT $1`,
             [Math.ceil(limit / tenants.length) || 10]
           );
           for (const row of rows) {
