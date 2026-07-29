@@ -1233,6 +1233,8 @@ const UNMANAGED_FLAGS = Object.freeze({
     "Gates the Company Profile surface itself — self-disable could lock a tenant out of its own settings.",
   offline_returns:
     "Gated-rollout flag on a risky write path; platform decision, not a merchant choice.",
+  tenant_data_restore:
+    "Gates POST /api/backup/restore, which replaces a tenant schema from an uploaded dump — irreversible, no provenance check on the file, no test coverage. Deliberately NOT on the Operations card: that card bundles backup_restore (export) with supplier_payables/e_invoicing_export, so a merchant enabling it to get data export would silently re-arm destructive restore. Platform decision, not a merchant choice; same posture as offline_returns.",
   notifications:
     "Gates the core in-app notification center (routes/tier4/notifications.js) — self-disable would silently break the notification bell and cross-feature alerts.",
   phase4_restaurant_preauth:

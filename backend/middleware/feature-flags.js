@@ -22,7 +22,16 @@ for (const [cardKey, card] of Object.entries(BUSINESS_MODULES)) {
 }
 
 const DEFAULT_FEATURE_FLAGS = {
+  // Covers backup DOWNLOAD and the backup log only — both read-only. Kept
+  // default-on deliberately: a merchant being able to export their own data is
+  // a portability/trust guarantee, not a risk.
   backup_restore: true,
+  // The destructive half, split out and default-OFF. POST /api/backup/restore
+  // accepts an uploaded dump and replaces the tenant schema with it: a
+  // one-request, irreversible evidence-destruction primitive with no
+  // provenance check on the uploaded file and no test coverage. all_access
+  // alone is not a sufficient gate for that, since every tenant admin holds it.
+  tenant_data_restore: false,
   e_invoicing_export: true,
   supplier_payables: true,
   approvals: true,

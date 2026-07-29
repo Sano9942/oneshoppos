@@ -461,10 +461,14 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     limits: { fileSize: 50 * 1024 * 1024 },
   }).single("backup_file");
 
+  // tenant_data_restore, not backup_restore: this route replaces the tenant
+  // schema from an uploaded file and cannot be undone. It is split off from the
+  // read-only download/log routes so that enabling data export never re-arms
+  // destructive restore. Default OFF for every tenant (UNMANAGED_FLAGS).
   app.post(
     "/api/backup/restore",
     requirePerm("all_access"),
-    requireFeature("backup_restore"),
+    requireFeature("tenant_data_restore"),
     (req, res, next) => {
       restoreUpload(req, res, (err) => {
         if (err) return res.status(400).json({ error: `Upload error: ${err.message}` });
