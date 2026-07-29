@@ -267,26 +267,42 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
 
       const limits = PLAN_DEFAULTS[intent.plan] || PLAN_DEFAULTS.free;
 
-      await masterDb.query(
-        `UPDATE payment_intents SET status = 'completed', completed_at = NOW(), gateway_data = $1 WHERE id = $2`,
-        [JSON.stringify(raw), intent.id]
-      );
+      // One transaction, and the tenant is activated BEFORE the intent is
+      // marked complete. Both halves matter, for different failures.
+      //
+      // These were three independent autocommits. A failure after the first
+      // left a tenant that had paid and could not use the product — and the
+      // idempotency guard above ("already completed → Already processed")
+      // meant every gateway retry short-circuited before reaching the
+      // activation it still needed. One badly-timed error stuck a paying
+      // merchant permanently, with the webhook reporting success each time.
+      //
+      // The ordering is defence in depth for the day someone unwraps the
+      // transaction or a statement is added between them: if only a prefix of
+      // this block ever lands, the merchant should end up with access and a
+      // re-runnable intent, never the reverse.
+      await masterDb.transaction(async (client) => {
+        await client.query(
+          `UPDATE tenants
+           SET plan = $1, billing_cycle = $2, plan_expires_at = $3, grace_ends_at = $4,
+               payment_status = 'active', max_employees = $5, max_outlets = $6, max_products = $7, updated_at = NOW()
+           WHERE id = $8`,
+          [intent.plan, intent.cycle, periodEnd.toISOString(), graceEnd.toISOString(),
+           limits.max_employees, Math.max(limits.max_outlets, intent.outlet_count), limits.max_products, intent.tenant_id]
+        );
 
-      await masterDb.query(
-        `UPDATE tenants
-         SET plan = $1, billing_cycle = $2, plan_expires_at = $3, grace_ends_at = $4,
-             payment_status = 'active', max_employees = $5, max_outlets = $6, max_products = $7, updated_at = NOW()
-         WHERE id = $8`,
-        [intent.plan, intent.cycle, periodEnd.toISOString(), graceEnd.toISOString(),
-         limits.max_employees, Math.max(limits.max_outlets, intent.outlet_count), limits.max_products, intent.tenant_id]
-      );
+        await client.query(
+          `INSERT INTO payment_records (tenant_id, amount, plan, cycle, period_start, period_end, payment_method, reference_note, recorded_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [intent.tenant_id, intent.amount, intent.plan, intent.cycle,
+           now.toISOString(), periodEnd.toISOString(), provider, `intent:${intent.id}`, `webhook:${provider}`]
+        );
 
-      await masterDb.query(
-        `INSERT INTO payment_records (tenant_id, amount, plan, cycle, period_start, period_end, payment_method, reference_note, recorded_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [intent.tenant_id, intent.amount, intent.plan, intent.cycle,
-         now.toISOString(), periodEnd.toISOString(), provider, `intent:${intent.id}`, `webhook:${provider}`]
-      );
+        await client.query(
+          `UPDATE payment_intents SET status = 'completed', completed_at = NOW(), gateway_data = $1 WHERE id = $2`,
+          [JSON.stringify(raw), intent.id]
+        );
+      });
 
       // Enqueue confirmation email via pg-boss (fire-and-forget).
       // Previously INSERTed into legacy `email_queue` table — that path was
@@ -411,20 +427,46 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
   if (link) {
     if (status === "completed" || event_type === "payment.completed") {
       try {
-        await db.query(
-          "UPDATE customer_invoice_payment_links SET status = 'completed', completed_at = NOW(), raw_completion_payload = $1 WHERE id = $2",
-          [JSON.stringify(raw), link.id]
+        const applied = await db.transaction(async (client) => {
+          // Claim the link and record the payment in one transaction.
+          //
+          // These were three autocommits inside `try {} catch { log }` that
+          // still answered `{ ok: true }`. Two ways that hurt: a failure after
+          // the first statement left a link marked completed with no payment
+          // row, so the customer had paid and the invoice still showed the full
+          // balance; a failure after the second left the payment recorded and
+          // the invoice balance stale.
+          //
+          // The conditional UPDATE is also the missing idempotency guard. There
+          // was none, so a redelivered webhook — which gateways do on any
+          // non-2xx, and this handler now returns non-2xx on failure — inserted
+          // a SECOND customer_invoice_payments row and credited the invoice
+          // twice. Claiming the link is what makes a retry safe.
+          const { rows: claimed } = await client.query(
+            `UPDATE customer_invoice_payment_links
+                SET status = 'completed', completed_at = NOW(), raw_completion_payload = $1
+              WHERE id = $2 AND status IS DISTINCT FROM 'completed'
+              RETURNING id`,
+            [JSON.stringify(raw), link.id]
+          );
+          if (!claimed.length) return false;
+
+          await client.query(
+            `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
+             VALUES ($1, $2, 'online', 'payment', $3)`,
+            [link.invoice_id, link.amount, `gateway:${transaction_id}`]
+          );
+          const { recomputeBalance } = require("../services/customer-invoicing");
+          await recomputeBalance(client, link.invoice_id);
+          return true;
+        });
+        _logger.info(
+          { invoiceId: link.invoice_id, linkId: link.id, applied },
+          applied ? "Invoice payment link completed" : "Invoice payment link already completed (idempotent)"
         );
-        await db.query(
-          `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
-           VALUES ($1, $2, 'online', 'payment', $3)`,
-          [link.invoice_id, link.amount, `gateway:${transaction_id}`]
-        );
-        const { recomputeBalance } = require("../services/customer-invoicing");
-        await recomputeBalance(db, link.invoice_id);
-        _logger.info({ invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link completed");
       } catch (linkErr) {
-        _logger.error({ err: linkErr }, "Invoice payment link processing failed");
+        _logger.error({ err: linkErr, invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link processing failed");
+        return { ok: false, statusCode: 500, error: "Invoice payment processing failed" };
       }
     }
     return { ok: true };

@@ -237,9 +237,51 @@ async function query(sql, params) {
   }
 }
 
+/**
+ * Run several master-schema statements as one atomic unit.
+ *
+ * This module shipped without it, so every multi-statement master write was a
+ * run of independent autocommits — each `query()` above opens and commits its
+ * own transaction. The billing webhook was the expensive case: it marked a
+ * payment intent completed, then activated the tenant, then recorded the
+ * payment, as three separate commits. A failure after the first left a tenant
+ * that had paid and could not use the product, and the handler's own
+ * idempotency guard ("intent already completed → return Already processed")
+ * meant every subsequent retry short-circuited before the activation it still
+ * needed. Permanently stuck, from one badly-timed error.
+ *
+ * The callback receives a client whose search_path is pinned to public for the
+ * whole transaction, which also removes the reason `query()` wraps single
+ * statements: with one BEGIN around the batch, the SET and every statement are
+ * guaranteed the same backend under Supavisor transaction-mode pooling.
+ *
+ * Mirrors the tenant-side contract (`db-pg.js`, `tenant-db-manager-pg.js`) so
+ * `masterDb.transaction(fn)` reads the same as `deps.db.transaction(fn)`.
+ *
+ * @param {(client: import('pg').PoolClient) => Promise<T>} fn
+ * @returns {Promise<T>} whatever fn returns
+ * @template T
+ */
+async function transaction(fn) {
+  const db = _getDb();
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL search_path TO public");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 function _getDb() {
   if (!_db) throw new Error("[master-db-pg] Not initialized — call init(db) first");
   return _db;
 }
 
-module.exports = { init, createTenant, getTenantBySlug, getTenantById, query };
+module.exports = { init, createTenant, getTenantBySlug, getTenantById, query, transaction };
