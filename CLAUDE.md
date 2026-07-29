@@ -479,7 +479,7 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 
 | Service | Plan | Key Limit |
 |---------|------|-----------|
-| **Supabase** | **Pro** ($25/mo) | Daily auto-backups + 7-day PITR, 8GB DB included, ~200 max Postgres connections, no auto-pause |
+| **Supabase** | **Pro** ($25/mo) | Daily auto-backups, 7-day retention. **PITR is NOT enabled** (paid add-on; `pitr_enabled: false`). 8GB DB included, **`max_connections` = 60** (verified live 2026-07-29 — an older revision of this table said ~200), no auto-pause |
 | **Railway** | Hobby/Pro | Single Node.js instance, single-threaded event loop |
 | **Vercel** | Pro | 100GB bandwidth/mo — not a bottleneck |
 | **Cloudflare R2** | Free tier | 10M reads/mo free, then $0.015/M — negligible at current scale |
@@ -500,10 +500,12 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 
 ### Backups (Supabase Pro)
 
-- **Daily automated backups** retained 7 days (configurable to 14/30 in dashboard)
-- **Point-in-time recovery (PITR)** for the last 7 days
-- Restore via Supabase dashboard → Database → Backups, or `pg_restore` from a downloaded snapshot
-- App-level `pg_dump` to R2 (`POST /api/admin/backup` + `POST /api/backup/download`) is supplementary for tenant-self-export, not the primary DR strategy
+All four points below were verified live against the Supabase Management API on 2026-07-29.
+
+- **Daily automated backups**, retained 7 days, taken ~22:04 UTC. All 7 report `is_physical_backup: true` — a WAL-G snapshot of the database directory, so **every `tenant_*` schema is covered byte-for-byte identically to `public`**. Schema-selective backup is not expressible in this mode.
+- **PITR is NOT enabled** — it is a paid add-on and `pitr_enabled` is `false`. **Real RPO is up to 24 hours, not seconds.** (`walg_enabled: true` names the backup tool, not PITR — don't read it as PITR being on.) A prior revision of this guide claimed 7-day PITR; it was wrong.
+- **Restore is whole-project only.** There is no per-schema restore: recovering one corrupted tenant rolls all 29 back to the snapshot. Restore via Supabase dashboard → Database → Backups, or `pg_restore` from a downloaded snapshot. Deleting the project destroys its backups too.
+- App-level `pg_dump` to R2 (`POST /api/admin/backup` + `POST /api/backup/download`) is a tenant-self-export path, not DR — and **it has never produced a stored object in production**: `backups/` in the R2 bucket holds zero keys against a writer at `routes/admin/system.js:357`. The only automatic backup job in-repo (`boot/workers.js:159-161`) is SQLite-mode-only and cannot run on Postgres. **Supabase's daily physical backup is the only automated backup that exists**, and nothing backs up R2 itself.
 
 ## Storage Destination Map
 
