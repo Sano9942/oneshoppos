@@ -50,7 +50,34 @@ Not "fix everything first." Just what's cheap and would embarrass you in front o
 
 The goal is not "more tests." It is *one working feedback loop*, so the next P0 cannot hide.
 
-- [ ] **Triage the 36 unloadable integration test files.** They `require("../helpers/createTestApp")`, deleted in the Phase 5 SQLite cleanup. Port the ones covering **sales, returns, shifts, RBAC, security** to `createTestApp-pg`; explicitly quarantine or delete the rest with a note. Leaving them in-tree makes the suite look four times healthier than it is.
+> ### Suite actually run, 2026-07-29 — the premise was wrong
+>
+> The suite was executed for the first time (safely — `.env.test` → localhost, verified). It is **not** "outdated and wrong."
+>
+> | | Result |
+> |---|---|
+> | **Unit** | **51 of 53 files pass · 701 of 704 tests** |
+> | **Integration, loadable files** | **147 of 165 pass (89%)** |
+> | **Genuinely failing tests** | **26**, across 14 files |
+> | Files that cannot load | **37** (not 36 — five distinct deleted modules) |
+> | Total passing assertions | **~2,400** |
+>
+> **The single highest-leverage finding: `vitest.config.js` sets `hookTimeout: 10000`, but every integration file's `beforeAll` executes all 5,926 lines of `schema-pg.sql` to build 327 tables — then 202 of those run in parallel forks against one Postgres.** That configuration cannot succeed on this workload.
+>
+> Re-running the failures serially with `--no-file-parallelism --hookTimeout=120000` moved **52 files from fail to pass with zero code changes.** The first run reported 106 failed files; only 17 are real. **~49% of the apparent failure was a config mistake, not broken tests.**
+>
+> This trap is recorded twice in project memory (`feedback_verifier_env_traps`, `admin_test_provisioning_gotcha`) and never reached the config file.
+>
+> **Fix the config first — it is a one-line change that makes the suite honest, and it must land before any test triage.**
+
+- [ ] **Fix `vitest.config.js` first** — raise `hookTimeout` to ≥120000 (or set `fileParallelism: false`). Verified: this alone converts 52 failing files to passing. Everything below is unreadable until this lands.
+- [ ] **Triage the 37 unloadable integration test files.** Five deleted modules, not one: `helpers/createTestApp` (36 files), plus `tenant-provisioner`, `tenant-db-manager`, `schema-full`, `master-db`. Port the ones covering **sales, returns, shifts, RBAC, security** to `createTestApp-pg`; explicitly quarantine or delete the rest with a note. Leaving them in-tree makes the suite look healthier than it is.
+- [ ] **Fix the 26 genuinely failing tests.** Triaged 2026-07-29; all inspected signatures are stale fixtures tracking deliberate behaviour changes, not defects — but each needs confirming before closing:
+  - `pg-batch2/3/8` sales+gift-card cluster — the sale path gained an **open-shift requirement** the fixtures never satisfy (already recorded in memory as `stale_pg_batch_fixtures`)
+  - 3 × feature-flag gating expecting 503 — `requireMode` enforcement changed when `tenant_modes` was materialised in v135
+  - `pg-batch15-couriers` — `duplicate key on courier_integrations_adapter_key_key`; the 13 pre-seeded couriers now collide with the fixture's own inserts
+  - Remainder: refund-idempotency (2), risk-controls threshold (1), import preview, admin infra, COD settlements, bookings availability/reschedule
+  - **`sales-decimal-quantity` (3 failures) deserves a real look** — it covers weighted-goods rounding on stock deduction, which touches the stock-writer problem
 - [ ] **Fix the 4 files using `jest.*` globals** under Vitest (`pg-batch-phase3c-atomicity`, `pg-batch12-billing`, `pg-batch13-catalog-scheduler`, `public-bookings`) — they `ReferenceError` at collection.
 - [ ] **Put the integration suite in CI**, nightly against a throwaway Postgres, using the existing baseline-diff pattern (fail on new/changed, never on totals) so it can go green immediately.
 - [ ] **Add `tsc --noEmit` and `vite build` to the PR gate.** Both are free and currently ungated.
