@@ -17,6 +17,68 @@ const masterDb = require("../master-db-pg");
 const _logger = require("../services/logger").child({ component: "webhooks" });
 const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
 const depositEngine = require("../services/deposit-engine");
+const stockLedger = require("../services/stock-ledger");
+const batchStock = require("../services/batch-stock");
+
+/**
+ * Return the stock a storefront order is holding when its payment does not
+ * complete. Runs inside the caller's transaction.
+ *
+ * This is the exact inverse of the decrement in `routes/storefront.js:874-924`,
+ * and the word "exact" is doing real work:
+ *
+ *   - Checkout decrements `outlet_stock` ONLY. It never touches
+ *     `product_variants.stock` or `variant_outlet_stock`, even for a variant
+ *     line. So the release must not touch them either — `incrementStock` is
+ *     called with `variantId: null` deliberately. Passing the row's real
+ *     variant id would credit two tables that were never debited, turning a
+ *     stock leak into stock inflation. (That the forward path skips variant
+ *     tables at all is a separate inconsistency; it is recorded, not silently
+ *     "fixed" here, because an inverse that does not match its forward
+ *     operation is a new bug rather than a correction.)
+ *   - Checkout DOES consume batches, keyed on the real variant id. So the
+ *     batch half is driven directly with that id, and `manageBatch: false`
+ *     keeps `incrementStock` from returning to the wrong batch key.
+ *
+ * The UPDATE ... RETURNING is the idempotency key. Claiming the rows and
+ * flipping their status in one statement means a redelivered webhook — or a
+ * failed→cancelled sequence for the same order — releases nothing twice; the
+ * second call matches no `converted` rows and returns 0.
+ *
+ * @returns {Promise<number>} how many reservations were released
+ */
+async function releaseStorefrontStock(client, webOrderId) {
+  const { rows } = await client.query(
+    `UPDATE inventory_reservations
+        SET status = 'released', updated_at = NOW()
+      WHERE web_order_id = $1 AND status = 'converted'
+      RETURNING product_id, variant_id, outlet_id, quantity`,
+    [webOrderId]
+  );
+
+  for (const r of rows) {
+    // outlet_id is NOT NULL for anything checkout wrote, but a row seeded by
+    // another surface could lack it and there is nothing to credit without one.
+    if (!r.outlet_id) continue;
+    const qty = Number(r.quantity);
+    await stockLedger.incrementStock(client, {
+      productId: r.product_id,
+      variantId: null,
+      outletId: r.outlet_id,
+      qty,
+      manageBatch: false,
+    });
+    await batchStock.returnToBatch(client, {
+      productId: r.product_id,
+      variantId: r.variant_id || null,
+      outletId: r.outlet_id,
+      qty,
+      refType: "web_order",
+      refId: webOrderId,
+    });
+  }
+  return rows.length;
+}
 
 // W32: webhook arrives with no tenant context (mounted before tenant
 // middleware, payload doesn't carry slug). Tenant-scoped tables
@@ -400,77 +462,69 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     [transaction_id]
   );
   if (session) {
-    if (status === "completed" || event_type === "payment.completed") {
-      try {
-        await db.query(
-          "UPDATE storefront_payment_sessions SET status = 'completed', completed_at = NOW() WHERE id = $1",
-          [session.id]
-        );
-        await db.query(
-          `UPDATE web_orders SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
-          [session.web_order_id]
-        );
-        await db.query(
-          `INSERT INTO web_order_transactions (web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, provider_ref, payment_context)
-           VALUES ($1, $2, $3, 'sale', 'completed', $4, NOW(), $5, 'storefront')`,
-          [session.web_order_id, transaction_id, provider, session.amount, transaction_id]
-        );
-        _logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment completed");
-      } catch (sfErr) {
-        _logger.error({ err: sfErr }, "Storefront payment processing failed");
-      }
-    } else if (status === "failed" || event_type === "payment.failed") {
-      try {
-        await db.query(
-          "UPDATE storefront_payment_sessions SET status = 'failed' WHERE id = $1",
-          [session.id]
-        );
-        await db.query(
-          `UPDATE web_orders SET payment_status = 'failed', updated_at = NOW() WHERE id = $1`,
-          [session.web_order_id]
-        );
-        // Release inventory reservations
-        const { rows: reservations } = await db.query(
-          `SELECT r.id, r.product_id, r.variant_id, r.outlet_id, r.quantity
-           FROM storefront_cart_reservations r
-           JOIN web_orders wo ON wo.id = $1
-           WHERE r.status = 'converted' AND r.outlet_id IS NOT NULL`,
-          [session.web_order_id]
-        );
-        for (const r of reservations) {
-          await db.query(
-            `UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3`,
-            [r.quantity, r.product_id, r.outlet_id]
+    // Every branch below is one transaction. Previously each was a run of bare
+    // db.query() calls inside `try {} catch { log }`, which meant a mid-sequence
+    // failure left the order half-updated AND still answered the gateway
+    // `{ ok: true }` — the gateway saw success, so it never retried, and the
+    // inconsistency was permanent and silent.
+    const terminal = { orderId: session.web_order_id, sessionId: session.id };
+    try {
+      if (status === "completed" || event_type === "payment.completed") {
+        await db.transaction(async (client) => {
+          await client.query(
+            "UPDATE storefront_payment_sessions SET status = 'completed', completed_at = NOW() WHERE id = $1",
+            [session.id]
           );
-          if (r.variant_id) {
-            await db.query(
-              `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
-              [r.quantity, r.variant_id]
-            );
-          }
-          await db.query(
-            `UPDATE storefront_cart_reservations SET status = 'released' WHERE id = $1`,
-            [r.id]
+          await client.query(
+            `UPDATE web_orders SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
+            [session.web_order_id]
           );
-        }
-        _logger.info({ orderId: session.web_order_id, sessionId: session.id, releasedCount: reservations.length }, "Storefront payment failed — inventory released");
-      } catch (sfErr) {
-        _logger.error({ err: sfErr }, "Storefront payment failure processing failed");
+          await client.query(
+            `INSERT INTO web_order_transactions (web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, provider_ref, payment_context)
+             VALUES ($1, $2, $3, 'sale', 'completed', $4, NOW(), $5, 'storefront')`,
+            [session.web_order_id, transaction_id, provider, session.amount, transaction_id]
+          );
+        });
+        _logger.info(terminal, "Storefront payment completed");
+      } else if (status === "failed" || event_type === "payment.failed") {
+        const released = await db.transaction(async (client) => {
+          await client.query(
+            "UPDATE storefront_payment_sessions SET status = 'failed' WHERE id = $1",
+            [session.id]
+          );
+          await client.query(
+            `UPDATE web_orders SET payment_status = 'failed', updated_at = NOW() WHERE id = $1`,
+            [session.web_order_id]
+          );
+          return releaseStorefrontStock(client, session.web_order_id);
+        });
+        _logger.info({ ...terminal, releasedCount: released }, "Storefront payment failed — inventory released");
+      } else if (status === "cancelled" || event_type === "payment.cancelled") {
+        // Cancellation holds stock exactly as failure does — checkout has
+        // already decremented by the time a session exists. The previous code
+        // released nothing here at all, so a cancelled order leaked its stock
+        // even once the failure path was working.
+        const released = await db.transaction(async (client) => {
+          await client.query(
+            "UPDATE storefront_payment_sessions SET status = 'cancelled' WHERE id = $1",
+            [session.id]
+          );
+          await client.query(
+            `UPDATE web_orders SET payment_status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+            [session.web_order_id]
+          );
+          return releaseStorefrontStock(client, session.web_order_id);
+        });
+        _logger.info({ ...terminal, releasedCount: released }, "Storefront payment cancelled — inventory released");
       }
-    } else if (status === "cancelled" || event_type === "payment.cancelled") {
-      try {
-        await db.query(
-          "UPDATE storefront_payment_sessions SET status = 'cancelled' WHERE id = $1",
-          [session.id]
-        );
-        await db.query(
-          `UPDATE web_orders SET payment_status = 'cancelled', updated_at = NOW() WHERE id = $1`,
-          [session.web_order_id]
-        );
-        _logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment cancelled");
-      } catch (sfErr) {
-        _logger.error({ err: sfErr }, "Storefront payment cancellation processing failed");
-      }
+    } catch (sfErr) {
+      // Answer the gateway with a failure so it retries. Everything above is
+      // transactional and the release claims its rows with UPDATE ... RETURNING,
+      // so a retry is safe: it either redoes nothing or completes the work.
+      // Swallowing this into `{ ok: true }` is what let the stock leak run
+      // unnoticed for the life of the feature.
+      _logger.error({ err: sfErr, ...terminal, status, event_type }, "Storefront payment processing failed");
+      return { ok: false, statusCode: 500, error: "Storefront payment processing failed" };
     }
     return { ok: true };
   }
@@ -898,3 +952,7 @@ module.exports = function registerWebhookRoutes(app, deps) {
 
 // Export processWebhookEvent for reuse by sandbox simulate endpoint
 module.exports.processWebhookEvent = processWebhookEvent;
+// Exported for tests/integration/pg-storefront-stock-release.test.js. Driving it
+// through processWebhookEvent would require a real gateway session and a
+// master-registry tenant scan; the stock arithmetic is the part worth pinning.
+module.exports.releaseStorefrontStock = releaseStorefrontStock;
