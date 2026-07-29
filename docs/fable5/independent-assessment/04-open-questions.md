@@ -10,12 +10,12 @@ These block nothing but sharpen several findings. All are dashboard or CLI check
 
 | # | Question | Why it matters | Where to check |
 |---|---|---|---|
-| **A1** | **Is `R2_PUBLIC_URL` set on Railway?** | Decides between two opposite failure modes. **Set** → field-rep selfies, clinical attachments, signed consent forms, CNIC/passport photos, scheduled report CSVs **and full database dumps** are plain public URLs. **Unset** → those features are silently 404-ing in the owner UI. The incoming report recorded it unset on 2026-07-29; not re-checked since | `railway variables` |
+| ~~A1~~ | ~~**Is `R2_PUBLIC_URL` set on Railway?**~~ **CLOSED 2026-07-29 — it is UNSET.** Two independent sources agree: the platform-architecture report §11 (2026-07-29) and project memory (verified 2026-07-25). **You are fail-closed on confidentiality — nothing sensitive is publicly readable.** But this promotes the other half to a confirmed defect: `field-selfies/`, `clinical/`, `consents/` and `booking-guests/` (CNIC/passport) are outside the proxy's three-prefix allowlist, so they **404**, while `utils/r2.js:71` writes those URLs into the DB and the owner UI renders them directly (`field/FieldVisitsRedesign.jsx:194-197`). **Field-rep selfies and clinical attachments are silently broken in production today.** Re-verify only if the variable is ever set — doing so un-mounts the proxy entirely and exposes every key including `backups/full-backup-*.dump` | closed |
 | **A2** | Is `INTEGRATION_SECRET_KEY` (or `SHOPIFY_SECRET_KEY`) set in production? | `services/crypto.js:26` returns plaintext unchanged when unset — integration, courier and marketplace credentials would be stored unencrypted with no error and no log | `railway variables` |
 | **A3** | R2 bucket settings — public-access mode, server-side encryption, lifecycle/TTL rules | Backups and clinical media live there. Nothing in code asserts encryption; nothing expires | Cloudflare dashboard |
 | **A4** | Do Supabase automated backups cover `tenant_*` schemas identically to `public`? | It is the **only** functioning automated backup — the in-repo backup job never runs in production (`boot/workers.js:159-161` gates it behind `!DATABASE_URL`) | Supabase dashboard |
 
-**A1 is the highest-value hour in this entire assessment.** Do it first.
+~~**A1 is the highest-value hour in this entire assessment.**~~ **Answered — see above.** The privacy question is closed favourably; the functional defect it revealed (broken selfie/clinical media in the owner UI) moves to the action plan. **A2 is now the highest-value remaining lookup**, since `services/crypto.js:26` silently stores plaintext when the key is unset.
 
 ---
 

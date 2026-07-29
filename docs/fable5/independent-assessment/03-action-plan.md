@@ -22,7 +22,8 @@ Not "fix everything first." Just what's cheap and would embarrass you in front o
 
 ### Dashboards, no code (~1 h)
 
-- [ ] **Check `R2_PUBLIC_URL` on Railway** (5 min) — **do this first.** If set, patient attachments, CNIC/passport photos and full database dumps are world-readable. If unset, field selfies and clinical attachments are silently 404-ing in the owner UI. Either way you need to know. *(§3B.1)*
+- [x] ~~Check `R2_PUBLIC_URL`~~ — **DONE: it is UNSET.** Good news on privacy (nothing sensitive is public). But this confirms a live functional defect: **field-rep selfies and clinical attachments 404 in the owner UI** because those prefixes sit outside the proxy allowlist while their URLs are written to the DB and rendered directly. → new task below *(§3B.1)*
+- [ ] **Fix the broken R2 media paths** (~1 h) — either add `field-selfies/`, `clinical/`, `consents/`, `booking-guests/` to `PUBLIC_R2_PREFIXES` **with an authz check** (the proxy currently has none and mounts above the tenant chain), or serve them through an authenticated route. Do **not** simply set `R2_PUBLIC_URL` — that un-mounts the proxy and exposes every key including `backups/full-backup-*.dump`.
 - [ ] **Rotate the production credentials** in `frontend/tests/helpers/auth.js` and drop the literal fallbacks to `undefined` (~30 min) — a clone of this repo currently yields a working login to live production.
 - [ ] **Enable Dependabot alerts, Dependabot security updates, secret scanning, push protection** (5 min) — four free toggles, all currently off.
 - [ ] **Repoint UptimeRobot** at `https://api.sanopos.com/api/health?deep=true` and add a monitor on `sanopos.com` (10 min) — the current monitor watches the Railway fallback hostname via an endpoint that returns 200 during a total database outage. *(§3B.8)*
