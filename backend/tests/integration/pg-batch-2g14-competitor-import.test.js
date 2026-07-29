@@ -5,14 +5,23 @@
  *  1. POST /api/import/products?source=shopify&preview=1 → preview shape
  *  2. POST /api/import/products?source=shopify → products inserted
  *  3. POST /api/import/customers?source=square → customers inserted
- *  4. GET /api/import/template/products?source=shopify → xlsx with Shopify headers
+ *  4. GET /api/import/template/products?source=shopify → CSV with Shopify headers
  *  5. Unknown source falls back to native handling
  *  6. Unsupported template source+entity pair returns 400
  */
 
 require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
 
-const XLSX = require("xlsx");
+const Papa = require("papaparse");
+
+// Fixtures are CSV, not .xlsx. Imports became CSV-only when `xlsx` was removed
+// from the product — npm's copy is frozen at 0.18.5 with two advisories whose
+// fixes ship only to SheetJS's own registry. Papa.unparse quotes correctly, so
+// the Shopify/Square headers containing spaces and the addresses containing
+// commas survive the round-trip the same way a real export would.
+function aoaToCsvBuffer(aoa) {
+  return Buffer.from(Papa.unparse(aoa), "utf8");
+}
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
@@ -26,10 +35,7 @@ function shopifyProductsBuffer(rows) {
     "Variant Price", "Cost per item", "Variant Inventory Qty", "Status",
   ];
   const aoa = [headers, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "products");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  return aoaToCsvBuffer(aoa);
 }
 
 function squareCustomersBuffer(rows) {
@@ -38,10 +44,7 @@ function squareCustomersBuffer(rows) {
     "Postal Address", "Reference ID", "Group Names",
   ];
   const aoa = [headers, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "customers");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  return aoaToCsvBuffer(aoa);
 }
 
 beforeAll(async () => {
@@ -68,7 +71,7 @@ describe("2-G.14 Competitor import — Shopify", () => {
     ]);
     const res = await req
       .post("/api/import/products?source=shopify&preview=1")
-      .attach("file", buf, "shopify-products.xlsx");
+      .attach("file", buf, "shopify-products.csv");
     expect(res.status).toBe(200);
     expect(res.body.preview).toBe(true);
     // row 1 valid, row 2 errors (name missing — Title empty on Shopify means name-less)
@@ -85,7 +88,7 @@ describe("2-G.14 Competitor import — Shopify", () => {
     ]);
     const res = await req
       .post("/api/import/products?source=shopify")
-      .attach("file", buf, "shopify-products.xlsx");
+      .attach("file", buf, "shopify-products.csv");
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(1);
 
@@ -100,17 +103,14 @@ describe("2-G.14 Competitor import — Shopify", () => {
   });
 
   test("variant option appends to name", async () => {
-    // Use XLSX to build the file with a dynamic header (Option1 Value)
+    // Build the file with a dynamic header (Option1 Value)
     const headers = ["Title", "Option1 Value", "Variant SKU", "Variant Price"];
     const rows = [["Shirt", "Large", "SH-L", 12.5]];
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "products");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const buf = aoaToCsvBuffer([headers, ...rows]);
 
     const res = await req
       .post("/api/import/products?source=shopify")
-      .attach("file", buf, "shopify-variants.xlsx");
+      .attach("file", buf, "shopify-variants.csv");
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(1);
 
@@ -131,7 +131,7 @@ describe("2-G.14 Competitor import — Square", () => {
     ]);
     const res = await req
       .post("/api/import/customers?source=square")
-      .attach("file", buf, "square-customers.xlsx");
+      .attach("file", buf, "square-customers.csv");
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(2);
 
@@ -147,7 +147,7 @@ describe("2-G.14 Competitor import — Square", () => {
 });
 
 describe("2-G.14 Competitor import — template endpoint", () => {
-  test("returns Shopify-shaped template xlsx", async () => {
+  test("returns Shopify-shaped template CSV", async () => {
     const res = await req
       .get("/api/import/template/products?source=shopify")
       .buffer(true)
@@ -157,11 +157,11 @@ describe("2-G.14 Competitor import — template endpoint", () => {
         resp.on("end", () => cb(null, Buffer.concat(chunks)));
       });
     expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-    // Parse the xlsx and verify Shopify-specific headers
-    const wb = XLSX.read(res.body, { type: "buffer" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    expect(res.headers["content-type"]).toContain("text/csv");
+    // Parse the CSV and verify Shopify-specific headers
+    const data = Papa.parse(res.body.toString("utf8").replace(/^\uFEFF/, ""), {
+      header: false, dynamicTyping: false, skipEmptyLines: "greedy",
+    }).data;
     expect(data[0]).toContain("Title");
     expect(data[0]).toContain("Variant SKU");
     expect(data[0]).toContain("Variant Price");
@@ -183,9 +183,9 @@ describe("2-G.14 Competitor import — template endpoint", () => {
         resp.on("end", () => cb(null, Buffer.concat(chunks)));
       });
     expect(res.status).toBe(200);
-    const wb = XLSX.read(res.body, { type: "buffer" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const data = Papa.parse(res.body.toString("utf8").replace(/^\uFEFF/, ""), {
+      header: false, dynamicTyping: false, skipEmptyLines: "greedy",
+    }).data;
     // Native headers are lowercase snake_case
     expect(data[0]).toContain("name");
     expect(data[0]).toContain("selling_price");
@@ -197,14 +197,11 @@ describe("2-G.14 Competitor import — fallback", () => {
     // Build a native-shaped file; the mapper for source=lightspeed is null, so
     // it should process the raw rows normally.
     const headers = ["name", "sku", "selling_price", "stock_quantity"];
-    const ws = XLSX.utils.aoa_to_sheet([headers, ["Fallback Product", "FB-1", 5, 3]]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "products");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const buf = aoaToCsvBuffer([headers, ["Fallback Product", "FB-1", 5, 3]]);
 
     const res = await req
       .post("/api/import/products?source=lightspeed")
-      .attach("file", buf, "native.xlsx");
+      .attach("file", buf, "native.csv");
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(1);
   });

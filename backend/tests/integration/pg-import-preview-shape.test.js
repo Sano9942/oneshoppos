@@ -16,7 +16,9 @@
 
 require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
 
-const XLSX = require("xlsx");
+// (No spreadsheet library needed — this file has always built its fixtures with
+// the local csvBuffer helper below. The unused `xlsx` require went out with the
+// dependency itself.)
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 

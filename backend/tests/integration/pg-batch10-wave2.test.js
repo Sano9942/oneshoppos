@@ -1,5 +1,24 @@
 const request = require("supertest");
+const Papa = require("papaparse");
 const { createTestApp } = require("../helpers/createTestApp-pg");
+
+/**
+ * Build a CSV upload fixture from an array of row objects.
+ *
+ * These tests used to build .xlsx workbooks with SheetJS. Imports are CSV-only
+ * now — `xlsx` was removed from the product because npm's copy is frozen at
+ * 0.18.5 with two advisories whose fixes are published only to SheetJS's own
+ * registry — so the fixtures follow.
+ *
+ * Headers union across all rows in first-seen order, matching what
+ * XLSX.utils.json_to_sheet produced, so a row that omits a key still lines up
+ * with the header the other rows established.
+ */
+function csvBuffer(rows) {
+  const fields = [];
+  for (const r of rows) for (const k of Object.keys(r)) if (!fields.includes(k)) fields.push(k);
+  return Buffer.from(Papa.unparse({ fields, data: rows }), "utf8");
+}
 
 describe("Batch 10 — Wave 2 tests: support, FBR, import (Postgres)", () => {
   let app, db, deps, cleanup;
@@ -313,40 +332,37 @@ describe("Batch 10 — Wave 2 tests: support, FBR, import (Postgres)", () => {
 
   describe("Import routes", () => {
     it("POST /api/import/products — preview mode validates rows", async () => {
-      const XLSX = require("xlsx");
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
+      const buffer = csvBuffer([
         { name: "Test Widget", selling_price: 100, category: "Electronics", brand: "TestBrand" },
         { name: "Bad Widget", selling_price: "not-a-number" },
         { name: "", selling_price: 50 }, // missing name
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
       const res = await request(app)
         .post("/api/import/products?preview=1")
         .set("x-employee-id", "1")
-        .attach("file", buffer, "products.xlsx");
+        .attach("file", buffer, "products.csv");
 
       expect(res.status).toBe(200);
       expect(res.body.preview).toBe(true);
       expect(res.body.valid).toBeGreaterThanOrEqual(1);
-      expect(res.body.errors.length).toBeGreaterThanOrEqual(1);
+      // `errors` is a COUNT, not an array — import.js returns
+      // `{ valid: valid.length, errors: errors.length }`. The assertion used to
+      // read `.length` off that number, which is `undefined`, so it threw a
+      // TypeError rather than checking anything. Pre-existing, unrelated to the
+      // CSV migration; fixed here because this file had to be touched anyway.
+      expect(res.body.errors).toBeGreaterThanOrEqual(1);
     });
 
     it("POST /api/import/products — real import creates products", async () => {
-      const XLSX = require("xlsx");
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
+      const buffer = csvBuffer([
         { name: "Import Widget X", selling_price: 250, category: "Electronics" },
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
       const res = await request(app)
         .post("/api/import/products")
         .set("x-employee-id", "1")
-        .attach("file", buffer, "products.xlsx");
+        .attach("file", buffer, "products.csv");
 
       expect(res.status).toBe(200);
       expect(res.body.imported).toBeGreaterThanOrEqual(1);
@@ -369,64 +385,52 @@ describe("Batch 10 — Wave 2 tests: support, FBR, import (Postgres)", () => {
     });
 
     it("POST /api/import/products — 403 for non-admin", async () => {
-      const XLSX = require("xlsx");
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([{ name: "X", selling_price: 10 }]);
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buffer = csvBuffer([{ name: "X", selling_price: 10 }]);
 
       const res = await request(app)
         .post("/api/import/products?preview=1")
         .set("x-employee-id", "3") // cashier
-        .attach("file", buffer, "products.xlsx");
+        .attach("file", buffer, "products.csv");
 
       expect(res.status).toBe(403);
     });
 
     it("POST /api/import/customers — imports customers", async () => {
-      const XLSX = require("xlsx");
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
+      const buffer = csvBuffer([
         { name: "Imported Customer A", mobile: "0300-1234567", email: "a@test.com" },
         { name: "Imported Customer B" },
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
       const res = await request(app)
         .post("/api/import/customers")
         .set("x-employee-id", "1")
-        .attach("file", buffer, "customers.xlsx");
+        .attach("file", buffer, "customers.csv");
 
       expect(res.status).toBe(200);
       expect(res.body.imported).toBe(2);
     });
 
     it("POST /api/import/suppliers — imports suppliers", async () => {
-      const XLSX = require("xlsx");
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
+      const buffer = csvBuffer([
         { name: "Imported Supplier X", phone: "021-9999999" },
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
       const res = await request(app)
         .post("/api/import/suppliers")
         .set("x-employee-id", "1")
-        .attach("file", buffer, "suppliers.xlsx");
+        .attach("file", buffer, "suppliers.csv");
 
       expect(res.status).toBe(200);
       expect(res.body.imported).toBe(1);
     });
 
-    it("GET /api/import/template/products — returns XLSX template", async () => {
+    it("GET /api/import/template/products — returns a CSV template", async () => {
       const res = await request(app)
         .get("/api/import/template/products")
         .set("x-employee-id", "1");
 
       expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/spreadsheet|octet/);
+      expect(res.headers["content-type"]).toMatch(/text\/csv/);
     });
 
     it("GET /api/import/template/unknown — 400 for invalid entity", async () => {

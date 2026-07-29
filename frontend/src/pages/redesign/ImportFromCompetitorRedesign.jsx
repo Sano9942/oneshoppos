@@ -167,7 +167,7 @@ export default function ImportFromCompetitorRedesign() {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,text/csv"
             className="hidden"
             onChange={handleFileSelect}
             disabled={loading || importing}
@@ -181,7 +181,7 @@ export default function ImportFromCompetitorRedesign() {
             <p className="text-sm font-medium text-(--ui-text)">
               {loading ? "Parsing file..." : "Click to upload or drag and drop"}
             </p>
-            <p className="mt-1 text-xs text-(--ui-text-muted)">CSV, XLSX, or XLS exported from {SOURCES.find((s) => s.key === source)?.label}</p>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">CSV exported from {SOURCES.find((s) => s.key === source)?.label}. In Excel: File → Save As → CSV.</p>
           </div>
           {file && !loading && (
             <p className="text-xs text-(--ui-text-muted)">Selected: {file.name}</p>

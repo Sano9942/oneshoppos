@@ -94,7 +94,9 @@ export default function ImportRedesign() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${activeTab}_template.xlsx`;
+      // Templates are CSV now — the backend stopped emitting .xlsx when the
+      // `xlsx` dependency (unfixable advisories) was removed from the import path.
+      a.download = `${activeTab}_template.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -361,7 +363,7 @@ export default function ImportRedesign() {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,text/csv"
             className="hidden"
             onChange={handleFileSelect}
             disabled={loading || importing}
@@ -375,7 +377,7 @@ export default function ImportRedesign() {
             <p className="text-sm font-medium text-(--ui-text)">
               {loading ? "Parsing file..." : "Click to upload or drag and drop"}
             </p>
-            <p className="mt-1 text-xs text-(--ui-text-muted)">CSV, XLSX, or XLS files</p>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">CSV files only. In Excel: File → Save As → CSV.</p>
           </div>
           {file && !loading && (
             <p className="text-xs text-(--ui-text-muted)">

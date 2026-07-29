@@ -66,15 +66,33 @@ const CSV_IMPORT_HEADERS = [
   "description_html", "gst", "min_qty", "max_qty",
 ];
 
-// Indices (0-based) of TEXT_COLS within CSV_IMPORT_HEADERS — used to pre-format xlsx template
-const TEXT_COL_INDICES = CSV_IMPORT_HEADERS.reduce((acc, h, i) => {
-  if (TEXT_COLS.has(h)) acc.push(i);
-  return acc;
-}, []);
+/** Trigger a client-side download of `text` as `filename`. */
+function downloadText(filename, text) {
+  const url = URL.createObjectURL(new Blob(["\uFEFF" + text], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
+// CSV template, not xlsx. Two things are deliberately lost and worth naming:
+//
+//  1. The .xlsx version marked the barcode/sku columns as Text (`z: "@"`) across
+//     all 500 rows so leading zeros survived typing, pasting or dragging. A CSV
+//     carries no formatting, so a merchant who opens this in Excel and re-saves
+//     can lose them. Import is unaffected — every value is read as a string, and
+//     parseCSV still unwraps Excel's ="..." text-formula wrapper — so the
+//     failure mode is confined to the Excel round-trip.
+//  2. The "Branches (reference)" second sheet. A CSV has one sheet, so the
+//     branch list downloads as its own small file alongside.
+//
+// The exchange is an unfixable parser CVE on merchant-supplied files for a
+// formatting convenience. If leading zeros become a real support burden the fix
+// is guidance ("import the CSV directly, don't open it in Excel"), not a return
+// to xlsx.
 async function downloadImportTemplate(outlets = []) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.utils.book_new();
+  const { default: Papa } = await import("papaparse");
   const sampleRow = {
     name: "Sample Product",
     barcode: "001234",
@@ -95,65 +113,51 @@ async function downloadImportTemplate(outlets = []) {
     min_qty: "",
     max_qty: "",
   };
-  // Build 500 rows: row 1 = sample, rows 2-500 = blank but with Text-formatted barcode/sku cells
-  const TEMPLATE_ROWS = 500;
-  const allRows = [sampleRow];
-  for (let i = 1; i < TEMPLATE_ROWS; i++) {
-    const blank = {};
-    CSV_IMPORT_HEADERS.forEach((h) => { blank[h] = ""; });
-    allRows.push(blank);
-  }
-  const ws = XLSX.utils.json_to_sheet(allRows, { header: CSV_IMPORT_HEADERS });
+  // One sample row only. The .xlsx version padded to 500 blank rows purely to
+  // carry Text formatting on each cell; without formatting to carry, 499 empty
+  // CSV lines are noise that some parsers read back as blank products.
+  downloadText(
+    "products-import-template.csv",
+    Papa.unparse({ fields: CSV_IMPORT_HEADERS, data: [sampleRow] })
+  );
 
-  // Force Text format on every barcode/sku cell (rows 1-500) so leading zeros are
-  // preserved whether the user types, pastes, or drags values into any row
-  TEXT_COL_INDICES.forEach((colIdx) => {
-    for (let rowIdx = 0; rowIdx <= TEMPLATE_ROWS; rowIdx++) {
-      const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
-      if (!ws[addr]) ws[addr] = { t: "s", v: rowIdx === 0 ? "barcode" : "", z: "@" };
-      ws[addr].t = "s";
-      ws[addr].z = "@";
-    }
-    if (!ws["!cols"]) ws["!cols"] = [];
-    ws["!cols"][colIdx] = { wch: 20, z: "@" };
-  });
-
-  XLSX.utils.book_append_sheet(wb, ws, "Products");
-
-  // Second sheet: branch reference so users know which outlet_id to use
+  // Branch reference as its own file — a CSV cannot hold a second sheet.
   if (outlets.length > 0) {
-    const outletRows = outlets.map((o) => ({ outlet_id: o.id, branch_name: o.name }));
-    const wsOutlets = XLSX.utils.json_to_sheet(outletRows, { header: ["outlet_id", "branch_name"] });
-    wsOutlets["!cols"] = [{ wch: 12 }, { wch: 30 }];
-    XLSX.utils.book_append_sheet(wb, wsOutlets, "Branches (reference)");
+    downloadText(
+      "products-import-branches-reference.csv",
+      Papa.unparse({
+        fields: ["outlet_id", "branch_name"],
+        data: outlets.map((o) => ({ outlet_id: o.id, branch_name: o.name })),
+      })
+    );
   }
-
-  XLSX.writeFile(wb, "products-import-template.xlsx");
 }
 
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-  return lines.slice(1).map((line) => {
-    // Handle quoted fields with commas inside
-    const values = [];
-    let cur = "", inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQuote = !inQuote; continue; }
-      if (ch === "," && !inQuote) { values.push(cur); cur = ""; continue; }
-      cur += ch;
-    }
-    values.push(cur);
-    const row = {};
-    headers.forEach((h, i) => {
-      let val = (values[i] || "").trim();
-      // Strip Excel text-formula wrapper ="..." that may appear after a round-trip
+// Papa.parse rather than the hand-rolled scanner this replaced. The old one
+// handled quoted commas but not two cases a real export produces: a field
+// containing a newline, and a literal quote escaped as "". Both silently shifted
+// every subsequent column, which on this path means prices and stock landing on
+// the wrong products.
+//
+// dynamicTyping stays off so barcodes and SKUs keep leading zeros — the reason
+// the template used to be a formatted .xlsx.
+async function parseCSV(text) {
+  const { default: Papa } = await import("papaparse");
+  const { data } = Papa.parse(text.replace(/^\uFEFF/, ""), {
+    header: true,
+    dynamicTyping: false,
+    skipEmptyLines: "greedy",
+    transformHeader: (h) => String(h).trim(),
+  });
+  return data.map((row) => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) {
+      let val = v == null ? "" : String(v).trim();
+      // Excel writes a text-formatted cell back out as ="007" on round-trip.
       if (val.startsWith('="') && val.endsWith('"')) val = val.slice(2, -1);
-      row[h] = val;
-    });
-    return row;
+      out[k] = val;
+    }
+    return out;
   });
 }
 
@@ -394,21 +398,15 @@ export default function InventoryRedesign() {
     if (!file) return;
     e.target.value = "";
 
-    let rows;
-    const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
-    if (isXlsx) {
-      // Parse xlsx using SheetJS — values are already typed correctly (no leading-zero loss)
-      const XLSX = await import("xlsx");
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      // raw:false keeps everything as strings (preserves leading zeros stored as text)
-      rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
-    } else {
-      const text = await file.text();
-      rows = parseCSV(text);
+    // CSV only. Excel files used to be parsed here with SheetJS, which is
+    // frozen at 0.18.5 on npm with two unfixable advisories.
+    if (/\.(xlsx|xlsm|xlsb|xls)$/i.test(file.name)) {
+      return alert(
+        "Excel files are no longer accepted. In Excel choose File → Save As → CSV, then upload that file. The template download is already a CSV."
+      );
     }
-    // Strip blank rows (template has 500 pre-formatted rows; only send ones with a name)
+    let rows = await parseCSV(await file.text());
+    // Only send rows that actually name a product.
     rows = rows.filter((r) => String(r.name || "").trim() !== "");
     if (!rows.length) return alert("File is empty or unreadable.");
     setImporting(true);
@@ -456,7 +454,7 @@ export default function InventoryRedesign() {
           <input
             ref={importFileRef}
             type="file"
-            accept=".csv,text/csv,.xlsx,.xls"
+            accept=".csv,text/csv"
             className="hidden"
             onChange={handleImportFile}
           />

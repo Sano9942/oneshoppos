@@ -5,8 +5,9 @@ import { Button } from "../../../ui/primitives";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { useToast } from "../../../contexts/ToastContext";
 
-// xlsx is ~430 KB (143 KB gzip) — load on demand, not eagerly. The wizard
-// only needs it inside handleFile when the user actually picks a file.
+// The CSV parser is loaded on demand inside handleFile, not eagerly — the wizard
+// only needs it once the user actually picks a file. (This used to be `xlsx` at
+// ~430 KB / 143 KB gzip; papaparse is a fraction of that and maintained.)
 
 // The courier_integrations.config_json column is stored as TEXT, not JSONB.
 // Defensively parse it so the wizard does not crash on legacy data or a
@@ -65,16 +66,24 @@ export default function ImportWizard({ onCancel, onComplete }) {
   async function handleFile(file) {
     setFileName(file.name);
     try {
-      const XLSX = await import("xlsx");
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      // CSV only. This was `await import("xlsx")`, which is frozen at 0.18.5 on
+      // npm with two advisories whose fixes ship only to SheetJS's own
+      // registry. Papa.parse handles RFC-4180 quoting, which a split(",") would
+      // not — courier settlement files carry addresses full of commas.
+      const { default: Papa } = await import("papaparse");
+      const text = (await file.text()).replace(/^\uFEFF/, "");
+      const { data: json } = Papa.parse(text, {
+        header: false,
+        // Keep every cell a string: tracking numbers and CNICs must not lose
+        // leading zeros, and amounts still parse downstream.
+        dynamicTyping: false,
+        skipEmptyLines: "greedy",
+      });
       if (json.length < 2) {
         toast.error("File has no data rows");
         return;
       }
-      const parsedHeaders = json[0].map(String);
+      const parsedHeaders = json[0].map((h) => String(h).trim());
       const parsedRows = json
         .slice(1)
         .filter((r) => r.some((cell) => cell !== ""));
@@ -269,11 +278,11 @@ export default function ImportWizard({ onCancel, onComplete }) {
               className="mx-auto mb-2 text-(--text-muted)"
             />
             <span className="text-sm text-(--text-secondary)">
-              {fileName || "Click to choose a file (.csv, .xlsx)"}
+              {fileName || "Click to choose a CSV file"}
             </span>
             <input
               type="file"
-              accept=".csv,.xlsx"
+              accept=".csv,text/csv"
               className="hidden"
               onChange={(e) =>
                 e.target.files?.[0] && handleFile(e.target.files[0])

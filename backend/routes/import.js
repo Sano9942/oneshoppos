@@ -1,4 +1,4 @@
-const XLSX = require("xlsx");
+const Papa = require("papaparse");
 const { asyncStore } = require("../tenant-db-proxy-pg");
 const {
   getMapper,
@@ -35,17 +35,99 @@ module.exports = function mountImportRoutes(app, deps) {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
   // ---------------------------------------------------------------------------
-  // Helper: parse uploaded file (CSV or XLSX) into array of row objects
+  // Helper: parse an uploaded CSV into an array of row objects.
+  //
+  // CSV ONLY. This used to run every upload — .csv and .xlsx alike — through
+  // XLSX.read(), which is why the `xlsx` dependency was here at all. That
+  // package is frozen at 0.18.5 on npm with two advisories (prototype
+  // pollution, ReDoS) whose fixes are published only to SheetJS's own registry,
+  // so npm can see the problem and never the remedy. Parsing merchant-supplied
+  // spreadsheets with it was the one unfixable exposure in the product.
+  //
+  // Papa.parse is used rather than a hand-rolled split(","), deliberately: the
+  // only CSV parsing previously written by hand in this repo is
+  // CustomerGroupPriceBookRedesign.jsx's naive split, which breaks on any
+  // quoted field containing a comma. Product names and addresses contain
+  // commas. XLSX was doing correct RFC-4180 quoting for free and dropping it
+  // without a real parser would have traded a CVE for silent data corruption on
+  // the path that sets prices and stock.
+  //
+  // Options chosen to match the previous behaviour exactly:
+  //   header: true          → row objects keyed by the header row, as
+  //                           sheet_to_json produced
+  //   dynamicTyping: false  → every value stays a string, which is what
+  //                           `raw: false` gave us. It matters twice: ISO dates
+  //                           ("2026-04-29") must not become numbers, or
+  //                           Date.parse() in the expenses/payments validators
+  //                           breaks; and a barcode or SKU like "007" must keep
+  //                           its leading zeros. Numeric fields still parse
+  //                           cleanly downstream via parseFloat.
+  //   skipEmptyLines: "greedy" → drops blank and whitespace-only rows, which a
+  //                           spreadsheet export leaves at the end of a file.
   // ---------------------------------------------------------------------------
-  function parseFile(buffer, originalname) {
-    const wb = XLSX.read(buffer, { type: "buffer" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    if (!sheet) return [];
-    // raw: false keeps cell values as the displayed strings — without it, XLSX
-    // auto-coerces ISO dates ("2026-04-29") into Excel serial numbers
-    // (46141.20...), which breaks Date.parse() in expenses/payments validation.
-    // Numeric fields (selling_price, amount) still parse cleanly via parseFloat.
-    return XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+  function parseFile(buffer) {
+    const text = buffer.toString("utf8").replace(/^\uFEFF/, ""); // strip Excel's BOM
+    const { data } = Papa.parse(text, {
+      header: true,
+      dynamicTyping: false,
+      skipEmptyLines: "greedy",
+      transformHeader: (h) => String(h).trim(),
+    });
+    // Papa reports malformed rows in `errors` but still returns what it could
+    // read. The per-row validators downstream already reject incomplete rows
+    // with a reason the merchant sees, so surfacing parse errors separately
+    // would report the same bad row twice.
+    return data.map((row) => {
+      const out = {};
+      for (const [k, v] of Object.entries(row)) out[k] = v == null ? "" : v;
+      return out;
+    });
+  }
+
+  /**
+   * Send a download template as CSV.
+   *
+   * Was an .xlsx workbook. The trade-off is worth stating where the code is,
+   * because it is a real regression for barcode retail: an .xlsx template could
+   * mark SKU and barcode columns as text, so a value like "007" survived being
+   * opened in Excel. A CSV carries no formatting, so a merchant who opens the
+   * template in Excel and re-saves it can lose leading zeros before uploading.
+   * The import itself is unaffected — parseFile keeps every value a string —
+   * and the exposure this removes (an unfixable parser CVE on merchant-supplied
+   * files) was judged the larger risk. If leading zeros become a real support
+   * burden, the fix is a UTF-8 BOM plus quoted values, not a return to xlsx.
+   */
+  function sendCsvTemplate(res, filename, headers, exampleRows) {
+    // BOM so Excel opens UTF-8 correctly on Windows — without it, non-ASCII
+    // product names arrive mojibaked, which is how most merchants here will
+    // first see the file.
+    const csv = "\uFEFF" + Papa.unparse({ fields: headers, data: exampleRows });
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}_template.csv"`);
+    return res.send(csv);
+  }
+
+  /**
+   * Reject anything that is not a CSV before it reaches the parser.
+   *
+   * Checked on the extension rather than the MIME type because browsers and
+   * operating systems disagree wildly about CSV's type — Windows with Excel
+   * installed sends `application/vnd.ms-excel` for a .csv file — so a MIME
+   * allowlist would refuse legitimate uploads from the machines merchants
+   * actually use.
+   *
+   * @returns {string|null} an error message, or null when the file is fine
+   */
+  function rejectNonCsv(file) {
+    if (!file) return "No file uploaded";
+    const name = String(file.originalname || "");
+    if (/\.(xlsx|xlsm|xlsb|xls)$/i.test(name)) {
+      return "Excel files are no longer accepted. Save your sheet as CSV (File → Save As → CSV) and upload that. Download the template below for the exact columns.";
+    }
+    if (!/\.csv$/i.test(name)) {
+      return `Unsupported file type "${name.split(".").pop() || name}". Upload a .csv file.`;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -156,11 +238,12 @@ module.exports = function mountImportRoutes(app, deps) {
     withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
         const source = req.query.source ? String(req.query.source).toLowerCase() : null;
         const columnMap = parseColumnMap(req);
-        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const raw = parseFile(req.file.buffer);
         const mapped = resolveMappedRows(raw, source, columnMap, "products");
         const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
@@ -396,11 +479,12 @@ module.exports = function mountImportRoutes(app, deps) {
     withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
         const source = req.query.source ? String(req.query.source).toLowerCase() : null;
         const columnMap = parseColumnMap(req);
-        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const raw = parseFile(req.file.buffer);
         const mapped = resolveMappedRows(raw, source, columnMap, "customers");
         const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
@@ -496,10 +580,11 @@ module.exports = function mountImportRoutes(app, deps) {
     withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
         const columnMap = parseColumnMap(req);
-        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const raw = parseFile(req.file.buffer);
         const rows = resolveMappedRows(raw, null, columnMap, "suppliers").map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
@@ -587,9 +672,10 @@ module.exports = function mountImportRoutes(app, deps) {
     withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
-        const rows = parseFile(req.file.buffer, req.file.originalname).map(normaliseRow);
+        const rows = parseFile(req.file.buffer).map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
         const isPreview = req.query.preview === "1";
@@ -679,9 +765,10 @@ module.exports = function mountImportRoutes(app, deps) {
     withTenantContext(upload.single("file")),
     async (req, res) => {
       try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
-        const rows = parseFile(req.file.buffer, req.file.originalname).map(normaliseRow);
+        const rows = parseFile(req.file.buffer).map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
         const isPreview = req.query.preview === "1";
@@ -837,9 +924,10 @@ module.exports = function mountImportRoutes(app, deps) {
             error: `Column mapping is not supported for "${entity}". Supported: products, customers, suppliers`,
           });
         }
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
 
-        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const raw = parseFile(req.file.buffer);
         if (!raw.length) {
           return res.status(400).json({ error: "File is empty or has no data rows" });
         }
@@ -889,13 +977,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
         headers = tpl.headers;
         exampleRows = tpl.examples;
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleRows]);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, entity);
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="${source}_${entity}_template.xlsx"`);
-        return res.send(buf);
+        return sendCsvTemplate(res, `${source}_${entity}`, headers, exampleRows);
       }
 
       switch (entity) {
@@ -938,14 +1020,7 @@ module.exports = function mountImportRoutes(app, deps) {
           return res.status(400).json({ error: `Unknown entity "${entity}". Supported: products, customers, suppliers, expenses, payments` });
       }
 
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleRows]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, entity);
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${entity}_template.xlsx"`);
-      return res.send(buf);
+      return sendCsvTemplate(res, entity, headers, exampleRows);
     },
   );
 };
