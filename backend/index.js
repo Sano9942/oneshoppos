@@ -152,26 +152,51 @@ app.use((err, req, res, next) => {
 app.use("/uploads", express.static(UPLOADS_DIR));
 
 // R2 proxy — serves /r2/<key> by streaming from Cloudflare R2.
-// Public prefixes only: products/, company/, support/ (displayed in browsers,
-// including unauthenticated public pages like /receipt/:invoice). The
-// backups/ prefix holds full pg_dump archives across all tenants and MUST
-// NOT be proxied — admins fetch those via the R2 console or signed URLs.
+//
+// Two ways in. PUBLIC_R2_PREFIXES are served to anyone: product images and the
+// company logo render on genuinely unauthenticated pages (/receipt/:invoice),
+// so they cannot require a signature. Everything else must present a valid
+// short-lived signature, minted by middleware/sign-media-urls.js when a
+// permission-gated endpoint returned the row that owns it.
+//
+// This replaces an allowlist that served only these three prefixes and 404'd
+// the other eleven, which is why clinical documents, consent signatures, guest
+// ID scans, field-rep selfies and eight other categories of upload were broken
+// in the UI. A wider allowlist was not an option: four prefixes key on a bare
+// row id (clinical/<planId>/ and friends) and so are shared across tenants —
+// no prefix rule can mean "this tenant's files". See utils/media-url.js.
+//
+// backups/ holds full pg_dump archives spanning every tenant. It is in neither
+// path: absent from PUBLIC_R2_PREFIXES, and refused by the signer and the
+// verifier independently, so no route to it exists even via a bug upstream.
 const PUBLIC_R2_PREFIXES = ["products/", "company/", "support/"];
 if (!process.env.R2_PUBLIC_URL) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
   const { r2, bucket } = require("./utils/r2");
+  const { verifySignature } = require("./utils/media-url");
   app.get("/r2/*key", async (req, res) => {
     // Express 5 named-wildcard returns the matched segments as an ARRAY,
     // not a string. Join them back so S3 receives a valid key.
     const raw = req.params.key;
     const key = Array.isArray(raw) ? raw.join("/") : raw;
-    if (!PUBLIC_R2_PREFIXES.some((p) => key.startsWith(p))) {
+    const isPublic = PUBLIC_R2_PREFIXES.some((p) => key.startsWith(p));
+    if (!isPublic && !verifySignature(key, req.query.exp, req.query.sig)) {
+      // Same 404 for "no signature", "bad signature", "expired" and "no such
+      // object" — a distinct status would let a caller probe which keys exist.
       return res.status(404).json({ error: "Not found" });
     }
     try {
       const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
-      res.setHeader("Cache-Control", "public, max-age=31536000");
+      // Public assets cache for a year in any shared cache — the filenames are
+      // content-addressed enough that they never change under a given key.
+      // Signed assets are somebody's clinical document or ID scan, so they get
+      // `private` (browser only, never a proxy or CDN) and expire with the
+      // signature rather than outliving it in an intermediary.
+      res.setHeader(
+        "Cache-Control",
+        isPublic ? "public, max-age=31536000" : "private, max-age=3600, no-transform"
+      );
       // The frontend (Vercel) and this API (Railway) live on different origins,
       // so helmet's default Cross-Origin-Resource-Policy: same-origin would
       // block <img> rendering. Open this read-only static asset to cross-origin.
@@ -186,6 +211,12 @@ app.use(compression());
 app.use(cookieParser());
 app.use(globalLimiter);
 app.use(requestId);
+
+// Sign outgoing /r2/<key> URLs. Mounted above ALL route registration — admin,
+// portal, public and tenant — because every one of those surfaces returns rows
+// carrying media URLs, and a route added later must not have to opt in.
+const { signMediaUrls } = require("./middleware/sign-media-urls");
+app.use(signMediaUrls);
 
 // ─── Route registration ─────────────────────────────────────────────────────
 const runtimeState = { isRestoreInProgress: false };
