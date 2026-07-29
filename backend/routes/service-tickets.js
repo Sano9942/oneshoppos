@@ -118,7 +118,7 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
       const ticket = await tickets.createTicket(deps.db, req.body, req.employee.id);
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee.id, "ticket_created", JSON.stringify({ id: ticket.id, ticket_number: ticket.ticket_number })]
         );
       } catch {}
@@ -270,7 +270,7 @@ module.exports = function registerServiceTicketRoutes(app, deps) {
       );
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee.id, "ticket_invoice_generated", JSON.stringify({
             ticket_id: result.ticket_id, invoice_id: result.invoice.id,
           })]

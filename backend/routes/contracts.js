@@ -35,7 +35,7 @@ module.exports = function registerContractRoutes(app, deps) {
   app.post("/api/contracts", ...gate, validate(createContractSchema), async (req, res) => {
     try {
       const contract = await contracts.createContract(deps.db, req.body, req.employee.id);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "contract_created", JSON.stringify({ id: contract.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "contract_created", JSON.stringify({ id: contract.id })]); } catch {}
       res.status(201).json(contract);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
@@ -51,7 +51,7 @@ module.exports = function registerContractRoutes(app, deps) {
   app.post("/api/contracts/:id/send", ...gate, async (req, res) => {
     try {
       const contract = await contracts.sendContract(deps.db, Number(req.params.id));
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "contract_sent", JSON.stringify({ id: contract.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "contract_sent", JSON.stringify({ id: contract.id })]); } catch {}
       res.json(contract);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });

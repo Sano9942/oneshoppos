@@ -189,7 +189,7 @@ module.exports = function registerReservationsRoutes(app, deps) {
 
         try {
           await deps.db.query(
-            "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+            "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
             [
               req.employee.id,
               "reservation_seated",

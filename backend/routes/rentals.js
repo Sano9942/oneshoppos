@@ -129,7 +129,7 @@ module.exports = function registerRentalRoutes(app, deps) {
       const contract = await rentals.createContract(deps.db, req.body, req.employee.id);
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee.id, "rental_contract_created", JSON.stringify({ id: contract.id, contract_number: contract.contract_number })]
         );
       } catch {}
@@ -222,7 +222,7 @@ module.exports = function registerRentalRoutes(app, deps) {
       const result = await rentals.generateInvoiceFromContract(deps.db, Number(req.params.id), req.employee.id);
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee.id, "rental_invoice_generated", JSON.stringify({ contract_id: result.contract_id, invoice_id: result.invoice.id })]
         );
       } catch {}

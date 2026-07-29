@@ -161,7 +161,7 @@ module.exports = function registerBackorderRoutes(app, deps) {
       if (!row) return res.status(404).json({ error: "Backorder not found or not open" });
       try {
         await db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee?.id || null, "backorder_cancelled", JSON.stringify({ backorder_id: row.id, reason })]
         );
       } catch { /* audit best-effort */ }

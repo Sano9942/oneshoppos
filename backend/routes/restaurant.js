@@ -62,7 +62,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   app.post("/api/restaurant/floor-plans", ...gate, validate(createFloorPlanSchema), async (req, res) => {
     try {
       const plan = await floor.createFloorPlan(deps.db, req.body);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_floor_plan_created", JSON.stringify({ id: plan.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_floor_plan_created", JSON.stringify({ id: plan.id })]); } catch {}
       res.status(201).json(plan);
     } catch (err) {
       sendErr(req, res, err);
@@ -158,7 +158,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   app.post("/api/restaurant/table-sessions", ...gate, validate(createSessionSchema), async (req, res) => {
     try {
       const session = await floor.openTableSession(deps.db, req.body);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_session_opened", JSON.stringify({ session_id: session.id, table_id: req.body.table_id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_session_opened", JSON.stringify({ session_id: session.id, table_id: req.body.table_id })]); } catch {}
       res.status(201).json(session);
     } catch (err) {
       sendErr(req, res, err);
@@ -209,7 +209,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   app.post("/api/restaurant/checks/:id/fire-course", ...gate, validate(fireCourseSchema), async (req, res) => {
     try {
       const fire = await checks.fireCourse(deps.db, Number(req.params.id), req.body.course_name, req.employee.id);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_course_fired", JSON.stringify({ draft_order_id: Number(req.params.id), course_name: req.body.course_name })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_course_fired", JSON.stringify({ draft_order_id: Number(req.params.id), course_name: req.body.course_name })]); } catch {}
 
       // 2-R.7 — route fire chit to each involved station's printer.
       // Flag-gated so tenants without the flag keep the prior no-print path.
@@ -364,7 +364,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
         default:
           result = await checks.splitCheckByItem(deps.db, sourceId, req.body.item_assignments || [], eid);
       }
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: sourceId, type: req.body.split_type })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: sourceId, type: req.body.split_type })]); } catch {}
       res.json({ new_checks: result });
     } catch (err) {
       sendErr(req, res, err);
@@ -386,7 +386,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
         [status, id]
       );
       if (!rows[0]) return res.status(404).json({ error: "Check not found" });
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_status_changed", JSON.stringify({ id, status })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_status_changed", JSON.stringify({ id, status })]); } catch {}
       res.json(rows[0]);
     } catch (err) {
       sendErr(req, res, err);
@@ -396,7 +396,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   app.post("/api/restaurant/checks/merge", ...gate, validate(mergeChecksSchema), async (req, res) => {
     try {
       const merged = await checks.mergeChecks(deps.db, req.body.target_id, req.body.source_ids, req.employee.id);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_checks_merged", JSON.stringify({ target_id: req.body.target_id, source_ids: req.body.source_ids })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_checks_merged", JSON.stringify({ target_id: req.body.target_id, source_ids: req.body.source_ids })]); } catch {}
       res.json(merged);
     } catch (err) {
       sendErr(req, res, err);

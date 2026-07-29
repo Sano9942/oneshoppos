@@ -165,7 +165,7 @@ module.exports = function registerRestaurantVoidCompRoutes(app, deps) {
         // Best-effort audit hook — matches restaurant/availability pattern.
         try {
           await deps.db.query(
-            "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+            "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
             [
               req.employee?.id || null,
               `restaurant_${adjustment_type}`,

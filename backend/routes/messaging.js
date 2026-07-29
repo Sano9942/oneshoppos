@@ -129,7 +129,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
         }
       }
 
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "message_sent", JSON.stringify({ thread_id: threadId, channel: thread.channel })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "message_sent", JSON.stringify({ thread_id: threadId, channel: thread.channel })]); } catch {}
 
       res.json(entry);
     } catch (err) {

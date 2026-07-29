@@ -247,7 +247,7 @@ module.exports = function registerRoomRoutes(app, deps) {
       const booking = await rooms.createBooking(deps.db, req.body, req.employee?.id);
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee?.id || null, "room_booking_created", JSON.stringify({ id: booking.id, booking_number: booking.booking_number })]
         );
       } catch {}

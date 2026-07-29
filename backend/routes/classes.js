@@ -111,7 +111,7 @@ module.exports = function registerClassRoutes(app, deps) {
         cascadeSeries: req.body.cascade_series,
         notifyCtx: notifyCtxFrom(req),
       });
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "class_session_cancelled", JSON.stringify({ ids: result.sessionIds })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "class_session_cancelled", JSON.stringify({ ids: result.sessionIds })]); } catch {}
       res.json({ cancelled_session_ids: result.sessionIds, notified_bookings: result.affected.length });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });

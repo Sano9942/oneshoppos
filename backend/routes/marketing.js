@@ -62,7 +62,7 @@ module.exports = function registerMarketingRoutes(app, deps) {
         }
       }
 
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "campaign_created", JSON.stringify({ campaign_id: campaign.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "campaign_created", JSON.stringify({ campaign_id: campaign.id })]); } catch {}
 
       res.status(201).json(campaign);
     } catch (err) {
@@ -142,7 +142,7 @@ module.exports = function registerMarketingRoutes(app, deps) {
     try {
       const boss = await getBoss();
       const result = await enqueueCampaignSend(boss, Number(req.params.id), deps.db, req.tenantSlug);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "campaign_sent", JSON.stringify({ campaign_id: Number(req.params.id) })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "campaign_sent", JSON.stringify({ campaign_id: Number(req.params.id) })]); } catch {}
 
       res.json(result);
     } catch (err) {
@@ -172,7 +172,7 @@ module.exports = function registerMarketingRoutes(app, deps) {
         { startAfter: new Date(scheduled_at) }
       );
 
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "campaign_scheduled", JSON.stringify({ campaign_id: Number(id), scheduled_at })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "campaign_scheduled", JSON.stringify({ campaign_id: Number(id), scheduled_at })]); } catch {}
 
       res.json({ status: "scheduled", scheduled_at });
     } catch (err) {

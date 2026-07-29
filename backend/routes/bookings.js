@@ -252,7 +252,7 @@ module.exports = function registerBookingRoutes(app, deps) {
   app.post("/api/appointments", ...gate, validate(createAppointmentSchema), async (req, res) => {
     try {
       const appt = await createAppointment(deps.db, req.body, "admin");
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_created", JSON.stringify({ id: appt.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "appointment_created", JSON.stringify({ id: appt.id })]); } catch {}
       res.status(201).json(stripCardToken(appt));
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -308,7 +308,7 @@ module.exports = function registerBookingRoutes(app, deps) {
   app.post("/api/appointments/:id/reschedule", ...gate, validate(rescheduleSchema), async (req, res) => {
     try {
       const appt = await rescheduleAppointment(deps.db, Number(req.params.id), req.body);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_rescheduled", JSON.stringify({ id: appt.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "appointment_rescheduled", JSON.stringify({ id: appt.id })]); } catch {}
       res.json(stripCardToken(appt));
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -318,7 +318,7 @@ module.exports = function registerBookingRoutes(app, deps) {
   app.post("/api/appointments/:id/cancel", ...gate, validate(cancelSchema), async (req, res) => {
     try {
       const appt = await cancelAppointment(deps.db, Number(req.params.id), req.body.reason, { notifyCtx: notifyCtxFrom(req) });
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "appointment_cancelled", JSON.stringify({ id: appt.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "appointment_cancelled", JSON.stringify({ id: appt.id })]); } catch {}
       res.json(stripCardToken(appt));
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -332,7 +332,7 @@ module.exports = function registerBookingRoutes(app, deps) {
       const result = await markNoShow(deps.db, Number(req.params.id));
       try {
         await deps.db.query(
-          "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+          "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
           [req.employee.id, "appointment_no_show", JSON.stringify({ id: Number(req.params.id), charge: result.charge })]
         );
       } catch {}

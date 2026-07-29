@@ -37,7 +37,7 @@ module.exports = function registerProjectRoutes(app, deps) {
   app.post("/api/projects", ...gate, validate(createProjectSchema), async (req, res) => {
     try {
       const project = await projects.createProject(deps.db, req.body, req.employee.id);
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "project_created", JSON.stringify({ id: project.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "project_created", JSON.stringify({ id: project.id })]); } catch {}
       res.status(201).json(project);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });
@@ -71,7 +71,7 @@ module.exports = function registerProjectRoutes(app, deps) {
     try {
       const quotation = await projects.approveQuotation(deps.db, Number(req.params.id), req.employee.id);
       if (!quotation) return res.status(404).json({ error: "Quotation not found" });
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "quotation_approved", JSON.stringify({ id: quotation.id })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)", [req.employee.id, "quotation_approved", JSON.stringify({ id: quotation.id })]); } catch {}
       res.json(quotation);
     } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
   });

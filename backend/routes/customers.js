@@ -475,7 +475,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
         try {
           await db.query(
-            "INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)",
+            "INSERT INTO action_history (employee_id, action_type, description) VALUES ($1, $2, $3)",
             [
               req.employee?.id || null,
               "customer_statement_sent",
