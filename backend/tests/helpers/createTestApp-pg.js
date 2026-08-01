@@ -483,6 +483,24 @@ async function createTestApp(options = {}) {
     //      security test asserting against it validates the mirror, not the
     //      rules the app ships.
     //
+    // ⚠️ NOT A DROP-IN REPLACEMENT FOR PER-ROUTE MOUNTING. Prefer per-route
+    // mounting (what the 139 existing files do) and reach for this ONLY when the
+    // route under test is inline in registerAllRoutes.
+    //
+    // The reason: registerAllRoutes wires the REAL tenant middleware —
+    // resolveOutletContext, resolveEffectiveRole — not the stubs in `deps`.
+    // Those expect a tenant DB resolved through AsyncLocalStorage, which this
+    // header-auth harness does not provide, so paths that reach them die with
+    // "Cannot read properties of undefined (reading 'query')" as a 500.
+    //
+    // Measured 2026-08-02 on POST /api/returns, same request, same seed:
+    //   per-route mounting              -> 200
+    //   registerAll, ADMIN (all_access) -> 200
+    //   registerAll, MANAGER            -> 500
+    // all_access short-circuits the per-outlet role resolution; a non-admin
+    // role does not, so it hits resolveEffectiveRole and throws. A file can
+    // therefore pass under registerAll purely because its actors are admins.
+    //
     // .env.test sets MULTI_TENANT=1, which sends registerAllRoutes down the JWT
     // branch and demands deps.loadTenantAndPerms + resolveTenant. This helper is
     // header-auth (x-employee-id via helpers/request.js), so the single-tenant
