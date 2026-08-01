@@ -73,7 +73,7 @@ The goal is not "more tests." It is *one working feedback loop*, so the next P0 
 >
 > **Fix the config first — it is a one-line change that makes the suite honest, and it must land before any test triage.**
 
-- [ ] **Fix `vitest.config.js` first** — raise `hookTimeout` to ≥120000 (or set `fileParallelism: false`). Verified: this alone converts 52 failing files to passing. Everything below is unreadable until this lands.
+- [x] ~~**Fix `vitest.config.js` first**~~ — **DONE 2026-07-29 (`306d541c`).** `testTimeout` 15000 → 60000, `hookTimeout` 10000 → 120000, `fileParallelism: false`. Verified: converts 52 failing files to passing with zero code changes; only 17 file failures were ever real. Everything below was unreadable until this landed.
 - [ ] **Triage the 37 unloadable integration test files.** Five deleted modules, not one: `helpers/createTestApp` (36 files), plus `tenant-provisioner`, `tenant-db-manager`, `schema-full`, `master-db`. Port the ones covering **sales, returns, shifts, RBAC, security** to `createTestApp-pg`; explicitly quarantine or delete the rest with a note. Leaving them in-tree makes the suite look healthier than it is.
 - [ ] **Fix the 26 genuinely failing tests.** Triaged 2026-07-29; all inspected signatures are stale fixtures tracking deliberate behaviour changes, not defects — but each needs confirming before closing:
   - `pg-batch2/3/8` sales+gift-card cluster — the sale path gained an **open-shift requirement** the fixtures never satisfy (already recorded in memory as `stale_pg_batch_fixtures`)
@@ -83,7 +83,7 @@ The goal is not "more tests." It is *one working feedback loop*, so the next P0 
   - **`sales-decimal-quantity` (3 failures) deserves a real look** — it covers weighted-goods rounding on stock deduction, which touches the stock-writer problem
 - [ ] **Fix the 4 files using `jest.*` globals** under Vitest (`pg-batch-phase3c-atomicity`, `pg-batch12-billing`, `pg-batch13-catalog-scheduler`, `public-bookings`) — they `ReferenceError` at collection.
 - [ ] **Put the integration suite in CI**, nightly against a throwaway Postgres, using the existing baseline-diff pattern (fail on new/changed, never on totals) so it can go green immediately.
-- [ ] **Add `tsc --noEmit` and `vite build` to the PR gate.** Both are free and currently ungated.
+- [x] ~~**Add `tsc --noEmit` and `vite build` to the PR gate.**~~ — **DONE 2026-08-02.** `.github/workflows/build-gate.yml`, two parallel jobs so a red X names its own cause: `backend-typecheck` (`tsc --noEmit`) and `frontend-typecheck-and-build` (`tsc --noEmit`, then `vite build && prerender-meta.mjs`). All three verified passing locally before the gate landed, so it went green on day one. Note it proves the build **compiles** — with no `VITE_*` set, bundle sizes from this job are not comparable to Vercel's artifact (`feedback_local_build_measures_nothing`).
 - [ ] **Write the test that would have caught P0-1** — a storefront payment-failure test asserting stock is returned. This matters more than the fix itself.
 - [ ] **Un-skip the wholesale credit-limit tests** — 9 `it.skip` covering the most financially sensitive untested logic in the product.
 - [ ] Add a drift guard for the `PERMISSION_RULES` copy duplicated verbatim in `tests/helpers/createTestApp-pg.js:100-131` — today the security tests validate a mirror, not the real rules.

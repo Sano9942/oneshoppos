@@ -1,0 +1,64 @@
+# Type + build gate (Phase 1 of docs/fable5/independent-assessment, 2026-08).
+#
+# Both halves of the product already typecheck clean and the frontend already
+# builds — they were simply never gated, so nothing stopped a PR from breaking
+# either one. This is the cheapest possible protection: no database, no
+# fixtures, no baseline file, and green on the day it lands.
+#
+# Deliberately NOT here:
+#   - the integration suite  — needs a throwaway Postgres + the baseline-diff
+#                              runner; lands separately as a nightly job
+#   - lint / tz / design-token guards — already covered by lint-guard.yml and
+#                              tz-guard.yml; keep the gates single-purpose so a
+#                              red X names its own cause
+#
+# Backend and frontend are separate jobs on purpose: they run in parallel and a
+# failure is attributable without opening the log.
+name: build-gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: tsc --noEmit (backend)
+        run: npm run typecheck
+
+  frontend-typecheck-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: tsc --noEmit (frontend)
+        run: npm run typecheck
+      # `npm run build` is `vite build && node scripts/prerender-meta.mjs` — the
+      # prerender step writes the marketing shells, sitemap.xml and robots.txt,
+      # so it catches a broken marketing route as well as a broken bundle.
+      # No VITE_* secrets are set here: this gate proves the build COMPILES, it
+      # does not measure the artifact Vercel actually ships (see
+      # feedback_local_build_measures_nothing — an unset VITE_* tree-shakes code
+      # out, so bundle sizes from this job are not comparable to production).
+      - name: vite build + prerender (frontend)
+        run: npm run build
