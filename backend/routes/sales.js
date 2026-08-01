@@ -185,8 +185,22 @@ module.exports = function registerSalesRoutes(app, deps) {
         params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
+        // Number("1 OR 1=1") is NaN, and pg sends NaN straight to Postgres,
+        // which rejects it as invalid integer input — a 500 on user-supplied
+        // input. Reject it here instead.
+        //
+        // 400 rather than dropping the filter, deliberately: silently ignoring
+        // an unparseable outlet_id would widen the result set to EVERY outlet,
+        // turning a malformed filter into a cross-outlet data leak. Failing the
+        // request is the only safe reading of "I could not apply your filter".
+        const outletIdNum = Number(outlet_id);
+        if (!Number.isInteger(outletIdNum)) {
+          return res
+            .status(400)
+            .json({ error: "outlet_id must be an integer", code: "INVALID_OUTLET_ID" });
+        }
         conditions.push(`s.outlet_id = $${paramIdx++}`);
-        params.push(Number(outlet_id));
+        params.push(outletIdNum);
       }
 
       const where = conditions.join(" AND ");

@@ -467,36 +467,72 @@ async function createTestApp(options = {}) {
     ...shopifyUtilStubs,
   };
 
-  // Wire middleware chain (mirrors registerAllRoutes.js lines 55-140)
-  app.use(deps.loadEmployeePerms);
-  app.use(deps.loadCompanyProfile);
-  app.use(deps.resolveContext);
-  app.use(deps.requireContextOutlet);
-
-  // Permission rules middleware
-  app.use((req, res, next) => {
-    if (!req.path.startsWith("/api/")) return next();
-    const rule = PERMISSION_RULES.find(
-      (r) => r.methods.includes(req.method) && r.path.test(req.path)
-    );
-    if (!rule) return next();
-    const perms = req.employeePerms || [];
-    const allowed =
-      perms.includes("all_access") ||
-      (rule.anyPerms || []).some((p) => perms.includes(p));
-    if (!allowed) {
-      return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+  if (options.registerAll) {
+    // ── Full-app mode (opt-in) ────────────────────────────────────────────
+    // Hand the whole chain to the REAL registerAllRoutes instead of the
+    // hand-rolled mirror below. Two things this buys that per-route mounting
+    // cannot:
+    //
+    //   1. The inline routes become reachable. /api/feature-flags, the health
+    //      checks and enforceOutletAssignment are defined *inside*
+    //      registerAllRoutes, not in any mountable routes/*.js module — so no
+    //      test that mounts route modules one by one can reach them. They had
+    //      no integration coverage at all before this option existed.
+    //   2. The PERMISSION_RULES actually under test are the production ones.
+    //      The copy below is a verbatim duplicate that drifts silently; a
+    //      security test asserting against it validates the mirror, not the
+    //      rules the app ships.
+    //
+    // .env.test sets MULTI_TENANT=1, which sends registerAllRoutes down the JWT
+    // branch and demands deps.loadTenantAndPerms + resolveTenant. This helper is
+    // header-auth (x-employee-id via helpers/request.js), so the single-tenant
+    // branch is forced for the duration of the mount and restored immediately —
+    // registerAllRoutes reads process.env at call time, not at require time.
+    const prevMultiTenant = process.env.MULTI_TENANT;
+    process.env.MULTI_TENANT = "0";
+    try {
+      require("../../routes/registerAllRoutes")(app, deps);
+    } finally {
+      if (prevMultiTenant === undefined) delete process.env.MULTI_TENANT;
+      else process.env.MULTI_TENANT = prevMultiTenant;
     }
-    return next();
-  });
+  } else {
+    // ── Default mode ──────────────────────────────────────────────────────
+    // Unchanged: 139 existing files depend on this exact chain and mount their
+    // own route modules afterwards. Do not "unify" these two paths without
+    // running the full integration suite.
+    //
+    // Wire middleware chain (mirrors registerAllRoutes.js lines 55-140)
+    app.use(deps.loadEmployeePerms);
+    app.use(deps.loadCompanyProfile);
+    app.use(deps.resolveContext);
+    app.use(deps.requireContextOutlet);
 
-  // Restore lock middleware
-  app.use((req, res, next) => {
-    if (runtimeState.isRestoreInProgress && req.method !== "GET" && req.method !== "OPTIONS") {
-      return res.status(503).json({ error: "Service temporarily unavailable: database restore in progress" });
-    }
-    next();
-  });
+    // Permission rules middleware
+    app.use((req, res, next) => {
+      if (!req.path.startsWith("/api/")) return next();
+      const rule = PERMISSION_RULES.find(
+        (r) => r.methods.includes(req.method) && r.path.test(req.path)
+      );
+      if (!rule) return next();
+      const perms = req.employeePerms || [];
+      const allowed =
+        perms.includes("all_access") ||
+        (rule.anyPerms || []).some((p) => perms.includes(p));
+      if (!allowed) {
+        return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+      }
+      return next();
+    });
+
+    // Restore lock middleware
+    app.use((req, res, next) => {
+      if (runtimeState.isRestoreInProgress && req.method !== "GET" && req.method !== "OPTIONS") {
+        return res.status(503).json({ error: "Service temporarily unavailable: database restore in progress" });
+      }
+      next();
+    });
+  }
 
   const cleanup = async () => {
     try {
