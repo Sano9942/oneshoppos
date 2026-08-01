@@ -1,22 +1,27 @@
 /**
- * rbac.test.js — Integration tests for role-based access control and role management
+ * rbac.test.js — role-based access control and role management.
  *
- * Tests the PERMISSION_RULES enforcement, system role protection, and kiosk endpoint access.
+ * PORTED FROM SQLITE 2026-08-02 (see security.test.js for the full rationale).
+ * Built with { registerAll: true } deliberately: this file's entire subject is
+ * PERMISSION_RULES enforcement, and the default helper path enforces a verbatim
+ * COPY of those rules that lives in createTestApp-pg.js. Asserting a 403 against
+ * the copy proves the copy works. registerAll mounts the real registerAllRoutes,
+ * so these assertions now cover the rules the app actually ships.
+ *
+ * Port changes: dbRun/dbGet -> db.query, `?` -> `$1`, closeDb -> cleanup().
  */
 
-const { createTestApp, closeDb, dbRun, dbGet } = require("../helpers/createTestApp");
+const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } = require("../helpers/request");
 
-let app, db;
+let app, db, cleanup;
 
 beforeAll(async () => {
-  const ctx = await createTestApp();
-  app = ctx.app;
-  db = ctx.db;
+  ({ app, db, cleanup } = await createTestApp({ registerAll: true }));
 });
 
 afterAll(async () => {
-  await closeDb(db);
+  if (cleanup) await cleanup();
 });
 
 describe("RBAC — Permission Enforcement", () => {
@@ -50,9 +55,16 @@ describe("RBAC — Permission Enforcement", () => {
   });
 
   it("employee with zero permissions gets 403 on protected routes", async () => {
-    // Create a role with no permissions and an employee with that role
-    await dbRun(db, "INSERT INTO roles (id, name, description) VALUES (10, 'NoPerms', 'No permissions')");
-    await dbRun(db, "INSERT INTO employees (id, name, role, pin_code, role_id) VALUES (10, 'NoPerm User', 'NoPerms', '0000', 10)");
+    // Explicit ids here mirror the seed, which also inserts explicit ids and so
+    // leaves the SERIAL sequences behind MAX(id). Safe in this file because
+    // nothing here POSTs a new role or employee through the API; if that ever
+    // changes, the sequences need resetting first (see migration v132).
+    await db.query(
+      "INSERT INTO roles (id, name, description) VALUES (10, 'NoPerms', 'No permissions')"
+    );
+    await db.query(
+      "INSERT INTO employees (id, name, role, pin_code, role_id) VALUES (10, 'NoPerm User', 'NoPerms', '0000', 10)"
+    );
 
     const res = await makeRequest(app, 10)
       .post("/api/products")
@@ -66,9 +78,9 @@ describe("RBAC — Permission Enforcement", () => {
       .put("/api/employees/3")
       .send({ name: "Renamed Cashier" });
 
-    // Cashier doesn't have manage_employees
-    // The PERMISSION_RULES don't cover PUT /api/employees/:id directly,
-    // but the employees route itself uses requirePerm("manage_employees")
+    // PERMISSION_RULES has no entry for PUT /api/employees/:id; the guard is
+    // requirePerm("manage_employees") inside the route itself. The original
+    // accepted [200, 403] for that reason and the port keeps that latitude.
     expect([200, 403]).toContain(res.status);
   });
 
@@ -77,7 +89,7 @@ describe("RBAC — Permission Enforcement", () => {
       .post("/api/attendance/pin-status")
       .send({ pin: "1111", outlet_id: 1 });
 
-    // Should not be 403 — kiosk endpoints have no perm requirement
+    // Kiosk endpoints are deliberately unauthenticated — must not be perm-gated.
     expect(res.status).not.toBe(403);
   });
 
@@ -86,13 +98,30 @@ describe("RBAC — Permission Enforcement", () => {
       .post("/api/attendance/pin-checkin")
       .send({ pin: "1111", outlet_id: 1 });
 
-    // Should not be 403
     expect(res.status).not.toBe(403);
   });
 
-  it("anonymous request to GET /api/products works", async () => {
+  /**
+   * ASSERTION INVERTED DURING THE PORT — this is not a regression.
+   *
+   * The SQLite original asserted 200 here, titled "anonymous request to GET
+   * /api/products works". That documented a real hole: an unauthenticated
+   * caller could read the entire product catalogue. It has since been closed —
+   * routes/products.js:209 guards the route with requireAnyPerm([...]), and
+   * CLAUDE.md now states the invariant plainly: every data-returning GET
+   * requires auth.
+   *
+   * Restoring the old expectation would mean re-opening the hole to satisfy a
+   * test, so the assertion follows the fix instead. The authenticated case is
+   * covered above ("cashier GET /api/products → 200"), which keeps this from
+   * silently passing on a route that is broken for everyone.
+   *
+   * NOTE: health.test.js carries the identical stale assertion and is still
+   * unloaded — it needs the same inversion when it is ported.
+   */
+  it("anonymous request to GET /api/products is denied", async () => {
     const res = await makeRequest(app).get("/api/products");
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 });
 
@@ -114,14 +143,14 @@ describe("Role Management — System Role Protection", () => {
   });
 
   it("custom role with no employees can be deleted", async () => {
-    // Create a custom role
-    await dbRun(db, "INSERT INTO roles (id, name, description) VALUES (20, 'TempRole', 'To be deleted')");
+    await db.query(
+      "INSERT INTO roles (id, name, description) VALUES (20, 'TempRole', 'To be deleted')"
+    );
 
     const res = await makeRequest(app, ADMIN_ID).delete("/api/roles/20");
     expect(res.status).toBe(200);
 
-    // Verify it's gone
-    const role = await dbGet(db, "SELECT * FROM roles WHERE id = 20");
-    expect(role).toBeUndefined();
+    const { rows } = await db.query("SELECT id FROM roles WHERE id = 20");
+    expect(rows.length).toBe(0);
   });
 });

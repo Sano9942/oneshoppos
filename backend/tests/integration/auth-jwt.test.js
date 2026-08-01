@@ -1,26 +1,35 @@
 /**
- * auth-jwt.test.js — Integration tests for JWT auth (Phase 2)
+ * auth-jwt.test.js — bcrypt PIN verification, PIN hashing on create/update,
+ * and the jwt-auth sign/verify helpers.
  *
- * Tests bcrypt PIN verification, employee PIN hashing, and JWT token operations.
+ * PORTED FROM SQLITE 2026-08-02 (see security.test.js for the full rationale).
+ *
+ * Port changes: dbGet -> db.query, `?` -> `$1`, closeDb -> cleanup(),
+ * registerAll for the auth/employees routes, and the unused `jwt` and `dbRun`
+ * imports dropped.
  */
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { createTestApp, closeDb, dbRun, dbGet } = require("../helpers/createTestApp");
+const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 const TEST_JWT_SECRET = "test-jwt-secret-that-is-at-least-64-characters-long-for-security-purposes-here";
 const TEST_REFRESH_SECRET = "test-refresh-secret-that-is-at-least-64-characters-long-for-security-purposes";
 
-let app, db;
+let app, db, cleanup;
 
 beforeAll(async () => {
-  const ctx = await createTestApp();
-  app = ctx.app;
-  db = ctx.db;
+  ({ app, db, cleanup } = await createTestApp({ registerAll: true }));
 });
 
+// NOTE for future ports: the seed inserts employees with explicit ids (1, 2, 3),
+// which is exactly the shape that left SERIAL sequences behind MAX(id) and broke
+// the first API insert on wizard-seeded tenants (migration v132). It does NOT
+// bite here — createTestApp-pg.js:386 already setval()s every seeded table after
+// seeding. A setval guard added to this file was verified redundant by removing
+// it and re-running: still 13/13. Don't re-add one on suspicion.
+
 afterAll(async () => {
-  await closeDb(db);
+  if (cleanup) await cleanup();
 });
 
 describe("bcrypt PIN verification", () => {
@@ -67,33 +76,34 @@ describe("employee PIN hashing on create/update", () => {
       .send({ name: "JWTTestEmp", pin_code: "7777", role_id: 3 });
 
     expect(res.status).toBe(200);
-    const emp = await dbGet(db, "SELECT pin_hash FROM employees WHERE id = ?", [res.body.id]);
-    expect(emp.pin_hash).toBeTruthy();
-    expect(emp.pin_hash.startsWith("$2")).toBe(true); // bcrypt prefix
+    const { rows } = await db.query("SELECT pin_hash FROM employees WHERE id = $1", [
+      res.body.id,
+    ]);
+    expect(rows.length).toBe(1);
+    expect(rows[0].pin_hash).toBeTruthy();
+    expect(rows[0].pin_hash.startsWith("$2")).toBe(true); // bcrypt prefix
   });
 
   it("updating an employee PIN re-hashes it", async () => {
-    // Create first
     const create = await makeRequest(app, ADMIN_ID)
       .post("/api/employees")
       .send({ name: "JWTUpdateEmp", pin_code: "8888", role_id: 3 });
     const empId = create.body.id;
 
-    // Update PIN
     await makeRequest(app, ADMIN_ID)
       .put(`/api/employees/${empId}`)
       .send({ pin_code: "9999" });
 
-    const emp = await dbGet(db, "SELECT pin_hash FROM employees WHERE id = ?", [empId]);
-    expect(emp.pin_hash).toBeTruthy();
+    const { rows } = await db.query("SELECT pin_hash FROM employees WHERE id = $1", [empId]);
+    expect(rows.length).toBe(1);
+    const pinHash = rows[0].pin_hash;
+    expect(pinHash).toBeTruthy();
 
-    // Verify new PIN works
-    const valid = await bcrypt.compare("9999", emp.pin_hash);
-    expect(valid).toBe(true);
-
-    // Verify old PIN doesn't work
-    const invalid = await bcrypt.compare("8888", emp.pin_hash);
-    expect(invalid).toBe(false);
+    // Both directions matter: asserting only that the new PIN verifies would
+    // still pass if the update appended a second credential without retiring
+    // the old one.
+    expect(await bcrypt.compare("9999", pinHash)).toBe(true);
+    expect(await bcrypt.compare("8888", pinHash)).toBe(false);
   });
 });
 
@@ -116,16 +126,20 @@ describe("POST /api/employees/validate-pin (bcrypt)", () => {
   });
 
   it("returns 400 for missing PIN", async () => {
-    const res = await makeRequest(app)
-      .post("/api/employees/validate-pin")
-      .send({});
+    const res = await makeRequest(app).post("/api/employees/validate-pin").send({});
 
     expect(res.status).toBe(400);
   });
 });
 
 describe("JWT token operations (unit-level)", () => {
-  const { signAccessToken, verifyAccessToken, signRefreshToken, verifyRefreshToken, hashToken } = require("../../jwt-auth");
+  const {
+    signAccessToken,
+    verifyAccessToken,
+    signRefreshToken,
+    verifyRefreshToken,
+    hashToken,
+  } = require("../../jwt-auth");
 
   it("signs and verifies an access token", () => {
     const token = signAccessToken({ tid: 1, eid: 42, rid: 1, oid: 3 }, TEST_JWT_SECRET);
