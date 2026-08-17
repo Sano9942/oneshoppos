@@ -5,7 +5,7 @@
 > Scope agreed: all four mismatch directions, four default roles, **backend perms are the standard
 > of truth**, static matrix + intended live API probe.
 > Method: static cross-reference scanner at [role-audit.cjs](role-audit.cjs) (re-runnable:
-> `node docs/fable5/role-audit/role-audit.cjs`, writes `role-matrix.json`) + direct source
+> `node docs/fable5/archive/role-audit/role-audit.cjs`, writes `role-matrix.json`) + direct source
 > verification of every guard cited below. Read-only — nothing changed.
 > **Live-probe note**: the HTTP probe was not executed because the local backend was not running;
 > however every finding below rests on **boolean `all_access` permission checks** whose outcome is

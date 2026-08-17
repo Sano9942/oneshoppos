@@ -48,5 +48,5 @@
 ## Ground truth
 
 - Preset engine: `backend/config/industry-config.js` · `backend/config/mode-registry.js` · `backend/services/retail-flag-preset.js`
-- Square target: [../research/square-software-audit.md](../research/square-software-audit.md) · [../research/sanopos-vs-square-comparison.md](../research/sanopos-vs-square-comparison.md)
+- Square target: [../research/square-software-audit.md](../../research/square-software-audit.md) · [../research/sanopos-vs-square-comparison.md](../../research/sanopos-vs-square-comparison.md)
 - Operating rules: [../playbook.md](../playbook.md) · accumulated lessons: the `feedback_*` memory files

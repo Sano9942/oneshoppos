@@ -201,8 +201,8 @@ The following survived the current-code review. They are important, but must not
 ## Evidence used
 
 - `docs/fable5/platform-study/sanopos-platform-audit.md`
-- `docs/fable5/core-research/*`
+- `docs/fable5/archive/core-research/*`
 - `docs/fable5/vertical-depth/findings/*`
-- `docs/fable5/claim-audit/*`
+- `docs/fable5/archive/claim-audit/*`
 - `docs/fable5/completion/*` and `docs/fable5/vertical-depth/plans/*` to distinguish current capability from planned work.
 - Root and backend/frontend `AGENTS.md` project guides for current architecture and route/domain context.

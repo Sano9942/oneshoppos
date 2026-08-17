@@ -6,6 +6,30 @@ what was deferred, and where each effort's own detailed register lives. Built 20
 **This file is an index, not a source of truth.** Each effort's own register is authoritative — this
 tells you which one to open. When they disagree, the linked register wins, and source wins over both.
 
+## Layout — top level vs `archive/`
+
+Top level holds anything **still live**: open plans, re-runnable tooling, and reference material you
+would consult again. `archive/` holds **historical record** — efforts that are closed, whose findings
+were consumed and verified fixed, and which nothing open depends on.
+
+`archive/` currently holds 5: `claim-audit`, `core-research`, `remediation` (the audit → plan →
+execute triangle, all three verified discharged against source on 2026-08-17), `role-audit`
+(discharged at migration v134) and `marketing-site` (built and merged).
+
+**Three closed-looking efforts deliberately stayed at top level**, because "the plan is finished" and
+"nothing needs this any more" are different questions:
+
+- **`plan-v3/`** — holds `check-baseline.js` + `baseline-tests.json`, live tooling that the **open**
+  Phase 1 item "put the integration suite in CI … using the existing baseline-diff pattern" depends
+  on. Archiving working tooling that an open plan names would be a mistake.
+- **`go-live/`** — `DEPLOY-RUNBOOK.md` is re-runnable and `TEST-TENANTS.md` carries live credentials.
+  Operational, not historical.
+- **`platform-study/`** — competitor/market research. Reference material gets *less* findable in an
+  archive, not more.
+
+Archiving is reversible and costs nothing but a `git mv`; the test for moving something is **"would
+anyone need this to do current work?"**, not "is the plan closed?".
+
 ## Coverage of this index — read before trusting a row
 
 The folder holds **170 markdown files**. This index was built at *effort* granularity: for each of
@@ -19,13 +43,13 @@ cross-referenced every plan file against its parent register. I did **not** read
 | `completion/plans/` | 12 | ✅ all 12 in the README register |
 | `vertical-depth/plans/` | 23 | 🟡 20 in ROADMAP; **3 orphans** (below) |
 | `vertical-depth/findings/` | 11 | ✅ all 11 referenced |
-| `remediation/prompts/` | 8 | ✅ all 8 (WS1a–WS5) referenced in PLAN.md |
+| `archive/remediation/prompts/` | 8 | ✅ all 8 (WS1a–WS5) referenced in PLAN.md |
 | `platform-architecture-vnext/adrs/` | 12 | ✅ status read from each: **1 Accepted (ADR-002), 11 Proposed** |
 
 **Read only at folder level, not file by file** — these are reference/finding sets with no plan to
 close, but no one has walked them line by line: `technical-architecture-report/` (9),
 `platform-architecture-vnext/` body (16), `platform-architecture-claude-report/subsystem-audits/`
-(8), `platform-study/` (5), `claim-audit/` (5), `core-research/` (5), `business-modules/`
+(8), `platform-study/` (5), `archive/claim-audit/` (5), `archive/core-research/` (5), `business-modules/`
 non-verification docs (`AUDIT-FINDINGS`, `FEATURE-CATALOG`, `REPORT-PERMS`, `W0A`/`W0B`).
 If you need a *finding* rather than a *status*, open these directly — this index will not have it.
 
@@ -33,7 +57,7 @@ If you need a *finding* rather than a *status*, open these directly — this ind
 
 Three plan files sit in `vertical-depth/plans/` referenced by no register, and all three still carry
 an **"AWAITING APPROVAL"** header. **All three were in fact approved and executed** — the headers are
-stale, in the same way `admin-refresh/PLAN.md` is stale:
+stale in the same way `admin-refresh/PLAN.md` was. All four headers were corrected on 2026-08-17:
 
 | File | Header says | Actually |
 |---|---|---|
@@ -56,7 +80,7 @@ there are more, and never take a header `Status:` at face value.
 Four different conventions are in use. In rough order of reliability:
 
 1. **A `VERIFICATION*.md` companion exists** → the plan was executed and checked. This is the
-   strongest signal in the folder. Currently: `business-modules` (×4), `claim-audit`, `plan-v3`,
+   strongest signal in the folder. Currently: `business-modules` (×4), `archive/claim-audit`, `plan-v3`,
    `platform-architecture-claude-report`, `ai-platform-strategy` (`VERIFIED-STATE.md`).
    ```bash
    find docs/fable5 -iname "*VERIF*"
@@ -70,9 +94,10 @@ Four different conventions are in use. In rough order of reliability:
    > boxes and that deploy *shipped* — it is a re-runnable runbook, not a backlog.
    > `fast-entry-build-plan.md`'s 5 unticked items are open *questions*, not tasks.
 4. **A `Status:` line in the header** — least reliable, because it records the status *at authoring
-   time* and is often never updated. `admin-refresh/PLAN.md` still says **AWAITING APPROVAL**
-   although `feat/admin-refresh` was merged to `main` (recorded at `admin-roadmap/ROADMAP.md` batch
-   0.5). Treat a header `Status:` as a claim to verify, not an answer.
+   time* and is often never updated. `admin-refresh/PLAN.md` read **AWAITING APPROVAL** for weeks
+   after `feat/admin-refresh` was merged to `main` (the merge is recorded at
+   `admin-roadmap/ROADMAP.md` batch 0.5). That header and three others were corrected on 2026-08-17,
+   but assume more are wrong: treat a header `Status:` as a claim to verify, not an answer.
 
 **The tiebreaker is always git**, since nearly every plan names its own branch:
 ```bash
@@ -176,17 +201,17 @@ only (nothing to "finish") · 🔵 active
 | [vertical-depth](vertical-depth/) | 10 vertical + 7 foundation plans | ✅ **all V01–V10 + F01–F07 done** | [ROADMAP.md](vertical-depth/ROADMAP.md) | V06 marked 🟡 in the register — check its row before assuming closed |
 | [business-modules](business-modules/) | v1 + v2 build plans | ✅ v1 LIVE (v132) · ✅ v2 DEPLOYED (v137) | [VERIFICATION.md](business-modules/VERIFICATION.md), [VERIFICATION-V2.md](business-modules/VERIFICATION-V2.md) | v2's *Deferred to v3* table: **E1–E8**. v2 is live but inert until a per-outlet override row is written |
 | [plan-v3](plan-v3/) | Public-surface + v2-deferral remediation | ✅ closed | [VERIFICATION-V3.md](plan-v3/VERIFICATION-V3.md) | `W0-ops 4.4` R2 domain ⏸ **open by design**. Daraz webhook sig ⏸ deferred to V4 (contract unpublished) |
-| [remediation](remediation/) | 5 workstreams from claim-audit + core-research | ✅ WS2/3/4/5 complete; WS1 largely remediated | [PLAN.md](remediation/PLAN.md) | WS1 stock-writer collapse is the surviving item — now tracked by independent-assessment Phase 3 |
+| [remediation](archive/remediation/) | 5 workstreams from claim-audit + core-research | ✅ WS2/3/4/5 complete; WS1 largely remediated | [PLAN.md](archive/remediation/PLAN.md) | WS1 stock-writer collapse is the surviving item — now tracked by independent-assessment Phase 3 |
 | [admin-roadmap](admin-roadmap/) | Super-admin backlog, batched | 🟡 Batches 0, A, B, C1 done | [ROADMAP.md](admin-roadmap/ROADMAP.md) | **C2** flag kill switch is next · then D (tenant intel), E (analytics), F (compliance) |
 | [admin-refresh](admin-refresh/) | Predecessor of admin-roadmap | ✅ built + merged to `main` | [PLAN.md](admin-refresh/PLAN.md) | None. ⚠️ its header still says "AWAITING APPROVAL" — **stale** |
-| [marketing-site](marketing-site/) | Public site, phase 1+2 | ✅ merged (14 pages) | [PLAN.md](marketing-site/PLAN.md) | `demo@sanopos.com` Cloudflare Email Routing rule |
+| [marketing-site](archive/marketing-site/) | Public site, phase 1+2 | ✅ merged (14 pages) | [PLAN.md](archive/marketing-site/PLAN.md) | `demo@sanopos.com` Cloudflare Email Routing rule |
 | [go-live](go-live/) | V01–V10 deploy audit + runbook | ✅ deployed (v109 → v122) | [DEPLOY-AUDIT.md](go-live/DEPLOY-AUDIT.md) | Nothing. The runbook's unticked boxes are re-runnable steps |
 | [fast-entry-build-plan.md](fast-entry-build-plan.md) | Fast catalog/stock entry | 🟡 Phase 1 + AI descriptions + invoice-photo LIVE | the file itself | Phase 3 not started · 5 open *decisions* (not tasks), incl. R2 retention of parsed invoices |
 | [ai-platform-strategy](ai-platform-strategy/) | AI gateway + 3 front doors | ⏸ **planned, nothing built** | [VERIFIED-STATE.md](ai-platform-strategy/VERIFIED-STATE.md) | The whole plan. Read VERIFIED-STATE first — it is the exists/doesn't-exist ledger |
-| [role-audit](role-audit/) | Role/permission consistency | ✅ largely discharged at migration v134 | [REPORT.md](role-audit/REPORT.md) | Remainder folded into business-modules **E8** |
+| [role-audit](archive/role-audit/) | Role/permission consistency | ✅ largely discharged at migration v134 | [REPORT.md](archive/role-audit/REPORT.md) | Remainder folded into business-modules **E8** |
 | [frontend-coverage-audit](frontend-coverage-audit/) | Backend-built / frontend-missing | 📋 findings; baseline frozen | [REPORT.md](frontend-coverage-audit/REPORT.md) | 78 endpoints with no UI, accepted as baseline — only *new* orphans fail the guard |
-| [claim-audit](claim-audit/) | "Speaks your industry's language" | 📋 findings → fed remediation WS2 (✅ done) | [README.md](claim-audit/README.md) | Nothing — consumed by remediation |
-| [core-research](core-research/) | Pre-build-wave health check | 📋 findings → fed remediation WS1/3/4 | [README.md](core-research/README.md) | Nothing — consumed by remediation |
+| [claim-audit](archive/claim-audit/) | "Speaks your industry's language" | 📋 findings → fed remediation WS2 (✅ done) | [README.md](archive/claim-audit/README.md) | Nothing — consumed by remediation |
+| [core-research](archive/core-research/) | Pre-build-wave health check | 📋 findings → fed remediation WS1/3/4 | [README.md](archive/core-research/README.md) | Nothing — consumed by remediation |
 | [public-surface-audit](public-surface-audit/) | Externally-reachable surfaces | 📋 findings → fed plan-v3 (✅ closed) | [REPORT.md](public-surface-audit/REPORT.md) | Holds the **global-vs-Pakistan coupling inventory** — still the reference for any i18n work |
 | [technical-architecture-report](technical-architecture-report/) | Current-state architecture | 📋 **reference — verified current-state** | [README.md](technical-architecture-report/README.md) | n/a. Use this when you need "how it works today" |
 | [platform-architecture-claude-report](platform-architecture-claude-report/) | Source+live verified report | 📋 reference | [02-verification-log.md](platform-architecture-claude-report/02-verification-log.md) | n/a |

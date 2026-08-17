@@ -11,7 +11,7 @@
 | Decision | Value |
 |---|---|
 | **Primary axis** | **Wiring & integration correctness.** Make what already exists actually work end-to-end with no errors: every flow → screen → API → route → service → schema, on every surface that touches it. This is the user's core complaint and comes first in every plan. |
-| **Secondary axis** | **Square feature-parity gaps.** Close the real gaps from [../research/sanopos-vs-square-comparison.md](../research/sanopos-vs-square-comparison.md) (the 🟡 Partial and ❌ Missing rows). |
+| **Secondary axis** | **Square feature-parity gaps.** Close the real gaps from [../research/sanopos-vs-square-comparison.md](../../research/sanopos-vs-square-comparison.md) (the 🟡 Partial and ❌ Missing rows). |
 | **Tertiary axis** | **Polish & consistency.** Edge cases, error states, empty states, label/vocab correctness, UX consistency across surfaces. |
 | **Division** | **Hybrid — Fable proposes the cut.** Seed structure: core spine first, then a cross-cutting/multi-surface plan, then one plan per mode (with a preset-skin checklist per plan). Final register is Fable's proposal, approved before execution. See §3. |
 | **Branch** | **Fable decides per-plan.** Backend/wiring work branches off `main`; frontend-touching work notes the `redesign/square` collision risk (see §6). One line per plan. |
@@ -24,7 +24,7 @@ Everything else (auth, tax/FBR, multi-tenant routing, migrations, prod DB, commi
 ## 2. Grounding sources (read before generating any plan)
 
 - **The preset engine:** `backend/config/industry-config.js` (23 presets) + `backend/config/mode-registry.js` (10 modes) + `backend/services/retail-flag-preset.js` (flag seeding). This defines the core → modes → presets structure the plans are cut along.
-- **The Square target:** [../research/square-software-audit.md](../research/square-software-audit.md) (full Square catalog) + [../research/sanopos-vs-square-comparison.md](../research/sanopos-vs-square-comparison.md) (code-verified ✅/🟡/❌ per feature — **this is the source of truth for the feature-gap axis; cite its rows directly**).
+- **The Square target:** [../research/square-software-audit.md](../../research/square-software-audit.md) (full Square catalog) + [../research/sanopos-vs-square-comparison.md](../../research/sanopos-vs-square-comparison.md) (code-verified ✅/🟡/❌ per feature — **this is the source of truth for the feature-gap axis; cite its rows directly**).
 - **The accumulated lessons:** the `feedback_*` memory files — especially `feedback_parallel_paths` (POS-fixed-storefront-broken is the recurring bug), `feedback_verify_before_fixing`, `feedback_frontend_claude_stale`, `feedback_audit_ledger_before_building`. Read these before generating plans and append to them after.
 - **The redesign context:** [redesign-spec.md](../redesign-spec.md) — the `redesign/square` branch is a mid-flight frontend reskin. Relevant only for the per-plan branch note (§6).
 

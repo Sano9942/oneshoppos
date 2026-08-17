@@ -4,7 +4,7 @@
 on the helper — do not parallelize internally).
 
 ## Context
-From `docs/fable5/core-research/01-CORE-SPINE.md`. The POS sale path was hardened (`FOR UPDATE`,
+From `docs/fable5/archive/core-research/01-CORE-SPINE.md`. The POS sale path was hardened (`FOR UPDATE`,
 `WHERE quantity ≥ qty`, 3-table + batch ledger). Its sibling stock writers were NOT — they oversell
 under concurrency and/or drift variant/batch tables. Fix them via ONE shared helper so new surfaces
 can't drift again. See the stock-writer consistency table in that doc.

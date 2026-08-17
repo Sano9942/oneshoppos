@@ -3,7 +3,7 @@
 **Model:** Sonnet. **Branch:** `fix/ws1d-adjacent-writers` off `main`. Parallel-safe with WS1b/WS1c.
 
 ## Context
-From `docs/fable5/core-research/01-CORE-SPINE.md` MEDIUM + `03-VERTICAL-CONNECTIVITY.md`. A cluster of
+From `docs/fable5/archive/core-research/01-CORE-SPINE.md` MEDIUM + `03-VERTICAL-CONNECTIVITY.md`. A cluster of
 independent writers with double-write / semantic bugs.
 
 ## Verify first

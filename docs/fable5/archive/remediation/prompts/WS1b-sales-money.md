@@ -4,7 +4,7 @@
 (If WS1a is also in flight, expect a merge touch-point in `sales.js` around the void path — coordinate.)
 
 ## Context
-From `docs/fable5/core-research/01-CORE-SPINE.md` HIGH section. The POS sale total is client-trusted and
+From `docs/fable5/archive/core-research/01-CORE-SPINE.md` HIGH section. The POS sale total is client-trusted and
 several money-equivalent tenders lack balance checks/locks.
 
 ## Verify first

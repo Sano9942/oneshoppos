@@ -19,7 +19,7 @@
 | `docs/fable5/business-modules/PLAN-V2.md` | The Business Modules **v2 plan** (deferred items D1–D8), 16 steps, amended after a second-eye review. **Not started.** |
 | `docs/fable5/business-modules/AUDIT-FINDINGS.md` | **This file** — consolidated findings register. |
 | `docs/fable5/frontend-coverage-audit/REPORT.md` + `scan.cjs` + `matrix.json` | "Backend-built-but-no-UI" audit + re-runnable scanner. |
-| `docs/fable5/role-audit/REPORT.md` + `role-audit.cjs` + `role-matrix.json` | Role/permission consistency audit + re-runnable scanner. |
+| `docs/fable5/archive/role-audit/REPORT.md` + `role-audit.cjs` + `role-matrix.json` | Role/permission consistency audit + re-runnable scanner. |
 
 Re-run either scanner from repo root: `node docs/fable5/<folder>/<scanner>.cjs`.
 
@@ -102,7 +102,7 @@ The owner supplied a second review of the same question. Cross-checked against s
 
 ## 4. Role / permission consistency audit + third-eye review (MERGED, security-focused)
 
-Full report: `docs/fable5/role-audit/REPORT.md`. My audit focused on the UX-mismatch direction; the
+Full report: `docs/fable5/archive/role-audit/REPORT.md`. My audit focused on the UX-mismatch direction; the
 owner's third-eye review added the security/under-enforcement direction I under-weighted. **All ~10
 third-eye claims I checked are CONFIRMED against source.** Root cause of both: **`all_access` is
 over-used as a lazy "admin-only" gate, and several controls are enforced only in the UI, not the API.**

@@ -4,7 +4,7 @@
  * Backend truth: DEFAULT_ROLE_PERMISSIONS + inline requirePerm/requireAnyPerm + PERMISSION_RULES.
  * Frontend: appRoutes perm() gates, nav-config requiredPerm, hasPerm() sites.
  * Directions: A visible-but-forbidden, B hidden-but-allowed, C unguarded backend, D frontend-only.
- * Read-only. Run from repo root: node docs/fable5/role-audit/role-audit.cjs
+ * Read-only. Run from repo root: node docs/fable5/archive/role-audit/role-audit.cjs
  */
 const fs = require("fs");
 const path = require("path");

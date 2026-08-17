@@ -61,7 +61,7 @@ PHASE 1 — AUDIT + PLAN (then STOP for my approval):
 2. Audit the current landing + the 6 variants: what to keep (visual ideas worth stealing), what to delete.
 3. Propose: information architecture (routes/pages), a copy deck per page (headlines, feature blocks, CTAs — written out, not placeholders), the design direction (extend the Square --ui-* system for brand consistency; specify type scale, imagery strategy — product screenshots vs illustration), SEO plan (per-page title/meta/OG, structured data, sitemap; the site is a Vite SPA — state clearly how each page's meta is handled and whether prerendering is needed for SEO, with a recommendation), pricing-page mechanics (live from /api/billing/pricing vs static), and how screenshots will be produced (the golv_* local test tenants — one per industry, login "Owner"/1234, see docs/fable5/go-live/TEST-TENANTS.md — can be seeded with demo data and screenshotted via Playwright).
 4. Keep performance in scope: public pages must stay lazy-chunked and must not regress app-bundle size or the login path.
-Deliver as docs/fable5/marketing-site/PLAN.md + the copy deck, report the summary, and STOP.
+Deliver as docs/fable5/archive/marketing-site/PLAN.md + the copy deck, report the summary, and STOP.
 
 PHASE 2 — BUILD (only after I approve the IA + copy + design direction):
 - Branch feat/marketing-site off main. New pages under frontend/src/pages/marketing/ (lazy-loaded public routes), shared marketing layout/nav/footer components, mobile-first responsive, light+dark theme per the token system.

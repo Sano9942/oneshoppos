@@ -3,7 +3,7 @@
 **Model:** Sonnet. **Branch:** `fix/ws3-integrations` off `main`.
 
 ## Context
-From `docs/fable5/core-research/02-INTEGRATIONS.md`. Payment/FBR/email/SMS/aggregators are solid; the
+From `docs/fable5/archive/core-research/02-INTEGRATIONS.md`. Payment/FBR/email/SMS/aggregators are solid; the
 marketplace + courier layers hide connectivity rot — no-op webhooks, silent failures, plaintext creds.
 
 ## Verify first

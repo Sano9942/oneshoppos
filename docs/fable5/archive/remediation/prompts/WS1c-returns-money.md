@@ -3,7 +3,7 @@
 **Model:** Sonnet. **Branch:** `fix/ws1c-returns-money` off `main`. Parallel-safe with WS1b/WS1d.
 
 ## Context
-From `docs/fable5/core-research/01-CORE-SPINE.md`. Returns guard quantity but not refund AMOUNT, and
+From `docs/fable5/archive/core-research/01-CORE-SPINE.md`. Returns guard quantity but not refund AMOUNT, and
 `store_credit` is a decorative no-op (store keeps goods AND money).
 
 ## Verify first

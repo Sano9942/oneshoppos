@@ -4,7 +4,7 @@
 `feat/ws4-auto-stock-phase1` off `main`. Separate cadence — not a bug-fix workstream.
 
 ## Context
-Roadmap: `docs/fable5/core-research/AUTO-STOCK-ENTRY.md`. Phase 1 is low-risk UX plumbing on the
+Roadmap: `docs/fable5/archive/core-research/AUTO-STOCK-ENTRY.md`. Phase 1 is low-risk UX plumbing on the
 existing capable import engine (`routes/import.js` — CSV/XLSX parse, per-row `_errors`, FK-by-name
 resolution, SKU dedup, single-tx bulk insert with `outlet_stock` upsert). Do NOT start Phase 2/3 (AI
 invoice parse) here — those are gated on `ANTHROPIC_API_KEY` being set on Railway (absent today; also

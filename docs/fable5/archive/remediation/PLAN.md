@@ -1,6 +1,6 @@
 # Remediation Plan — platform-audit → fixes
 
-**Derived:** 2026-07-08 · **From:** `docs/fable5/claim-audit/` (5 files) + `docs/fable5/core-research/` (5 files)
+**Derived:** 2026-07-08 · **From:** `docs/fable5/archive/claim-audit/` (5 files) + `docs/fable5/archive/core-research/` (5 files)
 · **Against:** main @ v126 · **Status:** PLANNING ONLY — no code changed yet.
 
 This plan sequences every finding from both audit bundles into dispatchable workstreams, collapses the

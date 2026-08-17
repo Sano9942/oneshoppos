@@ -47,7 +47,7 @@
 - **Three Reports→Inventory tabs 403 for every default tenant** — `Reports.jsx:477-480` lists `stock-aging`, `stockout-risk`, `replenishment-smart` unconditionally in the Inventory tab group, but their routes are gated `requireFeature("reports_inventory_health_plus")` (`reports/inventory.js:736-738` et al.), and that flag defaults `false` (`feature-flags.js:21`) with no wizard/mode/migration seed → clicking any of the three yields a 403 error state on every tenant. Compounding it: `/api/reports/stock-aging` is registered twice — the gated copy in `inventory.js:737` (registered via `reports/index.js:21`) shadows the ungated Wave-3 implementation in `stock-aging.js:12` (registered later at `reports/index.js:33`), so the dedicated stock-aging report can never serve. · surfaces: reports · fix sketch: delete one stock-aging duplicate, and either gate the three tabs client-side on the flag or ungate the routes — one consistent decision.
 
 ## Feature-parity gaps (P1)
-> From [sanopos-vs-square-comparison.md](../../research/sanopos-vs-square-comparison.md).
+> From [sanopos-vs-square-comparison.md](../../../research/sanopos-vs-square-comparison.md).
 
 - **Exchanges (item-swap)** — 🟡 §2: returns are full; explicit swap flow thin · reuse: `returns.js` + `sales.js` in one transaction (return + new sale linked).
 - **Cross-location returns UX** — 🟡 §2: return at outlet B for sale at outlet A · reuse: `returns.js` already has the data; needs outlet-aware restock + UI affordance.

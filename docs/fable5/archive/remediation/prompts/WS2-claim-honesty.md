@@ -4,7 +4,7 @@
 `fix/ws2-claim-honesty` off `main`. Fully parallel to all of WS1 (never touches the money path).
 
 ## Context
-From `docs/fable5/claim-audit/` (README, LEAKS, MATRIX, VERIFICATION). Seeding is CLEAN (zero drift);
+From `docs/fable5/archive/claim-audit/` (README, LEAKS, MATRIX, VERIFICATION). Seeding is CLEAN (zero drift);
 every leak here is in the RENDERING layer. Makes the "reshapes the dashboard, reports, portal"
 marketing honest. Follow the Always-Square design rule: reuse `ui/primitives` + `--ui-*` tokens, never
 raw colors.
