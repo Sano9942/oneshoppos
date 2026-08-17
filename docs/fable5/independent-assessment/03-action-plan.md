@@ -106,6 +106,86 @@ The goal is not "more tests." It is *one working feedback loop*, so the next P0 
 - [ ] **`grn.js:462`** — `res.json()` executes inside an open transaction; and the route has no permission guard at all.
 - [ ] **Offline queue recovery** — expose failed rows to non-admins, make "Sync now" retry `failed`, wire the unused `WARN_THRESHOLD`, call `navigator.storage.persist()`, and **send `queued_at`** so offline sales book to the correct day and shift.
 
+### Routed in from the architecture audits — 2026-08-17
+
+> **Why these appear here now.** The 2026-07-29 subsystem audits and the technical-architecture
+> report carry risk registers that were never routed into any plan — they existed only as
+> description, so nothing tracked them. A findings-disposition pass on 2026-08-17 (see
+> [`../STATUS.md`](../STATUS.md)) found ~60–80% of those registers unrouted. `claim-audit` and
+> `core-research` are *not* affected — they fed `remediation/`, which executed and verified.
+>
+> **None of these is a P0 or a new defect.** They are pre-existing, mostly-Low findings that need a
+> decision: fix, or write "accepted, won't fix" and close. Each was re-checked against source on
+> 2026-08-17 unless marked otherwise. Severity is the audit's own.
+
+- [ ] **Legacy plaintext-PIN fallback** (Med) — `services/manager-pin.js:46` and `routes/attendance.js`
+      still compare `String(emp.pin_code) === pin`. Pre-v14 rows stay plaintext at rest and compare
+      non-constant-time, on the kiosk check-in and manager-override paths. **Verified present.**
+      Fix is a backfill (hash the remaining `pin_code` rows, then drop the fallback), not a code
+      change alone. → `subsystem-audits/06-security-posture.md` §9.3
+- [ ] **`cleanup-dead-tenants.js:51`** (Low) — interpolates a registry-sourced slug into
+      `DROP SCHEMA tenant_${slug} CASCADE` with **no** immediate re-validation, unlike
+      `routes/admin/tenants.js` which re-validates before its own DROP. **Verified present.**
+      → `06-security-posture.md` §9.9
+- [ ] **Helmet CSP + COEP disabled** (Low-Med) — `index.js:121-122`, both still `false`. API-only
+      origin, but it also serves `/uploads` and the `/r2/*` proxy. **Verified present.**
+      Decide explicitly: enable a minimal CSP, or record why an API origin doesn't need one.
+      → `06-security-posture.md` §9.5, `technical-architecture-report/08-risks` §9
+- [ ] **`ensureDefaultRolePermissions` is a permanent silent no-op in MT mode** (Med, correctness) —
+      called at boot with the ALS proxy, which throws outside a request context; the rejection is
+      swallowed by its own try/catch. The documented "re-seeds at every boot" behaviour holds **only**
+      in single-tenant mode. → `subsystem-audits/01-backend-core.md` §9.2
+- [ ] **`migrate()` versions off `MAX(version)`, not set membership** (Med, operational) — a skipped
+      or failed intermediate is never revisited, and `migrateAllTenants` only logs per-tenant
+      failures, so **a tenant can fall permanently behind while the deploy reports success**. Pairs
+      naturally with the Phase 3 schema-drift test. → `01-backend-core.md` §9.13
+- [ ] **Tenant-keyed rate limiters are bypassable by rotating a client header** (Low-Med) —
+      `extractTenantKey` prefers `x-tenant-slug`, `authLimiter` prefers `req.body.store_code`, portal
+      limiters key on `?tenant=`; none is validated against a real tenant. → `01-backend-core.md` §9.3
+- [ ] **Revocation block swallows every error** (Low) — `tenant-auth.js:167-169` treats "table
+      missing" and "transient pool timeout" identically, silently skipping revocation for a 24 h
+      token. Contrast the permission load directly below it, deliberately hardened to 503.
+      → `01-backend-core.md` §9.7, `06-security-posture.md` §9.6
+- [ ] **No account lockout** on repeated admin/employee password failures (Low) — throttling is
+      `authLimiter` only. → `06-security-posture.md` §9.7
+- [ ] **Global error handler leaks `err.message` verbatim** on 500s (Low) — `index.js:279`.
+      → `01-backend-core.md` §9.9
+- [ ] **Turnstile is env-conditional and silently absent** when `TURNSTILE_SECRET_KEY` is unset
+      (Low) — signup and public inquiries lose CAPTCHA with no signal. Same silent-degradation class
+      as `INTEGRATION_SECRET_KEY` above; fix the same way (assert at boot). → `06-security-posture.md` §9.10
+- [ ] **`getClient()` sets session-level `search_path` outside a transaction** (Low) —
+      `tenant-db-manager-pg.js:91-95`, unlike `query`/`transaction`. Fail-safe under transaction
+      pooling (wrong path → `public` → error, **not** cross-tenant reads) but fragile.
+      → `06-security-posture.md` §9.8
+- [ ] **WhatsApp inbound has no `external_id` idempotency** (Low) — a replayed valid delivery
+      duplicates inbox rows. → `06-security-posture.md` §9.11
+- [ ] **Sweep the remaining unrouted registers.** Only `06-security-posture.md` §9 (13 items) was
+      walked in full; `01-backend-core.md` §9 was **sampled, not exhausted** (14 of 25).
+      `02-api-route-surface.md` §7 (15 items) and `04-data-model.md` §7 were not walked at all.
+      Walk them, route or reject each item, then delete this line.
+
+### Reported and still true, from the earlier audits (never actioned)
+
+Lower-ranked `claim-audit`/`core-research` items whose top-ranked siblings were all fixed. All
+re-verified against source 2026-08-17. Product/polish rather than security:
+
+- [ ] **L-6 · Retail spine never subtracted for service industries** — `ui/nav-config.js` still has no
+      `business_model` exclusions, so a clinic, salon, hotel and car-rental all see the full
+      Catalog / Inventory / Procurement / Online Store nav. The reports surface already hides these
+      for those presets, so the app contradicts itself. The single most visible remaining
+      "speaks your industry's language" gap.
+- [ ] **N-9 · `dashboard_widgets` is largely decorative** — only `inventory_alerts` is consumed;
+      `appointments_today`, `active_treatment_plans`, `overdue_sessions` and `floor_plan` have no
+      consumer. Either build them or drop the config keys.
+- [ ] **L-7 · Public QR menu not mode-gated** — `routes/public-restaurant.js` has no `requireMode`;
+      protection is only implicit at kiosk-token issuance. Defense-in-depth.
+- [ ] **GRN scan-receive moves no stock** — `routes/grn.js` increments `qty_received` and creates
+      serials but touches no `outlet_stock`/batch. Pairs with the `grn.js:462` item above.
+- [ ] **M-8 · Vocabulary bleed** — `PortalOrders.jsx` still hardcodes "Order history" / "Order #"
+      under a preset-renamed tab; POS hardcodes "Sell"/"Total Due" regardless of preset.
+- [ ] **`chart_area` codes unvalidated** — `schemas/treatment-plans.js` still accepts any
+      `z.string().min(1).max(100)`; clinical chart correctness is UI-enforced only.
+
 ---
 
 ## Phase 3 — Structural, before growth (months 3–9)

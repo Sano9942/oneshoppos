@@ -1,6 +1,11 @@
 # Folio-tax proposal — rentals / rooms / treatment plans (plan-01 open item 2)
 
-**Status: APPROVED 2026-07-04 (schema columns + no-backfill stance + FBR out-of-scope, all three as proposed). Not yet implemented.** Implementation happens in the gated later steps (rentals V09, lodging V10, clinical V05 — plan-01 steps 18/19/20); the migration below is the agreed design for that work.
+**Status: ✅ APPROVED 2026-07-04 AND IMPLEMENTED.** Shipped as **migration v118** (verified present in
+`backend/migrate-pg.js`, 2026-08-17); the completion register's plan-06 row records the folio-tax gap
+as "resolved via the approved proposal in v118".
+*(Header corrected 2026-08-17 — it still said "Not yet implemented".)*
+
+~~**Status: APPROVED 2026-07-04 (schema columns + no-backfill stance + FBR out-of-scope, all three as proposed). Not yet implemented.**~~ Implementation happens in the gated later steps (rentals V09, lodging V10, clinical V05 — plan-01 steps 18/19/20); the migration below is the agreed design for that work.
 
 ## Verified current state (2026-07-04, code-confirmed)
 

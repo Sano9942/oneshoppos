@@ -1,6 +1,11 @@
 # V02 Wholesale Depth — Migration Proposal (v110–v113)
 
-> Pause-list stop per completion-spec §5. Approve before any migration code is written.
+> ✅ **APPROVED AND SHIPPED.** Migrations **v110, v111, v112 and v113 all exist in
+> `backend/migrate-pg.js`** (verified 2026-08-17), and V02 is marked done in
+> [`../ROADMAP.md`](../ROADMAP.md). This file is now a design record, not a pending gate.
+> *(Header corrected 2026-08-17 — it still read as an open pause-list stop.)*
+>
+> Original header: Pause-list stop per completion-spec §5. Approve before any migration code is written.
 > Branch: `feat/v02-wholesale-depth` off `main` (head v109). All migrations tenant-schema-scoped,
 > SAVEPOINT-guarded on public, idempotent — same shape as v100–v109.
 

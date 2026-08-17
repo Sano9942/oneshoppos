@@ -1,6 +1,10 @@
 # Admin Refresh — Audit & Plan
 
-Date: 2026-07-07 · Branch (Phase 2): `feat/admin-refresh` · Status: **AWAITING APPROVAL**
+Date: 2026-07-07 · Branch (Phase 2): `feat/admin-refresh` · Status: ✅ **APPROVED, BUILT AND MERGED**
+— `feat/admin-refresh` was fast-forward-merged into `main` and pushed (recorded at
+[`../admin-roadmap/ROADMAP.md`](../admin-roadmap/ROADMAP.md) batch 0.5). Successor backlog:
+`admin-roadmap`, where batches 0/A/B/C1 are done and C2 is next.
+*(Header corrected 2026-08-17 — it read "AWAITING APPROVAL" for weeks after the merge.)*
 
 Everything below was verified against source on `main` (post-v122) and live prod state
 (Supabase read-only + `railway variables`), not against docs/memory.

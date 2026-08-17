@@ -1,6 +1,11 @@
 # F04 — Webhook dispatch change: proposal + intent-registry design
 
-**Status: AWAITING APPROVAL (HARD GATE #2).** Security-adjacent — `routes/webhooks.js` is the shared, before-tenant-middleware entry for xPay/sandbox. No code below is wired yet.
+**Status: ✅ APPROVED AND SHIPPED.** F04 is marked done in [`../ROADMAP.md`](../ROADMAP.md); the
+deposit webhook capture/release path described here is live (`webhooks.js` deposit `ENTITY_ADAPTERS`).
+Design record, not a pending gate.
+*(Header corrected 2026-08-17 — it still read "AWAITING APPROVAL". Original text below.)*
+
+~~**Status: AWAITING APPROVAL (HARD GATE #2).** Security-adjacent — `routes/webhooks.js` is the shared, before-tenant-middleware entry for xPay/sandbox. No code below is wired yet.~~
 
 ## What exists today
 

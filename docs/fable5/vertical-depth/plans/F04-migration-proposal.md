@@ -1,6 +1,11 @@
 # F04 — Consumer + hardening migration: proposal
 
-**Status: AWAITING APPROVAL (pause-list: migration application).** Nothing added to `migrate-pg.js` or applied to any DB yet. This one migration unblocks all three new consumers + the orphaned-hold hardening.
+**Status: ✅ APPROVED AND SHIPPED.** F04 is marked done in [`../ROADMAP.md`](../ROADMAP.md) and the
+migration landed. Design record, not a pending gate.
+*(Header corrected 2026-08-17 — it still read "AWAITING APPROVAL" long after the work shipped, which
+is why this file looked like open work. Original text below.)*
+
+~~**Status: AWAITING APPROVAL (pause-list: migration application).** Nothing added to `migrate-pg.js` or applied to any DB yet.~~ This one migration unblocks all three new consumers + the orphaned-hold hardening.
 
 ## Decisions you need to make
 
