@@ -6,7 +6,10 @@ dockerfilePath = "./Dockerfile"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+# Was 3, which let a transient database stall park the service permanently —
+# the deploy sat CRASHED for two weeks because the retries were spent during
+# one bad window and nothing ever tried again.
+restartPolicyMaxRetries = 10
 
 [[volumes]]
 mount = "/data"
