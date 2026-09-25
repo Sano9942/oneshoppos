@@ -331,7 +331,7 @@ export function PayablesReceivablesTab({ filters }) {
           empty={!supplierAp.length}
         >
           {supplierAp.map((row) => (
-            <tr key={row.id} className="hover:bg-(--ui-muted-surface)">
+            <tr key={`${row.status === "supplier_return" ? "ret" : "inv"}-${row.id}`} className="hover:bg-(--ui-muted-surface)">
               <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">
                 {row.supplier_name}
               </td>

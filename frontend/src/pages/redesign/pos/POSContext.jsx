@@ -21,6 +21,7 @@ import { useLoyaltyWallet } from "./hooks/useLoyaltyWallet";
 import { useFolioCharging } from "./hooks/useFolioCharging";
 import { useOfflineQueue } from "./hooks/useOfflineQueue";
 import { useCheckout } from "./hooks/useCheckout";
+import { variantCartLine } from "./variantCartLine";
 
 /* ──────────────────────────────────────────────────────────────────────────────
  * WAVE-C SNAPSHOT — usePOS() value object keys (pre-split, for diff verification)
@@ -288,6 +289,11 @@ export const POSProvider = ({ children }) => {
     if (!cartCheckpointKey) return;
     if (cartCheckpointPromptedRef.current) return;
     if (cartHook.cart.length > 0) return;
+    // Only on arrival. Without this the check re-ran every time the cart went
+    // back to empty — including right after a completed sale, when this effect
+    // runs before the writer below deletes the checkpoint — and offered to
+    // "resume" the cart that had just been paid for (a double-sale trap).
+    cartCheckpointPromptedRef.current = true;
     try {
       const raw = sessionStorage.getItem(cartCheckpointKey);
       if (!raw) return;
@@ -913,6 +919,11 @@ export const POSProvider = ({ children }) => {
       const data = await res.json();
       const product = data.product;
       if (!product) return;
+      // The scanned code was one variant's own barcode — add exactly that variant.
+      if (data.variant) {
+        addToCartWithModifiers(variantCartLine(product, data.variant, data.variant.sku));
+        return;
+      }
       // 2-G.6: serialized products intercept the add-to-cart flow. The
       // serial modal collects one serial per unit and commits the line
       // itself (with `serials: [ids]` attached).

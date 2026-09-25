@@ -25,6 +25,12 @@ module.exports = function (app, deps) {
    * @param {number} startIdx - next $N index
    * @returns {{ clause: string, values: number[] }}
    */
+  // A sale line's value with tax backed out — the same expression the
+  // dashboard's tax_exclusive sums use.
+  const EX_TAX_LINE = `CASE WHEN t.id IS NOT NULL
+              THEN (si.quantity * si.price_at_sale) / (1 + (t.rate / 100.0))
+              ELSE (si.quantity * si.price_at_sale) / (1 + (COALESCE(p.gst, 0) / 100.0)) END`;
+
   function buildOutletClause(col, ids, startIdx) {
     if (!ids.length) return { clause: "", values: [] };
     if (ids.length === 1)
@@ -124,6 +130,30 @@ module.exports = function (app, deps) {
           LEFT JOIN taxes t ON p.tax_id = t.id
           WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${rmOutlet.clause}
         ),
+        today_discount AS (
+          SELECT ROUND(COALESCE(SUM(b.discount * CASE WHEN b.gross > 0 THEN b.ex_gross / b.gross ELSE 1 END), 0)::numeric, 2) AS discount
+          FROM (
+            SELECT s.id, COALESCE(s.discount_amount, 0) AS discount,
+                   SUM(si.quantity * si.price_at_sale) AS gross,
+                   SUM(${EX_TAX_LINE}) AS ex_gross
+            FROM sales s JOIN sale_items si ON si.sale_id = s.id JOIN products p ON si.product_id = p.id
+            LEFT JOIN taxes t ON p.tax_id = t.id
+            WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${rmOutlet.clause}
+            GROUP BY s.id, s.discount_amount
+          ) b
+        ),
+        month_discount AS (
+          SELECT ROUND(COALESCE(SUM(b.discount * CASE WHEN b.gross > 0 THEN b.ex_gross / b.gross ELSE 1 END), 0)::numeric, 2) AS month_discount
+          FROM (
+            SELECT s.id, COALESCE(s.discount_amount, 0) AS discount,
+                   SUM(si.quantity * si.price_at_sale) AS gross,
+                   SUM(${EX_TAX_LINE}) AS ex_gross
+            FROM sales s JOIN sale_items si ON si.sale_id = s.id JOIN products p ON si.product_id = p.id
+            LEFT JOIN taxes t ON p.tax_id = t.id
+            WHERE s.voided = false AND s.timestamp >= $${mgIdx} AND s.timestamp < $${mgIdx + 1} ${mgOutlet.clause}
+            GROUP BY s.id, s.discount_amount
+          ) b
+        ),
         month_metrics AS (
           SELECT
             ROUND(COALESCE(SUM(CASE WHEN t.id IS NOT NULL
@@ -134,15 +164,18 @@ module.exports = function (app, deps) {
           LEFT JOIN taxes t ON p.tax_id = t.id
           WHERE s.voided = false AND s.timestamp >= $${mgIdx} AND s.timestamp < $${mgIdx + 1} ${mgOutlet.clause}
         )
-        SELECT * FROM today_metrics, month_metrics`,
+        SELECT * FROM today_metrics, today_discount, month_metrics, month_discount`,
         [todayStart, todayEnd, ...rmOutlet.values, monthStart, todayEnd, ...mgOutlet.values])).rows[0] || {};
       const taxInclusive = Number(profitMetrics.tax_inclusive || 0);
       const taxExclusive = Number(profitMetrics.tax_exclusive || 0);
       const totalCost = Number(profitMetrics.total_cost || 0);
-      const todayGrossProfit = taxExclusive - totalCost;
+      // Bill-level discounts come off gross profit (they were ignored, so the
+      // dashboard overstated profit by every discount given). The *_discount
+      // CTEs already strip tax from each bill's discount by that bill's own mix.
+      const todayGrossProfit = taxExclusive - totalCost - Number(profitMetrics.discount || 0);
       const monthTaxExclusive = Number(profitMetrics.month_tax_exclusive || 0);
       const monthTotalCost = Number(profitMetrics.month_total_cost || 0);
-      const monthGrossMargin = Number((monthTaxExclusive - monthTotalCost).toFixed(2));
+      const monthGrossMargin = Number((monthTaxExclusive - monthTotalCost - Number(profitMetrics.month_discount || 0)).toFixed(2));
 
       // ─── Query 4: Expenses today ───
       const expOutlet = buildOutletClause("outlet_id", outletIds, 2);
@@ -173,18 +206,31 @@ module.exports = function (app, deps) {
           LEFT JOIN taxes t ON p.tax_id = t.id
           WHERE s.voided = false AND s.timestamp >= $${ypIdx} AND s.timestamp < $${ypIdx + 1} ${ypOutlet.clause}
         ),
+        yd_discount AS (
+          SELECT ROUND(COALESCE(SUM(b.discount * CASE WHEN b.gross > 0 THEN b.ex_gross / b.gross ELSE 1 END), 0)::numeric, 2) AS discount
+          FROM (
+            SELECT s.id, COALESCE(s.discount_amount, 0) AS discount,
+                   SUM(si.quantity * si.price_at_sale) AS gross,
+                   SUM(${EX_TAX_LINE}) AS ex_gross
+            FROM sales s JOIN sale_items si ON si.sale_id = s.id JOIN products p ON si.product_id = p.id
+            LEFT JOIN taxes t ON p.tax_id = t.id
+            WHERE s.voided = false AND s.timestamp >= $${ypIdx} AND s.timestamp < $${ypIdx + 1} ${ypOutlet.clause}
+            GROUP BY s.id, s.discount_amount
+          ) b
+        ),
         yd_refunds AS (
           SELECT ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0)::numeric, 2) AS refund_value
           FROM returns r LEFT JOIN return_items ri ON ri.return_id = r.id
           WHERE r.timestamp >= $${yrIdx} AND r.timestamp < $${yrIdx + 1} ${yrOutlet.clause}
         )
-        SELECT * FROM yd_sales, yd_profit, yd_refunds`,
+        SELECT * FROM yd_sales, yd_profit, yd_discount, yd_refunds`,
         [yesterdayStart, yesterdayEnd, ...ysOutlet.values,
          yesterdayStart, yesterdayEnd, ...ypOutlet.values,
          yesterdayStart, yesterdayEnd, ...yrOutlet.values])).rows[0] || {};
       const yesterdayRevenue = Number(yesterdayData.revenue || 0);
       const yesterdaySaleCount = Number(yesterdayData.sale_count || 0);
-      const yesterdayProfit = Number((Number(yesterdayData.tax_exclusive || 0) - Number(yesterdayData.total_cost || 0)).toFixed(2));
+      const yesterdayProfit = Number((Number(yesterdayData.tax_exclusive || 0) - Number(yesterdayData.total_cost || 0)
+        - Number(yesterdayData.discount || 0)).toFixed(2));
       const yesterdayRefunds = Number(yesterdayData.refund_value || 0);
 
       // ─── Query 6: Month sales + purchases + refunds today (combined) ───

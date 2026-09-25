@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Grid3x3 } from "lucide-react";
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
+import { variantCartLine } from "./variantCartLine";
 
 // Phase 2-G Wave 3 — 2-G.1 matrix variant grid modal.
 // Opens when `pendingVariantProductId` is set (by POSOmniInput after scanning
@@ -105,26 +106,15 @@ export default function POSVariantMatrixModal() {
 
   const commitVariant = (variant) => {
     if (!variant) return;
-    const parentName = product?.name || "Variant";
     const variantLabel = (variant.options || [])
       .map((o) => o.option_value)
       .filter(Boolean)
       .join(" / ");
-    const cartLine = {
-      id: variant.id, // distinct cart line per variant
-      original_product_id: product?.id ?? pendingVariantProductId,
-      variant_id: variant.id,
-      name: variantLabel ? `${parentName} (${variantLabel})` : parentName,
-      price: Number(variant.price ?? product?.price ?? 0),
-      cost_price: Number(variant.cost_price ?? product?.cost_price ?? 0),
-      barcode: variant.barcode || product?.barcode || null,
-      sku: variant.sku || null,
-      unit: product?.unit || null,
-      stock: Number(variant.stock_at_outlet ?? variant.stock ?? 0),
-      local_stock: Number(variant.stock_at_outlet ?? variant.stock ?? 0),
-      tax: product?.tax ?? null,
-      gst: product?.gst ?? null,
-    };
+    const cartLine = variantCartLine(
+      product ?? { id: pendingVariantProductId },
+      variant,
+      variantLabel,
+    );
     addToCart(cartLine);
 
     // 2-G.6: if this variant's parent product is serialized, chain into the

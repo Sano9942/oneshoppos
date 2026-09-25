@@ -48,8 +48,15 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
       if (!po)
         return res.status(404).json({ error: "Purchase order not found" });
 
+      // qty_received: already booked in on earlier GRNs, so the receive
+      // dialog can offer just the outstanding remainder.
       const { rows: items } = await db.query(
-        `SELECT poi.*, p.name, p.barcode
+        `SELECT poi.*, p.name, p.barcode,
+                COALESCE((
+                  SELECT SUM(gi.qty_received)
+                    FROM grn_items gi JOIN goods_received_notes g ON g.id = gi.grn_id
+                   WHERE g.po_id = poi.po_id AND gi.product_id = poi.product_id
+                ), 0) AS qty_received
          FROM purchase_order_items poi
          JOIN products p ON poi.product_id = p.id
          WHERE poi.po_id = $1`,
@@ -396,6 +403,39 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
         const grnNumber = `GRN-${Date.now()}`;
 
         const grnResult = await db.transaction(async (client) => {
+          // 0. What is still outstanding on this PO, under a lock so two
+          //    receipts can't both claim the same remainder. Receiving more
+          //    than is outstanding is refused: the GRN dialog pre-fills the
+          //    FULL ordered qty on every delivery, so a second delivery used to
+          //    add the whole order again. A receipt with no items list takes
+          //    exactly the outstanding remainder.
+          await client.query("SELECT id FROM purchase_orders WHERE id = $1 FOR UPDATE", [id]);
+          const { rows: priorRows } = await client.query(
+            `SELECT gi.product_id, SUM(gi.qty_received) AS received
+               FROM grn_items gi JOIN goods_received_notes g ON g.id = gi.grn_id
+              WHERE g.po_id = $1 GROUP BY gi.product_id`,
+            [id]
+          );
+          const outstanding = {};
+          for (const item of poItems) {
+            outstanding[item.product_id] = (outstanding[item.product_id] || 0) + Number(item.quantity || 0);
+          }
+          for (const r of priorRows) {
+            if (r.product_id in outstanding) outstanding[r.product_id] -= Number(r.received || 0);
+          }
+          const receiveQty = {};
+          for (const item of poItems) {
+            const left = Math.max(0, outstanding[item.product_id] || 0);
+            const want = hasPartialReceive ? Number(receivedMap[item.product_id] ?? 0) : left;
+            if (want > left + 1e-9) {
+              throw Object.assign(
+                new Error(`Receiving ${want} of ${item.product_name} but only ${left} still outstanding on this PO`),
+                { statusCode: 400, code: "OVER_RECEIPT", product_id: item.product_id, outstanding: left }
+              );
+            }
+            receiveQty[item.product_id] = want;
+          }
+
           // 1. Create GRN header. PO status is decided at the END of the tx,
           //    once we know how much of the PO has now been received
           //    cumulatively (M5: no blanket status→'Received' on a partial).
@@ -411,9 +451,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
           let receivedValue = 0;
 
           for (const item of poItems) {
-            const qtyReceived = hasPartialReceive
-              ? (receivedMap[item.product_id] ?? 0)
-              : item.quantity;
+            const qtyReceived = receiveQty[item.product_id] ?? 0;
 
             receivedValue += Number(qtyReceived) * Number(item.cost_price || 0);
 
@@ -515,22 +553,21 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
             );
           }
 
-          return { grnId: newGrnId, fullyReceived };
+          return { grnId: newGrnId, fullyReceived, receiveQty };
         });
 
         const grnId = grnResult.grnId;
 
+        // Keyed by GRN, not PO: the outbound idempotency key includes the
+        // reference, so a PO-keyed 2nd delivery was dropped as a "duplicate"
+        // and never reached Shopify.
         const syncChanges = poItems.map((item) => ({
           product_id: item.product_id,
           outlet_id,
-          delta: Number(
-            hasPartialReceive
-              ? (receivedMap[item.product_id] ?? 0)
-              : (item.quantity ?? 0),
-          ),
+          delta: Number(grnResult.receiveQty[item.product_id] ?? 0),
           reason: "po_receive",
-          reference_type: "purchase_order",
-          reference_id: po.id,
+          reference_type: "grn",
+          reference_id: grnId,
         }));
         enqueueInventorySyncEvents(syncChanges, {}, () => {});
 
@@ -549,6 +586,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
           fully_received: grnResult.fullyReceived,
         });
       } catch (err) {
+        if (err.code === "OVER_RECEIPT") {
+          return res.status(400).json({ error: err.message, code: err.code, product_id: err.product_id, outstanding: err.outstanding });
+        }
         res.status(500).json({ error: err.message });
       }
     },

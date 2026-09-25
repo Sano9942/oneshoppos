@@ -498,8 +498,10 @@ export default function PurchaseOrdersRedesign() {
   const openGrnModal = () => {
     if (!selectedPo?.purchaseOrder || !selectedPo?.items?.length) return;
     const initial = {};
+    // Pre-fill what is still outstanding, not the full order: on a 2nd
+    // delivery the full qty would over-receive (the server now refuses that).
     selectedPo.items.forEach((item) => {
-      initial[item.product_id] = Number(item.quantity || 0);
+      initial[item.product_id] = Math.max(0, Number(item.quantity || 0) - Number(item.qty_received || 0));
     });
     setGrnQtys(initial);
     setGrnBatches({});

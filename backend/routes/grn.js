@@ -432,7 +432,11 @@ module.exports = function registerGRNRoutes(app, deps) {
             .json({ error: "Invoice already fully paid" });
 
         const amt = parseFloat(amount);
-        const remaining = inv.amount - inv.amount_paid;
+        // pg returns NUMERIC as strings; "5000.00" + 4000 concatenates, which
+        // left an invoice cleared in two instalments stuck at 'partial'.
+        const invAmount = Number(inv.amount);
+        const alreadyPaid = Number(inv.amount_paid);
+        const remaining = invAmount - alreadyPaid;
         if (amt > remaining + 0.001)
           return res.status(400).json({
             error: `Payment exceeds outstanding amount (${req.company?.currency_symbol || "$"} ${remaining.toFixed(2)})`,
@@ -452,9 +456,9 @@ module.exports = function registerGRNRoutes(app, deps) {
             ],
           );
           // Update invoice status
-          const newPaid = inv.amount_paid + amt;
+          const newPaid = alreadyPaid + amt;
           const newStatus =
-            newPaid >= inv.amount - 0.001 ? "paid" : "partial";
+            newPaid >= invAmount - 0.001 ? "paid" : "partial";
           await client.query(
             "UPDATE supplier_invoices SET status = $1 WHERE id = $2",
             [newStatus, id],

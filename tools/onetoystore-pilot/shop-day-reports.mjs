@@ -158,11 +158,12 @@ export async function assertReports(ctx) {
   }
   const ps = body("profit-summary");
   if (ps) {
-    const s = ps.summary || ps.totals || ps;
-    const cogs = num(s.cogs ?? s.total_cost ?? s.cost_of_goods ?? s.cost);
-    const rev = num(s.revenue ?? s.net_sales ?? s.total_revenue ?? s.sales);
-    check("profit summary cost of goods = Σ(qty × cost at sale)", cogs, shadow.cogs);
-    check("profit summary gross profit = sales − cost", num(s.gross_profit ?? s.profit), r2((rev ?? 0) - (cogs ?? 0)));
+    const s = ps.summary;
+    check("profit summary cost of goods = Σ(qty × cost at sale)", num(s.cogs), shadow.cogs);
+    check("profit summary gross sales = item value before bill discounts", num(s.gross_sales), shadow.gross);
+    check("profit summary discounts = bill discounts given", num(s.discount_amount), shadow.disc);
+    check("profit summary net profit = sales after discounts − cost", num(s.net_profit), r2(shadow.net - shadow.cogs));
+    note("profit summary and returns", `net profit ${s.net_profit} does not deduct returns; after returns it would be ${r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost))}`);
   }
 
   // ── E. Stock value, purchases, suppliers ──────────────────────────────────

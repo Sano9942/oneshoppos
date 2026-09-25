@@ -4,6 +4,7 @@ const {
   getDescendantLeafIds,
 } = require("../category-tree");
 const kitEngine = require("../services/kit-engine");
+const stockLedger = require("../services/stock-ledger");
 const { decodeEmbeddedBarcode } = require("../services/embedded-barcode");
 
 module.exports = function registerProductRoutes(app, deps) {
@@ -423,7 +424,6 @@ module.exports = function registerProductRoutes(app, deps) {
         lookupField = decoded.itemCodeField; // 'sku' | 'plu' | 'barcode'
       }
 
-      let outletJoinCondition = "";
       let whereClause;
       let params;
       if (lookupField === "sku") {
@@ -443,22 +443,47 @@ module.exports = function registerProductRoutes(app, deps) {
         params = [lookupValue, lookupValue, lookupValue];
       }
 
-      if (outlet_id) {
-        params.push(Number(outlet_id));
-        outletJoinCondition = `AND os.outlet_id = $${params.length}`;
-      }
+      if (outlet_id) params.push(Number(outlet_id));
 
-      const sql = `
+      // outletParam: the $n placeholder holding outlet_id in the caller's params.
+      const productSql = (where, outletParam) => `
           SELECT p.*, t.rate as tax_rate, t.name as tax_name,
                  COALESCE(SUM(os.quantity), 0) as local_stock
           FROM products p
           LEFT JOIN taxes t ON p.tax_id = t.id
-          LEFT JOIN outlet_stock os ON p.id = os.product_id ${outletJoinCondition}
-          WHERE p.deleted_at IS NULL AND ${whereClause}
+          LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = $${outletParam}` : ""}
+          WHERE p.deleted_at IS NULL AND ${where}
           GROUP BY p.id, t.rate, t.name
       `;
 
-      const { rows: [row] } = await db.query(sql, params);
+      let { rows: [row] } = await db.query(productSql(whereClause, params.length), params);
+
+      // A variant's own barcode/SKU (e.g. one car in a Hot Wheels assortment,
+      // each with its own label). Resolve to the parent product and hand back
+      // the variant so the POS adds that exact variant line.
+      let scannedVariant = null;
+      if (!row && !decoded.ok) {
+        const vParams = [lookupValue];
+        if (outlet_id) vParams.push(Number(outlet_id));
+        const { rows: [v] } = await db.query(
+          `SELECT pv.id, pv.product_id, pv.sku, pv.barcode, pv.price, pv.cost_price, pv.stock,
+                  ${outlet_id ? "vos.quantity" : "NULL"} AS stock_at_outlet
+             FROM product_variants pv
+             JOIN products vp ON vp.id = pv.product_id AND vp.deleted_at IS NULL
+             ${outlet_id ? "LEFT JOIN variant_outlet_stock vos ON vos.variant_id = pv.id AND vos.outlet_id = $2" : ""}
+            WHERE pv.barcode = $1 OR pv.sku = $1
+            ORDER BY (pv.barcode = $1) DESC, pv.id
+            LIMIT 1`,
+          vParams,
+        );
+        if (v) {
+          scannedVariant = v;
+          const idParams = [v.product_id];
+          if (outlet_id) idParams.push(Number(outlet_id));
+          ({ rows: [row] } = await db.query(productSql("p.id = $1", 2), idParams));
+        }
+      }
+
       if (!row) {
         // A decoded scale label that resolves to no product is a mis-mapped
         // scale PLU — surface it clearly so the cashier fixes the mapping,
@@ -500,7 +525,10 @@ module.exports = function registerProductRoutes(app, deps) {
       }
 
       await enrichKitAvailability([productWithTax], outlet_id);
-      res.json({ product: stripCostFields(productWithTax, req) });
+      res.json({
+        product: stripCostFields(productWithTax, req),
+        ...(scannedVariant ? { variant: stripCostFields(scannedVariant, req) } : {}),
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -838,7 +866,8 @@ module.exports = function registerProductRoutes(app, deps) {
     // seeded; multi-outlet tenants who care about which outlet continue to
     // pass outlet_id explicitly.
     let outlet_id = req.body.outlet_id || req.context?.outletId;
-    if (!outlet_id && (_initial_stock || req.body.stock)) {
+    const variantOpeningStock = Array.isArray(variants) && variants.some((v) => Number(v?.initial_stock) > 0);
+    if (!outlet_id && (_initial_stock || req.body.stock || variantOpeningStock)) {
       const { rows: [first] } = await deps.db.query(
         "SELECT id FROM outlets ORDER BY id LIMIT 1"
       );
@@ -979,12 +1008,22 @@ module.exports = function registerProductRoutes(app, deps) {
             );
             const variantId = vRow.id;
 
-            // Insert Outlet stock for variant if provided
-            if (outlet_id && variant.initial_stock) {
-              await client.query(
-                "UPDATE product_variants SET stock = $1 WHERE id = $2",
-                [variant.initial_stock, variantId]
-              );
+            // Opening stock for the variant. Goes through the shared stock
+            // helper so all three tables agree: the per-outlet variant row (the
+            // one a sale checks), the product_variants rollup, and the
+            // product's outlet_stock total (what on-hand / stock value read).
+            // Writing only the rollup let the first sale create the per-outlet
+            // row at −1 and refused every sale after it.
+            if (outlet_id && Number(variant.initial_stock) > 0) {
+              await stockLedger.incrementStock(client, {
+                productId: newProductId,
+                variantId,
+                outletId: outlet_id,
+                qty: Number(variant.initial_stock),
+                manageBatch: false,
+                refType: "opening_stock",
+                refId: newProductId,
+              });
             }
 
             const options = variant.options || [];

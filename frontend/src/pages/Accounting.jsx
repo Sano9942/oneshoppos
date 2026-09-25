@@ -301,7 +301,7 @@ export default function Accounting() {
               </thead>
               <tbody>
                 {(ap?.supplier_ap || []).map((r) => (
-                  <tr key={r.id} className="border-t">
+                  <tr key={`${r.status === "supplier_return" ? "ret" : "inv"}-${r.id}`} className="border-t">
                     <td className="py-2">{r.supplier_name || "-"}</td>
                     <td>{r.invoice_number || "-"}</td>
                     <td>{fmt(r.amount)}</td>

@@ -521,21 +521,52 @@ module.exports = function registerInventoryRoutes(app, deps) {
       if (!count) return res.status(404).json({ error: "Stock count not found" });
       if (count.status !== "in_progress") return res.status(400).json({ error: "Stock count is not in progress" });
 
-      // Find product by barcode or SKU
-      const { rows: [product] } = await db.query(
-        "SELECT id, name, barcode, sku FROM products WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)",
+      // Find product by barcode or SKU, then a variant by its own barcode/SKU
+      // (e.g. one car in a Hot Wheels assortment).
+      let { rows: [product] } = await db.query(
+        "SELECT id, name, barcode, sku, NULL::int AS variant_id FROM products WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)",
         [barcode]
       );
+      if (!product) {
+        ({ rows: [product] } = await db.query(
+          `SELECT p.id, p.name, pv.barcode, pv.sku, pv.id AS variant_id
+             FROM product_variants pv JOIN products p ON p.id = pv.product_id AND p.deleted_at IS NULL
+            WHERE pv.barcode = $1 OR pv.sku = $1
+            ORDER BY (pv.barcode = $1) DESC, pv.id LIMIT 1`,
+          [barcode]
+        ));
+      }
       if (!product) return res.status(404).json({ error: "Product not found for barcode: " + barcode });
 
-      // Upsert into count items (increment counted_qty)
-      const { rows: [item] } = await db.query(`
-        INSERT INTO stock_count_items (stock_count_id, product_id, system_qty, counted_qty, last_scanned_at)
-        VALUES ($1, $2, 0, 1, NOW())
-        ON CONFLICT (stock_count_id, product_id, variant_id)
-        DO UPDATE SET counted_qty = stock_count_items.counted_qty + 1, last_scanned_at = NOW()
-        RETURNING *, (stock_count_items.counted_qty - stock_count_items.system_qty) as variance
-      `, [req.params.id, product.id]);
+      // Add to the existing count line. Not ON CONFLICT: the unique index is on
+      // (stock_count_id, product_id, variant_id) and NULLs never conflict, so for
+      // every plain product each scan inserted a fresh line with system_qty 0.
+      const { rows: [existing] } = await db.query(
+        `SELECT id FROM stock_count_items
+          WHERE stock_count_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3
+          ORDER BY id LIMIT 1`,
+        [req.params.id, product.id, product.variant_id]
+      );
+      let item;
+      if (existing) {
+        ({ rows: [item] } = await db.query(
+          `UPDATE stock_count_items SET counted_qty = counted_qty + 1, last_scanned_at = NOW()
+            WHERE id = $1 RETURNING *, (counted_qty - system_qty) AS variance`,
+          [existing.id]
+        ));
+      } else {
+        // A line the opening snapshot didn't include (a variant, or a product
+        // created after the count started): snapshot its on-hand now.
+        const { rows: [onHand] } = product.variant_id
+          ? await db.query("SELECT COALESCE(quantity, 0) AS qty FROM variant_outlet_stock WHERE variant_id = $1 AND outlet_id = $2", [product.variant_id, count.outlet_id])
+          : await db.query("SELECT COALESCE(quantity, 0) AS qty FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2", [product.id, count.outlet_id]);
+        ({ rows: [item] } = await db.query(
+          `INSERT INTO stock_count_items (stock_count_id, product_id, variant_id, system_qty, counted_qty, last_scanned_at)
+           VALUES ($1, $2, $3, $4, 1, NOW())
+           RETURNING *, (counted_qty - system_qty) AS variance`,
+          [req.params.id, product.id, product.variant_id, Number(onHand?.qty || 0)]
+        ));
+      }
 
       res.json({ item: { ...item, product_name: product.name, barcode: product.barcode, sku: product.sku } });
     } catch (err) {

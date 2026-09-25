@@ -118,7 +118,9 @@ module.exports = function (app, deps) {
       if (!shiftRows.length) return res.status(404).json({ error: "Open shift not found" });
       const shift = shiftRows[0];
 
-      const closedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
+      // The database clock, at full precision. A JS ISO string truncated to
+      // whole seconds left out any sale rung up in the same second as the close.
+      const { rows: [{ now: closedAt }] } = await db.query("SELECT NOW() AS now");
 
       // Sum all cash payments for this outlet during this shift period
       const { rows: cashRows } = await db.query(

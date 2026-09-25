@@ -60,6 +60,11 @@ module.exports = function createApprovalsRouter(deps) {
   // Approve or reject a PO
   router.post(
     "/api/purchase-orders/:id/approve",
+    // This router mounts BEFORE routes/purchase-orders.js, which owns the same
+    // URL for the direct Draft → Approved step the Purchase Orders screen uses
+    // (it posts an empty body). Only claim requests that carry the approvals-
+    // workflow `action`; hand everything else on, or no PO could be approved.
+    (req, res, next) => (req.body && req.body.action ? next() : next("route")),
     requireFeature("approvals"),
     async (req, res) => {
       try {

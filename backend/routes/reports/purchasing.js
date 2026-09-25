@@ -112,21 +112,36 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
           COALESCE(SUM(poi.quantity), 0) AS qty_ordered,
           COALESCE(SUM(gi.qty_received), 0) AS qty_received,
           ROUND(COALESCE(SUM(poi.quantity * poi.cost_price), 0), 2) AS ordered_cost,
-          ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS received_cost,
+          ROUND(COALESCE(SUM(gi.received_value), 0), 2) AS received_cost,
           ROUND(COALESCE(SUM((poi.quantity * poi.cost_price) * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS ordered_tax,
-          ROUND(COALESCE(SUM((gi.qty_received * gi.cost_price) * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS received_tax,
+          ROUND(COALESCE(SUM(gi.received_value * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS received_tax,
           COALESCE(inv.amount, 0) AS invoice_amount,
           COALESCE(inv.status, 'not_invoiced') AS invoice_status,
-          ROUND(COALESCE(SUM(poi.quantity * poi.cost_price), 0) - COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS pending_cost
+          ROUND(COALESCE(SUM(poi.quantity * poi.cost_price), 0) - COALESCE(SUM(gi.received_value), 0), 2) AS pending_cost
         FROM purchase_orders po
         JOIN suppliers s ON s.id = po.supplier_id
-        LEFT JOIN goods_received_notes grn ON grn.po_id = po.id
+        LEFT JOIN LATERAL (
+          SELECT g.id, g.outlet_id FROM goods_received_notes g
+          WHERE g.po_id = po.id ORDER BY g.id LIMIT 1
+        ) grn ON true
         LEFT JOIN outlets o ON o.id = grn.outlet_id
-        LEFT JOIN supplier_invoices inv ON inv.po_id = po.id
+        LEFT JOIN LATERAL (
+          SELECT SUM(si.amount) AS amount,
+                 CASE WHEN COUNT(*) = 0 THEN NULL
+                      WHEN bool_and(si.status = 'paid') THEN 'paid'
+                      WHEN bool_or(si.status IN ('paid', 'partial')) THEN 'partial'
+                      ELSE 'unpaid' END AS status
+          FROM supplier_invoices si WHERE si.po_id = po.id
+        ) inv ON true
         JOIN purchase_order_items poi ON poi.po_id = po.id
         JOIN products p ON p.id = poi.product_id
         LEFT JOIN taxes t ON t.id = p.tax_id
-        LEFT JOIN grn_items gi ON gi.grn_id = grn.id AND gi.product_id = poi.product_id
+        LEFT JOIN LATERAL (
+          SELECT SUM(gi2.qty_received) AS qty_received,
+                 SUM(gi2.qty_received * gi2.cost_price) AS received_value
+          FROM grn_items gi2 JOIN goods_received_notes g2 ON g2.id = gi2.grn_id
+          WHERE g2.po_id = po.id AND gi2.product_id = poi.product_id
+        ) gi ON true
         ${whereStr ? "WHERE " + whereStr : ""}
         GROUP BY po.id, po.created_at, po.due_date, po.status, s.name, o.name, inv.amount, inv.status
         ORDER BY po.created_at DESC, po.id DESC
@@ -206,9 +221,9 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
           COALESCE(SUM(gi.qty_received), 0) AS qty_received,
           ROUND(COALESCE(AVG(poi.cost_price), 0), 2) AS avg_cost_price,
           ROUND(COALESCE(SUM(poi.quantity * poi.cost_price), 0), 2) AS ordered_cost,
-          ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS received_cost,
+          ROUND(COALESCE(SUM(gi.received_value), 0), 2) AS received_cost,
           ROUND(COALESCE(SUM((poi.quantity * poi.cost_price) * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS ordered_tax,
-          ROUND(COALESCE(SUM((gi.qty_received * gi.cost_price) * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS received_tax,
+          ROUND(COALESCE(SUM(gi.received_value * (COALESCE(t.rate, p.gst, 0) / 100.0)), 0), 2) AS received_tax,
           MAX(po.created_at) AS last_po_at
         FROM purchase_order_items poi
         JOIN purchase_orders po ON po.id = poi.po_id
@@ -217,8 +232,16 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
         LEFT JOIN brands b ON b.id = p.brand_id
         LEFT JOIN suppliers s ON s.id = po.supplier_id
         LEFT JOIN taxes t ON t.id = p.tax_id
-        LEFT JOIN goods_received_notes grn ON grn.po_id = po.id
-        LEFT JOIN grn_items gi ON gi.grn_id = grn.id AND gi.product_id = poi.product_id
+        LEFT JOIN LATERAL (
+          SELECT g.id, g.outlet_id FROM goods_received_notes g
+          WHERE g.po_id = po.id ORDER BY g.id LIMIT 1
+        ) grn ON true
+        LEFT JOIN LATERAL (
+          SELECT SUM(gi2.qty_received) AS qty_received,
+                 SUM(gi2.qty_received * gi2.cost_price) AS received_value
+          FROM grn_items gi2 JOIN goods_received_notes g2 ON g2.id = gi2.grn_id
+          WHERE g2.po_id = po.id AND gi2.product_id = poi.product_id
+        ) gi ON true
         ${whereStr ? "WHERE " + whereStr : ""}
         GROUP BY p.id, p.name, p.barcode, p.category_id, cat.name, b.name, s.name, t.name, t.rate, p.gst
         ORDER BY received_cost DESC, ordered_cost DESC, p.name ASC

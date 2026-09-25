@@ -281,6 +281,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           LEFT JOIN (
             SELECT supplier_invoice_id, SUM(amount) AS paid_amount
             FROM supplier_payments
+            WHERE voided IS NOT TRUE
             GROUP BY supplier_invoice_id
           ) pay ON pay.supplier_invoice_id = si.id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
@@ -497,7 +498,43 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         supplierParams,
       );
-      const { rows: supplierAp } = await db.query(supplierApQ.text, supplierApQ.values);
+      const { rows: supplierInvoices } = await db.query(supplierApQ.text, supplierApQ.values);
+
+      // Supplier returns reduce what we owe (the supplier ledger books them as
+      // a credit). Listed as negative lines so this report and the ledger agree.
+      const returnWhere = ["1 = 1"];
+      const returnParams = [];
+      applyRangeFilters(returnWhere, returnParams, req.query, {
+        dateColumn: "sr.return_date",
+        outletColumn: "sr.outlet_id",
+        supplierColumn: "sr.supplier_id",
+        searchSql: "(s.name ILIKE ? OR COALESCE(sr.reference_number, '') ILIKE ?)",
+        searchParams: [1, 1],
+      }, tz);
+      const supplierReturnQ = pgify(
+        `
+          SELECT
+            sr.id,
+            COALESCE(sr.reference_number, 'RET-' || LPAD(sr.id::text, 4, '0')) AS invoice_number,
+            sr.return_date AS invoice_date,
+            NULL::date AS due_date,
+            ROUND(-COALESCE(sr.total_value, 0), 2) AS amount,
+            0 AS paid_amount,
+            ROUND(-COALESCE(sr.total_value, 0), 2) AS outstanding,
+            'supplier_return' AS status,
+            s.name AS supplier_name,
+            COALESCE(o.name, 'Unassigned') AS outlet_name,
+            0 AS days_open
+          FROM supplier_returns sr
+          LEFT JOIN suppliers s ON s.id = sr.supplier_id
+          LEFT JOIN outlets o ON o.id = sr.outlet_id
+          WHERE ${returnWhere.join(" AND ")} AND COALESCE(sr.total_value, 0) <> 0
+          ORDER BY sr.id DESC
+        `,
+        returnParams,
+      );
+      const { rows: supplierReturns } = await db.query(supplierReturnQ.text, supplierReturnQ.values);
+      const supplierAp = [...supplierInvoices, ...supplierReturns];
 
       const customerArQ = pgify(
         `
@@ -521,7 +558,8 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       const { rows: customerAr } = await db.query(customerArQ.text, customerArQ.values);
 
       const summary = {
-        supplier_invoice_count: supplierAp.length,
+        supplier_invoice_count: supplierInvoices.length,
+        supplier_return_count: supplierReturns.length,
         supplier_outstanding: roundMoney(
           supplierAp.reduce((sum, row) => sum + Number(row.outstanding || 0), 0),
         ),

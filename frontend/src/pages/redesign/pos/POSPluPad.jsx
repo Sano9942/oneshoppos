@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Hash, Delete, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { api } from "../../../api";
+import { variantCartLine } from "./variantCartLine";
 
 /**
  * POSPluPad — grocery/butcher/sweet PLU rapid-entry pad (V01 P1).
@@ -50,6 +51,12 @@ export default function POSPluPad() {
         return;
       }
       if (product.embedded) { addDecodedLine(product, product.embedded); setCode(""); return; }
+      if (data.variant) {
+        addToCart(variantCartLine(product, data.variant, data.variant.sku));
+        showNotice?.(`Added ${product.name} (${data.variant.sku})`);
+        setCode("");
+        return;
+      }
       let variants = [];
       try {
         const v = await api.get(`/api/products/${product.id}/variants`);

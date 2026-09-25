@@ -1331,6 +1331,33 @@ module.exports = function registerSalesRoutes(app, deps) {
     });
     const taxInclusiveResolved = taxSnapshot.taxInclusive;
     const taxByIndex = taxSnapshot.lines;
+
+    // Cost of goods is snapshotted from the database, not the cart. The POS
+    // cart line only carries cost_price when it was built from a product
+    // lookup; a bill resumed from "parked" (POSContext restoreParked) or any
+    // other rebuilt cart arrives without it and was booked at Rs 0 cost,
+    // inflating every margin report. Variant cost wins when set; otherwise
+    // the product's. The cart value is only a last resort for a product the
+    // lookup can't find.
+    const costProductIds = [...new Set(cartItems.map((x) => Number(x.original_product_id || x.id)).filter((n) => n > 0))];
+    const costVariantIds = [...new Set(cartItems.map((x) => Number(x.variant_id)).filter((n) => n > 0))];
+    const productCost = new Map(
+      (await db.query("SELECT id, cost_price FROM products WHERE id = ANY($1::int[])", [costProductIds])).rows
+        .map((r) => [Number(r.id), r.cost_price]),
+    );
+    const variantCost = new Map(
+      costVariantIds.length
+        ? (await db.query("SELECT id, cost_price FROM product_variants WHERE id = ANY($1::int[])", [costVariantIds])).rows
+          .map((r) => [Number(r.id), r.cost_price])
+        : [],
+    );
+    const costAtSale = (item) => {
+      const v = item.variant_id ? variantCost.get(Number(item.variant_id)) : null;
+      if (v != null && Number(v) > 0) return Number(v);
+      const p = productCost.get(Number(item.original_product_id || item.id));
+      if (p != null) return Number(p);
+      return Number(item.cost_price || 0);
+    };
     const taxTotalSnapshot = taxSnapshot.taxTotal;
     const subtotalSnapshot = taxSnapshot.subtotal;
 
@@ -1474,6 +1501,28 @@ module.exports = function registerSalesRoutes(app, deps) {
           tendered: Number(totalTendered.toFixed(2)),
           total_amount: Number(Number(totalAmount).toFixed(2)),
         });
+      }
+
+      // Change handed back is not money taken. The POS sends each tender as
+      // typed (Rs 3,000 cash on a Rs 2,800 bill); storing that as-is made the
+      // shift "expect" the change in the drawer — a false shortage at every
+      // close — and overstated cash in the Z-report, payment mix and dashboard.
+      // Take the change off the cash tenders (last first), keeping any tip the
+      // customer included (the POS computes change as paid − total − tip).
+      const tipKept = Number(tip_amount) > 0 && tip_method ? Number(tip_amount) : 0;
+      let changeDue = Math.round((totalTendered - Number(totalAmount) - tipKept) * 100) / 100;
+      if (changeDue > 0.009) {
+        finalPayments = finalPayments.map((p) => ({ ...p }));
+        for (let i = finalPayments.length - 1; i >= 0 && changeDue > 0.009; i -= 1) {
+          if (String(finalPayments[i].method || "").toLowerCase() !== "cash") continue;
+          const take = Math.min(Number(finalPayments[i].amount || 0), changeDue);
+          finalPayments[i].amount = Math.round((Number(finalPayments[i].amount) - take) * 100) / 100;
+          changeDue = Math.round((changeDue - take) * 100) / 100;
+        }
+        finalPayments = finalPayments.filter(
+          (p) => !(String(p.method || "").toLowerCase() === "cash" && Number(p.amount) <= 0),
+        );
+        if (finalPayments.length === 1) mainPaymentMethod = finalPayments[0].method;
       }
     }
 
@@ -1945,7 +1994,7 @@ module.exports = function registerSalesRoutes(app, deps) {
               item.variant_id || null,
               item.quantity,
               item.price,
-              item.cost_price || 0,
+              costAtSale(item),
               item.gross_weight != null ? Number(item.gross_weight) : null,
               item.tare_weight != null ? Number(item.tare_weight) : 0,
               // v49: service items (car wash, tailoring) can be assigned to staff.

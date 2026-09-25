@@ -5,6 +5,7 @@ import { classifyOmniInput } from "./omniInputRouter";
 import { decodeEmbeddedBarcode } from "../../../utils/embeddedBarcode";
 import { useAuth } from "../../../auth/AuthProvider";
 import { api } from "../../../api";
+import { variantCartLine } from "./variantCartLine";
 
 // V01 P2 — age-restricted attest prompt. Cashier confirms the customer meets
 // the minimum age before an age_restricted product is rung up. Lightweight
@@ -111,6 +112,11 @@ export default function POSOmniInput() {
         // shelf unit-price; both lock tare.
         if (product.embedded) {
           addDecodedLine(product, product.embedded);
+          return;
+        }
+        // The code was one variant's own barcode — add exactly that variant.
+        if (data.variant) {
+          addToCart(variantCartLine(product, data.variant, data.variant.sku));
           return;
         }
         let variants = [];

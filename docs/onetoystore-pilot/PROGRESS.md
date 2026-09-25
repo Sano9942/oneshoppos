@@ -74,6 +74,10 @@ All three blockers are **real**. Blockers 1 and 2 are **worse** than the readine
 
 **First full run (2026-09-25, before any fixes): 76 checks pass, 29 fail.** The 29 failures trace back to **about 14 distinct bugs** (D1–D15 below). The basic "ring up a bill and take the money" path works. The bugs are in purchasing, variants, cash closing, stock counts and reports.
 
+**After the first round of fixes (same day): 106 pass, 1 fails.** The one left is D6 (stock count wipes uncounted items), which waits on an owner decision. Every fix has a regression test in `backend/tests/integration/ots-retail-core.test.js` (22 tests), each shown to fail before its fix. The two POS-screen fixes (D5 variant scan, D18 resume prompt) were also proven in the real POS screen in a browser; screenshots are in `tools/onetoystore-pilot/out/` (not committed).
+
+> The tables below are the **first-run** picture. For current status, go by the Defect list at the bottom.
+
 Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (test proves it) · ⬜ untested · 🟡 works, but differently from iPOS or needs a setting
 
 ### Selling
@@ -152,21 +156,25 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 
 | # | Severity | Defect | Status |
 |---|---|---|---|
-| D1 | 🔴 | PO "Approve" fails for every shop: the approvals module registers the same URL earlier and intercepts it (`routes/tier4/approvals.js:62` shadows `routes/purchase-orders.js:318`) | open |
-| D2 | 🔴 | Sale cost is taken from the POS screen, not the database. Bills resumed from "parked" (and any path that rebuilds the cart) are booked at Rs 0 cost → inflated margin (`routes/sales.js:1946`) | open |
-| D3 | 🔴 | Cash change booked as cash taken (tendered amount stored in `sale_payments`) → the till "expects" the change (false shortage); dashboard sales, payment mix and Z-report cash overstated | open |
-| D4 | 🔴 | Variant opening stock is written only to `product_variants.stock`; per-outlet rows aren't created → 2nd sale refused, on-hand/stock value show 0 | open |
-| D5 | 🔴 | Barcode scan (POS and stock count) doesn't look up variant barcodes | open |
+| D1 | 🔴 | PO "Approve" fails for every shop: the approvals module registers the same URL earlier and intercepts it (`routes/tier4/approvals.js:62` shadows `routes/purchase-orders.js:318`) | 🛠️ fixed: approvals handler only claims requests carrying `action` |
+| D2 | 🔴 | Sale cost is taken from the POS screen, not the database. Bills resumed from "parked" (and any path that rebuilds the cart) are booked at Rs 0 cost → inflated margin (`routes/sales.js:1946`) | 🛠️ fixed: cost read from product/variant in the DB at sale time |
+| D3 | 🔴 | Cash change booked as cash taken (tendered amount stored in `sale_payments`) → the till "expects" the change (false shortage); dashboard sales, payment mix and Z-report cash overstated | 🛠️ fixed: change taken off the cash tender before storing (tips kept). Also: till close now uses the DB clock (a sale in the same second as the close was left out) |
+| D4 | 🔴 | Variant opening stock is written only to `product_variants.stock`; per-outlet rows aren't created → 2nd sale refused, on-hand/stock value show 0 | 🛠️ fixed: opening stock goes through the shared stock ledger (all three tables) |
+| D5 | 🔴 | Barcode scan (POS and stock count) doesn't look up variant barcodes | 🛠️ fixed: server + all 3 POS scan inputs; proven in the real POS screen |
 | D6 | 🔴 | Stock count auto-adjust zeroes every product not scanned | open, **needs owner decision** |
-| D7 | 🟠 | Stock-count scan creates a duplicate line per scan (`ON CONFLICT` never fires when `variant_id` is NULL) | open |
-| D8 | 🟠 | Receiving can exceed the ordered qty; GRN dialog pre-fills the full ordered qty on later deliveries | open |
-| D9 | 🟠 | Sales summary splits split-tender bills equally between methods | open |
-| D10 | 🟠 | Profit summary sums a bill's discount once per line; dashboard gross profit ignores bill discounts | open |
-| D11 | 🟠 | Purchase reports double-count ordered qty/value for POs with more than one delivery | open |
-| D12 | 🟡 | Payables report ignores supplier returns | open |
+| D7 | 🟠 | Stock-count scan creates a duplicate line per scan (`ON CONFLICT` never fires when `variant_id` is NULL) | 🛠️ fixed |
+| D8 | 🟠 | Receiving can exceed the ordered qty; GRN dialog pre-fills the full ordered qty on later deliveries | 🛠️ fixed: server refuses over-receipt; dialog pre-fills the outstanding qty. Also: the Shopify sync for a 2nd delivery is now keyed by GRN (was silently dropped, blocker 2f) |
+| D9 | 🟠 | Sales summary splits split-tender bills equally between methods | 🛠️ fixed: split by what was actually paid |
+| D10 | 🟠 | Profit summary sums a bill's discount once per line; dashboard gross profit ignores bill discounts | 🛠️ fixed (both) |
+| D11 | 🟠 | Purchase reports double-count ordered qty/value for POs with more than one delivery | 🛠️ fixed |
+| D12 | 🟡 | Payables report ignores supplier returns (and counted voided supplier payments as paid) | 🛠️ fixed: returns shown as credit lines; voided payments excluded |
 | D13 | 🟡 | Supplier payment only per delivery invoice, not on account | open, owner decision |
 | D14 | 🟡 | Retail setup seeds 5 sample products with stock | open, owner decision |
-| D15 | 🟡 | Margin reports off by default for retail | config: turn on for OTS |
+| D15 | 🟡 | Margin reports off by default for retail | config: turn on "Advanced Reports" for OTS |
+| D16 | 🟠 | A supplier invoice paid in two instalments stays "partial" forever (text + number concatenation in `routes/grn.js`) | 🛠️ fixed |
+| D17 | 🟡 | Profit reports (profit summary, dashboard) don't subtract returns: a returned item's profit still counts | open, owner decision: how does iPOS report it? |
+| D18 | 🟠 | After every completed sale, the POS offers to "Resume previous cart?", i.e. the cart just paid for. Clicking Resume re-rings it (double-sale trap) | 🛠️ fixed; proven in the real POS screen (fails before, passes after) |
+| D19 | 🟡 | Scanning a variant runs the modifier lookup with the variant id as a product id (harmless 403 today; pre-existing pattern shared with the variant picker) | open, low |
 
 ---
 
@@ -176,7 +184,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 |---|---|---|
 | Backend unit | **749 / 752 pass** (55/57 files) | 3 failures, none retail: worker-status test expects the marketplace-sync worker "running" (that worker is a known stub); 2 payment-gateway `isEnabled()` env tests |
 | Frontend unit | **201 / 201 pass** (25 files) | `npx vitest run` with no path also picks up 54 Playwright browser specs, which "fail" because Vitest can't run them. Not real failures. Run `npx vitest run tests/unit`. |
-| Backend integration | _running_ | |
+| Backend integration | **1,801 pass, 26 fail, 29 skipped** (155 of 202 files pass) | **33 files can't load at all** (30 import a deleted helper `tests/helpers/createTestApp`; 3 use Jest syntax). Those 33 include the dedicated retail tests: `purchase-orders`, `returns-exchange`, `shifts`, `shift-linkage`, `supplier-payables`, `reports_accuracy`, `inventory`, `promotions`. **So most of the retail core had no running test.** The 26 failures are the same 12 files already triaged in July as stale test fixtures (e.g. sales tests written before a sale needed an open till); none are new. |
 
 ---
 
@@ -186,5 +194,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 |---|---|---|---|
 | 2026-09-25 | Work on branch `onetoystore-pilot`, push only, no PR unless asked | repo convention | |
 | 2026-09-25 | Acceptance script runs against the **real** backend (`index.js`, multi-tenant mode) on local Postgres, with a fresh throwaway tenant each run, not against the test harness's re-implemented middleware | Claude | The test harness (`tests/helpers/createTestApp-pg.js`) re-implements auth/permissions, so it can't prove the real server works |
+| 2026-09-25 | Margin reports' cost = the cost recorded **on each sale line at the moment of sale** (now read from the DB, D2). The product's cost itself = **latest purchase price** | code as-is | iPOS may use weighted average; see open question |
+| _open_ | Stock count (D6): when a count is completed, should items that weren't scanned be (a) left alone, or (b) set to zero? Proposal: (a) by default, with an explicit "full count: zero everything not counted" tick box | **Owner** | A shelf-by-shelf count at 10k items needs (a); a full wall-to-wall count needs (b) |
 | _open_ | Offline product lookup: keep a catalogue copy in the browser so scanning works offline? | **Owner** | Needed for blocker 3; a new capability, so the owner decides |
 | _open_ | Cost method: latest purchase price (current) vs weighted average (iPOS?) | **Owner** | Changes margin reports |

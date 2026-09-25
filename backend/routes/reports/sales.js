@@ -177,14 +177,17 @@ module.exports = function (app, deps, helpers) {
              s.id, s.timestamp, s.total_amount AS revenue,
              COALESCE(s.tax_total, 0) AS tax_total,
              COALESCE(o.name,'\u2014') AS outlet_name,
-             string_agg(DISTINCT COALESCE(sp.payment_method, s.payment_method), ',') AS payment_methods
+             string_agg(DISTINCT COALESCE(sp.payment_method, s.payment_method), ',') AS payment_methods,
+             json_agg(json_build_object('method', sp.payment_method, 'amount', sp.amount))
+               FILTER (WHERE sp.sale_id IS NOT NULL) AS payment_lines,
+             s.payment_method AS header_method
       FROM sales s
       LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN employees e ON s.employee_id = e.id
       LEFT JOIN outlets o ON s.outlet_id = o.id
       LEFT JOIN sale_payments sp ON s.id = sp.sale_id
       WHERE ${text}
-      GROUP BY s.id, o.name, s.timestamp, s.total_amount, s.tax_total
+      GROUP BY s.id, o.name, s.timestamp, s.total_amount, s.tax_total, s.payment_method
       ORDER BY s.timestamp DESC`;
       const { rows } = await db.query(sql, values);
 
@@ -206,15 +209,21 @@ module.exports = function (app, deps, helpers) {
           daily_sales.push({ date: dateStr, total: Number(r.revenue), orders: 1 });
         }
 
-        // Payment methods
-        const methods = (r.payment_methods || "").split(",");
-        methods.forEach((m) => {
-          const method = m.trim();
-          if (method) {
-            payment_map[method] =
-              (payment_map[method] || 0) + Number(r.revenue) / methods.length;
+        // Payment methods: split each bill by what was actually paid in each
+        // method (was an equal split, so Rs 2,900 cash + 5,000 card showed as
+        // 3,950 each). Scaled to the bill total so the methods always add up to
+        // total_revenue, including older bills that stored cash change.
+        const lines = (r.payment_lines || []).filter((l) => l && l.method);
+        const paid = lines.reduce((a, l) => a + Number(l.amount || 0), 0);
+        if (paid > 0) {
+          for (const l of lines) {
+            payment_map[l.method] =
+              (payment_map[l.method] || 0) + (Number(r.revenue) * Number(l.amount || 0)) / paid;
           }
-        });
+        } else {
+          const method = String(r.header_method || (r.payment_methods || "").split(",")[0] || "").trim();
+          if (method) payment_map[method] = (payment_map[method] || 0) + Number(r.revenue);
+        }
 
         total_revenue += Number(r.revenue);
         total_tax += Number(r.tax_total || 0);
@@ -223,7 +232,7 @@ module.exports = function (app, deps, helpers) {
       const payment_methods = Object.keys(payment_map)
         .map((method) => ({
           method,
-          total: payment_map[method],
+          total: Math.round(payment_map[method] * 100) / 100,
         }))
         .sort((a, b) => b.total - a.total);
 
@@ -1404,24 +1413,29 @@ module.exports = function (app, deps, helpers) {
       try {
         const { where, params } = await buildReportFilterParts(req);
         const { text, values } = pgWhere(where, params);
+        // Lines are totalled per bill first: summing s.discount_amount across
+        // the sale_items join counted each bill's discount once per line.
         const sql = `
+        WITH per_sale AS (
+          SELECT s.id,
+                 COALESCE(s.discount_amount, 0) AS discount_amount,
+                 SUM(si.quantity * si.price_at_sale) AS gross,
+                 SUM(si.quantity * si.cost_price_at_sale) AS cogs
+          FROM sales s
+          JOIN sale_items si ON s.id = si.sale_id
+          JOIN products p ON si.product_id = p.id
+          ${text ? `WHERE ${text}` : ""}
+          GROUP BY s.id, s.discount_amount
+        )
         SELECT
-          COUNT(DISTINCT s.id) AS orders,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale), 0), 2) AS gross_sales,
-          ROUND(COALESCE(SUM(si.quantity * si.cost_price_at_sale), 0), 2) AS cogs,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0), 2) AS gross_profit,
-          ROUND(COALESCE(SUM(COALESCE(s.discount_amount, 0)), 0), 2) AS discount_amount,
+          COUNT(*) AS orders,
+          ROUND(COALESCE(SUM(gross), 0), 2) AS gross_sales,
+          ROUND(COALESCE(SUM(cogs), 0), 2) AS cogs,
+          ROUND(COALESCE(SUM(gross - cogs), 0), 2) AS gross_profit,
+          ROUND(COALESCE(SUM(discount_amount), 0), 2) AS discount_amount,
           ROUND(0::numeric, 2) AS promo_discount,
-          ROUND(
-            COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0)
-            - COALESCE(SUM(COALESCE(s.discount_amount, 0)), 0)
-            - 0,
-            2
-          ) AS net_profit
-        FROM sales s
-        JOIN sale_items si ON s.id = si.sale_id
-        JOIN products p ON si.product_id = p.id
-        ${text ? `WHERE ${text}` : ""}
+          ROUND(COALESCE(SUM(gross - cogs - discount_amount), 0), 2) AS net_profit
+        FROM per_sale
       `;
         const { rows } = await db.query(sql, values);
         const row = rows[0] || {};
