@@ -200,6 +200,7 @@ function CountingView({ countId, onBack }) {
   const [completing, setCompleting] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [autoAdjust, setAutoAdjust] = useState(false);
+  const [fullCount, setFullCount] = useState(false);
   const [completeSummary, setCompleteSummary] = useState(null);
   const [editingItemId, setEditingItemId] = useState(null);
   const [editQty, setEditQty] = useState("");
@@ -238,7 +239,9 @@ function CountingView({ countId, onBack }) {
       const scannedItem = data.item;
       // Update local state
       setItems((prev) => {
-        const idx = prev.findIndex((i) => i.product_id === scannedItem.product_id);
+        const idx = prev.findIndex(
+          (i) => i.product_id === scannedItem.product_id && (i.variant_id ?? null) === (scannedItem.variant_id ?? null)
+        );
         if (idx >= 0) {
           const updated = [...prev];
           updated[idx] = { ...updated[idx], counted_qty: scannedItem.counted_qty, last_scanned_at: scannedItem.last_scanned_at, variance: scannedItem.variance };
@@ -266,7 +269,7 @@ function CountingView({ countId, onBack }) {
     try {
       const data = await api.put(`/api/stock-counts/${countId}/items/${itemId}`, { counted_qty: qty });
       setItems((prev) =>
-        prev.map((i) => (i.id === itemId ? { ...i, counted_qty: data.item.counted_qty, variance: data.item.variance } : i))
+        prev.map((i) => (i.id === itemId ? { ...i, counted_qty: data.item.counted_qty, last_scanned_at: data.item.last_scanned_at, variance: data.item.variance } : i))
       );
     } catch (err) {
       console.error("Manual update failed:", err);
@@ -279,7 +282,7 @@ function CountingView({ countId, onBack }) {
     setCompleting(true);
     try {
       const data = await api.post(
-        `/api/stock-counts/${countId}/complete?auto_adjust=${autoAdjust}`
+        `/api/stock-counts/${countId}/complete?auto_adjust=${autoAdjust}&full_count=${autoAdjust && fullCount}`
       );
       setCompleteSummary(data.summary);
       setCount((prev) => prev ? { ...prev, status: "completed" } : prev);
@@ -307,13 +310,15 @@ function CountingView({ countId, onBack }) {
   };
 
   const isActive = count?.status === "in_progress";
-  const countedCount = items.filter((i) => i.counted_qty > 0).length;
+  // Counted = scanned or typed in (a line counted as 0 is still counted).
+  const isCounted = (i) => Boolean(i.last_scanned_at);
+  const countedCount = items.filter(isCounted).length;
 
   const filteredItems = useMemo(() => {
     let list = items;
-    if (filter === "counted") list = list.filter((i) => i.counted_qty > 0);
-    else if (filter === "uncounted") list = list.filter((i) => i.counted_qty === 0);
-    else if (filter === "variance") list = list.filter((i) => (i.counted_qty - i.system_qty) !== 0);
+    if (filter === "counted") list = list.filter(isCounted);
+    else if (filter === "uncounted") list = list.filter((i) => !isCounted(i));
+    else if (filter === "variance") list = list.filter((i) => isCounted(i) && (i.counted_qty - i.system_qty) !== 0);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -364,7 +369,11 @@ function CountingView({ countId, onBack }) {
             </div>
             {count.status === "completed" && (
               <p className="text-xs text-(--ui-text-muted) mt-3 text-center">
-                {autoAdjust ? "Stock adjustments were auto-created." : "No auto-adjustments were made."}
+                {!autoAdjust
+                  ? "No auto-adjustments were made."
+                  : fullCount
+                  ? "Full count: stock was set to the counted quantities, and everything not counted was set to 0."
+                  : `Stock was adjusted for the counted items only. ${completeSummary.items_not_counted} items not counted were left unchanged.`}
               </p>
             )}
           </SectionCard>
@@ -565,18 +574,22 @@ function CountingView({ countId, onBack }) {
                           )}
                         </td>
                         <td className="py-2 pr-4 text-center">
-                          <span
-                            className={`font-mono font-medium ${
-                              variance > 0
-                                ? "text-(--ui-success-fg)"
-                                : variance < 0
-                                ? "text-(--ui-danger-fg)"
-                                : "text-(--ui-text-muted)"
-                            }`}
-                          >
-                            {variance > 0 ? "+" : ""}
-                            {variance}
-                          </span>
+                          {isCounted(item) ? (
+                            <span
+                              className={`font-mono font-medium ${
+                                variance > 0
+                                  ? "text-(--ui-success-fg)"
+                                  : variance < 0
+                                  ? "text-(--ui-danger-fg)"
+                                  : "text-(--ui-text-muted)"
+                              }`}
+                            >
+                              {variance > 0 ? "+" : ""}
+                              {variance}
+                            </span>
+                          ) : (
+                            <span className="text-(--ui-text-muted)">—</span>
+                          )}
                         </td>
                         <td className="py-2 text-xs text-(--ui-text-muted)">
                           {item.last_scanned_at ? fmtUtcDateTime(item.last_scanned_at) : "—"}
@@ -602,7 +615,8 @@ function CountingView({ countId, onBack }) {
           {countedCount} of {items.length} products have been counted.
           {items.length - countedCount > 0 && (
             <span className="text-(--ui-warning-fg) font-medium">
-              {" "}{items.length - countedCount} products were not scanned (will show 0 counted).
+              {" "}{items.length - countedCount} products were not counted
+              {autoAdjust && fullCount ? " and will be set to 0." : " and will be left unchanged."}
             </span>
           )}
         </p>
@@ -615,6 +629,21 @@ function CountingView({ countId, onBack }) {
           />
           <span className="text-sm">
             Auto-adjust stock to match counted quantities
+          </span>
+        </label>
+        <label className={`flex items-start gap-2 mb-4 ml-6 ${autoAdjust ? "cursor-pointer" : "opacity-50"}`}>
+          <input
+            type="checkbox"
+            checked={autoAdjust && fullCount}
+            disabled={!autoAdjust}
+            onChange={(e) => setFullCount(e.target.checked)}
+            className="rounded mt-0.5"
+          />
+          <span className="text-sm">
+            Full count: set everything not counted to 0
+            <span className="block text-xs text-(--ui-text-muted)">
+              Only tick this if you counted the whole shop. Leave it off for a shelf-by-shelf count.
+            </span>
           </span>
         </label>
         <ModalFooter>

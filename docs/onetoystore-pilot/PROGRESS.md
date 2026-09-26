@@ -76,6 +76,8 @@ All three blockers are **real**. Blockers 1 and 2 are **worse** than the readine
 
 **After the first round of fixes (same day): 106 pass, 1 fails.** The one left is D6 (stock count wipes uncounted items), which waits on an owner decision. Every fix has a regression test in `backend/tests/integration/ots-retail-core.test.js` (22 tests), each shown to fail before its fix. The two POS-screen fixes (D5 variant scan, D18 resume prompt) were also proven in the real POS screen in a browser; screenshots are in `tools/onetoystore-pilot/out/` (not committed).
 
+**After D6 (2026-09-26): 107 pass, 0 fail.** First fully clean run. 26 regression tests.
+
 > The tables below are the **first-run** picture. For current status, go by the Defect list at the bottom.
 
 Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (test proves it) · ⬜ untested · 🟡 works, but differently from iPOS or needs a setting
@@ -161,7 +163,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D3 | 🔴 | Cash change booked as cash taken (tendered amount stored in `sale_payments`) → the till "expects" the change (false shortage); dashboard sales, payment mix and Z-report cash overstated | 🛠️ fixed: change taken off the cash tender before storing (tips kept). Also: till close now uses the DB clock (a sale in the same second as the close was left out) |
 | D4 | 🔴 | Variant opening stock is written only to `product_variants.stock`; per-outlet rows aren't created → 2nd sale refused, on-hand/stock value show 0 | 🛠️ fixed: opening stock goes through the shared stock ledger (all three tables) |
 | D5 | 🔴 | Barcode scan (POS and stock count) doesn't look up variant barcodes | 🛠️ fixed: server + all 3 POS scan inputs; proven in the real POS screen |
-| D6 | 🔴 | Stock count auto-adjust zeroes every product not scanned | open, **needs owner decision** |
+| D6 | 🔴 | Stock count auto-adjust zeroes every product not scanned | 🛠️ fixed: only scanned/typed-in lines are adjusted (a line counted as 0 still counts); `?full_count=true` / the "Full count" tick box zeroes the rest, including every variant with stock, moving stock on the variant rows so product and variant totals stay in step. Complete is claimed atomically (a double-click can't adjust twice). Screen: "counted" now means scanned or typed in, uncounted rows show "—" variance. Proven in the real screen (`out/stock-count-*.png`) |
 | D7 | 🟠 | Stock-count scan creates a duplicate line per scan (`ON CONFLICT` never fires when `variant_id` is NULL) | 🛠️ fixed |
 | D8 | 🟠 | Receiving can exceed the ordered qty; GRN dialog pre-fills the full ordered qty on later deliveries | 🛠️ fixed: server refuses over-receipt; dialog pre-fills the outstanding qty. Also: the Shopify sync for a 2nd delivery is now keyed by GRN (was silently dropped, blocker 2f) |
 | D9 | 🟠 | Sales summary splits split-tender bills equally between methods | 🛠️ fixed: split by what was actually paid |

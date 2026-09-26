@@ -417,7 +417,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
       let sql = `
         SELECT sc.*, o.name as outlet_name, e.name as started_by_name,
                ce.name as completed_by_name,
-               (SELECT COUNT(*) FROM stock_count_items sci WHERE sci.stock_count_id = sc.id AND sci.counted_qty > 0) as items_counted,
+               (SELECT COUNT(*) FROM stock_count_items sci WHERE sci.stock_count_id = sc.id AND sci.last_scanned_at IS NOT NULL) as items_counted,
                (SELECT COUNT(*) FROM stock_count_items sci WHERE sci.stock_count_id = sc.id) as total_items
         FROM stock_counts sc
         JOIN outlets o ON sc.outlet_id = o.id
@@ -599,9 +599,20 @@ module.exports = function registerInventoryRoutes(app, deps) {
     }
   });
 
-  // Complete count — finalize, calculate variances, optionally auto-adjust
+  // Complete count — finalize, calculate variances, optionally auto-adjust.
+  //
+  // A line is "counted" once it has been scanned or had a quantity typed in
+  // (last_scanned_at IS NOT NULL); a line counted as 0 is still counted. By
+  // default only counted lines are adjusted, so counting one shelf leaves the
+  // rest of the shop alone. ?full_count=true is the wall-to-wall count: every
+  // line not counted is taken as 0, including each variant with stock.
+  //
+  // A product with variants keeps its stock on the variant rows; its own
+  // (variant_id NULL) line is never adjusted directly, otherwise the product
+  // total and the variants would drift apart.
   app.post("/api/stock-counts/:id/complete", requirePerm("manage_inventory"), async (req, res) => {
     const autoAdjust = req.query.auto_adjust === "true";
+    const fullCount = req.query.full_count === "true";
     try {
       const { rows: [count] } = await db.query(
         "SELECT * FROM stock_counts WHERE id = $1", [req.params.id]
@@ -610,11 +621,30 @@ module.exports = function registerInventoryRoutes(app, deps) {
       if (count.status !== "in_progress") return res.status(400).json({ error: "Stock count is not in progress" });
 
       await db.transaction(async (client) => {
-        // Mark completed
-        await client.query(
-          `UPDATE stock_counts SET status = 'completed', completed_by = $1, completed_at = NOW() WHERE id = $2`,
+        // Claim the count atomically so two completes can't both adjust.
+        const { rowCount: claimed } = await client.query(
+          `UPDATE stock_counts SET status = 'completed', completed_by = $1, completed_at = NOW()
+            WHERE id = $2 AND status = 'in_progress'`,
           [req.employee?.id || null, req.params.id]
         );
+        if (!claimed) {
+          throw Object.assign(new Error("Stock count is not in progress"), { statusCode: 400 });
+        }
+
+        if (autoAdjust && fullCount) {
+          // Variants are only snapshotted when scanned; a full count must also
+          // zero the ones nobody scanned.
+          await client.query(`
+            INSERT INTO stock_count_items (stock_count_id, product_id, variant_id, system_qty, counted_qty)
+            SELECT $1, pv.product_id, vos.variant_id, vos.quantity, 0
+              FROM variant_outlet_stock vos
+              JOIN product_variants pv ON pv.id = vos.variant_id
+              JOIN products p ON p.id = pv.product_id AND p.deleted_at IS NULL
+             WHERE vos.outlet_id = $2 AND vos.quantity <> 0
+               AND NOT EXISTS (SELECT 1 FROM stock_count_items x
+                                WHERE x.stock_count_id = $1 AND x.variant_id = vos.variant_id)
+          `, [req.params.id, count.outlet_id]);
+        }
 
         if (autoAdjust) {
           // Get items with variance. WS1a: carry variant_id so a variant/batch
@@ -623,7 +653,10 @@ module.exports = function registerInventoryRoutes(app, deps) {
             SELECT sci.product_id, sci.variant_id, sci.system_qty, sci.counted_qty, (sci.counted_qty - sci.system_qty) as variance
             FROM stock_count_items sci
             WHERE sci.stock_count_id = $1 AND sci.counted_qty != sci.system_qty
-          `, [req.params.id]);
+              AND (sci.last_scanned_at IS NOT NULL OR $2::boolean)
+              AND NOT (sci.variant_id IS NULL
+                       AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = sci.product_id))
+          `, [req.params.id, fullCount]);
 
           for (const v of variances) {
             const variance = Number(v.variance);
@@ -631,7 +664,8 @@ module.exports = function registerInventoryRoutes(app, deps) {
             await client.query(
               `INSERT INTO stock_adjustments (product_id, variant_id, outlet_id, employee_id, quantity_change, reason)
                VALUES ($1, $2, $3, $4, $5, $6)`,
-              [v.product_id, v.variant_id || null, count.outlet_id, req.employee?.id || null, variance, `Stock count ${count.count_number}`]
+              [v.product_id, v.variant_id || null, count.outlet_id, req.employee?.id || null, variance,
+                `Stock count ${count.count_number}${fullCount ? " (full count)" : ""}`]
             );
             // WS1a: route the on-hand correction through the shared stock helper so
             // variant_outlet_stock + the product_variants rollup move in lockstep
@@ -674,22 +708,26 @@ module.exports = function registerInventoryRoutes(app, deps) {
         }
       });
 
-      // Return variance summary
+      // Return variance summary. Variance figures cover the lines the count
+      // decided on: counted lines, plus every line on a full count.
       const { rows: summary } = await db.query(`
+        WITH decided AS (
+          SELECT * FROM stock_count_items
+           WHERE stock_count_id = $1 AND (last_scanned_at IS NOT NULL OR $2::boolean)
+        )
         SELECT
-          COUNT(*) FILTER (WHERE counted_qty != system_qty)::int as items_with_variance,
-          COUNT(*) FILTER (WHERE counted_qty > system_qty)::int as items_over,
-          COUNT(*) FILTER (WHERE counted_qty < system_qty)::int as items_under,
-          COUNT(*) FILTER (WHERE counted_qty = 0 AND system_qty > 0)::int as items_not_counted,
-          COALESCE(SUM(counted_qty - system_qty) FILTER (WHERE counted_qty > system_qty), 0)::int as total_over,
-          COALESCE(SUM(system_qty - counted_qty) FILTER (WHERE counted_qty < system_qty), 0)::int as total_under,
-          COUNT(*)::int as total_items
-        FROM stock_count_items WHERE stock_count_id = $1
-      `, [req.params.id]);
+          (SELECT COUNT(*) FILTER (WHERE counted_qty != system_qty) FROM decided)::int as items_with_variance,
+          (SELECT COUNT(*) FILTER (WHERE counted_qty > system_qty) FROM decided)::int as items_over,
+          (SELECT COUNT(*) FILTER (WHERE counted_qty < system_qty) FROM decided)::int as items_under,
+          (SELECT COUNT(*) FROM stock_count_items WHERE stock_count_id = $1 AND last_scanned_at IS NULL)::int as items_not_counted,
+          (SELECT COALESCE(SUM(counted_qty - system_qty) FILTER (WHERE counted_qty > system_qty), 0) FROM decided)::int as total_over,
+          (SELECT COALESCE(SUM(system_qty - counted_qty) FILTER (WHERE counted_qty < system_qty), 0) FROM decided)::int as total_under,
+          (SELECT COUNT(*) FROM stock_count_items WHERE stock_count_id = $1)::int as total_items
+      `, [req.params.id, fullCount]);
 
-      res.json({ message: "Stock count completed", autoAdjusted: autoAdjust, summary: summary[0] });
+      res.json({ message: "Stock count completed", autoAdjusted: autoAdjust, fullCount, summary: summary[0] });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 

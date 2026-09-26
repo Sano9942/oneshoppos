@@ -347,3 +347,78 @@ describe("D16 — paying a supplier invoice in two instalments", () => {
     expect((await one("SELECT status FROM supplier_invoices WHERE id = $1", [inv.id])).status).toBe("paid");
   });
 });
+
+// ─── D6 ─────────────────────────────────────────────────────────────────────
+// Last in the file on purpose: the full-count case zeroes the shop.
+describe("D6 — completing a stock count of one shelf", () => {
+  const stockOf = async (pid) => num((await one("SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = 1", [pid]))?.quantity ?? 0);
+  const variantStockOf = async (vid) => num((await one("SELECT quantity FROM variant_outlet_stock WHERE variant_id = $1 AND outlet_id = 1", [vid]))?.quantity ?? 0);
+  const setStock = (pid, q) => db.query(
+    `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, $2)
+     ON CONFLICT (product_id, outlet_id) DO UPDATE SET quantity = EXCLUDED.quantity`, [pid, q]);
+  const startCount = async () => (await admin().post("/api/stock-counts").send({ outlet_id: 1 })).body.stockCount.id;
+
+  let variantProductId, variantId;
+  beforeAll(async () => {
+    await setStock(4, 7);
+    await setStock(5, 9);
+    await setStock(1, 6);
+    const res = await admin().post("/api/products").send({
+      name: "Count Car", sku: "CC-PARENT", price: 450, cost_price: 260, has_variants: true, outlet_id: 1,
+      variants: [{ sku: "CC-RED", barcode: "CC-RED-BC", price: 450, cost_price: 260, initial_stock: 4 }],
+    });
+    expect(res.status).toBe(200);
+    variantProductId = res.body.id;
+    variantId = (await one("SELECT id FROM product_variants WHERE product_id = $1", [variantProductId])).id;
+  });
+
+  it("a shelf count only corrects the items that were scanned; the rest keep their stock", async () => {
+    const id = await startCount();
+    for (let i = 0; i < 2; i += 1) {
+      expect((await admin().post(`/api/stock-counts/${id}/scan`).send({ barcode: "PROD-004" })).status).toBe(200);
+    }
+    const done = await admin().post(`/api/stock-counts/${id}/complete?auto_adjust=true`).send({});
+    expect(done.status).toBe(200);
+    expect(await stockOf(4)).toBe(2);
+    expect(await stockOf(5)).toBe(9);
+    expect(await variantStockOf(variantId)).toBe(4);
+    expect(await stockOf(variantProductId)).toBe(4);
+    expect(done.body.summary.items_with_variance).toBe(1);
+    expect(done.body.summary.items_not_counted).toBeGreaterThan(0);
+  });
+
+  it("an item deliberately counted as 0 is set to 0", async () => {
+    const id = await startCount();
+    const line = await one("SELECT id FROM stock_count_items WHERE stock_count_id = $1 AND product_id = 5 AND variant_id IS NULL", [id]);
+    expect((await admin().put(`/api/stock-counts/${id}/items/${line.id}`).send({ counted_qty: 0 })).status).toBe(200);
+    expect((await admin().post(`/api/stock-counts/${id}/complete?auto_adjust=true`).send({})).status).toBe(200);
+    expect(await stockOf(5)).toBe(0);
+    expect(await stockOf(1)).toBe(6);
+  });
+
+  it("completing twice does not adjust twice", async () => {
+    await setStock(4, 7);
+    const id = await startCount();
+    await admin().post(`/api/stock-counts/${id}/scan`).send({ barcode: "PROD-004" });
+    const [a, b] = await Promise.all([
+      admin().post(`/api/stock-counts/${id}/complete?auto_adjust=true`).send({}),
+      admin().post(`/api/stock-counts/${id}/complete?auto_adjust=true`).send({}),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 400]);
+    expect(await stockOf(4)).toBe(1);
+  });
+
+  it("a full count zeroes everything not counted, including each variant, keeping variant and product totals in step", async () => {
+    await setStock(1, 6);
+    const id = await startCount();
+    await admin().post(`/api/stock-counts/${id}/scan`).send({ barcode: "PROD-004" });
+    const done = await admin().post(`/api/stock-counts/${id}/complete?auto_adjust=true&full_count=true`).send({});
+    expect(done.status).toBe(200);
+    expect(done.body.fullCount).toBe(true);
+    expect(await stockOf(4)).toBe(1);
+    expect(await stockOf(1)).toBe(0);
+    expect(await variantStockOf(variantId)).toBe(0);
+    expect(await stockOf(variantProductId)).toBe(0);
+    expect(num((await one("SELECT stock FROM product_variants WHERE id = $1", [variantId])).stock)).toBe(0);
+  });
+});
