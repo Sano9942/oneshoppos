@@ -5,7 +5,7 @@
 import "fake-indexeddb/auto";
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, renderHook, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, renderHook, act, within } from "@testing-library/react";
 
 const { apiState, pos } = vi.hoisted(() => ({
   apiState: { raw: vi.fn(), get: vi.fn(), post: vi.fn() },
@@ -110,6 +110,25 @@ describe("variant picker (POSVariantMatrixModal)", () => {
     fireEvent.click(cell);
     expect(pos.addToCart).toHaveBeenCalledTimes(1);
     expect(pos.addToCart.mock.calls[0][0]).toMatchObject({ id: 70, variant_id: 70, stock_unknown: true });
+  });
+});
+
+describe("variant picker with SKU-only variants (D24)", () => {
+  it("lists each variant by SKU so the cashier can pick the right one", async () => {
+    apiState.get.mockImplementation(async (path) => {
+      if (path === "/api/products/25") return { id: 25, name: "Doll Dress-Up Set", price: "2400.00" };
+      if (path.startsWith("/api/products/25/variants")) return { variants: [
+        { id: 4, product_id: 25, sku: "DRESS-PINK", price: "2400.00", stock_at_outlet: 3, options: [] },
+        { id: 5, product_id: 25, sku: "DRESS-BLUE", price: "2400.00", stock_at_outlet: 2, options: [] },
+      ] };
+      throw new TypeError("Failed to fetch");
+    });
+    pos.pendingVariantProductId = 25;
+    render(<POSVariantMatrixModal />);
+    expect(await screen.findByText("DRESS-PINK")).toBeTruthy();
+    fireEvent.click(within(screen.getByText("DRESS-BLUE").closest("tr")).getByRole("button"));
+    expect(pos.addToCart).toHaveBeenCalledTimes(1);
+    expect(pos.addToCart.mock.calls[0][0]).toMatchObject({ id: 5, variant_id: 5, name: "Doll Dress-Up Set (DRESS-BLUE)" });
   });
 });
 

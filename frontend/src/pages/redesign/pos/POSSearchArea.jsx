@@ -29,7 +29,25 @@ export default function POSSearchArea() {
     addToCart,
     money,
     posFlags,
+    setPendingVariantProductId,
+    showNotice,
   } = usePOS();
+
+  // D24 (One Toy Store pilot): a product with variants opens the variant
+  // picker, like a scan does. Adding the parent booked the sale against the
+  // parent product and moved no variant's stock.
+  const chooseResult = (p) => {
+    if (!p.has_variants) {
+      addToCart(p);
+      return;
+    }
+    setShowResults(false);
+    if (posFlags?.phase2g_variant_picker) {
+      setPendingVariantProductId(p.id);
+    } else {
+      showNotice?.(`"${p.name}" has variants: scan the variant's own barcode or search its SKU`);
+    }
+  };
 
   return (
     <div className="mb-3 space-y-2">
@@ -83,7 +101,7 @@ export default function POSSearchArea() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && results.length > 0) {
               e.preventDefault();
-              addToCart(results[0]);
+              chooseResult(results[0]);
             }
           }}
           placeholder={`Search ${productsWord} by name, barcode, SKU… (F2)`}
@@ -106,7 +124,7 @@ export default function POSSearchArea() {
                 return (
                   <div
                     key={p.id}
-                    onClick={() => { if (!soldOut) addToCart(p); }}
+                    onClick={() => { if (!soldOut) chooseResult(p); }}
                     className={`flex items-center gap-3 px-3 py-1.5 border-b border-(--ui-border) last:border-0 transition text-xs ${
                       soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-(--ui-muted-surface) cursor-pointer"
                     }`}>
@@ -129,7 +147,7 @@ export default function POSSearchArea() {
                 return (
                   <div
                     key={p.id}
-                    onClick={() => { if (!soldOut) addToCart(p); }}
+                    onClick={() => { if (!soldOut) chooseResult(p); }}
                     className={`flex justify-between items-center px-4 py-2.5 border-b border-(--ui-border) last:border-0 transition ${
                       soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-(--ui-muted-surface) cursor-pointer"
                     }`}>

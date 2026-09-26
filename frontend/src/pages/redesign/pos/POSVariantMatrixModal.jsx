@@ -83,7 +83,14 @@ export default function POSVariantMatrixModal() {
     }
   }, [axis3, axisValues, axis2Filter]);
 
+  // D24: variants with no options (SKU-only, e.g. one car of a Hot Wheels
+  // assortment) collapsed into a single "—" cell, so only the first could be
+  // picked. With no option axes, each variant is its own row, keyed by SKU.
+  const skuOnly = axes.length === 0 && variants.length > 0;
+  const skuKey = (v) => v.sku || `#${v.id}`;
+
   const findVariant = (rowVal, colVal) => {
+    if (skuOnly) return variants.find((v) => skuKey(v) === rowVal);
     return variants.find((v) => {
       const opts = v.options || [];
       const r = opts.find((o) => o.attribute_name === axisRow)?.option_value;
@@ -98,7 +105,7 @@ export default function POSVariantMatrixModal() {
     });
   };
 
-  const rowValues = axisRow ? axisValues[axisRow] || [] : ["—"];
+  const rowValues = skuOnly ? variants.map(skuKey) : axisRow ? axisValues[axisRow] || [] : ["—"];
   const colValues = axisCol ? axisValues[axisCol] || [] : ["—"];
 
   const commitVariant = (variant) => {
@@ -106,7 +113,7 @@ export default function POSVariantMatrixModal() {
     const variantLabel = (variant.options || [])
       .map((o) => o.option_value)
       .filter(Boolean)
-      .join(" / ");
+      .join(" / ") || variant.sku || "";
     const cartLine = variantCartLine(
       product ?? { id: pendingVariantProductId },
       variant,
@@ -232,7 +239,7 @@ export default function POSVariantMatrixModal() {
                 <thead>
                   <tr>
                     <th className="text-[10px] uppercase tracking-wider text-(--ui-text-muted) text-left px-2 py-1 font-bold">
-                      {axisRow || ""}
+                      {skuOnly ? "SKU" : axisRow || ""}
                     </th>
                     {axisCol ? (
                       colValues.map((cv) => (
