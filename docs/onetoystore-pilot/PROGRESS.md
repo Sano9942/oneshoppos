@@ -6,6 +6,26 @@
 
 **Branch:** `onetoystore-pilot`
 
+## ▶ Where we are / next (updated 2026-09-26)
+
+**Phase B order** (agreed with owner 2026-09-26):
+1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
+2. ✅ Profit takes returns off (D17), plus D20–D23 found on the way — `e3c3503d`, `42992dae`, `e143ee5b`
+3. ⏭ **NEXT: online orders reduce shop stock (blocker 1, findings 1a–1f below).** Build and test locally; Shopify-facing parts get tested on a dev store later (owner: "later")
+4. "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, findings 2a–2f)
+5. Offline catalogue copy in the browser so scanning works offline (blocker 3; owner said yes)
+6. Suggested new selling price when a delivery arrives at a different cost (cost-plus margin per category/brand, nearest Rs 50, owner confirms each). Needs the margin % per category/brand from the owner
+7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
+
+**Current proof:** shop-day **112 pass, 0 fail**; `ots-retail-core.test.js` 37 tests. Everything committed on `onetoystore-pilot`, not pushed.
+
+**How to run things (local only):**
+- Backend: start via the `backend` launch config (or `node backend/index.js`); banner must say LOCAL DB. Restart it after backend edits (no hot reload).
+- Shop day: `OTS_API_BASE=http://127.0.0.1:5000 node tools/onetoystore-pilot/shop-day.mjs --dump` — use 127.0.0.1, `localhost` fails from Node here (IPv6). Log into the printed `otsacc_*` shop in the UI as **Owner / 4321**.
+- Regression file: from `backend/`, `npx vitest run tests/integration/ots-retail-core.test.js`.
+- Screens: the in-app browser pane has a 0×0 viewport here; use the Playwright MCP.
+- Files here are CRLF: edits via scripts must keep CRLF (check `git diff --stat` stays small).
+
 ## Ground rules
 
 1. Never connect SanoPOS to `one-toy-store-dev.myshopify.com`. **That is the LIVE store** (onetoystore.com), despite the name. All Shopify testing happens on a separate development store the owner provides.
@@ -21,8 +41,8 @@
 
 | Phase | What | Status |
 |---|---|---|
-| **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | 🟡 in progress |
-| **B** | Fix the 3 blockers: fulfilment trigger, absolute initial alignment + drift check, offline queue proof | ⏳ |
+| **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
+| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–2 done |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ⏳ needs dev store from owner |
 | **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
