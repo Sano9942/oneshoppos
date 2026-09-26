@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { IS_MULTI_TENANT, API_BASE as API } from "../config";
+import { saveLastKnown, readLastKnown } from "../utils/lastKnown";
 
 const CurrencyContext = createContext({
   symbol: "$",
@@ -17,6 +18,11 @@ export function CurrencyProvider({ children }) {
   });
 
   const load = useCallback(async () => {
+    const apply = (data) => setCurrency({
+      symbol: data.symbol || "$",
+      code: data.code || "USD",
+      denominations: Array.isArray(data.denominations) ? data.denominations : [100, 50, 20, 10, 5, 1],
+    });
     try {
       let url = `${API}/api/company-profile/currency`;
       if (IS_MULTI_TENANT) {
@@ -28,14 +34,14 @@ export function CurrencyProvider({ children }) {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setCurrency({
-          symbol: data.symbol || "$",
-          code: data.code || "USD",
-          denominations: Array.isArray(data.denominations) ? data.denominations : [100, 50, 20, 10, 5, 1],
-        });
+        apply(data);
+        saveLastKnown("currency", data);
       }
     } catch {
-      // Silently use defaults on failure
+      // Offline: the shop's currency last seen online (One Toy Store blocker
+      // 3h — a reload during an outage showed "$"); else the defaults.
+      const saved = readLastKnown("currency");
+      if (saved) apply(saved.value);
     }
   }, []);
 

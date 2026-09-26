@@ -6,6 +6,7 @@ import { decodeEmbeddedBarcode } from "../../../utils/embeddedBarcode";
 import { useAuth } from "../../../auth/AuthProvider";
 import { api } from "../../../api";
 import { variantCartLine } from "./variantCartLine";
+import { scanProduct, listVariants } from "./offlineLookup";
 
 // V01 P2 — age-restricted attest prompt. Cashier confirms the customer meets
 // the minimum age before an age_restricted product is rung up. Lightweight
@@ -79,29 +80,17 @@ export default function POSOmniInput() {
               : `Scale item — ${preview.weight} kg`,
           );
         }
-        const res = await api.raw(
-          `/api/products/scan/${encodeURIComponent(parsed.value)}`,
-        );
-        if (!res.ok) {
+        // Server first; the counter's offline catalogue copy when the server
+        // can't be reached (One Toy Store blocker 3a).
+        const data = await scanProduct(parsed.value);
+        if (!data.found) {
           // Surface the backend's message (e.g. "Unmapped scale item — no
           // product for sku 12345") instead of a generic miss, so a mis-mapped
           // scale PLU is fixable rather than a silent zero-price line.
-          let msg = `No product for ${parsed.value}`;
-          try {
-            const body = await res.json();
-            if (body?.error) msg = body.error;
-          } catch {
-            /* non-JSON body */
-          }
-          showNotice?.(msg);
+          showNotice?.(data.error || `No product for ${parsed.value}`);
           return;
         }
-        const data = await res.json();
-        const product = data?.product;
-        if (!product) {
-          showNotice?.(`No product for ${parsed.value}`);
-          return;
-        }
+        const product = data.product;
         // V01 P2 — age-restricted attest gate (tobacco/alcohol). Cashier must
         // confirm before the item is added.
         if (product.age_restricted && !confirmAgeRestricted(product)) {
@@ -119,13 +108,7 @@ export default function POSOmniInput() {
           addToCart(variantCartLine(product, data.variant, data.variant.sku));
           return;
         }
-        let variants = [];
-        try {
-          const v = await api.get(`/api/products/${product.id}/variants`);
-          variants = Array.isArray(v?.variants) ? v.variants : [];
-        } catch {
-          variants = [];
-        }
+        const variants = await listVariants(product.id);
         if (variants.length > 0) {
           setPendingVariantProductId(product.id);
           return;

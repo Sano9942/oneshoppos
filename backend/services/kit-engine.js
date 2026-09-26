@@ -112,9 +112,12 @@ function insufficient({ productId, variantId, available, requested }) {
  * in stable lock order. Does NOT write — call decrementComponents() after all
  * reserve passes for a multi-line sale so every row is locked before any write.
  * Throws on shortfall (code insufficient_stock) or empty kit (code empty_kit).
+ * onShortfall (optional): called with the insufficient_stock error instead of
+ * throwing it, and the component is still decremented (offline sale replays,
+ * which are booked past stock — One Toy Store blocker 3e).
  * Returns [{ component_product_id, component_variant_id, needed, useVariantOutlet }].
  */
-async function reserveComponents(client, { productId, outletId, saleQty, components }) {
+async function reserveComponents(client, { productId, outletId, saleQty, components, onShortfall = null }) {
   const comps = components || (await loadComponents(client, productId));
   if (!comps.length) {
     throw Object.assign(
@@ -149,12 +152,14 @@ async function reserveComponents(client, { productId, outletId, saleQty, compone
         useVariantOutlet = false;
       }
       if (available < needed) {
-        throw insufficient({
+        const err = insufficient({
           productId: comp.component_product_id,
           variantId: comp.component_variant_id,
           available,
           requested: needed,
         });
+        if (onShortfall) onShortfall(err);
+        else throw err;
       }
       decrements.push({ ...comp, needed, useVariantOutlet });
     } else {
@@ -165,11 +170,13 @@ async function reserveComponents(client, { productId, outletId, saleQty, compone
       );
       const available = Number(row?.available ?? 0);
       if (available < needed) {
-        throw insufficient({
+        const err = insufficient({
           productId: comp.component_product_id,
           available,
           requested: needed,
         });
+        if (onShortfall) onShortfall(err);
+        else throw err;
       }
       decrements.push({ ...comp, needed, useVariantOutlet: false });
     }

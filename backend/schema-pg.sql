@@ -651,7 +651,11 @@ CREATE TABLE IF NOT EXISTS sales (
   -- toggle state at sale time (B2B override).
   subtotal NUMERIC(12,2),
   tax_total NUMERIC(12,2),
-  tax_inclusive BOOLEAN
+  tax_inclusive BOOLEAN,
+  -- v140 (One Toy Store blocker 3): set on sales rung up offline and synced
+  -- later — when it was really rung up, and the items sold past stock.
+  offline_sold_at TIMESTAMPTZ,
+  offline_past_stock JSONB
 );
 -- v88 (Tier 0.1 wholesale): added in a separate ALTER below the
 -- customer_invoices CREATE TABLE so the FK reference resolves on a

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Hash, Delete, X } from "lucide-react";
 import { usePOS } from "./POSContext";
-import { api } from "../../../api";
 import { variantCartLine } from "./variantCartLine";
+import { scanProduct, listVariants } from "./offlineLookup";
 
 /**
  * POSPluPad — grocery/butcher/sweet PLU rapid-entry pad (V01 P1).
@@ -35,16 +35,10 @@ export default function POSPluPad() {
     if (!value || busy) return;
     setBusy(true);
     try {
-      const res = await api.raw(`/api/products/scan/${encodeURIComponent(value)}`);
-      if (!res.ok) {
-        let msg = `No product for PLU ${value}`;
-        try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* noop */ }
-        showNotice?.(msg);
-        return;
-      }
-      const data = await res.json();
-      const product = data?.product;
-      if (!product) { showNotice?.(`No product for PLU ${value}`); return; }
+      // Server first; the offline catalogue copy when it can't be reached.
+      const data = await scanProduct(value);
+      if (!data.found) { showNotice?.(data.error || `No product for PLU ${value}`); return; }
+      const product = data.product;
       if (product.age_restricted &&
         typeof window !== "undefined" && typeof window.confirm === "function" &&
         !window.confirm(`"${product.name || "This item"}" is age-restricted.\nConfirm the customer meets the minimum age?`)) {
@@ -57,11 +51,7 @@ export default function POSPluPad() {
         setCode("");
         return;
       }
-      let variants = [];
-      try {
-        const v = await api.get(`/api/products/${product.id}/variants`);
-        variants = Array.isArray(v?.variants) ? v.variants : [];
-      } catch { variants = []; }
+      const variants = await listVariants(product.id);
       if (variants.length > 0) { setPendingVariantProductId(product.id); setCode(""); return; }
       if (product.serial_required) {
         setPendingSerialContext({ product_id: product.id, variant_id: null, quantity: 1 });

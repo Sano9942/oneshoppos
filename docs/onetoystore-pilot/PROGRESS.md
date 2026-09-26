@@ -6,18 +6,18 @@
 
 **Branch:** `onetoystore-pilot`
 
-## ▶ Where we are / next (updated 2026-09-26)
+## ▶ Where we are / next (updated 2026-09-27)
 
 **Phase B order** (agreed with owner 2026-09-26):
 1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
 2. ✅ Profit takes returns off (D17), plus D20–D23 found on the way — `e3c3503d`, `42992dae`, `e143ee5b`
 3. ✅ Online orders reduce shop stock (blocker 1, 1a–1f) — `f92533b5`. Proven locally in tests and on the real backend with a signed webhook and no login. **Still to prove on the Shopify dev store** (Phase C): real Shopify payloads, and registering the 3 webhooks
 4. ✅ "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, 2a–2h). Found on the way: **the everyday sync was never switched on** (2h), so no till sale ever reached Shopify. Proven locally against a fake Shopify in tests. **Still to prove on the Shopify dev store** (Phase C): the exact field name Shopify's API version wants for the set (see 2a), and a real count set
-5. ⏭ **NEXT: offline catalogue copy in the browser so scanning works offline (blocker 3; owner said yes)**
-6. Suggested new selling price when a delivery arrives at a different cost (cost-plus margin per category/brand, nearest Rs 50, owner confirms each). Needs the margin % per category/brand from the owner
+5. ✅ Offline counter (blocker 3, 3a–3j): catalogue copy in the browser, scan/search/variants offline, offline reload keeps selling, queued sales land at their own time and till and are accepted past stock. Proven in tests and in a real browser on a production build (see Blocker 3). **Still to prove in the shop** (Phase E): the real counter PC, scanner and router, with the internet unplugged
+6. ⏭ **NEXT:** Suggested new selling price when a delivery arrives at a different cost (cost-plus margin per category/brand, nearest Rs 50, owner confirms each). Needs the margin % per category/brand from the owner
 7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
 
-**Current proof:** shop-day **112 pass, 0 fail** (re-run after blocker 2); `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**. Everything committed on `onetoystore-pilot`, not pushed.
+**Current proof:** shop-day **112 pass, 0 fail** (re-run after blocker 2); `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
 
 **Shopify access on the owner's machine (checked 2026-09-26):** the Claude desktop Shopify connector and the Shopify CLI (3.91.1, theme login for `one-toy-store-dev.myshopify.com`) both point at the **LIVE** store. Neither is a test store. Don't use them for Phase C testing.
 
@@ -27,6 +27,7 @@
 - Regression file: from `backend/`, `npx vitest run tests/integration/ots-retail-core.test.js`.
 - Online-order webhook proof (after a shop-day run): `node tools/onetoystore-pilot/online-orders.cjs <otsacc_* tenant>`. Posts signed Shopify order webhooks with no login to the real backend and checks shop stock. Fake shop domain, never calls Shopify.
 - Screens: the in-app browser pane has a 0×0 viewport here; use the Playwright MCP.
+- Offline proof needs a **production build** (the service worker only registers in production): `VITE_API_BASE=http://localhost:5000 npx vite build --outDir <scratch>/dist`, then `npx vite preview --outDir <scratch>/dist --port 5173 --strictPort` (5173 because of the local CORS origin). In Playwright: `context.route('http://localhost:5000/**', r => r.abort())` = internet down with Wi-Fi up; `context.setOffline(true)` = browser fully offline. Run `node backend/migrate-pg.js` first after a new migration.
 - Files here are CRLF: edits via scripts must keep CRLF (check `git diff --stat` stays small).
 
 ## Ground rules
@@ -45,7 +46,7 @@
 | Phase | What | Status |
 |---|---|---|
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
-| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–4 done |
+| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–5 done (all 3 blockers) |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ⏳ needs dev store from owner |
 | **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
@@ -130,6 +131,50 @@ Screen checked in the browser (local shop): new button with a confirm box, plain
 | 3c | Queued sales carry an `idempotency_key`, and there is a unique DB index on `sales.idempotency_key`, so a duplicate replay should be rejected (to be proven). The duplicate check runs *before* the transaction, so the unique index is the real guard. | `routes/sales.js:1694-1704`; `schema-pg.sql:2032` |
 
 **Plain English:** the offline safety net exists but only catches the last step. For One Toy Store we need the POS to be able to **find products while offline**, which means keeping a copy of the catalogue (~10k items) in the browser. That is a design decision for the owner (see Decisions log).
+
+**Checked against source 2026-09-26, before building:**
+
+| # | Finding | Evidence |
+|---|---|---|
+| 3a | Confirmed, and wider: **every** way into the cart asked the server (hand scanner, scan box, PLU pad, typed search, variant picker). No endpoint returned the whole catalogue | `POSContext.jsx` `handleBarcodeScanned`, `POSOmniInput.jsx`, `POSPluPad.jsx`, `useCart.js` `triggerSearch`, `POSVariantMatrixModal.jsx` |
+| 3b | **Wrong as written.** An offline reload **signed the cashier out**: boot re-reads the role's permissions, the fetch throws, the catch clears the session, and signing in needs the server | `AuthProvider.jsx` boot catch → `clearSession()` |
+| 3b′ | The service worker saved the app page once, at install, and never again. After a few deploys the offline page pointed at code files never saved. Its fallback also tested a promise for truthiness, so it never fell through | `frontend/public/sw.js` |
+| 3c | Holds: pre-check + unique index, racing duplicate → 409 `duplicate`, which the queue treats as synced | `routes/sales.js` |
+| 3d | Queued sales replayed only on the browser's `online` event. With the shop Wi-Fi up and the internet down the browser never goes "offline", so sales sat until someone pressed Sync | `useOfflineQueue.js` |
+| 3e | A replay was refused when SanoPOS's stock was too low (`insufficient_stock`), leaving a sale whose money was already taken stuck as "failed". The "Oversell anyway" button is wired to nothing | `routes/sales.js` stock gate; `POSInsufficientStockModal.jsx` |
+| 3f | A replayed sale got the **replay** time and whatever till was open then: a 21:50 bill synced next morning landed in the next day and the next till | `routes/sales.js` `INSERT INTO sales` (timestamp default NOW(), open till) |
+| 3g | The queue refused the 51st bill (`MAX_QUEUED = 50`) | `utils/offlineQueue.js` |
+
+**Found while fixing:**
+
+| # | Finding |
+|---|---|
+| 3h | After an offline reload the POS still couldn't sell: the opening gate couldn't load branches / till / clock-in ("Failed to load POS setup data."), the POS feature flags (which switch on the scan box) weren't loaded, and money showed in "$" |
+| 3i | A sync network failure marked the sale **failed**, and nothing retries failed sales automatically. A sale left **"syncing"** by a page reload mid-request was never retried either (seen live in the browser test) |
+| 3j | The catalogue's ETag can't be read by the page (the API is on another origin), so every refresh would re-download the whole catalogue; and the browser's own HTTP cache replayed an old body under the same ETag |
+
+**Fixed 2026-09-27 (Phase B step 5), locally:**
+
+| # | What changed | Proof |
+|---|---|---|
+| 3a | New `GET /api/products/catalogue`: every live product and variant with barcode, SKU, PLU, shelf price, tax and variant options; **no cost, no stock**. The POS keeps it in IndexedDB, one copy per shop (`utils/offlineCatalogue.js`), refreshed when the POS opens, every 10 min and when the browser comes back online; an unchanged catalogue answers 304 (`?version=`, 3j). Every input asks the server first and falls back to the copy only when the server can't be reached: browser offline, request fails, 502/503/504, or no answer in 4 s (`offlineLookup.js`). A real answer (404 etc.) is never overridden. Offline items carry "stock unknown": never called out of stock; the variant picker shows "?" and lets the cashier pick | `ots-offline.test.js` 3a (3); `offline-catalogue`, `offline-lookup`, `use-offline-catalogue`, `pos-offline-inputs` (all 8 input tests fail on the old code), `pos-context-offline` |
+| 3b | A network failure at boot keeps the saved session and its permissions; a real refusal (401) still signs out | `auth-offline-boot` |
+| 3b′ | Every successful page load saves the page as the offline copy | `sw-offline-shell` |
+| 3d, 3i | While sales wait, the queue retries every 60 s; a network failure or 502/503/504 leaves the sale **waiting** (not failed) and stops that round; "syncing" sales found when the page opens go back to waiting. A real refusal (400/500) still marks it failed for a manager | `use-offline-queue-ots` |
+| 3e | An **offline replay** (`idempotency_key` + `offline_sold_at`) is booked past stock: stock goes negative (a missing stock row is created negative), kits too. The sale stores `offline_past_stock`; the reply lists the items; the POS shows "Sold offline past stock: recount these" with sold vs had, until dismissed. Live sales keep the stock check | `ots-offline.test.js` 3e (4) |
+| 3f | The queue stamps `offline_sold_at` when the bill is rung; checkout sends its till (`shift_id`). The server books the sale **at that time** in that till, but only if the time falls inside that till's open–close window, otherwise in the till open at that time. Future times are clamped to now. The clock-in check is skipped for replays. A closed till is named in the reply and the POS panel. Migration **v140**: `sales.offline_sold_at`, `sales.offline_past_stock` | `ots-offline.test.js` 3f (6) |
+| 3g | Queue cap 500 bills (counted through the index, not by reading every row) | `use-offline-queue-ots` |
+| 3h | The POS remembers, per shop, the last-known currency, branches, POS flags and (per branch + cashier) the till and clock-in (`utils/lastKnown.js`), and uses them only when the server can't be reached, with the notice "Offline: using the till and clock-in saved at HH:MM" | `pos-offline-reload` (4), `pos-context-offline` |
+| — | Owner decisions: Lock greyed out offline ("Lock needs the internet"; also refused when the server doesn't answer), the lock screen says it unlocks when the internet is back; automatic discounts off offline with a one-time notice | `pos-offline-screens`, `pos-context-offline`, `pos-offline-inputs` |
+
+**Real browser, production build, local backend (2026-09-27):**
+1. Online: catalogue saved (25 products, 5 variants); next refresh 304.
+2. Wi-Fi up, internet down (API blocked, browser still "online"): scanned a plain item and a single Hot Wheels car by its own barcode, searched "monopoly", took cash → queued with its time and till #2.
+3. Browser fully offline, **page reloaded**: still signed in, no opening gate, prices in Rs, scan box present, Lock greyed out; scanned + took cash → queued.
+4. Back online: both queued sales synced (both had been left "syncing" by reloads, 3i); in the database each is booked **once**, `timestamp` = `offline_sold_at` = the moment it was rung up, till #2, cash matches.
+5. Matchbox Car stock set to 0, sold 2 offline, synced: stock −2, panel "Matchbox Car: sold 2, SanoPOS had 0". Screens: `out/offline-sale-queued.png`, `out/offline-reload-sale.png`, `out/offline-recount-report.png`.
+
+**Not covered / to do in the shop (Phase E):** the real counter PC, scanner and router with the internet unplugged. The first visit to the POS must happen online (it saves the app, the catalogue and the till state then). Receipts printed offline show "Invoice: PENDING" (the number is given when the sale syncs). Offline **returns** were already queued before this work and are unchanged (no past-stock or time handling). Signing out offline still works, but signing back in needs the internet.
 
 ---
 
@@ -251,6 +296,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D21 | 🟡 | Profit **by product** and **by outlet** still count sales only (returns not subtracted per product/outlet) | 🛠️ fixed: both join the shared returned-lines CTE (`returnLinesCte` in `services/returns-profit.js`); new `returns_value` / `returns_profit` / `net_profit` (+ `net_margin_pct` per product); a product only *returned* in the period still gets a row; default sort is net profit. Per-outlet net profit also takes off that outlet's bill discounts, so it equals the summary. Panel shows after-returns figures and exports them |
 | D22 | 🔴 | Dead stock: "value tied Rs 0" | 🛠️ fixed, and it was worse: (1) the panel summed `stock_cost_value`, the API returned `cost_value`; (2) the **Dead Stock report page** expected a per-outlet row (`stock_qty`, `stock_cost_value`, `stock_retail_value`, `days_since_sale`, `last_sold_at`, outlet, brand, supplier) the API never returned, so most columns were blank; (3) the query joined every past sale line onto stock, **multiplying stock and value** for anything that had ever sold. Rewritten per product per outlet with the last sale in its own CTE; a never-sold item is aged from when it was created; deleted products excluded; old field names kept. Also the panel's stock-aging "Oldest" read `days_since_sale`, the API returns `age_days`. Proven on screen (`out/dead-stock-report.png`) |
 | D23 | 🔴 | Sales & Stock report: stock and sales joined together, so every sale was multiplied by the number of outlet rows and `SUM(DISTINCT os.quantity)` counted two outlets holding the same stock once; **voided bills counted as sales**; deleted products listed; the page's date / time / outlet filters were **ignored** (always all-time, all outlets) | 🛠️ fixed: stock and sales totalled in separate CTEs, voided bills excluded, deleted products excluded, filters applied (times in the shop's time zone). In the test: 4 → 8 stock, 6 → 2 units sold. Screen: `out/sales-and-stock.png` |
+| D24 | 🟠 | Picking a product **with variants** from the search results adds the parent product itself (no variant picker), online and offline; the sale is then booked against the parent, not a variant | open (found in the blocker 3 browser test; `POSSearchArea.jsx` result click → `addToCart(p)`) |
 | D19 | 🟡 | Scanning a variant runs the modifier lookup with the variant id as a product id (harmless 403 today; pre-existing pattern shared with the variant picker) | open, low |
 
 ---
@@ -264,6 +310,8 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | Backend integration | **1,801 pass, 26 fail, 29 skipped** (155 of 202 files pass) | **33 files can't load at all** (30 import a deleted helper `tests/helpers/createTestApp`; 3 use Jest syntax). Those 33 include the dedicated retail tests: `purchase-orders`, `returns-exchange`, `shifts`, `shift-linkage`, `supplier-payables`, `reports_accuracy`, `inventory`, `promotions`. **So most of the retail core had no running test.** The 26 failures are the same 12 files already triaged in July as stale test fixtures (e.g. sales tests written before a sale needed an open till); none are new. |
 | Backend integration, **after the 13 fixes** (re-run 2026-09-26) | **1,823 pass, 26 fail, 29 skipped** | Compared test-by-test against the baseline: **0 new failures**, 0 disappeared, the same 26 failing. The +22 are the new `ots-retail-core` regression tests, all passing. |
 | Backend integration, **after blocker 1** (2026-09-26, ~36 min) | **1,848 pass, 26 fail, 29 skipped** | Pass count = 1,823 + 15 regression tests added for D6–D23 + 10 for blocker 1, exactly. Failures still 26, all in the stale-fixture files; none in any Shopify/order file. The 11 order-adjacent files were also run with and without the change: identical failures. |
+| Backend unit, **after blocker 3** (2026-09-27) | **748 / 752 pass** | 4 failures, none from blocker 3: the 3 baseline ones (worker-status ×2, payment-gateway env) plus `frontend-coverage-drift`, which flags 2 endpoints from blockers 1/2 with no screen calling them: `POST …/shopify/webhooks/orders/:tenantSlug` (headless by design → belongs in `frontend-coverage-baseline.json`) and `POST …/shopify/reconciliation/:id/fix` (its per-row buttons were removed in 2j; retire the endpoint or baseline it). Open |
+| Frontend unit, **after blocker 3** (2026-09-27) | **262 / 262 pass** (35 files) | +61 blocker 3 tests |
 | Backend integration, **after blocker 2** (2026-09-26, ~34 min) | **1,866 pass, 26 fail, 29 skipped** | 1,848 + the 18 new `ots-shopify-stock` tests, exactly. The same 12 stale-fixture files fail; none is a Shopify, stock, sales or returns file. |
 
 ---
@@ -285,3 +333,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-26 | The daily Shopify stock check **only reports** (notification + Reconciliation tab); the owner presses "Set Shopify to SanoPOS counts" to fix. Revisit after the 2-week parallel run | **Owner** | Nothing changes on the live website without the owner seeing it first. Blocker 2e |
 | 2026-09-26 | Shopify is set to SanoPOS's shop count as Shopify's **available** count | Claude | SanoPOS takes stock off when an online order arrives (1a), and Shopify's "available" is on-hand minus orders not yet shipped, so the two are the same number. No separate "minus unshipped" setting needed |
 | 2026-09-26 | Which Shopify location each SanoPOS shop updates = the existing **location map** (Shopify → Mappings). One Toy Store picks it at setup on the dev store | open, owner at setup | |
+| 2026-09-26 | Offline sale replayed when SanoPOS stock is too low: **accept it**, let stock go negative, mark the sale "sold offline past stock" and list the items in the sync notice for a recount. Live counter sales keep the stock check | **Owner** | Money was taken and the toy left the shop; refusing only makes the books wrong. Blocker 3e |
+| 2026-09-26 | Offline sale lands **when and where it happened**: keeps the time it was rung up and goes into the till session open at that moment, even if since closed. A till closed before its sale synced shows extra cash at close that clears when the sale arrives; the sync notice names the till | **Owner** | Day and till reports match the counter. Blocker 3f |
+| 2026-09-26 | Lock button **off while offline** ("Lock needs the internet"); a screen already locked says so plainly. No PIN kept in the browser | **Owner** | Unlock checks the PIN on the server |
+| 2026-09-26 | Offline bills ring at **shelf price**: no automatic promotions or price lists offline; hand discount (F2) still works; POS says "Automatic discounts are off while offline" | **Owner** | Simpler, fewer ways to go wrong |

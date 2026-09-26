@@ -326,6 +326,10 @@ export function useCheckout({
       points_earned: checkoutCustomerId ? pointsEarned : 0,
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
+      // The till this bill is rung into. Only read by the server when the sale
+      // is replayed from the offline queue: it lands in this till, even if it
+      // has closed by then (One Toy Store blocker 3f).
+      shift_id: activeShift?.id || null,
       folio_id: chargeToRoomFolioId ? Number(chargeToRoomFolioId) : null,
       treatment_folio_id: chargeToTreatmentFolioId ? Number(chargeToTreatmentFolioId) : null,
       // Phase 2.1 C1 tip capture — backend requires both fields or skips tips.

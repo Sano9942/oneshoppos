@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { searchProducts } from "../offlineLookup";
 import { api } from "../../../../api";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "../cartMath.js";
 
@@ -115,6 +116,10 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
   }, [cart.map(c => c.id).join(","), posFlags.phase2_item_suggestions]);
 
   // ── Auto-apply promotions (debounced on cart change) ──────────────────
+  // Offline, promotions can't be worked out: the bill rings at shelf price and
+  // the cashier is told once per outage (owner decision 2026-09-26, blocker 3).
+  const [discountsOffline, setDiscountsOffline] = useState(false);
+  const discountsOfflineRef = useRef(false);
   useEffect(() => {
     if (!cart.length) { setAppliedPromotions([]); setPromoDiscount(0); return; }
     const timer = setTimeout(() => {
@@ -132,8 +137,18 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
         .then(d => {
           setAppliedPromotions(d.applied_promotions || []);
           setPromoDiscount(Number(d.total_promotion_discount || 0));
+          if (discountsOfflineRef.current) { discountsOfflineRef.current = false; setDiscountsOffline(false); }
         })
-        .catch(() => { setAppliedPromotions([]); setPromoDiscount(0); });
+        .catch((err) => {
+          setAppliedPromotions([]);
+          setPromoDiscount(0);
+          const unreachable = err instanceof TypeError || err?.status >= 502;
+          if (unreachable && !discountsOfflineRef.current) {
+            discountsOfflineRef.current = true;
+            setDiscountsOffline(true);
+            showNotice?.("Automatic discounts are off while offline");
+          }
+        });
     }, 400);
     return () => clearTimeout(timer);
   }, [cart.map(c => `${c.id}:${c.quantity}:${c.price}`).join(",")]);
@@ -175,11 +190,9 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     }
     searchTimer.current = setTimeout(async () => {
       try {
-        const params = { query };
-        if (selectedOutletId) params.outlet_id = selectedOutletId;
-        if (field !== "all") params.field = field;
-        const data = await api.get("/api/products/search", params);
-        setResults(data.products || []);
+        // Server first; the offline catalogue copy when it can't be reached.
+        const data = await searchProducts(query, { field, outletId: selectedOutletId });
+        setResults(data.products);
         setShowResults(true);
       } catch {
         setResults([]);
@@ -218,7 +231,9 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
 
   const addToCart = useCallback((product, overlay = {}) => {
     const stock = Number(product.local_stock ?? product.stock ?? 0);
-    const isBundle = Boolean(product.is_bundle);
+    // An item from the offline catalogue copy has no stock figure: treat it
+    // like a bundle for the stock notices (never "out of stock").
+    const isBundle = Boolean(product.is_bundle) || Boolean(product.stock_unknown);
     // Phase 2-R.0: optional restaurant overlay stamps each line with the
     // active seat + course. When no overlay is passed (retail flow) we
     // default to seat_number=null / course_name="main" — the same defaults
@@ -368,6 +383,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     showResults, setShowResults,
     searchRef,
     triggerSearch,
+    discountsOffline,
     handleSearchChange,
     // Cart
     cart, setCart,

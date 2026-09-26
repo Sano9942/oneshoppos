@@ -33,6 +33,7 @@ import POSBarcodeMissModal from "./pos/POSBarcodeMissModal";
 import POSInsufficientStockModal from "./pos/POSInsufficientStockModal";
 import POSCreditLimitModal from "./pos/POSCreditLimitModal";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
+import POSSyncReport from "./pos/POSSyncReport";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
 const MOBILE_TABS = [
@@ -152,6 +153,7 @@ function POSContent() {
 
       {/* Header */}
       <POSHeader />
+      <POSSyncReport />
 
       {/* Desktop layout — unchanged */}
       <div className="hidden md:flex flex-1 overflow-hidden">

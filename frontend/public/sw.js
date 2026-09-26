@@ -56,12 +56,25 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
 
+  // Page loads: network first. Every successful load also saves the page as
+  // the offline copy, so an offline reload opens the app the counter last ran
+  // (One Toy Store blocker 3b′). It used to be saved only at install, so after
+  // a few deploys the offline page pointed at code files never saved. Every
+  // route serves the same SPA page, so one saved copy ("/") covers them all.
   if (request.mode === "navigate" && sameOrigin) {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cache = await caches.open(STATIC_CACHE);
-        return cache.match("/") || Response.error();
-      })
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put("/", copy)));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(STATIC_CACHE);
+          return (await cache.match("/")) || Response.error();
+        })
     );
     return;
   }

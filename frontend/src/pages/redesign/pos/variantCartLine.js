@@ -22,5 +22,7 @@ export function variantCartLine(product, variant, label = "") {
     local_stock: stock,
     tax: product?.tax ?? null,
     gst: product?.gst ?? null,
+    // Offline catalogue copy: stock unknown, so the cart doesn't call it out of stock.
+    ...(variant.stock_unknown ? { stock_unknown: true } : {}),
   };
 }

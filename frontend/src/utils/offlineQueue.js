@@ -5,8 +5,10 @@ const DB_VERSION = 1;
 const STORE = "sales_queue";
 const LS_PREFIX = "pos_offline_queue_";
 
-export const MAX_QUEUED = 50;
-export const WARN_THRESHOLD = 40;
+// Was 50: a busy afternoon outage at a shop counter passes that, and the 51st
+// bill was refused (One Toy Store blocker 3g). IndexedDB holds far more.
+export const MAX_QUEUED = 500;
+export const WARN_THRESHOLD = 400;
 
 let _dbPromise = null;
 
@@ -66,8 +68,10 @@ export async function getQueueByState(employeeId, state) {
 // MAX_QUEUED cap across all types (sales + returns combined) to match the
 // existing single-bucket UX — users won't stockpile both.
 async function enqueueTyped(employeeId, payload, type) {
-  const existing = await getQueue(employeeId);
-  if (existing.length >= MAX_QUEUED) {
+  // Count through the index rather than reading every queued row.
+  const db = await getDb();
+  const queued = await db.countFromIndex(STORE, "by_employee", employeeId);
+  if (queued >= MAX_QUEUED) {
     throw new Error(`Offline queue full (${MAX_QUEUED} items). Please sync before adding more.`);
   }
   const key = payload?.idempotency_key;
@@ -93,9 +97,8 @@ async function enqueueTyped(employeeId, payload, type) {
     last_attempt_at: null,
     payload,
   };
-  const db = await getDb();
   await db.put(STORE, row);
-  return existing.length + 1;
+  return queued + 1;
 }
 
 // Back-compat: the existing enqueue() keeps its sale-only semantics.
@@ -113,7 +116,7 @@ export async function enqueueReturn(employeeId, returnPayload) {
 }
 
 // Tier 1.1 wholesale: field-rep check-ins share the same IndexedDB store but
-// use type="check_in". Reuses MAX_QUEUED cap (50 — a rep does 8-15 visits/day,
+// use type="check_in". Reuses MAX_QUEUED cap (500 — a rep does 8-15 visits/day,
 // so this is plenty). On reconnect, the drain loop sees these alongside sales
 // and POSTs them to /api/field/check-in. Payload contract:
 //   {

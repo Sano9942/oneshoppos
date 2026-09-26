@@ -1111,9 +1111,54 @@ module.exports = function registerSalesRoutes(app, deps) {
       }));
     }
 
+    // One Toy Store blocker 3: an OFFLINE REPLAY is a sale the POS rang up with
+    // the internet down and queued; it carries the moment it was rung up
+    // (offline_sold_at). Owner decisions 2026-09-26: it lands when and where it
+    // happened (its own time + the till open then, even if since closed — 3f),
+    // and it is booked even past SanoPOS's stock, because the money was taken
+    // and the item has left the shop (3e). A live sale keeps every check.
+    const isOfflineReplay = Boolean(idempotency_key && req.body.offline_sold_at);
+    let offlineSoldAt = null;
+    let tillClosed = null;
+    if (isOfflineReplay) {
+      const t = new Date(req.body.offline_sold_at);
+      const now = new Date();
+      // A counter clock running ahead can't date a sale in the future.
+      offlineSoldAt = Number.isNaN(t.getTime()) || t > now ? now : t;
+    }
+
     let activeShift;
     try {
-      activeShift = await getActiveShiftForOutlet(outlet_id);
+      if (isOfflineReplay) {
+        const offlineShiftCols = "id, status, opened_at, closed_at";
+        let shiftRow = null;
+        // The till the POS says it rang into — only if the sale's time falls
+        // inside that till's open..close window. A counter that reloaded
+        // offline may remember a stale till; then the time decides.
+        if (req.body.shift_id) {
+          ({ rows: [shiftRow] } = await db.query(
+            `SELECT ${offlineShiftCols} FROM cash_shifts
+              WHERE id = $1 AND outlet_id = $2
+                AND opened_at <= $3 AND (closed_at IS NULL OR closed_at >= $3)`,
+            [Number(req.body.shift_id), outlet_id, offlineSoldAt]
+          ));
+        }
+        if (!shiftRow) {
+          ({ rows: [shiftRow] } = await db.query(
+            `SELECT ${offlineShiftCols} FROM cash_shifts
+              WHERE outlet_id = $1 AND opened_at <= $2 AND (closed_at IS NULL OR closed_at >= $2)
+              ORDER BY opened_at DESC LIMIT 1`,
+            [outlet_id, offlineSoldAt]
+          ));
+        }
+        if (shiftRow) {
+          activeShift = shiftRow;
+          if (shiftRow.status !== "open") {
+            tillClosed = { shift_id: shiftRow.id, closed_at: shiftRow.closed_at };
+          }
+        }
+      }
+      if (!activeShift) activeShift = await getActiveShiftForOutlet(outlet_id);
       if (!activeShift) {
         if (idempotency_key) {
           // Offline-queued sale: shift may have closed. Use most recent shift for this outlet.
@@ -1144,7 +1189,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       // screen; the converting manager isn't clocked in at a register. Same
       // exemption as field-rep sales (shift is still required — the sale
       // lands in the outlet's open cash session like any other).
-      if (!isFieldRepSale && !isBackorderConversion && (!idempotency_key || activeShift.status === "open")) {
+      if (!isFieldRepSale && !isBackorderConversion && !isOfflineReplay && (!idempotency_key || activeShift.status === "open")) {
         // Only check attendance for real-time sales (not offline replays)
         const attendanceStatus = await getEmployeeCheckoutStatus(
           authenticatedEmployeeId,
@@ -1756,6 +1801,7 @@ module.exports = function registerSalesRoutes(app, deps) {
     // (Per-line tax snapshot resolved earlier, ahead of the total — see H2.)
 
     // Start Transaction Logic
+    const offlinePastStock = [];
     try {
       const saleId = await db.transaction(async (client) => {
         // Lock and check stock for each item (FOR UPDATE prevents TOCTOU race)
@@ -1807,6 +1853,15 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // 3e: an offline replay short of stock is recorded here, not refused.
+        const noteShortfall = (err) => {
+          offlinePastStock.push({
+            product_id: Number(err.product_id),
+            variant_id: err.variant_id ? Number(err.variant_id) : null,
+            available: Number(err.available ?? 0),
+            requested: Number(err.requested ?? 0),
+          });
+        };
         for (let ci = 0; ci < cartItems.length; ci++) {
           const item = cartItems[ci];
           if (isKit(item)) {
@@ -1816,8 +1871,9 @@ module.exports = function registerSalesRoutes(app, deps) {
               outletId: outlet_id,
               saleQty: item.quantity,
               components: kitInfoFor(item).components,
+              onShortfall: isOfflineReplay ? noteShortfall : null,
             });
-          } else {
+          } else try {
             const variantId = item.variant_id || null;
             if (variantId) {
               // 2-G.1: per-outlet stock is the authoritative gate when a
@@ -1888,12 +1944,31 @@ module.exports = function registerSalesRoutes(app, deps) {
                 );
               }
             }
+          } catch (gateErr) {
+            if (!(isOfflineReplay && gateErr.code === "insufficient_stock")) throw gateErr;
+            noteShortfall(gateErr);
+          }
+        }
+        if (offlinePastStock.length) {
+          // Name each item for the cashier's recount list: "Product (variant SKU)".
+          const { rows: prods } = await client.query(
+            "SELECT id, name FROM products WHERE id = ANY($1::int[])",
+            [offlinePastStock.map((r) => r.product_id)]
+          );
+          const { rows: vars } = await client.query(
+            "SELECT id, sku FROM product_variants WHERE id = ANY($1::int[])",
+            [offlinePastStock.map((r) => r.variant_id).filter(Boolean)]
+          );
+          for (const r of offlinePastStock) {
+            const productName = prods.find((p) => p.id === r.product_id)?.name || null;
+            const sku = r.variant_id ? vars.find((v) => v.id === r.variant_id)?.sku : null;
+            r.name = sku ? `${productName} (${sku})` : productName;
           }
         }
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id, appointment_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id, subtotal, tax_total, tax_inclusive, field_visit_id, appointment_id, timestamp, offline_sold_at, offline_past_stock) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, COALESCE($20::timestamptz, NOW()), $20::timestamptz, $21::jsonb) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -1914,6 +1989,8 @@ module.exports = function registerSalesRoutes(app, deps) {
             taxInclusiveResolved,
             field_visit_id || null,
             appointment_id ? Number(appointment_id) : null,
+            offlineSoldAt,
+            offlinePastStock.length ? JSON.stringify(offlinePastStock) : null,
           ]
         );
         const newSaleId = saleRow.id;
@@ -2150,8 +2227,17 @@ module.exports = function registerSalesRoutes(app, deps) {
               });
             }
           } else {
+            // 3e: an offline replay is booked past stock, so an item with no
+            // stock row at this outlet gets one (negative) instead of the sale
+            // leaving no trace on stock.
+            const upsertRow = isOfflineReplay && !nonInventoryProductIds.has(Number(item.id));
             await client.query(
-              "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+              upsertRow
+                ? `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                     VALUES ($2, $3, 0 - $1::numeric)
+                     ON CONFLICT (product_id, outlet_id)
+                     DO UPDATE SET quantity = outlet_stock.quantity - $1::numeric`
+                : "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
               [stockDeductQty, item.id, outlet_id]
             );
             if (isTrackedLine(item)) {
@@ -2797,6 +2883,10 @@ module.exports = function registerSalesRoutes(app, deps) {
           // backorders this sale fulfilled (conversion flow).
           backorders: createdBackorders,
           convertedBackorders,
+          // One Toy Store blocker 3: an offline replay reports the items it
+          // sold past SanoPOS's stock (for a recount) and the closed till it
+          // landed in, so the POS sync notice can name both.
+          ...(isOfflineReplay ? { sold_past_stock: offlinePastStock, till_closed: tillClosed } : {}),
         });
 
         // V02 — F05 customer notifications, post-commit + best-effort (inert

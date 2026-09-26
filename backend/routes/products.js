@@ -401,6 +401,61 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  // The counter's offline copy of the catalogue (One Toy Store blocker 3a): every
+  // live product and variant with the codes the POS scans and searches by and the
+  // shelf price. No cost and no stock — the copy only has to find and price an
+  // item; the server re-reads cost and checks stock when the sale syncs.
+  // `version` is a hash of the catalogue: a counter whose copy is current sends
+  // it back as ?version= (or If-None-Match) and gets a 304. It is in the body
+  // because a browser can't read the ETag header from the API's other origin.
+  // NOTE: must be registered BEFORE /:id.
+  app.get("/api/products/catalogue", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
+    try {
+      const { rows: products } = await db.query(
+        `SELECT p.id, p.name, p.barcode, p.sku, p.plu_code, p.price, p.gst, p.tax_id,
+                t.rate AS tax_rate, t.name AS tax_name, p.category_id, p.brand_id,
+                p.unit, p.product_type, p.status, p.has_variants, p.is_bundle, p.bom_type,
+                p.serial_required, p.age_restricted, p.is_gift_card_sku
+           FROM products p
+           LEFT JOIN taxes t ON t.id = p.tax_id
+          WHERE p.deleted_at IS NULL
+          ORDER BY p.id`
+      );
+      for (const p of products) {
+        p.effectiveTaxRate = p.tax_rate !== null ? p.tax_rate : p.gst !== null ? p.gst : 0;
+        p.effectiveTaxName = p.tax_name || (p.gst !== null ? "GST" : "No Tax");
+      }
+      const { rows: variants } = await db.query(
+        `SELECT pv.id, pv.product_id, pv.sku, pv.barcode, pv.price,
+                COALESCE(
+                  json_agg(json_build_object('attribute_name', a.name, 'option_value', ao.value)
+                           ORDER BY a.id) FILTER (WHERE a.name IS NOT NULL),
+                  '[]'::json
+                ) AS options
+           FROM product_variants pv
+           JOIN products p ON p.id = pv.product_id AND p.deleted_at IS NULL
+           LEFT JOIN variant_option_values vov ON vov.variant_id = pv.id
+           LEFT JOIN attributes a ON a.id = vov.attribute_id
+           LEFT JOIN attribute_options ao ON ao.id = vov.attribute_option_id
+          GROUP BY pv.id
+          ORDER BY pv.id`
+      );
+      const content = JSON.stringify({ products, variants });
+      const crypto = require("crypto");
+      const version = crypto.createHash("sha1").update(content).digest("hex");
+      const body = `{"version":"${version}",${content.slice(1)}`;
+      // The ETag covers the whole body (not just `version`), so the browser's
+      // own HTTP cache can never answer with a body of a different shape.
+      const etag = `"${crypto.createHash("sha1").update(body).digest("hex")}"`;
+      res.set("ETag", etag);
+      res.set("Cache-Control", "private, no-cache");
+      if (req.query.version === version || req.get("If-None-Match") === etag) return res.status(304).end();
+      res.type("application/json").send(body);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Scan/Find a product by barcode (Crucial for POS speed)
   // NOTE: must be registered BEFORE /:id to prevent Express matching "scan" as an id param
   app.get("/api/products/scan/:barcode", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {

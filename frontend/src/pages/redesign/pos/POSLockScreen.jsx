@@ -1,6 +1,7 @@
 import React from "react";
 import { Lock } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { useBrowserOnline } from "./hooks/useBrowserOnline";
 
 export default function POSLockScreen() {
   const {
@@ -12,6 +13,7 @@ export default function POSLockScreen() {
     logout,
     navigate,
   } = usePOS();
+  const online = useBrowserOnline();
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-(--ui-muted-surface)">
@@ -23,6 +25,11 @@ export default function POSLockScreen() {
         <p className="mb-6 text-center text-sm text-(--ui-text-muted)">
           Enter your PIN to unlock
         </p>
+        {!online && !lockError && (
+          <p className="mb-4 text-center text-sm font-medium text-(--ui-warning-fg)">
+            You're offline. The PIN is checked online, so the screen unlocks when the internet is back.
+          </p>
+        )}
         <form onSubmit={handleUnlock} className="flex w-full flex-col gap-4">
           <input
             type="password"

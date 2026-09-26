@@ -327,9 +327,17 @@ export function AuthProvider({ children }) {
             // non-critical
           }
         }
-      } catch {
-        clearSession();
-        if (isMounted) setSession(null);
+      } catch (err) {
+        // No connection (the counter reloaded with the internet down): keep
+        // the saved session and its permissions. Signing back in needs the
+        // server, so clearing here locked the till for the whole outage
+        // (One Toy Store blocker 3b). A real refusal still signs out.
+        if (err instanceof TypeError) {
+          if (isMounted) setSession(existing);
+        } else {
+          clearSession();
+          if (isMounted) setSession(null);
+        }
       } finally {
         if (isMounted) setIsBootstrapping(false);
       }

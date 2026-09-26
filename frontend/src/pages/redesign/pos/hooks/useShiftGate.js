@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { api } from "../../../../api";
 import { useAuth } from "../../../../auth/AuthProvider";
 import { readContext } from "../../../../auth/authStore";
+import { saveLastKnown, readLastKnown, isUnreachable } from "../../../../utils/lastKnown";
 
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
@@ -34,9 +35,19 @@ export function useShiftGate({ setError, showNotice }) {
     selectedOutletId && activeShift && attendanceCode === "clocked_in",
   );
 
-  // Bootstrap outlets + auto-select based on context
+  // Bootstrap outlets + auto-select based on context. Offline (after a reload
+  // with the internet down) the branches last seen online are used (3h).
   useEffect(() => {
     api.get("/api/outlets")
+      .then((outData) => {
+        saveLastKnown("pos_outlets", outData);
+        return outData;
+      })
+      .catch((err) => {
+        const saved = isUnreachable(err) ? readLastKnown("pos_outlets") : null;
+        if (saved) return saved.value;
+        throw err;
+      })
       .then((outData) => {
         const outList = outData.outlets || [];
         setOutlets(outList);
@@ -66,14 +77,25 @@ export function useShiftGate({ setError, showNotice }) {
       ]);
       setActiveShift(shiftData.shift || null);
       setAttendanceStatus(attendanceData || null);
+      saveLastKnown(`pos_gate:${targetOutletId}:${employee.id}`, { shift: shiftData.shift || null, attendance: attendanceData || null });
     } catch (err) {
-      setActiveShift(null);
-      setAttendanceStatus(null);
-      setError?.(err.message || "Failed to load POS opening status");
+      // Offline (3h): the till and clock-in last seen online for this branch
+      // and cashier, so a reload during an outage doesn't stop the counter.
+      const saved = isUnreachable(err) ? readLastKnown(`pos_gate:${targetOutletId}:${employee.id}`) : null;
+      if (saved) {
+        setActiveShift(saved.value.shift);
+        setAttendanceStatus(saved.value.attendance);
+        const at = new Date(saved.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        showNotice?.(`Offline: using the till and clock-in saved at ${at}`);
+      } else {
+        setActiveShift(null);
+        setAttendanceStatus(null);
+        setError?.(err.message || "Failed to load POS opening status");
+      }
     } finally {
       setGateLoading(false);
     }
-  }, [selectedOutletId, employee?.id, setError]);
+  }, [selectedOutletId, employee?.id, setError, showNotice]);
 
   // Reset shift/attendance when outlet cleared
   useEffect(() => {

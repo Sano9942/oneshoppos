@@ -10080,6 +10080,29 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 140,
+    description:
+      "One Toy Store pilot, blocker 3 (offline counter). sales gains offline_sold_at (when a sale rung up offline was actually rung up; NULL for live sales — the sale's timestamp is set to it too, so it lands in the right day and till) and offline_past_stock (JSONB list of the items an offline replay sold past SanoPOS's stock, for a recount; owner decision 2026-09-26: such replays are accepted). Tenant-only; guarded on sales existing. Idempotent.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'sales'`
+      );
+      if (schema === "public" || !hasTable.length) {
+        console.log(`[migrate-pg v140] ${schema}: no sales table — skipped`);
+        return;
+      }
+      await client.query(`
+        ALTER TABLE sales
+          ADD COLUMN IF NOT EXISTS offline_sold_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS offline_past_stock JSONB
+      `);
+    },
+  },
 ];
 
 /**

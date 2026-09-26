@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Grid3x3 } from "lucide-react";
-import { api } from "../../../api";
 import { usePOS } from "./POSContext";
+import { loadVariants } from "./offlineLookup";
 import { variantCartLine } from "./variantCartLine";
 
 // Phase 2-G Wave 3 — 2-G.1 matrix variant grid modal.
@@ -32,14 +32,11 @@ export default function POSVariantMatrixModal() {
     if (!pendingVariantProductId) return;
     setLoading(true);
     setError("");
-    const qs = selectedOutletId ? `?outlet_id=${selectedOutletId}` : "";
-    Promise.all([
-      api.get(`/api/products/${pendingVariantProductId}`),
-      api.get(`/api/products/${pendingVariantProductId}/variants${qs}`),
-    ])
-      .then(([prodRes, varRes]) => {
-        setProduct(prodRes?.product || prodRes || null);
-        setVariants(Array.isArray(varRes?.variants) ? varRes.variants : []);
+    // Server first; the offline catalogue copy when it can't be reached.
+    loadVariants(pendingVariantProductId, { outletId: selectedOutletId })
+      .then(({ product: p, variants: vs }) => {
+        setProduct(p);
+        setVariants(vs);
       })
       .catch((err) => setError(err.message || "Failed to load variants"))
       .finally(() => setLoading(false));
@@ -270,6 +267,11 @@ export default function POSVariantMatrixModal() {
                           cellClass += " bg-(--ui-muted-surface) text-(--ui-text-muted)";
                           disabled = true;
                           title = "No such combination";
+                        } else if (v.stock_unknown) {
+                          // From the offline catalogue copy: stock isn't known,
+                          // so never block the pick (One Toy Store blocker 3a).
+                          cellClass += " bg-(--ui-surface) text-(--ui-text) hover:bg-(--ui-muted-surface)";
+                          title = `Stock not known offline · ${v.sku || ""}`;
                         } else if (stock <= 0) {
                           cellClass += " bg-(--ui-muted-surface) text-(--ui-text-muted) line-through";
                           disabled = true;
@@ -298,7 +300,7 @@ export default function POSVariantMatrixModal() {
                               onFocus={() => setFocusedCell({ row: rowIdx, col: colIdx })}
                               className={cellClass + " w-full"}
                             >
-                              {v ? stock : "—"}
+                              {v ? (v.stock_unknown ? "?" : stock) : "—"}
                             </button>
                           </td>
                         );

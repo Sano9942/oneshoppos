@@ -20,6 +20,9 @@ import { useCustomerDisplay } from "./hooks/useCustomerDisplay";
 import { useLoyaltyWallet } from "./hooks/useLoyaltyWallet";
 import { useFolioCharging } from "./hooks/useFolioCharging";
 import { useOfflineQueue } from "./hooks/useOfflineQueue";
+import { useOfflineCatalogue } from "./hooks/useOfflineCatalogue";
+import { scanProduct, serverReachable, isUnreachableError } from "./offlineLookup";
+import { saveLastKnown, readLastKnown, isUnreachable } from "../../../utils/lastKnown";
 import { useCheckout } from "./hooks/useCheckout";
 import { variantCartLine } from "./variantCartLine";
 
@@ -103,7 +106,13 @@ export const POSProvider = ({ children }) => {
       const map = {};
       for (const f of (d.flags || [])) map[f.key] = f.enabled;
       setPosFlags(map);
-    }).catch(() => {});
+      saveLastKnown("pos_flags", map);
+    }).catch((err) => {
+      // Offline reload: the flags last seen online (they switch on POS
+      // features such as the scan box) — One Toy Store blocker 3h.
+      const saved = isUnreachable(err) ? readLastKnown("pos_flags") : null;
+      if (saved) setPosFlags(saved.value);
+    });
   }, []);
 
   // ── Price override (Phase 2-G Wave 3 — 2-G.5) ────────────────────────────
@@ -468,8 +477,9 @@ export const POSProvider = ({ children }) => {
   const addToCartWithModifiers = useCallback(async (product) => {
     if (!product || !product.id) return;
     const overlay = buildSeatCourseOverlay();
-    // Skip tree lookup for bundles, weighted, or non-restaurant tenants.
-    if (product.is_bundle) {
+    // Skip tree lookup for bundles, weighted, or non-restaurant tenants — and
+    // for items from the offline catalogue copy (no server to ask).
+    if (product.is_bundle || product.stock_unknown) {
       cartHook.addToCart(product, overlay);
       return;
     }
@@ -541,6 +551,8 @@ export const POSProvider = ({ children }) => {
   });
 
   const offlineQueue = useOfflineQueue({ showNotice });
+  // The counter's offline copy of the catalogue (One Toy Store blocker 3a).
+  const offlineCatalogue = useOfflineCatalogue();
 
   // parked-sales loader — needed by useCheckout
   // When phase2_draft_orders is on, parkSale writes to /api/draft-orders
@@ -821,12 +833,19 @@ export const POSProvider = ({ children }) => {
   }, [receipt]);
 
   // ── Lock / unlock ───────────────────────────────────────────────────────
-  const handleLock = useCallback(() => {
+  const handleLock = useCallback(async () => {
+    // Unlocking checks the PIN on the server, so a screen locked during an
+    // outage couldn't be unlocked until the internet came back. Owner decision
+    // 2026-09-26: no locking while offline (blocker 3).
+    if (!(await serverReachable())) {
+      showNotice("Lock needs the internet");
+      return;
+    }
     sessionStorage.setItem("posLocked", "1");
     setIsLocked(true);
     setLockPin("");
     setLockError("");
-  }, []);
+  }, [showNotice]);
 
   const handleUnlock = useCallback(async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -847,8 +866,13 @@ export const POSProvider = ({ children }) => {
       setIsLocked(false);
       setLockPin("");
       setLockError("");
-    } catch {
-      setLockError("Failed to connect to server");
+    } catch (err) {
+      setLockPin("");
+      setLockError(
+        isUnreachableError(err)
+          ? "You're offline. The PIN is checked online, so the screen unlocks when the internet is back."
+          : "Failed to connect to server",
+      );
     }
   }, [lockPin, employee?.id]);
 
@@ -900,25 +924,28 @@ export const POSProvider = ({ children }) => {
 
   const handleBarcodeScanned = useCallback(async (barcode) => {
     try {
-      const res = await api.raw(`/api/products/scan/${encodeURIComponent(barcode)}`, {
-        headers: { "x-employee-id": String(employee?.id || "") },
-      });
-      // 2-G.15 Day 4: 404 → offer quick-create when the cashier can manage
-      // inventory; otherwise surface a visible toast instead of the old
-      // silent-return that left cashiers thinking the scanner was broken.
-      if (res.status === 404) {
-        logErrorState("pos_barcode_miss", `Barcode ${barcode} not found`, { barcode });
-        if (hasPerm && hasPerm("manage_inventory")) {
-          setBarcodeMissPrompt({ barcode });
-        } else {
-          setError(`Barcode ${barcode} not found`);
+      // Server first; the offline catalogue copy when it can't be reached (3a).
+      const data = await scanProduct(barcode);
+      if (!data.found) {
+        if (data.offline) {
+          // Offline: can't create a product, just say what happened.
+          setError(data.error);
+          return;
+        }
+        // 2-G.15 Day 4: 404 → offer quick-create when the cashier can manage
+        // inventory; otherwise surface a visible toast instead of the old
+        // silent-return that left cashiers thinking the scanner was broken.
+        if (data.status === 404) {
+          logErrorState("pos_barcode_miss", `Barcode ${barcode} not found`, { barcode });
+          if (hasPerm && hasPerm("manage_inventory")) {
+            setBarcodeMissPrompt({ barcode });
+          } else {
+            setError(`Barcode ${barcode} not found`);
+          }
         }
         return;
       }
-      if (!res.ok) return;
-      const data = await res.json();
       const product = data.product;
-      if (!product) return;
       // The scanned code was one variant's own barcode — add exactly that variant.
       if (data.variant) {
         addToCartWithModifiers(variantCartLine(product, data.variant, data.variant.sku));
@@ -940,7 +967,7 @@ export const POSProvider = ({ children }) => {
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
-  }, [employee?.id, addToCartWithModifiers, hasPerm, setError]);
+  }, [addToCartWithModifiers, hasPerm, setError]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -1225,6 +1252,10 @@ export const POSProvider = ({ children }) => {
     offlineSyncing: offlineQueue.offlineSyncing,
     offlineSyncResult: offlineQueue.offlineSyncResult,
     syncQueue: offlineQueue.syncQueue,
+    syncReport: offlineQueue.syncReport,
+    dismissSyncReport: offlineQueue.dismissSyncReport,
+    offlineCatalogue,
+    discountsOffline: cartHook.discountsOffline,
     showShortcutsOverlay,
     setShowShortcutsOverlay,
     // Endless aisle

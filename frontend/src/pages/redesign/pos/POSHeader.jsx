@@ -7,6 +7,7 @@ import { readTenantSlug } from "../../../auth/authStore";
 import { IS_MULTI_TENANT } from "../../../config";
 import { getQueueByState } from "../../../utils/offlineQueue";
 import POSStuckQueueModal from "./POSStuckQueueModal";
+import POSLockButton from "./POSLockButton";
 
 export default function POSHeader() {
   const {
@@ -17,7 +18,6 @@ export default function POSHeader() {
     canSwitchOutlet,
     slip,
     setSlipOpen,
-    handleLock,
     handleLogout,
     activeShift,
     canOpenShift,
@@ -151,12 +151,7 @@ export default function POSHeader() {
         >
           <HelpCircle size={14} /> <span className="hidden sm:inline">Help</span>
         </button>
-        <button
-          onClick={handleLock}
-          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-danger) font-medium transition"
-        >
-          <Lock size={14} /> <span className="hidden sm:inline">Lock</span>
-        </button>
+        <POSLockButton />
         <button
           onClick={handleLogout}
           className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
