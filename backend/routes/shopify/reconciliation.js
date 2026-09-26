@@ -1,6 +1,7 @@
 const {
   getActiveShopifyConnection: _getActiveShopifyConnection,
 } = require("../../shopify/utils");
+const stockCheck = require("../../shopify/stock-check");
 
 module.exports = function registerShopifyReconciliationRoutes(app, deps) {
   const {
@@ -14,7 +15,17 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
     fetchInventoryLevelsBatch,
     logShopifyEvent,
     decryptShopifySecret,
+    processPendingShopifyInventoryEvents,
   } = deps;
+  const setShopifyInventory =
+    deps.setShopifyInventory || require("../../shopify/client").setShopifyInventory;
+  const shopifyFns = { fetchInventoryLevelsBatch, setShopifyInventory };
+  const processPending =
+    typeof processPendingShopifyInventoryEvents === "function"
+      ? (limit) => processPendingShopifyInventoryEvents(limit)
+      : null;
+  const employeeIdOf = (req) =>
+    req.employee?.id ?? (req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null);
 
   async function getActiveShopifyConnection() {
     return _getActiveShopifyConnection(db, decryptShopifySecret);
@@ -75,7 +86,7 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
     },
   );
 
-  // POST run reconciliation
+  // POST run reconciliation — compare only, changes nothing on either side.
   app.post(
     "/api/integrations/shopify/reconciliation",
     requirePerm("manage_inventory"),
@@ -84,117 +95,53 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
         const conn = await getActiveShopifyConnection();
         if (!conn)
           return res.status(400).json({ error: "No active Shopify connection" });
-
-        const { rows: mappedRows } = await db.query(
-          `SELECT spm.product_id,
-                  spm.variant_id,
-                  spm.shopify_inventory_item_id,
-                  slm.outlet_id,
-                  slm.shopify_location_id,
-                  COALESCE(SUM(os.quantity), 0) as local_qty
-           FROM shopify_product_map spm
-           JOIN shopify_location_map slm ON true
-           LEFT JOIN outlet_stock os
-             ON os.product_id = spm.product_id
-            AND os.outlet_id = slm.outlet_id
-           WHERE spm.is_active = true
-             AND spm.shopify_inventory_item_id IS NOT NULL
-           GROUP BY spm.product_id, spm.variant_id, spm.shopify_inventory_item_id, slm.outlet_id, slm.shopify_location_id`
-        );
-
-        if (!mappedRows || mappedRows.length === 0) {
+        const rows = await stockCheck.compareCounts(db, conn, shopifyFns);
+        if (rows.length === 0) {
           return res.status(400).json({ error: "No mapped items found" });
         }
-
-        const rowsToInsert = [];
-        let matched = 0;
-        let mismatch = 0;
-        let errorsCount = 0;
-
-        const batchSize = 50;
-        for (let i = 0; i < mappedRows.length; i += batchSize) {
-          const batch = mappedRows.slice(i, i + batchSize);
-          const byLocation = {};
-          batch.forEach((r) => {
-            if (!byLocation[r.shopify_location_id]) byLocation[r.shopify_location_id] = [];
-            byLocation[r.shopify_location_id].push(r);
-          });
-
-          for (const locId of Object.keys(byLocation)) {
-            const locBatch = byLocation[locId];
-            const itemIds = locBatch.map((r) => r.shopify_inventory_item_id);
-            try {
-              const remoteLevels = await fetchInventoryLevelsBatch(conn, itemIds, locId);
-              const remoteMap = new Map(
-                remoteLevels.map((l) => [l.inventory_item_id, l.available])
-              );
-
-              for (const row of locBatch) {
-                const localQty = Number(row.local_qty || 0);
-                const externalQty = Number(
-                  remoteMap.get(`gid://shopify/InventoryItem/${row.shopify_inventory_item_id}`) ?? 0
-                );
-                const diff = Number((localQty - externalQty).toFixed(4));
-                const status = diff === 0 ? "matched" : "mismatch";
-                if (status === "matched") matched += 1;
-                else mismatch += 1;
-                rowsToInsert.push({
-                  product_id: row.product_id,
-                  variant_id: row.variant_id || null,
-                  outlet_id: row.outlet_id,
-                  external_location_id: locId,
-                  local_qty: localQty,
-                  external_qty: externalQty,
-                  diff,
-                  status,
-                  resolution_status: "open",
-                });
-              }
-            } catch (e) {
-              errorsCount += locBatch.length;
-              locBatch.forEach((row) => {
-                rowsToInsert.push({
-                  product_id: row.product_id,
-                  variant_id: row.variant_id || null,
-                  outlet_id: row.outlet_id,
-                  external_location_id: locId,
-                  local_qty: Number(row.local_qty || 0),
-                  external_qty: 0,
-                  diff: Number(row.local_qty || 0),
-                  status: "error",
-                  resolution_status: "open",
-                  resolution_note: e.message || "Batch fetch failed",
-                });
-              });
-            }
-          }
-        }
-
-        await db.transaction(async (client) => {
-          await client.query("DELETE FROM inventory_reconciliation");
-          for (const r of rowsToInsert) {
-            await client.query(
-              `INSERT INTO inventory_reconciliation (
-                 product_id, variant_id, outlet_id, external_location_id,
-                 local_qty, external_qty, diff, status, checked_at,
-                 resolution_status, resolution_note
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10)`,
-              [
-                r.product_id, r.variant_id, r.outlet_id, r.external_location_id,
-                r.local_qty, r.external_qty, r.diff, r.status,
-                r.resolution_status, r.resolution_note || null,
-              ]
-            );
-          }
-        });
-
+        await stockCheck.saveCheck(db, rows);
+        const counts = rows.reduce((acc, r) => {
+          acc[r.status] = (acc[r.status] || 0) + 1;
+          return acc;
+        }, {});
         res.json({
           message: "Live reconciliation completed",
-          row_count: rowsToInsert.length,
-          matched,
-          mismatch,
-          errors: errorsCount,
+          row_count: rows.length,
+          matched: counts.matched || 0,
+          mismatch: counts.mismatch || 0,
+          not_at_location: counts.not_at_location || 0,
+          not_found: counts.not_found || 0,
+          errors: counts.error || 0,
         });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // POST set Shopify to SanoPOS counts — the owner's button. Sets Shopify's
+  // "available" to SanoPOS's exact count for every mapped item that differs
+  // (or only `ids`, rows of the saved check). See shopify/stock-check.js.
+  app.post(
+    "/api/integrations/shopify/stock/set-to-pos",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const conn = await getActiveShopifyConnection();
+        if (!conn)
+          return res.status(400).json({ error: "No active Shopify connection" });
+        const ids = Array.isArray(req.body?.ids) && req.body.ids.length ? req.body.ids.map(Number) : null;
+        const result = await stockCheck.setShopifyToPos(db, conn, shopifyFns, {
+          reconIds: ids,
+          processPending,
+          employeeId: employeeIdOf(req),
+        });
+        logActionHistory(
+          req,
+          "shopify_set_counts",
+          `Set Shopify to SanoPOS counts: ${result.set} set, ${result.mismatch} still different, ${result.waiting} waiting`,
+        );
+        res.json(result);
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
@@ -309,30 +256,53 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
             ? Number(req.headers["x-employee-id"])
             : null;
 
+          if (mode === "pos_wins") {
+            // Used to only mark rows resolved (claiming "Shopify sync will
+            // push POS values", which nothing did). Now it actually sets Shopify.
+            const conn = await getActiveShopifyConnection();
+            if (!conn)
+              return res.status(400).json({ error: "No active Shopify connection" });
+            const result = await stockCheck.setShopifyToPos(db, conn, shopifyFns, {
+              reconIds: ids.map(Number),
+              processPending,
+              employeeId,
+            });
+            logActionHistory(req, "reconciliation_bulk_fix", `Set Shopify to SanoPOS for ${result.set} of ${ids.length} rows`);
+            return res.json({ message: `Set ${result.set} item(s) on Shopify to the SanoPOS count`, ...result });
+          }
+
+          // shopify_wins: overwrite SanoPOS with Shopify's count. Plain products
+          // only: a variant row's Shopify count is for one variant, and writing
+          // it into the product total would corrupt SanoPOS stock.
+          const { rows: picked } = await db.query(
+            `SELECT id, product_id, variant_id, outlet_id, external_qty
+             FROM inventory_reconciliation WHERE id = ANY($1::int[])`,
+            [ids.map(Number)]
+          );
+          if (picked.some((r) => r.variant_id)) {
+            return res.status(400).json({
+              error: "Shopify wins can't be used on variant items. Correct them with a stock adjustment instead.",
+            });
+          }
+          if (picked.some((r) => r.external_qty === null)) {
+            return res.status(400).json({
+              error: "Some selected items have no Shopify count to copy.",
+            });
+          }
           let fixedCount = 0;
           await db.transaction(async (client) => {
-            if (mode === "shopify_wins") {
-              const { rows } = await client.query(
-                `SELECT product_id, outlet_id, external_qty
-                 FROM inventory_reconciliation WHERE id = ANY($1::int[])`,
-                [ids]
+            for (const row of picked) {
+              await client.query(
+                `UPDATE outlet_stock SET quantity = $1
+                 WHERE product_id = $2 AND outlet_id = $3`,
+                [row.external_qty, row.product_id, row.outlet_id]
               );
-              for (const row of rows) {
-                await client.query(
-                  `UPDATE outlet_stock SET quantity = $1
-                   WHERE product_id = $2 AND outlet_id = $3`,
-                  [row.external_qty, row.product_id, row.outlet_id]
-                );
-              }
             }
-            // pos_wins: no stock changes needed — Shopify sync will push POS values
-
-            const placeholders = ids.map((_, i) => `$${i + 2}`).join(",");
             const result = await client.query(
               `UPDATE inventory_reconciliation
                SET resolution_status = 'resolved', resolved_by = $1, resolved_at = NOW()
-               WHERE id IN (${placeholders})`,
-              [employeeId, ...ids]
+               WHERE id = ANY($2::int[])`,
+              [employeeId, picked.map((r) => r.id)]
             );
             fixedCount = result.rowCount;
           });

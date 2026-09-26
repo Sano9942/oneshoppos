@@ -16,8 +16,10 @@ const shopifyStubs = {
   fetchInventoryLevel: () => Promise.resolve({ available: 10 }),
   fetchInventoryLevelsBatch: () => Promise.resolve([]),
   fetchRecentOrders: () => Promise.resolve([]),
-  processPendingShopifyInventoryEvents: (limit, cb) => cb(null, { processed: 0, failed: 0, skipped: 0 }),
-  enqueueInventorySyncEvents: (rows, opts, cb) => cb(null, { queued: 0, skipped: 0 }),
+  // Async like the real helpers in routes/orders.js. The old callback stubs
+  // hid that the routes waited on a callback the real code never calls.
+  processPendingShopifyInventoryEvents: async () => ({ processed: 0, failed: 0, skipped: 0 }),
+  enqueueInventorySyncEvents: async () => ({ queued: 0, skipped: 0 }),
   upsertWebOrderFromShopifyPayload: (payload) => Promise.resolve({ web_order_id: 999 }),
   logShopifyEvent: () => {},
   encryptShopifySecret: (v) => v,

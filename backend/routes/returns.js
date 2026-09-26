@@ -747,6 +747,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
       const syncChanges = items.map((item) => ({
         product_id: item.product_id,
+        variant_id: item.variant_id || null,
         outlet_id,
         delta: Number(item.quantity || 0),
         reason: "return",

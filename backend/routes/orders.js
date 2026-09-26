@@ -773,20 +773,38 @@ module.exports = function registerOrderRoutes(app, deps) {
       }))
       .filter((c) => c.product_id && c.outlet_id && c.delta !== 0);
 
-    if (normalized.length === 0) return { queued: 0, skipped: 0 };
+    // One event per item per stock move. The key below is also the dedupe key,
+    // so two lines of the same item on one bill must be added together here, or
+    // the second line was dropped as a "duplicate" and never reached Shopify.
+    // A move with no reference can't be deduped at all: give it a unique key
+    // (transfers used to pass none, so every transfer after an item's first
+    // was dropped).
+    const merged = new Map();
+    for (const c of normalized) {
+      if (!c.reference_id) {
+        c.reference_id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      }
+      const k = [c.reason, c.reference_type, c.reference_id, c.product_id, c.variant_id || 0, c.outlet_id].join("|");
+      const prev = merged.get(k);
+      if (prev) prev.delta += c.delta;
+      else merged.set(k, { ...c });
+    }
+    const combined = [...merged.values()].filter((c) => c.delta !== 0);
+
+    if (combined.length === 0) return { queued: 0, skipped: 0 };
 
     const conn = await getActiveShopifyConnection();
     if (!conn)
       return {
         queued: 0,
-        skipped: normalized.length,
+        skipped: combined.length,
         reason: "no_connection",
       };
 
     let queued = 0;
     let skipped = 0;
 
-    for (const item of normalized) {
+    for (const item of combined) {
       const { rows: [loc] } = await db.query(
         `SELECT shopify_location_id
        FROM shopify_location_map

@@ -99,23 +99,28 @@ module.exports = function registerShopifySyncRoutes(app, deps) {
         );
         const runId = rows[0].id;
 
-        // processPendingShopifyInventoryEvents is still callback-based (external)
-        processPendingShopifyInventoryEvents(limit, async (err, result) => {
-          const out = result || { processed: 0, failed: 0, skipped: 0 };
-          await db.query(
-            `UPDATE shopify_sync_runs
-             SET finished_at = NOW(), status = $1, processed_count = $2, failed_count = $3
-             WHERE id = $4`,
-            [
-              out.failed > 0 ? "completed_with_errors" : "completed",
-              out.processed || 0,
-              out.failed || 0,
-              runId,
-            ]
-          ).catch(() => {});
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ run_id: runId, ...out });
-        });
+        // processPendingShopifyInventoryEvents is async. It used to be handed
+        // a callback it never called, so this request never answered.
+        let out = { processed: 0, failed: 0, skipped: 0 };
+        let runErr = null;
+        try {
+          out = (await processPendingShopifyInventoryEvents(limit)) || out;
+        } catch (e) {
+          runErr = e;
+        }
+        await db.query(
+          `UPDATE shopify_sync_runs
+           SET finished_at = NOW(), status = $1, processed_count = $2, failed_count = $3
+           WHERE id = $4`,
+          [
+            runErr ? "failed" : out.failed > 0 ? "completed_with_errors" : "completed",
+            out.processed || 0,
+            out.failed || 0,
+            runId,
+          ]
+        ).catch(() => {});
+        if (runErr) return res.status(500).json({ error: runErr.message });
+        res.json({ run_id: runId, ...out });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
@@ -149,6 +154,9 @@ module.exports = function registerShopifySyncRoutes(app, deps) {
     },
   );
 
+  // Push stock to Shopify. With no rows, this is the absolute push: Shopify is
+  // set to SanoPOS's exact counts (same as "Set Shopify to SanoPOS counts").
+  // With rows, each row is a +/- change queued and sent as before.
   app.post(
     "/api/integrations/shopify/sync/push-inventory",
     requirePerm("manage_inventory"),
@@ -159,84 +167,74 @@ module.exports = function registerShopifySyncRoutes(app, deps) {
         if (!conn)
           return res.status(400).json({ error: "No active Shopify connection" });
 
+        const toPush = Array.isArray(bodyRows) ? bodyRows : [];
+        if (toPush.length === 0) {
+          const stockCheck = require("../../shopify/stock-check");
+          const result = await stockCheck.setShopifyToPos(
+            db,
+            conn,
+            {
+              fetchInventoryLevelsBatch: deps.fetchInventoryLevelsBatch,
+              setShopifyInventory:
+                deps.setShopifyInventory || require("../../shopify/client").setShopifyInventory,
+            },
+            { processPending: (limit) => processPendingShopifyInventoryEvents(limit) },
+          );
+          return res.json({ message: "Shopify set to SanoPOS counts", ...result });
+        }
+
         const { rows } = await db.query(
           `INSERT INTO shopify_sync_runs (direction, run_type, status, notes)
-           VALUES ('outbound', 'manual_push_inventory', 'running', $1)
-           RETURNING id`,
-          [
-            bodyRows.length > 0
-              ? "Manual rows pushed"
-              : "Dry-run push generated from local inventory",
-          ]
+           VALUES ('outbound', 'manual_push_inventory', 'running', 'Manual rows pushed')
+           RETURNING id`
         );
         const runId = rows[0].id;
-        const toPush = Array.isArray(bodyRows) ? bodyRows : [];
 
-        enqueueInventorySyncEvents(
-          toPush,
-          {
+        // Both helpers are async; they used to be handed callbacks they never
+        // called, so this request never answered.
+        let enqueueResult;
+        try {
+          enqueueResult = await enqueueInventorySyncEvents(toPush, {
             reason: "manual_sync",
             reference_type: "manual",
             reference_id: runId,
-          },
-          async (enqueueErr, enqueueResult) => {
-            if (enqueueErr) {
-              await db.query(
-                `UPDATE shopify_sync_runs
-                 SET finished_at = NOW(), status = 'failed', failed_count = 1, notes = $1
-                 WHERE id = $2`,
-                [enqueueErr.message, runId]
-              ).catch(() => {});
-              return res.status(500).json({ error: enqueueErr.message });
-            }
+          });
+        } catch (enqueueErr) {
+          await db.query(
+            `UPDATE shopify_sync_runs
+             SET finished_at = NOW(), status = 'failed', failed_count = 1, notes = $1
+             WHERE id = $2`,
+            [enqueueErr.message, runId]
+          ).catch(() => {});
+          return res.status(500).json({ error: enqueueErr.message });
+        }
 
-            const queuedCount = enqueueResult?.queued || 0;
-            const finalizeRun = async (processResult) => {
-              const processedCount = processResult?.processed || 0;
-              const failedCount = processResult?.failed || 0;
-              await db.query(
-                `UPDATE shopify_sync_runs
-                 SET finished_at = NOW(), status = $1, processed_count = $2, failed_count = $3
-                 WHERE id = $4`,
-                [
-                  failedCount > 0 ? "completed_with_errors" : "completed",
-                  processedCount,
-                  failedCount,
-                  runId,
-                ]
-              ).catch(() => {});
-              await db.query(
-                `UPDATE shopify_connections
-                 SET last_sync_at = NOW(), last_error = $1, updated_at = NOW()
-                 WHERE id = $2`,
-                [
-                  failedCount > 0 ? `${failedCount} event(s) failed` : null,
-                  conn.id,
-                ]
-              ).catch(() => {});
-              return res.json({
-                message: "Inventory sync run completed",
-                run_id: runId,
-                queued: queuedCount,
-                processed: processedCount,
-                failed: failedCount,
-                skipped: processResult?.skipped || 0,
-              });
-            };
-
-            if (!process_now || queuedCount === 0) {
-              return finalizeRun({
-                processed: 0,
-                failed: 0,
-                skipped: enqueueResult?.skipped || 0,
-              });
-            }
-            processPendingShopifyInventoryEvents(50, async (procErr, procResult) => {
-              if (procErr) return res.status(500).json({ error: procErr.message });
-              return finalizeRun(procResult || {});
-            });
-          }
-        );
+        const queuedCount = enqueueResult?.queued || 0;
+        let processResult = { processed: 0, failed: 0, skipped: enqueueResult?.skipped || 0 };
+        if (process_now && queuedCount > 0) {
+          processResult = (await processPendingShopifyInventoryEvents(50)) || processResult;
+        }
+        const processedCount = processResult?.processed || 0;
+        const failedCount = processResult?.failed || 0;
+        await db.query(
+          `UPDATE shopify_sync_runs
+           SET finished_at = NOW(), status = $1, processed_count = $2, failed_count = $3
+           WHERE id = $4`,
+          [
+            failedCount > 0 ? "completed_with_errors" : "completed",
+            processedCount,
+            failedCount,
+            runId,
+          ]
+        ).catch(() => {});
+        res.json({
+          message: "Inventory sync run completed",
+          run_id: runId,
+          queued: queuedCount,
+          processed: processedCount,
+          failed: failedCount,
+          skipped: processResult?.skipped || 0,
+        });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }

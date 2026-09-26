@@ -51,6 +51,7 @@ const {
   fetchShopifyProductsFull,
   fetchInventoryLevel,
   fetchInventoryLevelsBatch,
+  setShopifyInventory,
   fetchRecentOrders,
 } = require("./shopify/client");
 const {
@@ -265,6 +266,7 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     fetchShopifyProductsFull,
     fetchInventoryLevel,
     fetchInventoryLevelsBatch,
+    setShopifyInventory,
     fetchRecentOrders,
     retryDelayMinutesWithJitter,
     evaluateWebhookTimestampWindow,

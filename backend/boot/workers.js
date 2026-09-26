@@ -79,7 +79,9 @@ async function cleanupSyncEvents(deps) {
   await forEachActiveTenant("SyncCleanup", async (tenantDb) => {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { rowCount } = await tenantDb.query(
-      "DELETE FROM external_sync_events WHERE created_at < $1 AND status IN ('success', 'failed')",
+      // 'processed' and 'superseded' are what the Shopify sync actually writes;
+      // 'success' was never written, so sent events piled up forever.
+      "DELETE FROM external_sync_events WHERE created_at < $1 AND status IN ('success', 'processed', 'superseded', 'failed')",
       [cutoff]
     );
     if (rowCount > 0) console.log(`[SyncCleanup] Deleted ${rowCount} old sync events`);
@@ -216,6 +218,40 @@ function startShopifyWorker(deps) {
   }, 30000);
 }
 
+// Daily SanoPOS vs Shopify stock check (One Toy Store blocker 2e). Report
+// only: saves the comparison for the Reconciliation screen and notifies the
+// owner when counts differ; never changes a count. Ticks hourly and runs for a
+// tenant when its last check is 23h+ old, so a restart can't skip or double a day.
+function startShopifyStockCheckWorker(deps) {
+  const { IS_MULTI_TENANT, tenantDbManager, asyncStore, db } = deps;
+  if (!recordGate("shopify_stock_check", "SHOPIFY_STOCK_CHECK_WORKER_DISABLED", { optOut: true, kind: "poller" })) return;
+  global.__shopifyStockCheckWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+  markRegistered("shopify_stock_check");
+
+  const stockCheck = require("../shopify/stock-check");
+  const { getActiveShopifyConnection } = require("../shopify/utils");
+  const { decryptShopifySecret } = require("../shopify/crypto");
+  const { fetchInventoryLevelsBatch, setShopifyInventory } = require("../shopify/client");
+
+  const tick = async () => {
+    global.__shopifyStockCheckWorkerStatus.lastPollAt = Date.now();
+    await forEachActiveTenant("ShopifyStockCheck", async (tenantDb) => {
+      const run = async () => {
+        const conn = await getActiveShopifyConnection(tenantDb, decryptShopifySecret);
+        if (!conn) return;
+        if (!(await stockCheck.dailyCheckDue(tenantDb))) return;
+        await stockCheck.runDailyCheck(tenantDb, conn, { fetchInventoryLevelsBatch, setShopifyInventory });
+        global.__shopifyStockCheckWorkerStatus.processedToday += 1;
+      };
+      if (IS_MULTI_TENANT && asyncStore) await asyncStore.run({ db: tenantDb }, run);
+      else await run();
+    }, { db, IS_MULTI_TENANT, tenantDbManager });
+  };
+
+  setTimeout(() => tick().catch((e) => console.error("[ShopifyStockCheck]", e.message)), 5 * 60 * 1000);
+  setInterval(() => tick().catch((e) => console.error("[ShopifyStockCheck]", e.message)), 60 * 60 * 1000);
+}
+
 function startReportScheduleWorker(deps) {
   const { IS_MULTI_TENANT, tenantDbManager, asyncStore, processPendingReportSchedules } = deps;
   if (!recordGate("report_schedule", "REPORT_SCHEDULE_WORKER_DISABLED", { optOut: true, kind: "poller" })) return;
@@ -267,6 +303,7 @@ function startAll(deps) {
 
   // Shopify sync worker
   startShopifyWorker(deps);
+  startShopifyStockCheckWorker(deps);
 
   // Report schedule worker
   startReportScheduleWorker(deps);

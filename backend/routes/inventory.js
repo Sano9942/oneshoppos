@@ -126,6 +126,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
         }
       }
 
+      let transferId = null;
       await db.transaction(async (client) => {
         // 1. Record the transfer (with optional variant_id)
         const { rows: [transferRow] } = await client.query(
@@ -133,6 +134,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
           [product_id, variant_id || null, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
         );
+        transferId = transferRow.id;
 
         // 2. WS1a: move the on-hand total through the shared stock helper.
         // decrementStock at source takes the FOR UPDATE + availability gate the
@@ -186,7 +188,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
             delta: -1 * Number(quantity || 0),
             reason: "transfer_out",
             reference_type: "transfer",
-            reference_id: null,
+            reference_id: transferId,
           },
           {
             product_id,
@@ -195,7 +197,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
             delta: Number(quantity || 0),
             reason: "transfer_in",
             reference_type: "transfer",
-            reference_id: null,
+            reference_id: transferId,
           },
         ],
         {},

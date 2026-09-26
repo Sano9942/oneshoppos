@@ -12,12 +12,14 @@
 1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
 2. ✅ Profit takes returns off (D17), plus D20–D23 found on the way — `e3c3503d`, `42992dae`, `e143ee5b`
 3. ✅ Online orders reduce shop stock (blocker 1, 1a–1f) — `f92533b5`. Proven locally in tests and on the real backend with a signed webhook and no login. **Still to prove on the Shopify dev store** (Phase C): real Shopify payloads, and registering the 3 webhooks
-4. ⏭ **NEXT: "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, findings 2a–2f)**
-5. Offline catalogue copy in the browser so scanning works offline (blocker 3; owner said yes)
+4. ✅ "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, 2a–2h). Found on the way: **the everyday sync was never switched on** (2h), so no till sale ever reached Shopify. Proven locally against a fake Shopify in tests. **Still to prove on the Shopify dev store** (Phase C): the exact field name Shopify's API version wants for the set (see 2a), and a real count set
+5. ⏭ **NEXT: offline catalogue copy in the browser so scanning works offline (blocker 3; owner said yes)**
 6. Suggested new selling price when a delivery arrives at a different cost (cost-plus margin per category/brand, nearest Rs 50, owner confirms each). Needs the margin % per category/brand from the owner
 7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
 
-**Current proof:** shop-day **112 pass, 0 fail**; `ots-retail-core.test.js` 47 tests; online-order webhook proof on the real backend **7 pass, 0 fail**. Everything committed on `onetoystore-pilot`, not pushed.
+**Current proof:** shop-day **112 pass, 0 fail** (re-run after blocker 2); `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**. Everything committed on `onetoystore-pilot`, not pushed.
+
+**Shopify access on the owner's machine (checked 2026-09-26):** the Claude desktop Shopify connector and the Shopify CLI (3.91.1, theme login for `one-toy-store-dev.myshopify.com`) both point at the **LIVE** store. Neither is a test store. Don't use them for Phase C testing.
 
 **How to run things (local only):**
 - Backend: start via the `backend` launch config (or `node backend/index.js`); banner must say LOCAL DB. Restart it after backend edits (no hot reload).
@@ -43,7 +45,7 @@
 | Phase | What | Status |
 |---|---|---|
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
-| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–2 done |
+| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–4 done |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ⏳ needs dev store from owner |
 | **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
@@ -89,6 +91,35 @@ Changed on purpose (old tests updated): an unpaid order used to be ignored; one 
 | 2d | Reconciliation compares Shopify with **product-level** stock only. Variant stock is ignored, so every Hot Wheels variant would compare against the total for all cars. A Shopify item it can't read counts as 0. | `reconciliation.js:88-103, 134-136` |
 | 2e | No periodic drift check. Reconciliation only runs when someone presses the button. | no worker in `boot/workers.js` |
 | 2f | **Partial purchase receipts lose their Shopify update.** The sync de-duplication key uses the PO number, not the GRN number, so the 2nd delivery against the same PO is silently dropped as a "duplicate". Stock transfers use no reference at all, so after the first transfer of an item, later ones are dropped. | `routes/purchase-orders.js:523-535`, `routes/inventory.js:187-198`, key built at `routes/orders.js:808-816` |
+
+**Found while fixing (2026-09-26):**
+
+| # | Finding | Evidence |
+|---|---|---|
+| 2g | The stock check compared **every imported item against 0**. The Shopify import saves inventory ids as full `gid://shopify/InventoryItem/…`; reconciliation prefixed `gid://shopify/InventoryItem/` again, so no Shopify count was ever found. "Shopify wins" on those rows would have set SanoPOS stock to 0. | `routes/shopify/import.js:152-159` vs old `reconciliation.js:134-136` |
+| 2h | **The everyday sync was never switched on.** Sales, voids, returns, transfers, adjustments, PO receipts and supplier returns all queue their Shopify change via `deps.enqueueInventorySyncEvents`, but that helper was only given to the Shopify routes, never to `deps`. Every caller found nothing and silently skipped. No till sale ever reached Shopify. | `routes/registerAllRoutes.js:685-695` (helper only in `shopifyDeps`); callers e.g. `routes/sales.js:58-64` |
+| 2i | Two lines of the same item on one bill made the same de-duplication key, so the 2nd line was dropped. A return of a variant was sent without its `variant_id`, so it would update the plain product on Shopify. | `routes/orders.js` key; `routes/returns.js` sync call |
+| 2j | The per-row "POS wins / Shopify wins" buttons created approval requests that **nothing ever carries out**: approving one changes nothing. | no consumer of `reconciliation_fix` approvals anywhere in `backend/` |
+| 2k | The old-event cleanup deletes `success`/`failed` events, but the sync writes `processed`, so sent events were never cleaned up (matters on the 500 MB free Supabase tier). | `boot/workers.js` `cleanupSyncEvents` |
+
+**Fixed 2026-09-26 (Phase B step 4), locally. Shopify dev-store test still to do:**
+
+| # | What changed | Proof (`ots-shopify-stock.test.js`) |
+|---|---|---|
+| 2a | New **Set Shopify to SanoPOS counts** (Reconciliation tab button, `POST /api/integrations/shopify/stock/set-to-pos`). It sets Shopify's `available` to SanoPOS's **exact** count with `inventorySetQuantities`, not a +/- change. Negative SanoPOS stock is sent as 0; part-units round down. Every set is **compare-and-set**: it carries the count just read from Shopify, and Shopify refuses it if an online order changed the count in between. That item is left alone and reported "changed while fixing, run again"; the rest of the batch still goes through. Before setting, waiting +/- changes are sent; an item whose change is still waiting to retry is skipped ("update on its way") so it can't land on top of the new count. After a set, old failed changes for that item are marked `superseded`, so "retry failed" can't replay them. **To prove on the dev store:** Shopify renamed the compare field (`compareQuantity` before API 2026-04, `changeFromQuantity` + a required idempotency key from 2026-04). The code picks by the connection's API version (default 2025-10) and retries once with the other spelling. Shopify's schema couldn't be read from here to confirm. | sets exact counts; negative → 0; online order mid-fix; waiting change skipped; failed events retired |
+| 2b | "Process pending" and "push inventory" now **answer**. Push inventory with no rows = set Shopify to SanoPOS counts. The old tests passed only because their stubs called the callback the real code never calls. | 3 tests with a 5 s timeout (hung before) |
+| 2c | "POS wins" (bulk, and the new per-row **Set Shopify to N**) now actually sets Shopify. "Shopify wins" (now labelled "Copy Shopify count into SanoPOS") is refused on variant rows, and on rows with no Shopify count. The per-row approval buttons that did nothing (2j) are gone. | POS wins test; variant refusal test |
+| 2d | Compares **per variant** (the variant's own shop stock) and per plain product. An item Shopify can't read shows **"Unknown to Shopify"** or **"Not stocked here on Shopify"** with the Shopify count blank, never 0, and is never set. | variant test; unreadable test |
+| 2e | **Daily check** (`boot/workers.js` `shopify_stock_check`, on by default, off with `SHOPIFY_STOCK_CHECK_WORKER_DISABLED=1`). Runs for each shop with an active Shopify connection when its last check is 23 h+ old (hourly tick, so restarts can't skip or double a day). **Report only:** saves the comparison for the Reconciliation tab and sends an in-app notification when counts differ. It never changes a count. Items the owner marked "ignored" stay ignored if nothing changed. Shown on the admin worker-status page. | daily check test; ignored-stays-ignored test |
+| 2f | Transfers carry their transfer id (was none). PO receipts were already keyed by GRN (fixed in `e6389eac`). A move with no reference now gets a unique key instead of colliding. | 2 transfers → 2 events |
+| 2g | Ids compared in one form (`toGid`) whether saved as a number or a full gid. | exact-counts test (one of each form) |
+| 2h | The helper is now given to every caller, wrapped so a failed queue write is logged and can't crash the server. **Effect: once a shop has an active Shopify connection, every till sale, void, return, transfer, adjustment, delivery and supplier return now sends its change to Shopify.** That was always the intent, but it has never actually run before, so Phase C must watch it on the dev store. | all 3 duplicate tests needed it |
+| 2i | Same-item lines on one bill are added together into one change; returns send the variant. | 2 lines → one −3 change; variant return test |
+| 2k | Cleanup also removes old `processed` and `superseded` events. | |
+
+Real multi-tenant backend (not the test harness): `node tools/onetoystore-pilot/shopify-sync-live.cjs <otsacc_* tenant>` gives a throwaway local shop a Shopify link to a domain that can't exist (`ots-fake.invalid`), then checks that 2 transfers queue 2 Shopify changes (2h/2f), and that Check now / process pending / set counts all answer, with an unreachable Shopify shown as a blank count. **8 pass, 0 fail.**
+
+Screen checked in the browser (local shop): new button with a confirm box, plain-English statuses, blank Shopify count for unreadable items, "Set Shopify to 100" on a differing row.
 
 ### Blocker 3: cloud-only counter. REAL, and bigger than "untested"
 
@@ -233,6 +264,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | Backend integration | **1,801 pass, 26 fail, 29 skipped** (155 of 202 files pass) | **33 files can't load at all** (30 import a deleted helper `tests/helpers/createTestApp`; 3 use Jest syntax). Those 33 include the dedicated retail tests: `purchase-orders`, `returns-exchange`, `shifts`, `shift-linkage`, `supplier-payables`, `reports_accuracy`, `inventory`, `promotions`. **So most of the retail core had no running test.** The 26 failures are the same 12 files already triaged in July as stale test fixtures (e.g. sales tests written before a sale needed an open till); none are new. |
 | Backend integration, **after the 13 fixes** (re-run 2026-09-26) | **1,823 pass, 26 fail, 29 skipped** | Compared test-by-test against the baseline: **0 new failures**, 0 disappeared, the same 26 failing. The +22 are the new `ots-retail-core` regression tests, all passing. |
 | Backend integration, **after blocker 1** (2026-09-26, ~36 min) | **1,848 pass, 26 fail, 29 skipped** | Pass count = 1,823 + 15 regression tests added for D6–D23 + 10 for blocker 1, exactly. Failures still 26, all in the stale-fixture files; none in any Shopify/order file. The 11 order-adjacent files were also run with and without the change: identical failures. |
+| Backend integration, **after blocker 2** (2026-09-26, ~34 min) | **1,866 pass, 26 fail, 29 skipped** | 1,848 + the 18 new `ots-shopify-stock` tests, exactly. The same 12 stale-fixture files fail; none is a Shopify, stock, sales or returns file. |
 
 ---
 
@@ -250,3 +282,6 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-26 | Product **History tab** (as in the iPOS item file): (1) price & cost change history with who, when and why (hand edit / delivery / accepted suggestion); (2) sales with date, **bill no** (links to the bill), qty, price, cashier, returns as minus lines; (3) a **full stock ledger** (purchases, sales, returns, adjustments, transfers, counts) with running balance, per variant. Today: price changes are only a free-text activity-log line (employee usually "Unknown", GRN cost changes not logged); `/api/reports/history-sale` shows sale id not bill no, caps at 500 rows, no variant split; no per-item ledger exists | **Owner** | Staff need to see an item's price and movement history in one click |
 | 2026-09-26 | Shopify dev store: **later**. Phase B starts locally; Shopify-facing parts are tested on a dev store afterwards | **Owner** | |
 | 2026-09-26 | Online orders take shop stock off **when the order arrives** (COD included), not when paid or shipped; cancel puts it back; a Shopify refund puts back only what Shopify restocked | Claude (default; owner can change) | Matches what Shopify does to its own stock, so the two counts agree and the counter can't sell a toy already promised online. Blocker 1a |
+| 2026-09-26 | The daily Shopify stock check **only reports** (notification + Reconciliation tab); the owner presses "Set Shopify to SanoPOS counts" to fix. Revisit after the 2-week parallel run | **Owner** | Nothing changes on the live website without the owner seeing it first. Blocker 2e |
+| 2026-09-26 | Shopify is set to SanoPOS's shop count as Shopify's **available** count | Claude | SanoPOS takes stock off when an online order arrives (1a), and Shopify's "available" is on-hand minus orders not yet shipped, so the two are the same number. No separate "minus unshipped" setting needed |
+| 2026-09-26 | Which Shopify location each SanoPOS shop updates = the existing **location map** (Shopify → Mappings). One Toy Store picks it at setup on the dev store | open, owner at setup | |

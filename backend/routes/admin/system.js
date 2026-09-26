@@ -52,6 +52,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     orphan_schema_scan: "orphan-schema-scan",
     adoption_snapshot: "adoption-snapshot",
     shopify_sync: null, // setInterval
+    shopify_stock_check: null, // setInterval
     report_schedule: null, // setInterval
   };
 
@@ -105,6 +106,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const adoptionSnapshotStatus = global.__adoptionSnapshotWorkerStatus || null;
       // Shopify inventory-event poll (30s) + report-schedule poll (60s).
       const shopifySyncStatus = global.__shopifySyncWorkerStatus || null;
+      const shopifyStockCheckStatus = global.__shopifyStockCheckWorkerStatus || null;
       const reportScheduleStatus = global.__reportScheduleWorkerStatus || null;
       // Boot-time env-gate registry (boot/workers.js) — knows each worker's
       // env var, whether it's set, and whether registration succeeded. This
@@ -237,6 +239,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         orphan_schema_scan: workerInfo("orphan_schema_scan", orphanSchemaScanStatus, 60 * 60 * 1000),
         adoption_snapshot: workerInfo("adoption_snapshot", adoptionSnapshotStatus, 6 * 60 * 60 * 1000),
         shopify_sync: workerInfo("shopify_sync", shopifySyncStatus, 30_000),
+        shopify_stock_check: workerInfo("shopify_stock_check", shopifyStockCheckStatus, 60 * 60 * 1000),
         report_schedule: workerInfo("report_schedule", reportScheduleStatus, 60_000),
       });
     } catch (err) {

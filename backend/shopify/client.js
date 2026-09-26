@@ -280,17 +280,22 @@ async function fetchInventoryLevel(connection, inventoryItemId, locationId) {
   };
 }
 
+// Reads Shopify's "available" count for many items at one location.
+// `available` is null (never 0) when Shopify can't give a count: the item is
+// unknown to Shopify or isn't stocked at that location. Callers must not treat
+// "unreadable" as "zero": that is how a stock check came to report every
+// unreadable item as out of stock on Shopify.
 async function fetchInventoryLevelsBatch(
   connection,
   inventoryItemIds,
   locationId,
 ) {
   const query = `
-    query InventoryLevels($ids: [ID!]!) {
+    query InventoryLevels($ids: [ID!]!, $locationId: ID!) {
       nodes(ids: $ids) {
         ... on InventoryItem {
           id
-          inventoryLevel(locationId: "${toGid("Location", locationId)}") {
+          inventoryLevel(locationId: $locationId) {
             id
             quantities(names: ["available"]) {
               name
@@ -303,21 +308,121 @@ async function fetchInventoryLevelsBatch(
   `;
   const gids = (inventoryItemIds || []).map((id) => toGid("InventoryItem", id));
   if (gids.length === 0) return [];
+  const locationGid = toGid("Location", locationId);
 
-  const data = await shopifyGraphqlRequest(connection, query, { ids: gids });
-  const nodes = data?.nodes || [];
+  const out = [];
+  // Shopify caps nodes(ids:) at 250 per call.
+  for (let i = 0; i < gids.length; i += 250) {
+    const chunk = gids.slice(i, i + 250);
+    const data = await shopifyGraphqlRequest(connection, query, {
+      ids: chunk,
+      locationId: locationGid,
+    });
+    const nodes = data?.nodes || [];
+    chunk.forEach((gid, j) => {
+      const node = nodes[j];
+      const level = node?.inventoryLevel || null;
+      const qtyRow = level?.quantities?.find((q) => q.name === "available");
+      const qty = qtyRow ? Number(qtyRow.quantity) : NaN;
+      out.push({
+        inventory_item_id: gid,
+        location_id: locationGid,
+        found: Boolean(node?.id),
+        stocked: Boolean(level),
+        available: level && Number.isFinite(qty) ? qty : null,
+      });
+    });
+  }
+  return out;
+}
 
-  return nodes.map((node) => {
-    const qtyRow = node?.inventoryLevel?.quantities?.find(
-      (q) => q.name === "available",
+function apiVersionAtLeast(connection, version) {
+  const v = String(connection?.api_version || "2025-10").trim();
+  return v >= version;
+}
+
+// Sets Shopify's "available" count to an exact number (not a +/- change).
+// Each row: { inventory_item_id, location_id, quantity, expected }. `expected`
+// is the count we last read from Shopify: Shopify refuses the change if the
+// count has moved since (an online order came in meanwhile), so a stale read
+// can never overwrite a newer sale. Returns { userErrors }.
+//
+// Shopify renamed the compare field: API versions before 2026-04 take
+// `compareQuantity`; 2026-04 and later take `changeFromQuantity` and require an
+// idempotency key. We pick by the connection's version and, if Shopify rejects
+// the field name, retry once with the other spelling.
+async function setShopifyInventory(
+  connection,
+  rows,
+  { reason = "correction", idempotencyKey = null, referenceDocumentUri = null } = {},
+) {
+  const quantities = (rows || [])
+    .map((r) => ({
+      inventoryItemId: toGid("InventoryItem", r.inventory_item_id),
+      locationId: toGid("Location", r.location_id),
+      quantity: Number(r.quantity),
+      expected: Number(r.expected),
+    }))
+    .filter(
+      (q) =>
+        q.inventoryItemId &&
+        q.locationId &&
+        Number.isInteger(q.quantity) &&
+        Number.isInteger(q.expected),
     );
-    const qty = Number(qtyRow?.quantity || 0);
-    return {
-      inventory_item_id: node?.id || "",
-      location_id: toGid("Location", locationId),
-      available: Number.isFinite(qty) ? qty : 0,
+  if (quantities.length === 0) return { applied: 0, userErrors: [] };
+
+  const key =
+    idempotencyKey || require("crypto").randomUUID();
+
+  const attempt = async (newStyle) => {
+    const mutation = newStyle
+      ? `
+    mutation SetInventory($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+      inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+        userErrors { code field message }
+      }
+    }
+  `
+      : `
+    mutation SetInventory($input: InventorySetQuantitiesInput!) {
+      inventorySetQuantities(input: $input) {
+        userErrors { code field message }
+      }
+    }
+  `;
+    const input = {
+      name: "available",
+      reason,
+      quantities: quantities.map((q) => ({
+        inventoryItemId: q.inventoryItemId,
+        locationId: q.locationId,
+        quantity: q.quantity,
+        [newStyle ? "changeFromQuantity" : "compareQuantity"]: q.expected,
+      })),
     };
-  });
+    if (referenceDocumentUri) input.referenceDocumentUri = referenceDocumentUri;
+    if (!newStyle) input.ignoreCompareQuantity = false;
+    const variables = newStyle ? { input, idempotencyKey: key } : { input };
+    const data = await shopifyGraphqlRequest(connection, mutation, variables);
+    return data?.inventorySetQuantities || {};
+  };
+
+  const preferNew = apiVersionAtLeast(connection, "2026-04");
+  let result;
+  try {
+    result = await attempt(preferNew);
+  } catch (err) {
+    const msg = String(err?.message || "");
+    if (!/compareQuantity|changeFromQuantity|ignoreCompareQuantity|idempotent/i.test(msg)) {
+      throw err;
+    }
+    result = await attempt(!preferNew);
+  }
+  return {
+    applied: quantities.length,
+    userErrors: result?.userErrors || [],
+  };
 }
 
 async function fetchRecentOrders(connection, first = 10) {
@@ -531,5 +636,7 @@ module.exports = {
   fetchShopifyProductsFull,
   fetchInventoryLevel,
   fetchInventoryLevelsBatch,
+  setShopifyInventory,
   fetchRecentOrders,
+  toGid,
 };

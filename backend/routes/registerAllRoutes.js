@@ -688,6 +688,26 @@ module.exports = function registerAllRoutes(app, deps) {
     enqueueInventorySyncEvents,
     upsertWebOrderFromShopifyPayload,
   } = require("./orders")(app, deps) || {};
+  // Sales, returns, transfers, stock adjustments, PO receipts and supplier
+  // returns queue their Shopify stock changes through deps.enqueueInventorySyncEvents
+  // (looked up at call time). It was only ever given to the Shopify routes, so
+  // every one of those callers silently skipped it and no till sale reached
+  // Shopify. Callers fire and forget with a callback: honour it, and never let
+  // a failed queue write become an unhandled rejection.
+  if (typeof enqueueInventorySyncEvents === "function") {
+    deps.enqueueInventorySyncEvents = (changes, context, cb) =>
+      enqueueInventorySyncEvents(changes, context).then(
+        (result) => {
+          if (typeof cb === "function") cb(null, result);
+          return result;
+        },
+        (err) => {
+          logShopifyEvent("error", "outbound_enqueue_failed", { error: String(err?.message || err) });
+          if (typeof cb === "function") cb(err);
+          return { queued: 0, skipped: (changes || []).length, error: String(err?.message || err) };
+        },
+      );
+  }
   const shopifyDeps = {
     ...deps,
     processPendingShopifyInventoryEvents,
