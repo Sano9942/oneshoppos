@@ -71,13 +71,15 @@ describe("Batch 7 — order-service (Postgres)", () => {
       expect(result.action).toBe("noop_no_items");
     });
 
-    it("pending + open → noop (not actionable)", async () => {
+    it("pending (cash on delivery) + open → holds stock like a paid order", async () => {
+      // One Toy Store pilot 1a: COD orders stay 'pending' until delivery; they
+      // must hold stock from arrival. No items here, so nothing moves.
       const { rows: [{ id }] } = await db.query(
         `INSERT INTO web_orders (source, external_order_id, payment_status, order_status, stock_applied)
          VALUES ('shopify', 'state_pending_open', 'pending', 'open', false) RETURNING id`
       );
       const result = await service.applyWebOrderStockPolicy(id);
-      expect(result.action).toBe("noop_state_not_actionable");
+      expect(result.action).toBe("noop_no_items");
     });
 
     it("paid + cancelled → should reverse (cancelled overrides paid)", async () => {
@@ -91,10 +93,12 @@ describe("Batch 7 — order-service (Postgres)", () => {
       expect(result.action).toBe("noop_already_reversed");
     });
 
-    it("refunded + open → should reverse", async () => {
+    it("refunded manual order + open → should reverse", async () => {
+      // Shopify refunds release stock line by line (restocked_qty), see
+      // ots-retail-core "Blocker 1"; a manual order has no line detail.
       const { rows: [{ id }] } = await db.query(
         `INSERT INTO web_orders (source, external_order_id, payment_status, order_status, stock_applied)
-         VALUES ('shopify', 'state_refunded_open', 'refunded', 'open', false) RETURNING id`
+         VALUES ('manual', 'state_refunded_open', 'refunded', 'open', false) RETURNING id`
       );
       const result = await service.applyWebOrderStockPolicy(id);
       expect(result.action).toBe("noop_already_reversed");
@@ -246,7 +250,7 @@ describe("Batch 7 — order-service (Postgres)", () => {
       expect(items[0].variant_id).toBeNull();
     });
 
-    it("fails with unmapped items", async () => {
+    it("reports unmapped items instead of blocking the order", async () => {
       const { rows: [{ id }] } = await db.query(
         `INSERT INTO web_orders (source, external_order_id, payment_status, order_status, stock_applied)
          VALUES ('shopify', 'map_unmapped', 'paid', 'open', false) RETURNING id`
@@ -256,16 +260,16 @@ describe("Batch 7 — order-service (Postgres)", () => {
          VALUES ($1, 'NONEXISTENT-SKU', 'Unknown', 1, 50, 0, 0, 50)`,
         [id]
       );
-      await expect(service.applyWebOrderStockPolicy(id)).rejects.toThrow(
-        "Unmapped items (1) - stock policy not applied"
-      );
+      const result = await service.applyWebOrderStockPolicy(id);
+      expect(result.unmatched).toEqual(["Unknown"]);
 
-      // stock_policy_note should be set
+      // stock_policy_note names the line
       const { rows: [order] } = await db.query(
         "SELECT stock_policy_note FROM web_orders WHERE id = $1",
         [id]
       );
-      expect(order.stock_policy_note).toContain("Unmapped items");
+      expect(order.stock_policy_note).toContain("not matched to a SanoPOS product");
+      expect(order.stock_policy_note).toContain("Unknown");
     });
   });
 
@@ -310,20 +314,21 @@ describe("Batch 7 — order-service (Postgres)", () => {
         [id]
       );
       expect(order.stock_applied).toBe(true);
-      expect(order.stock_policy_note).toBe("Stock policy applyd");
+      expect(order.stock_policy_note).toBe("Stock applied");
     });
 
-    it("reverses stock (increments outlet_stock) for refunded order", async () => {
+    it("reverses stock (increments outlet_stock) when the order is cancelled", async () => {
       // First apply stock
       const { rows: [{ id }] } = await db.query(
         `INSERT INTO web_orders (source, external_order_id, payment_status, order_status, stock_applied)
-         VALUES ('shopify', 'stock_reverse', 'paid', 'open', true) RETURNING id`
+         VALUES ('shopify', 'stock_reverse', 'paid', 'open', false) RETURNING id`
       );
       await db.query(
         `INSERT INTO web_order_items (web_order_id, product_id, sku, title, qty, unit_price, discount, tax, line_total)
          VALUES ($1, 4, 'PROD-004', 'Snack', 10, 50, 0, 0, 500)`,
         [id]
       );
+      expect((await service.applyWebOrderStockPolicy(id)).action).toBe("apply");
 
       // Get initial stock
       const { rows: [before] } = await db.query(
@@ -331,9 +336,9 @@ describe("Batch 7 — order-service (Postgres)", () => {
       );
       const initialQty = Number(before.quantity);
 
-      // Now change to refunded
+      // Now cancel it
       await db.query(
-        "UPDATE web_orders SET payment_status = 'refunded' WHERE id = $1",
+        "UPDATE web_orders SET order_status = 'cancelled' WHERE id = $1",
         [id]
       );
 
@@ -523,7 +528,7 @@ describe("Batch 7 — order-service (Postgres)", () => {
       expect(Number(after.quantity)).toBeLessThan(qtyBefore);
     });
 
-    it("captures stock policy error for unmappable items in paid order", async () => {
+    it("reports unmappable items in a paid order on the stock policy result", async () => {
       const payload = {
         id: "shopify_paid_unmappable",
         total_price: "100.00",
@@ -533,9 +538,10 @@ describe("Batch 7 — order-service (Postgres)", () => {
         ],
       };
       const result = await service.upsertWebOrderFromShopifyPayload(payload);
-      // Stock policy should have an error (unmapped items)
+      // The order is stored; the unmatched line is reported, not thrown
       expect(result.stock_policy).toBeDefined();
-      expect(result.stock_policy.error).toContain("Unmapped items");
+      expect(result.stock_policy.error).toBeUndefined();
+      expect(result.stock_policy.unmatched).toEqual(["Unknown Item"]);
     });
 
     it("stores raw_payload as JSON string", async () => {

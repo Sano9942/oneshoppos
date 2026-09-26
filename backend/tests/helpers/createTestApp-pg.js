@@ -162,7 +162,7 @@ function createScopedDb(client) {
 }
 
 function loadEmployeePerms(db) {
-  return async (req, res, next) => {
+  return async function loadEmployeePerms(req, res, next) {
     const employeeId = req.headers["x-employee-id"];
     if (!employeeId) {
       req.employeePerms = [];
@@ -465,6 +465,8 @@ async function createTestApp(options = {}) {
     SHOPIFY_MAX_RETRY_ATTEMPTS: 3,
     ...shopifyStubs,
     ...shopifyUtilStubs,
+    // Per-file overrides, e.g. the real Shopify webhook utils instead of stubs.
+    ...(options.deps || {}),
   };
 
   if (options.registerAll) {

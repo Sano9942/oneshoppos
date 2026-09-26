@@ -150,6 +150,43 @@ module.exports = function registerAllRoutes(app, deps) {
   // Payment gateway webhooks — no auth, no tenant context (identifies via payment_intents)
   require("./webhooks")(app, deps);
 
+  // Shopify order webhooks — no SanoPOS login on Shopify's call, so they must
+  // be served before the tenant auth wall below (One Toy Store pilot, blocker
+  // 1b: mounted after it, every call got 401 AUTH_REQUIRED). The routes
+  // themselves are added later by routes/shopify/webhooks.js, which needs the
+  // order service built in routes/orders.js; a Router mounted here keeps its
+  // place in the middleware order regardless of when routes join it.
+  const shopifyWebhookRouter = require("express").Router();
+  app.use(shopifyWebhookRouter);
+  deps.shopifyWebhookRouter = shopifyWebhookRouter;
+  // Mode read at mount time, like the auth-wall choice below.
+  const shopifyWebhookMultiTenant = process.env.MULTI_TENANT === "1";
+  deps.resolveShopifyWebhookTenant = async (req, res, next) => {
+    if (!shopifyWebhookMultiTenant) return next();
+    const slug = String(req.params.tenantSlug || req.query.tenant || "").trim();
+    if (!slug) {
+      return res.status(400).json({
+        error: "Shopify webhook address must name the shop: /api/integrations/shopify/webhooks/orders/<tenant>",
+      });
+    }
+    try {
+      const masterDb = require("../master-db-pg");
+      const tenantDbMgr = deps.tenantDbManager || require("../tenant-db-manager-pg");
+      const { rows: [tenant] } = await masterDb.query(
+        "SELECT id FROM tenants WHERE slug = $1 AND status = 'active'",
+        [slug],
+      );
+      if (!tenant) return res.status(404).json({ error: "Store not found" });
+      const tenantDb = await tenantDbMgr.getDb(tenant.id);
+      // Same AsyncLocalStorage singleton resolveTenant uses, so deps.db (the
+      // tenant proxy the order service captured) resolves to this shop.
+      require("../tenant-db-proxy-pg").asyncStore.run({ db: tenantDb }, () => next());
+    } catch (err) {
+      console.error("[shopify-webhook] tenant resolution failed:", err.message);
+      return res.status(500).json({ error: "Failed to resolve store" });
+    }
+  };
+
   // Sandbox payment simulation — only available when PAYMENT_GATEWAY=sandbox
   if (process.env.PAYMENT_GATEWAY === "sandbox") {
     require("./sandbox")(app, deps);

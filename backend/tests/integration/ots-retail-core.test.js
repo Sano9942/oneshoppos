@@ -20,7 +20,17 @@ const admin = () => makeRequest(app, ADMIN_ID);
 const today = () => new Date().toISOString().slice(0, 10);
 
 beforeAll(async () => {
-  ({ app, db, cleanup } = await createTestApp({ registerAll: true }));
+  // Real Shopify webhook utils (signature, replay window, idempotency key), not
+  // the harness stubs: the blocker-1 tests go through the actual webhook checks.
+  const shopifyUtils = require("../../shopify/utils");
+  ({ app, db, cleanup } = await createTestApp({
+    registerAll: true,
+    deps: {
+      verifyWebhookSignature: shopifyUtils.verifyWebhookSignature,
+      evaluateWebhookTimestampWindow: shopifyUtils.evaluateWebhookTimestampWindow,
+      buildWebhookIdempotencyKey: shopifyUtils.buildWebhookIdempotencyKey,
+    },
+  }));
 });
 
 afterAll(async () => {
@@ -618,5 +628,203 @@ describe("D6 — completing a stock count of one shelf", () => {
     expect(await variantStockOf(variantId)).toBe(0);
     expect(await stockOf(variantProductId)).toBe(0);
     expect(num((await one("SELECT stock FROM product_variants WHERE id = $1", [variantId])).stock)).toBe(0);
+  });
+});
+
+// ─── Blocker 1: online orders reduce shop stock ─────────────────────────────
+// docs/onetoystore-pilot/PROGRESS.md findings 1a–1f. Orders arrive through the
+// real webhook route with a real HMAC signature.
+describe("Blocker 1 — Shopify online orders move shop stock", () => {
+  const crypto = require("crypto");
+  const SECRET = "ots_whsec_test";
+  const SHOP = "ots-test.myshopify.com";
+  let hookSeq = 0;
+  let plainId, skuOnlyId, mappedId, variantProductId, variantId;
+  const stockOf = async (pid) => num((await one("SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = 1", [pid]))?.quantity ?? 0);
+  const variantStockOf = async (vid) => num((await one("SELECT quantity FROM variant_outlet_stock WHERE variant_id = $1 AND outlet_id = 1", [vid]))?.quantity ?? 0);
+
+  function sendHook(payload, { path = "/api/integrations/shopify/webhooks/orders-create", topic = "orders/create" } = {}) {
+    const body = JSON.stringify(payload);
+    const hmac = crypto.createHmac("sha256", SECRET).update(body, "utf8").digest("base64");
+    return makeRequest(app)
+      .post(path)
+      .set("content-type", "application/json")
+      .set("x-shopify-webhook-id", `ots-hook-${++hookSeq}-${Date.now()}`)
+      .set("x-shopify-shop-domain", SHOP)
+      .set("x-shopify-topic", topic)
+      .set("x-shopify-hmac-sha256", hmac)
+      .send(body);
+  }
+
+  let orderSeq = 0;
+  function order(lines, extra = {}) {
+    orderSeq += 1;
+    return {
+      id: 7700000 + orderSeq,
+      name: `#OTS${orderSeq}`,
+      currency: "PKR",
+      financial_status: "pending", // cash on delivery
+      total_price: "1000.00",
+      created_at: "2026-09-26T10:00:00Z",
+      updated_at: "2026-09-26T10:00:00Z",
+      cancelled_at: null,
+      refunds: [],
+      line_items: lines.map((l, i) => ({ id: 88000000 + orderSeq * 10 + i, quantity: 1, price: "500.00", ...l })),
+      ...extra,
+    };
+  }
+
+  beforeAll(async () => {
+    await db.query("UPDATE shopify_connections SET is_active = false");
+    await db.query(
+      `INSERT INTO shopify_connections (shop_domain, access_token, webhook_secret, default_location_id, is_active)
+       VALUES ($1, 'shpat_test', $2, 'loc-1', true)`, [SHOP, SECRET]);
+    await db.query("INSERT INTO shopify_location_map (outlet_id, shopify_location_id) VALUES (1, 'loc-1') ON CONFLICT DO NOTHING");
+
+    const mk = async (name, sku, qty) => {
+      const p = await one(
+        `INSERT INTO products (name, sku, barcode, price, cost_price, stock) VALUES ($1, $2, NULL, 500, 300, $3) RETURNING id`,
+        [name, sku, qty]);
+      await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, $2)", [p.id, qty]);
+      return p.id;
+    };
+    plainId = await mk("OTS Plain Doll", null, 10);            // matched through the Shopify product map
+    skuOnlyId = await mk("OTS Puzzle", "OTS-PUZZLE", 10);       // plain product, matched by its own SKU
+    mappedId = await mk("OTS Kite", null, 10);                  // mapped; used by the lifecycle tests
+    await db.query(
+      `INSERT INTO shopify_product_map (product_id, variant_id, shopify_product_id, shopify_variant_id, is_active)
+       VALUES ($1, NULL, 'sp-doll', 'sv-doll', true), ($2, NULL, 'sp-kite', 'sv-kite', true)`, [plainId, mappedId]);
+
+    variantProductId = (await one(
+      `INSERT INTO products (name, price, cost_price, stock, has_variants) VALUES ('OTS Hot Wheels', 500, 300, 6, true) RETURNING id`)).id;
+    variantId = (await one(
+      `INSERT INTO product_variants (product_id, sku, price, cost_price, stock) VALUES ($1, 'OTS-HW-RED', 500, 300, 6) RETURNING id`,
+      [variantProductId])).id;
+    await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 6)", [variantProductId]);
+    await db.query("INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity) VALUES ($1, 1, 6)", [variantId]);
+    await db.query(
+      `INSERT INTO shopify_product_map (product_id, variant_id, shopify_product_id, shopify_variant_id, is_active)
+       VALUES ($1, $2, 'sp-hw', 'sv-hw-red', true)`, [variantProductId, variantId]);
+  });
+
+  it("1a: a cash-on-delivery (unpaid) order takes the stock off as soon as it arrives", async () => {
+    const before = await stockOf(skuOnlyId);
+    const res = await sendHook(order([{ sku: "OTS-PUZZLE", quantity: 2, variant_id: 555 }]));
+    expect(res.status).toBe(200);
+    expect(await stockOf(skuOnlyId)).toBe(before - 2);
+  });
+
+  it("1e: a line with no barcode is matched through the Shopify product map", async () => {
+    const before = await stockOf(plainId);
+    const res = await sendHook(order([{ variant_id: "sv-doll", product_id: "sp-doll", sku: "", quantity: 1 }], { financial_status: "paid" }));
+    expect(res.status).toBe(200);
+    expect(await stockOf(plainId)).toBe(before - 1);
+  });
+
+  it("1f: a variant line moves the variant's own shop stock, not just the product total", async () => {
+    const vBefore = await variantStockOf(variantId);
+    const pBefore = await stockOf(variantProductId);
+    const res = await sendHook(order([{ variant_id: "sv-hw-red", sku: "", quantity: 2 }]));
+    expect(res.status).toBe(200);
+    expect(await variantStockOf(variantId)).toBe(vBefore - 2);
+    expect(await stockOf(variantProductId)).toBe(pBefore - 2);
+  });
+
+  it("1d: a cancelled order puts the stock back, once", async () => {
+    const o = order([{ variant_id: "sv-kite", quantity: 3 }]);
+    const before = await stockOf(mappedId);
+    expect((await sendHook(o)).status).toBe(200);
+    expect(await stockOf(mappedId)).toBe(before - 3);
+
+    const cancelled = { ...o, cancelled_at: "2026-09-26T11:00:00Z", updated_at: "2026-09-26T11:00:00Z" };
+    expect((await sendHook(cancelled, { topic: "orders/cancelled" })).status).toBe(200);
+    expect(await stockOf(mappedId)).toBe(before);
+    expect((await one("SELECT order_status FROM web_orders WHERE external_order_id = $1", [String(o.id)])).order_status).toBe("cancelled");
+
+    // Shopify also sends orders/updated for the same cancellation: no double put-back.
+    expect((await sendHook(cancelled, { topic: "orders/updated" })).status).toBe(200);
+    expect(await stockOf(mappedId)).toBe(before);
+  });
+
+  it("the same order delivered twice by Shopify (create + updated) only takes stock off once", async () => {
+    const o = order([{ variant_id: "sv-kite", quantity: 1 }], { financial_status: "paid" });
+    const before = await stockOf(mappedId);
+    await sendHook(o, { topic: "orders/create" });
+    await sendHook({ ...o, updated_at: "2026-09-26T10:05:00Z" }, { topic: "orders/updated" });
+    expect(await stockOf(mappedId)).toBe(before - 1);
+  });
+
+  it("a refund that restocks 1 of 2 puts back 1; a refund without restock puts back nothing", async () => {
+    const o = order([{ variant_id: "sv-kite", quantity: 2 }], { financial_status: "paid" });
+    const lineId = o.line_items[0].id;
+    const before = await stockOf(mappedId);
+    await sendHook(o);
+    expect(await stockOf(mappedId)).toBe(before - 2);
+
+    const noRestock = {
+      ...o, financial_status: "partially_refunded", updated_at: "2026-09-26T12:00:00Z",
+      refunds: [{ id: 1, refund_line_items: [{ line_item_id: lineId, quantity: 1, restock_type: "no_restock" }] }],
+    };
+    await sendHook(noRestock, { topic: "orders/updated" });
+    expect(await stockOf(mappedId)).toBe(before - 2);
+
+    const restock = {
+      ...noRestock, updated_at: "2026-09-26T12:10:00Z",
+      refunds: [...noRestock.refunds, { id: 2, refund_line_items: [{ line_item_id: lineId, quantity: 1, restock_type: "return" }] }],
+    };
+    await sendHook(restock, { topic: "orders/updated" });
+    expect(await stockOf(mappedId)).toBe(before - 1);
+  });
+
+  it("an older update arriving late does not undo a newer one", async () => {
+    const o = order([{ variant_id: "sv-kite", quantity: 1 }], { financial_status: "paid" });
+    const before = await stockOf(mappedId);
+    await sendHook(o);
+    await sendHook({ ...o, cancelled_at: "2026-09-26T13:00:00Z", updated_at: "2026-09-26T13:00:00Z" }, { topic: "orders/cancelled" });
+    expect(await stockOf(mappedId)).toBe(before);
+    // Shopify retries the earlier create after the cancel has landed.
+    await sendHook(o, { topic: "orders/create" });
+    expect(await stockOf(mappedId)).toBe(before);
+  });
+
+  it("1e: an unmatched line doesn't stop the matched lines, and the order names the line that needs attention", async () => {
+    const before = await stockOf(mappedId);
+    const o = order([{ variant_id: "sv-kite", quantity: 1 }, { sku: "NOT-IN-SANOPOS", title: "Mystery Box", quantity: 1 }], { financial_status: "paid" });
+    const res = await sendHook(o);
+    expect(res.status).toBe(200);
+    expect(await stockOf(mappedId)).toBe(before - 1);
+    const row = await one("SELECT stock_policy_note FROM web_orders WHERE external_order_id = $1", [String(o.id)]);
+    expect(row.stock_policy_note).toMatch(/Mystery Box/);
+  });
+
+  it("1b: the per-shop webhook address is served before the login wall", async () => {
+    // Shopify's call carries no SanoPOS login. In multi-tenant mode a route
+    // mounted after the auth middleware answers 401 AUTH_REQUIRED before the
+    // signature check can run (PROGRESS 1b), so the webhook must sit in front.
+    const PATH = "/api/integrations/shopify/webhooks/orders/:tenantSlug";
+    const stack = app.router?.stack || app._router.stack;
+    const authIdx = stack.findIndex((l) => l.name === "loadEmployeePerms" || l.name === "loadTenantAndPerms");
+    const hookIdx = stack.findIndex((l) =>
+      l.route?.path === PATH || (l.handle?.stack || []).some((s) => s.route?.path === PATH));
+    expect(authIdx).toBeGreaterThan(-1);
+    expect(hookIdx).toBeGreaterThan(-1);
+    expect(hookIdx).toBeLessThan(authIdx);
+
+    const before = await stockOf(skuOnlyId);
+    const res = await sendHook(order([{ sku: "OTS-PUZZLE", quantity: 1 }]), { path: "/api/integrations/shopify/webhooks/orders/anyshop" });
+    expect(res.status).toBe(200);
+    expect(await stockOf(skuOnlyId)).toBe(before - 1);
+  });
+
+  it("a webhook with a bad signature changes nothing", async () => {
+    const before = await stockOf(skuOnlyId);
+    const res = await makeRequest(app)
+      .post("/api/integrations/shopify/webhooks/orders-create")
+      .set("x-shopify-webhook-id", `bad-${Date.now()}`)
+      .set("x-shopify-shop-domain", SHOP)
+      .set("x-shopify-hmac-sha256", "forged")
+      .send(order([{ sku: "OTS-PUZZLE", quantity: 1 }]));
+    expect(res.status).toBe(401);
+    expect(await stockOf(skuOnlyId)).toBe(before);
   });
 });

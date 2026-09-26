@@ -10028,6 +10028,58 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 139,
+    description:
+      "One Toy Store pilot, blocker 1 (online orders reduce shop stock). (a) web_order_items gains external_line_id (Shopify line_item id) and restocked_qty (units Shopify restocked via refunds), so a partial refund puts back only what was restocked. (b) new tenant table web_order_stock: what each web order currently holds off the shelf, per product/variant/outlet. The stock policy now diffs the order's wanted state against this table and moves only the difference through services/stock-ledger.js, so orders/create + orders/updated + retries can't double-count. Backfill: orders already marked stock_applied get a row per mapped item at product level (variant NULL), because the old policy only ever wrote outlet_stock; a later cancel then puts back exactly what was taken. Tenant-only; guarded on web_orders existing. Idempotent.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'web_order_items'`
+      );
+      if (schema === "public" || !hasTable.length) {
+        console.log(`[migrate-pg v139] ${schema}: no web_order_items table — skipped`);
+        return;
+      }
+      await client.query(`
+        ALTER TABLE web_order_items
+          ADD COLUMN IF NOT EXISTS external_line_id TEXT,
+          ADD COLUMN IF NOT EXISTS restocked_qty INTEGER NOT NULL DEFAULT 0
+      `);
+      const { rows: existed } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'web_order_stock'`
+      );
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS web_order_stock (
+          id SERIAL PRIMARY KEY,
+          web_order_id INTEGER NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+          qty NUMERIC(12,3) NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_web_order_stock
+          ON web_order_stock (web_order_id, product_id, COALESCE(variant_id, 0), outlet_id)
+      `);
+      if (!existed.length) {
+        await client.query(`
+          INSERT INTO web_order_stock (web_order_id, product_id, variant_id, outlet_id, qty)
+          SELECT wo.id, wi.product_id, NULL, wo.outlet_id, SUM(wi.qty)
+            FROM web_orders wo
+            JOIN web_order_items wi ON wi.web_order_id = wo.id
+           WHERE wo.stock_applied = true AND wo.outlet_id IS NOT NULL AND wi.product_id IS NOT NULL
+           GROUP BY wo.id, wi.product_id, wo.outlet_id
+        `);
+      }
+    },
+  },
 ];
 
 /**

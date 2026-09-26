@@ -1693,8 +1693,26 @@ CREATE TABLE IF NOT EXISTS web_order_items (
   unit_price NUMERIC(12,2) DEFAULT 0,
   discount NUMERIC(12,2) DEFAULT 0,
   tax NUMERIC(12,2) DEFAULT 0,
-  line_total NUMERIC(12,2) DEFAULT 0
+  line_total NUMERIC(12,2) DEFAULT 0,
+  -- v139: Shopify line_item id + units Shopify restocked through refunds
+  external_line_id TEXT,
+  restocked_qty INTEGER NOT NULL DEFAULT 0
 );
+
+-- v139: stock each web order currently holds off the shelf, per item and
+-- outlet. The stock policy diffs the order's wanted state against this, so a
+-- repeated / out-of-order webhook can never take stock off twice.
+CREATE TABLE IF NOT EXISTS web_order_stock (
+  id SERIAL PRIMARY KEY,
+  web_order_id INTEGER NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+  qty NUMERIC(12,3) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_order_stock
+  ON web_order_stock (web_order_id, product_id, COALESCE(variant_id, 0), outlet_id);
 
 CREATE TABLE IF NOT EXISTS web_order_transactions (
   id SERIAL PRIMARY KEY,

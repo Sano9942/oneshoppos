@@ -203,20 +203,27 @@ module.exports = function registerShopifyHealthRoutes(app, deps) {
           .replace(/\/+$/, "");
         const detectedBase = `${req.protocol}://${req.get("host")}`;
         const baseUrl = configuredBase || detectedBase;
-        const endpoint = `${baseUrl}/api/integrations/shopify/webhooks/orders-create`;
+        // Multi-tenant: the shop's slug in the path routes Shopify's
+        // (login-less) call to this tenant (One Toy Store pilot, blocker 1b).
+        const endpoint = req.tenantSlug
+          ? `${baseUrl}/api/integrations/shopify/webhooks/orders/${encodeURIComponent(req.tenantSlug)}`
+          : `${baseUrl}/api/integrations/shopify/webhooks/orders-create`;
         res.json({
           ok: true,
           base_url: baseUrl,
           callback_url: endpoint,
           shop_domain: conn.shop_domain || null,
           secret_configured: Boolean(conn.webhook_secret),
+          // All three send the full order to the same address. Refunds arrive
+          // as orders/updated (with the order's refunds), so refunds/create
+          // isn't needed.
           required_topics: [
             "orders/create",
             "orders/updated",
             "orders/cancelled",
-            "refunds/create",
           ],
           notes: [
+            "Point all three topics at the same callback URL.",
             "Set webhook format to JSON.",
             "Use the same webhook secret configured in SanoPOS.",
             "Use HTTPS callback URL reachable by Shopify.",
