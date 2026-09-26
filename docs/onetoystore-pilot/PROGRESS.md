@@ -11,18 +11,19 @@
 **Phase B order** (agreed with owner 2026-09-26):
 1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
 2. ✅ Profit takes returns off (D17), plus D20–D23 found on the way — `e3c3503d`, `42992dae`, `e143ee5b`
-3. ⏭ **NEXT: online orders reduce shop stock (blocker 1, findings 1a–1f below).** Build and test locally; Shopify-facing parts get tested on a dev store later (owner: "later")
-4. "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, findings 2a–2f)
+3. ✅ Online orders reduce shop stock (blocker 1, 1a–1f) — `f92533b5`. Proven locally in tests and on the real backend with a signed webhook and no login. **Still to prove on the Shopify dev store** (Phase C): real Shopify payloads, and registering the 3 webhooks
+4. ⏭ **NEXT: "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, findings 2a–2f)**
 5. Offline catalogue copy in the browser so scanning works offline (blocker 3; owner said yes)
 6. Suggested new selling price when a delivery arrives at a different cost (cost-plus margin per category/brand, nearest Rs 50, owner confirms each). Needs the margin % per category/brand from the owner
 7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
 
-**Current proof:** shop-day **112 pass, 0 fail**; `ots-retail-core.test.js` 37 tests. Everything committed on `onetoystore-pilot`, not pushed.
+**Current proof:** shop-day **112 pass, 0 fail**; `ots-retail-core.test.js` 47 tests; online-order webhook proof on the real backend **7 pass, 0 fail**. Everything committed on `onetoystore-pilot`, not pushed.
 
 **How to run things (local only):**
 - Backend: start via the `backend` launch config (or `node backend/index.js`); banner must say LOCAL DB. Restart it after backend edits (no hot reload).
 - Shop day: `OTS_API_BASE=http://127.0.0.1:5000 node tools/onetoystore-pilot/shop-day.mjs --dump` — use 127.0.0.1, `localhost` fails from Node here (IPv6). Log into the printed `otsacc_*` shop in the UI as **Owner / 4321**.
 - Regression file: from `backend/`, `npx vitest run tests/integration/ots-retail-core.test.js`.
+- Online-order webhook proof (after a shop-day run): `node tools/onetoystore-pilot/online-orders.cjs <otsacc_* tenant>`. Posts signed Shopify order webhooks with no login to the real backend and checks shop stock. Fake shop domain, never calls Shopify.
 - Screens: the in-app browser pane has a 0×0 viewport here; use the Playwright MCP.
 - Files here are CRLF: edits via scripts must keep CRLF (check `git diff --stat` stays small).
 
@@ -64,6 +65,19 @@ All three blockers are **real**. Blockers 1 and 2 are **worse** than the readine
 | 1d | **Cancellations are never recorded.** `order_status` is written as `'open'` on insert and never updated from Shopify's `cancelled_at`, so the "reverse on cancel" branch can't fire from order status. Reversal only works if payment moves to `refunded`/`voided`. | `order-service.js:234-247` |
 | 1e | **Online order lines usually won't match a SanoPOS product.** Matching tries `product_variants.sku`, then barcode, but Shopify order lines carry no barcode, and plain products (no variants) are never matched by SKU. The Shopify product map (`shopify_product_map`), which already links items, is not used. The failure is swallowed: the order saves and the webhook replies "success", but stock never moves. | `order-service.js:54-107, 166-173, 297-301` |
 | 1f | The online-order stock change writes `outlet_stock` directly: no row lock, no stock-movement record, and it ignores variant stock. Every other stock writer goes through `services/stock-ledger.js`. | `order-service.js:175-184` |
+
+**Fixed 2026-09-26 (Phase B step 3, `f92533b5`), locally. Shopify dev-store test still to do:**
+
+| # | What changed | Proof |
+|---|---|---|
+| 1a | An online order takes stock off **when it arrives**, paid or cash-on-delivery, the same moment Shopify reduces its own stock. It lets go when the order is cancelled or its payment voided. A Shopify refund puts back **only the units Shopify restocked** (the refund's "restock" tick), so a refund for a toy that never came back leaves stock alone. | test 1a; refund test |
+| 1b | The webhook now sits **in front of** the login wall, at a per-shop address: `/api/integrations/shopify/webhooks/orders/<shop>`. The shop name in the address picks the tenant; that tenant's webhook secret (HMAC) and shop domain are checked as before. The Shopify setup screen now shows this address. | test 1b (route order); `online-orders.cjs` on the real multi-tenant server: no login → 200, forged signature → 401, unknown shop → 404 |
+| 1c | One address takes `orders/create`, `orders/updated` and `orders/cancelled` (refunds arrive inside `orders/updated`). The setup screen lists exactly those 3. Other topics are acknowledged and ignored. **Webhooks are still registered by hand in Shopify admin**; automatic registration waits for the dev store. | |
+| 1d | Shopify's `cancelled_at` now marks the order cancelled, and a cancelled order stays cancelled. Out-of-order deliveries are handled: an older copy of the order arriving after a newer one is ignored. | tests 1d, "older update" |
+| 1e | Lines are matched through the **Shopify product map** first, then variant SKU, **plain-product SKU**, then barcode. An unmatched line no longer blocks the rest: matched lines move stock, and the order note and the webhook event (`needs_attention`) name the unmatched line. | tests 1e ×2 |
+| 1f | Stock moves through `services/stock-ledger.js` (row locks, variant stock, batch ledger). A new table `web_order_stock` (migration v139) records what each order currently holds off the shelf. Every webhook compares "should hold" with "holds" and moves only the difference, so create + updated + retries can't take stock off twice. | test 1f, "delivered twice" test |
+
+Changed on purpose (old tests updated): an unpaid order used to be ignored; one unmatched line used to block the whole order; a Shopify refund used to put everything back, restocked or not. `pg-batch7-order-service` tests updated to the new rules. Full integration suite: 1,848 pass, 26 fail (the known 26), see Test suite baseline below.
 
 ### Blocker 2: sync sends +/− changes, not absolute counts. REAL; no "set Shopify to SanoPOS" exists
 
@@ -218,6 +232,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | Frontend unit | **201 / 201 pass** (25 files) | `npx vitest run` with no path also picks up 54 Playwright browser specs, which "fail" because Vitest can't run them. Not real failures. Run `npx vitest run tests/unit`. |
 | Backend integration | **1,801 pass, 26 fail, 29 skipped** (155 of 202 files pass) | **33 files can't load at all** (30 import a deleted helper `tests/helpers/createTestApp`; 3 use Jest syntax). Those 33 include the dedicated retail tests: `purchase-orders`, `returns-exchange`, `shifts`, `shift-linkage`, `supplier-payables`, `reports_accuracy`, `inventory`, `promotions`. **So most of the retail core had no running test.** The 26 failures are the same 12 files already triaged in July as stale test fixtures (e.g. sales tests written before a sale needed an open till); none are new. |
 | Backend integration, **after the 13 fixes** (re-run 2026-09-26) | **1,823 pass, 26 fail, 29 skipped** | Compared test-by-test against the baseline: **0 new failures**, 0 disappeared, the same 26 failing. The +22 are the new `ots-retail-core` regression tests, all passing. |
+| Backend integration, **after blocker 1** (2026-09-26, ~36 min) | **1,848 pass, 26 fail, 29 skipped** | Pass count = 1,823 + 15 regression tests added for D6–D23 + 10 for blocker 1, exactly. Failures still 26, all in the stale-fixture files; none in any Shopify/order file. The 11 order-adjacent files were also run with and without the change: identical failures. |
 
 ---
 
@@ -234,3 +249,4 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-26 | Profit reports **subtract returns** (D17): a returned item's profit comes back out | **Owner** | Profit should match money kept |
 | 2026-09-26 | Product **History tab** (as in the iPOS item file): (1) price & cost change history with who, when and why (hand edit / delivery / accepted suggestion); (2) sales with date, **bill no** (links to the bill), qty, price, cashier, returns as minus lines; (3) a **full stock ledger** (purchases, sales, returns, adjustments, transfers, counts) with running balance, per variant. Today: price changes are only a free-text activity-log line (employee usually "Unknown", GRN cost changes not logged); `/api/reports/history-sale` shows sale id not bill no, caps at 500 rows, no variant split; no per-item ledger exists | **Owner** | Staff need to see an item's price and movement history in one click |
 | 2026-09-26 | Shopify dev store: **later**. Phase B starts locally; Shopify-facing parts are tested on a dev store afterwards | **Owner** | |
+| 2026-09-26 | Online orders take shop stock off **when the order arrives** (COD included), not when paid or shipped; cancel puts it back; a Shopify refund puts back only what Shopify restocked | Claude (default; owner can change) | Matches what Shopify does to its own stock, so the two counts agree and the counter can't sell a toy already promised online. Blocker 1a |
