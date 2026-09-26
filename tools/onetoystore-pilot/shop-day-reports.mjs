@@ -75,6 +75,25 @@ export async function assertReports(ctx) {
       `difference ${r2(iwRev - shadow.net)} = bill-level discounts (${shadow.disc}), which are not spread across items`);
     check("item-wise cost of goods = Σ(qty × cost at time of sale)", r2(sum(iw.items, (x) => x.total_cost)), shadow.cogs);
   }
+  const salesStock = body("sales-stock");
+  if (salesStock) {
+    const bad = [];
+    for (const [pid, exp] of Object.entries(byProduct)) {
+      const row = salesStock.items.find((x) => Number(x.id) === Number(pid));
+      if (!row || !near(row.units_sold, exp.units) || !near(row.revenue, exp.revenue)) {
+        bad.push(`${meta[pid]?.name}: report ${row ? `${Number(row.units_sold)} u / ${Number(row.revenue)}` : "missing"}, expected ${exp.units} u / ${exp.revenue}`);
+      }
+    }
+    check("sales & stock: units and value per item match the bills (D23)", bad, []);
+    const oh = body("on-hand");
+    if (oh) {
+      const stockBad = salesStock.items.filter((row) => {
+        const onHand = r2(sum(oh.items.filter((x) => Number(x.product_id) === Number(row.id)), (x) => x.quantity));
+        return !near(row.total_stock, onHand);
+      }).map((row) => `${row.name}: ${Number(row.total_stock)}`);
+      check("sales & stock: current stock per item = on-hand report (D23)", stockBad, []);
+    }
+  }
   const cw = body("category-wise");
   if (cw) {
     const bad = [];

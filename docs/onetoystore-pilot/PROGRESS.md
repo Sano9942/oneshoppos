@@ -82,6 +82,8 @@ All three blockers are **real**. Blockers 1 and 2 are **worse** than the readine
 
 **After D21/D22 (2026-09-26): 110 pass, 0 fail.** New checks: per-product profits add up to the day's profit after returns, and the outlet's profit equals the summary's. 33 regression tests.
 
+**After D23 (2026-09-26): 112 pass, 0 fail.** New checks: Sales & Stock units/value per item match the bills, and its stock matches the on-hand report. 37 regression tests.
+
 > The tables below are the **first-run** picture. For current status, go by the Defect list at the bottom.
 
 Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (test proves it) · ⬜ untested · 🟡 works, but differently from iPOS or needs a setting
@@ -183,7 +185,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D20 | 🔴 | `/api/reports/stockout-risk` 500s on every shop (ORDER BY used an output alias inside a CASE). Because the Reports Power-Up panel loaded everything with one `Promise.all`, it also blanked the **profit figures** to 0 | 🛠️ fixed: query wrapped; panel now loads each report independently and says which failed. Also: panel read `rows` where profit-by-product returns `items`, so "Top margin products" was always empty; fixed |
 | D21 | 🟡 | Profit **by product** and **by outlet** still count sales only (returns not subtracted per product/outlet) | 🛠️ fixed: both join the shared returned-lines CTE (`returnLinesCte` in `services/returns-profit.js`); new `returns_value` / `returns_profit` / `net_profit` (+ `net_margin_pct` per product); a product only *returned* in the period still gets a row; default sort is net profit. Per-outlet net profit also takes off that outlet's bill discounts, so it equals the summary. Panel shows after-returns figures and exports them |
 | D22 | 🔴 | Dead stock: "value tied Rs 0" | 🛠️ fixed, and it was worse: (1) the panel summed `stock_cost_value`, the API returned `cost_value`; (2) the **Dead Stock report page** expected a per-outlet row (`stock_qty`, `stock_cost_value`, `stock_retail_value`, `days_since_sale`, `last_sold_at`, outlet, brand, supplier) the API never returned, so most columns were blank; (3) the query joined every past sale line onto stock, **multiplying stock and value** for anything that had ever sold. Rewritten per product per outlet with the last sale in its own CTE; a never-sold item is aged from when it was created; deleted products excluded; old field names kept. Also the panel's stock-aging "Oldest" read `days_since_sale`, the API returns `age_days`. Proven on screen (`out/dead-stock-report.png`) |
-| D23 | 🟡 | `/api/reports/sales-stock` has the same join fan-out: `SUM(DISTINCT os.quantity)` (two outlets with equal stock count once) and revenue multiplied by the number of outlet rows | open, not fixed |
+| D23 | 🔴 | Sales & Stock report: stock and sales joined together, so every sale was multiplied by the number of outlet rows and `SUM(DISTINCT os.quantity)` counted two outlets holding the same stock once; **voided bills counted as sales**; deleted products listed; the page's date / time / outlet filters were **ignored** (always all-time, all outlets) | 🛠️ fixed: stock and sales totalled in separate CTEs, voided bills excluded, deleted products excluded, filters applied (times in the shop's time zone). In the test: 4 → 8 stock, 6 → 2 units sold. Screen: `out/sales-and-stock.png` |
 | D19 | 🟡 | Scanning a variant runs the modifier lookup with the variant id as a product id (harmless 403 today; pre-existing pattern shared with the variant picker) | open, low |
 
 ---

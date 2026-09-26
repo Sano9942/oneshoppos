@@ -498,6 +498,54 @@ describe("D22 — dead stock report", () => {
   });
 });
 
+// ─── D23 ────────────────────────────────────────────────────────────────────
+describe("D23 — Sales & Stock report", () => {
+  // Yo-yo: price 150. Two real bills of 1 and one voided bill, all at outlet 1.
+  // Then stock is 4 at each of the two outlets (equal on purpose).
+  let id;
+  const row = async (qs = "") => (await admin().get(`/api/reports/sales-stock?${qs}`)).body.items.find((r) => r.id === id);
+
+  beforeAll(async () => {
+    await closeAnyOpenTill();
+    await openTill();
+    ({ id } = await one("INSERT INTO products (name, barcode, sku, price, cost_price, stock, status) VALUES ('Yo-yo', 'D23-YOYO', 'D23-YOYO', 150, 60, 10, 'active') RETURNING id"));
+    await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 10), ($1, 2, 4)", [id]);
+    const saleIds = [];
+    for (let i = 0; i < 3; i += 1) {
+      const r = await sell({ cartItems: [{ id, quantity: 1, price: 150 }], payments: [{ method: "Card", amount: 150 }] });
+      expect(r.status).toBe(200);
+      saleIds.push(r.body.saleId);
+    }
+    await db.query("UPDATE sales SET voided = true WHERE id = $1", [saleIds[2]]);
+    await db.query("UPDATE outlet_stock SET quantity = 4 WHERE product_id = $1", [id]);
+  });
+
+  it("stock is the sum over outlets, sales skip voided bills, nothing is multiplied", async () => {
+    const r = await row();
+    expect(num(r.total_stock)).toBe(8);
+    expect(num(r.units_sold)).toBe(2);
+    expect(num(r.revenue)).toBe(300);
+  });
+
+  it("the outlet filter limits both stock and sales", async () => {
+    const r = await row("outlet_id=2");
+    expect(num(r.total_stock)).toBe(4);
+    expect(num(r.units_sold)).toBe(0);
+  });
+
+  it("the date filter limits sales", async () => {
+    const r = await row("date_from=2020-01-01&date_to=2020-01-31");
+    expect(num(r.units_sold)).toBe(0);
+    expect(num(r.total_stock)).toBe(8);
+  });
+
+  it("a deleted product is not listed", async () => {
+    await db.query("UPDATE products SET deleted_at = NOW() WHERE id = $1", [id]);
+    expect(await row()).toBeUndefined();
+    await db.query("UPDATE products SET deleted_at = NULL WHERE id = $1", [id]);
+  });
+});
+
 // ─── D6 ─────────────────────────────────────────────────────────────────────
 // Last in the file on purpose: the full-count case zeroes the shop.
 describe("D6 — completing a stock count of one shelf", () => {

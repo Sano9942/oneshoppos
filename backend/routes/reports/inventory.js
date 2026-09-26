@@ -1,4 +1,4 @@
-const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature, requirePerm } = deps;
@@ -55,19 +55,59 @@ module.exports = function (app, deps, helpers) {
   // Sales & Stock: product with all-time sales + current stock
   app.get("/api/reports/sales-stock", invView, async (req, res) => {
     try {
+      // Stock and sales are totalled in separate CTEs, then joined per product.
+      // Joining outlet_stock and sale_items together multiplied every sale by
+      // the number of outlet rows, and SUM(DISTINCT os.quantity) collapsed two
+      // outlets holding the same quantity into one. Voided bills don't count.
+      // Honours the page's outlet, date and time filters (times are in the
+      // shop's time zone).
+      const { date_from, date_to, time_from, time_to, outlet_id } = req.query;
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
+      const stockWhere = [];
+      const stockParams = [];
+      applyOutletFilter(stockWhere, stockParams, outlet_id, "os.outlet_id");
+      const saleWhere = ["s.voided = false"];
+      const saleParams = [];
+      applyOutletFilter(saleWhere, saleParams, outlet_id, "s.outlet_id");
+      if (date_from) { saleWhere.push("s.timestamp >= ?"); saleParams.push(toUtcStart(String(date_from), tz)); }
+      if (date_to) { saleWhere.push("s.timestamp < ?"); saleParams.push(toUtcEnd(String(date_to), tz)); }
+      if (time_from) { saleWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`); saleParams.push(time_from); }
+      if (time_to) { saleWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`); saleParams.push(time_to); }
+      const productWhere = ["p.deleted_at IS NULL"];
+      const productParams = [];
+      await applyInventoryProductFilters(productWhere, productParams, req.query);
+
+      const stock = helpers.pgWhere(stockWhere, stockParams);
+      const sold = helpers.pgWhere(saleWhere, saleParams, stock.nextIdx);
+      const prod = helpers.pgWhere(productWhere, productParams, sold.nextIdx);
       const sql = `
+      WITH stock AS (
+        SELECT os.product_id, SUM(os.quantity) AS total_stock
+        FROM outlet_stock os
+        ${stock.text ? `WHERE ${stock.text}` : ""}
+        GROUP BY os.product_id
+      ),
+      sold AS (
+        SELECT si.product_id,
+               SUM(si.quantity) AS units_sold,
+               SUM(si.quantity * si.price_at_sale) AS revenue
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        WHERE ${sold.text}
+        GROUP BY si.product_id
+      )
       SELECT p.id, p.name, p.barcode, COALESCE(cat.name,'—') AS category,
              p.category_id,
-             COALESCE(SUM(DISTINCT os.quantity),0) AS total_stock,
-             COALESCE(SUM(si.quantity),0) AS units_sold,
-             COALESCE(SUM(si.quantity * si.price_at_sale),0) AS revenue
+             COALESCE(stock.total_stock, 0) AS total_stock,
+             COALESCE(sold.units_sold, 0) AS units_sold,
+             ROUND(COALESCE(sold.revenue, 0), 2) AS revenue
       FROM products p
       LEFT JOIN categories cat ON p.category_id = cat.id
-      LEFT JOIN outlet_stock os ON p.id = os.product_id
-      LEFT JOIN sale_items si ON p.id = si.product_id
-      GROUP BY p.id, p.name, p.barcode, cat.name, p.category_id
-      ORDER BY units_sold DESC`;
-      const { rows } = await db.query(sql);
+      LEFT JOIN stock ON stock.product_id = p.id
+      LEFT JOIN sold ON sold.product_id = p.id
+      WHERE ${prod.text}
+      ORDER BY units_sold DESC, p.name`;
+      const { rows } = await db.query(sql, [...stock.values, ...sold.values, ...prod.values]);
       const categoryMeta = await buildCategoryMetaMap();
       res.json({ items: withCategoryPaths(rows, categoryMeta) });
     } catch (err) {

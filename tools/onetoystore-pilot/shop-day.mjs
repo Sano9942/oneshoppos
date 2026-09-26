@@ -650,7 +650,7 @@ async function reports(drawer) {
   dump.enableProfitLayer = flag;
   note("margin reports", `OFF by default for a new retail shop (Business Modules → Advanced Reports); switching on → HTTP ${flag.status}`);
   const R = {};
-  for (const name of ["sales-summary", "item-wise", "category-wise", "brand-wise", "supplier-wise",     "profit-summary", "profit-by-product", "profit-by-outlet", "on-hand", "dashboard", "refunds-voids", "sales-detail", "order-wise",
+  for (const name of ["sales-summary", "item-wise", "category-wise", "brand-wise", "supplier-wise",     "profit-summary", "profit-by-product", "profit-by-outlet", "sales-stock", "on-hand", "dashboard", "refunds-voids", "sales-detail", "order-wise",
     "finance-payment-mix", "cash-flow", "product-movement", "inventory-dump", "total-purchases", "itemwise-purchases",
     "payables-receivables", "cashier-wise", "discount-leakage", "shrinkage", "history-cost"]) {
     R[name] = await api.get(`/api/reports/${name}?${q}`, { allowFail: true });
