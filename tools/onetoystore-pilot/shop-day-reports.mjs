@@ -130,8 +130,8 @@ export async function assertReports(ctx) {
       const row = (db.zReport || []).find((x) => x.payment_method === m);
       check(`dashboard Z-report ${m} = Σ ${m} taken`, num(row?.total), payTotals(m));
     }
-    check("dashboard today's gross profit = sales (after discounts) − cost of goods", num(db.todayGrossProfit), r2(shadow.net - shadow.cogs));
-    note("dashboard gross profit and returns", `todayGrossProfit ${db.todayGrossProfit}; after returns it would be ${r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost))}`);
+    check("dashboard today's gross profit = sales after discounts and returns − cost of goods kept (D17)",
+      num(db.todayGrossProfit), r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost)));
     const extra = Object.keys(db).filter((k) => /stock|margin|payable|receivable|purchase|expense|profit/i.test(k));
     note("dashboard stock/margin/payables fields", extra.length ? extra.map((k) => `${k}=${JSON.stringify(db[k]).slice(0, 80)}`).join("; ") : "none on /api/reports/dashboard");
   }
@@ -162,8 +162,9 @@ export async function assertReports(ctx) {
     check("profit summary cost of goods = Σ(qty × cost at sale)", num(s.cogs), shadow.cogs);
     check("profit summary gross sales = item value before bill discounts", num(s.gross_sales), shadow.gross);
     check("profit summary discounts = bill discounts given", num(s.discount_amount), shadow.disc);
-    check("profit summary net profit = sales after discounts − cost", num(s.net_profit), r2(shadow.net - shadow.cogs));
-    note("profit summary and returns", `net profit ${s.net_profit} does not deduct returns; after returns it would be ${r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost))}`);
+    check("profit summary returns = refunds given", num(s.returns_value), shadow.refunds);
+    check("profit summary net profit = sales after discounts and returns − cost of goods kept (D17)",
+      num(s.net_profit), r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost)));
   }
 
   // ── E. Stock value, purchases, suppliers ──────────────────────────────────

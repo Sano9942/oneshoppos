@@ -1,5 +1,6 @@
 const express = require("express");
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { returnsProfit } = require("../../services/returns-profit");
 
 module.exports = function createAccountingRouter({
   db,
@@ -64,19 +65,12 @@ module.exports = function createAccountingRouter({
           cogsParams
         );
 
-        const returnsParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
-        let returnsOutletSql = "";
-        if (outlet_id) {
-          returnsOutletSql = ` AND r.outlet_id = $${returnsParams.length + 1}`;
-          returnsParams.push(outlet_id);
-        }
-        const { rows: [returnsRow] } = await db.query(
-          `SELECT COALESCE(SUM(ri.refund_price * ri.quantity), 0) AS returns
-           FROM return_items ri
-           JOIN returns r ON r.id = ri.return_id
-           WHERE r.timestamp >= $1 AND r.timestamp < $2${returnsOutletSql}`,
-          returnsParams
-        );
+        // D17: refunds come off revenue, and the cost of anything that went
+        // back on the shelf comes off cost of goods (it was never really sold).
+        const ret = await returnsProfit(db, {
+          from: toUtcStart(from, tz), to: toUtcEnd(to, tz),
+          outletIds: outlet_id ? [outlet_id] : [],
+        });
 
         const expBreakParams = [from, to];
         let expBreakOutletSql = "";
@@ -96,8 +90,8 @@ module.exports = function createAccountingRouter({
 
         const grossSales = Number(salesRow?.gross_sales || 0);
         const discounts = Number(salesRow?.discounts || 0);
-        const returns = Number(returnsRow?.returns || 0);
-        const cogs = Number(cogsRow?.cogs || 0);
+        const returns = ret.refunds;
+        const cogs = Number(cogsRow?.cogs || 0) - ret.cost_back;
         const netRevenue = grossSales - returns;
         const grossProfit = netRevenue - cogs;
         const operatingExpenses = expenseRows || [];

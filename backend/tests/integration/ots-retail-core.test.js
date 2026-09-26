@@ -348,6 +348,62 @@ describe("D16 — paying a supplier invoice in two instalments", () => {
   });
 });
 
+// ─── D17 ────────────────────────────────────────────────────────────────────
+describe("D17 — profit reports take returns off", () => {
+  // Snack D: price 50, cost 30, no tax. Selling 2 then returning 1 gives back 50 − 30 = 20 profit.
+  let saleId;
+  const profitSummary = async () => (await admin().get(`/api/reports/profit-summary?date_from=${today()}&date_to=${today()}`)).body.summary;
+  const dashboardProfit = async () => (await admin().get("/api/reports/dashboard")).body.todayGrossProfit;
+  const r2 = (n) => Math.round(n * 100) / 100;
+
+  beforeAll(async () => {
+    await closeAnyOpenTill();
+    await openTill();
+    await db.query("INSERT INTO feature_flags (key, enabled) VALUES ('reports_profit_layer', true) ON CONFLICT (key) DO UPDATE SET enabled = true");
+    const res = await sell({ cartItems: [{ id: 4, quantity: 2, price: 50 }], payments: [{ method: "Card", amount: 100 }] });
+    expect(res.status).toBe(200);
+    saleId = res.body.saleId;
+  });
+
+  it("a restocked return takes its refund off net profit and gives its cost back", async () => {
+    const psBefore = await profitSummary();
+    const dashBefore = await dashboardProfit();
+    const ret = await admin().post("/api/returns").send({
+      original_sale_id: saleId, outlet_id: 1, employee_id: ADMIN_ID, total_refund: 50, refund_method: "Card",
+      items: [{ product_id: 4, quantity: 1, refund_price: 50 }],
+    });
+    expect(ret.status).toBe(200);
+    const psAfter = await profitSummary();
+    expect(r2(Number(psBefore.net_profit) - Number(psAfter.net_profit))).toBe(20);
+    expect(r2(Number(psAfter.returns_value) - Number(psBefore.returns_value || 0))).toBe(50);
+    expect(r2(Number(psAfter.returns_profit) - Number(psBefore.returns_profit || 0))).toBe(20);
+    expect(r2(dashBefore - (await dashboardProfit()))).toBe(20);
+  });
+
+  it("a written-off return (not put back in stock) takes the whole refund off", async () => {
+    const psBefore = await profitSummary();
+    const ret = await admin().post("/api/returns").send({
+      original_sale_id: saleId, outlet_id: 1, employee_id: ADMIN_ID, total_refund: 50, refund_method: "Card",
+      items: [{ product_id: 4, quantity: 1, refund_price: 50 }],
+    });
+    expect(ret.status).toBe(200);
+    const retId = ret.body.returnId ?? ret.body.id ?? ret.body.return_id;
+    await db.query("UPDATE return_items SET restock_flag = false WHERE return_id = $1", [retId]);
+    const psAfter = await profitSummary();
+    expect(r2(Number(psBefore.net_profit) - Number(psAfter.net_profit))).toBe(50);
+  });
+});
+
+// ─── D20 ────────────────────────────────────────────────────────────────────
+describe("D20 — stockout-risk report", () => {
+  it("loads (it 500'd on every shop: ORDER BY used an output alias inside a CASE)", async () => {
+    await db.query("INSERT INTO feature_flags (key, enabled) VALUES ('reports_inventory_health_plus', true) ON CONFLICT (key) DO UPDATE SET enabled = true");
+    const res = await admin().get("/api/reports/stockout-risk");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+  });
+});
+
 // ─── D6 ─────────────────────────────────────────────────────────────────────
 // Last in the file on purpose: the full-count case zeroes the shop.
 describe("D6 — completing a stock count of one shelf", () => {

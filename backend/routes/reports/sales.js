@@ -1,4 +1,6 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
+const { getDescendantLeafIds } = require("../../category-tree");
+const { returnsProfit } = require("../../services/returns-profit");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature, requirePerm } = deps;
@@ -1439,19 +1441,41 @@ module.exports = function (app, deps, helpers) {
       `;
         const { rows } = await db.query(sql, values);
         const row = rows[0] || {};
+
+        // D17: returns in the period give their profit back (refund minus the
+        // cost of anything that went back on the shelf). Same filters as the
+        // sales side, applied to the return.
+        const { date_from, date_to, outlet_id, employee_id, category_id } = req.query;
+        const tz = req.company?.timezone || "UTC";
+        const ret = await returnsProfit(db, {
+          from: date_from ? toUtcStart(date_from, tz) : "-infinity",
+          to: date_to ? toUtcEnd(date_to, tz) : "infinity",
+          outletIds: outlet_id ? String(outlet_id).split(",") : [],
+          employeeId: employee_id || null,
+          categoryIds: category_id ? await getDescendantLeafIds(db, Number(category_id)) : null,
+        });
+
         const grossSales = Number(row.gross_sales || 0);
         const grossProfit = Number(row.gross_profit || 0);
-        const netProfit = Number(row.net_profit || 0);
+        const discounts = Number(row.discount_amount || 0);
+        const netSales = Number((grossSales - discounts - ret.refunds).toFixed(2));
+        const netProfit = Number((Number(row.net_profit || 0) - ret.profit_back).toFixed(2));
         res.json({
           summary: {
             ...row,
+            returns_count: ret.returns_count,
+            returns_value: ret.refunds,
+            returns_cost_back: ret.cost_back,
+            returns_profit: ret.profit_back,
+            net_sales: netSales,
+            net_profit: netProfit,
             margin_pct:
               grossSales > 0
                 ? Number(((grossProfit / grossSales) * 100).toFixed(2))
                 : 0,
             net_margin_pct:
-              grossSales > 0
-                ? Number(((netProfit / grossSales) * 100).toFixed(2))
+              netSales > 0
+                ? Number(((netProfit / netSales) * 100).toFixed(2))
                 : 0,
           },
         });

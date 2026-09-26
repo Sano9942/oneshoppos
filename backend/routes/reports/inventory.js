@@ -846,7 +846,10 @@ module.exports = function (app, deps, helpers) {
         await applyInventoryProductFilters(where, dynamicParams, req.query);
         const allParams = [...prependParams, ...dynamicParams];
         const { text: whereText, values } = helpers.pgWhere(where, allParams, prependParams.length + 1);
+        // Wrapped so ORDER BY can use risk_level: Postgres only resolves an
+        // output alias in ORDER BY when it stands alone, not inside a CASE.
         const sql = `
+        SELECT * FROM (
         WITH sales_velocity AS (
           SELECT
             si.product_id,
@@ -890,6 +893,7 @@ module.exports = function (app, deps, helpers) {
         LEFT JOIN suppliers sup ON sup.id = p.supplier_id
         LEFT JOIN sales_velocity v ON v.product_id = os.product_id AND v.outlet_id = os.outlet_id
         WHERE ${whereText}
+        ) risk
         ORDER BY
           CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC,
           days_of_cover ASC

@@ -78,6 +78,8 @@ All three blockers are **real**. Blockers 1 and 2 are **worse** than the readine
 
 **After D6 (2026-09-26): 107 pass, 0 fail.** First fully clean run. 26 regression tests.
 
+**After D17 (2026-09-26): 108 pass, 0 fail.** The two profit checks now expect profit **after returns** (Rs 18,480 on the shop day, was 22,680), plus a new "returns = refunds given" check. 29 regression tests.
+
 > The tables below are the **first-run** picture. For current status, go by the Defect list at the bottom.
 
 Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (test proves it) · ⬜ untested · 🟡 works, but differently from iPOS or needs a setting
@@ -174,8 +176,11 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D14 | 🟡 | Retail setup seeds 5 sample products with stock | open, owner decision |
 | D15 | 🟡 | Margin reports off by default for retail | config: turn on "Advanced Reports" for OTS |
 | D16 | 🟠 | A supplier invoice paid in two instalments stays "partial" forever (text + number concatenation in `routes/grn.js`) | 🛠️ fixed |
-| D17 | 🟡 | Profit reports (profit summary, dashboard) don't subtract returns: a returned item's profit still counts | open, owner decision: how does iPOS report it? |
+| D17 | 🟡 | Profit reports (profit summary, dashboard) don't subtract returns: a returned item's profit still counts | 🛠️ fixed: one shared definition, `services/returns-profit.js`. A return gives back its refund minus the original sale-line cost of anything restocked (a written-off item gives back the whole refund), dated when the return happens. Applied to the profit summary (new `returns_value` / `returns_profit` / `net_sales`; net margin now on net sales), dashboard today / yesterday / month, the end-of-day digest email (which also ignored bill discounts), and the Accounting P&L (took refunds off but never gave restocked cost back). Reports panel shows a Returns tile. Proven on screen (`out/dashboard-profit-after-returns.png`, `out/reports-profit-returns-fixed.png`) |
 | D18 | 🟠 | After every completed sale, the POS offers to "Resume previous cart?", i.e. the cart just paid for. Clicking Resume re-rings it (double-sale trap) | 🛠️ fixed; proven in the real POS screen (fails before, passes after) |
+| D20 | 🔴 | `/api/reports/stockout-risk` 500s on every shop (ORDER BY used an output alias inside a CASE). Because the Reports Power-Up panel loaded everything with one `Promise.all`, it also blanked the **profit figures** to 0 | 🛠️ fixed: query wrapped; panel now loads each report independently and says which failed. Also: panel read `rows` where profit-by-product returns `items`, so "Top margin products" was always empty; fixed |
+| D21 | 🟡 | Profit **by product** and **by outlet** still count sales only (returns not subtracted per product/outlet) | open: follow-up to D17 |
+| D22 | 🟡 | Reports panel "Dead stock: 8 rows, value tied Rs 0.00" on the shop day looks wrong (value should be qty × cost) | open, not investigated |
 | D19 | 🟡 | Scanning a variant runs the modifier lookup with the variant id as a product id (harmless 403 today; pre-existing pattern shared with the variant picker) | open, low |
 
 ---

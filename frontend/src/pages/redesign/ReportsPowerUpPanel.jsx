@@ -127,23 +127,32 @@ export default function ReportsPowerUpPanel({ flags }) {
         calls.push(api.get(`/api/reports/exceptions?${query}&type=${encodeURIComponent(exceptionType)}`));
       }
 
-      const results = await Promise.all(calls);
+      // One failing report must not blank the others (a 500 on stockout-risk
+      // used to zero the profit figures too).
+      const settled = await Promise.allSettled(calls);
+      const failed = settled.filter((r) => r.status === "rejected");
+      const results = settled.map((r) => (r.status === "fulfilled" ? r.value || {} : {}));
+      // Report endpoints return their list as `rows` or `items`.
+      const list = (r) => r.rows || r.items || [];
       let idx = 0;
       if (flags.reports_profit_layer) {
         setProfitSummary(results[idx++].summary || null);
-        setProfitByProduct(results[idx++].rows || []);
-        setProfitByOutlet(results[idx++].rows || []);
-        setDiscountLeakage(results[idx++].rows || []);
+        setProfitByProduct(list(results[idx++]));
+        setProfitByOutlet(list(results[idx++]));
+        setDiscountLeakage(list(results[idx++]));
       }
       if (flags.reports_inventory_health_plus) {
-        setDeadStock(results[idx++].rows || []);
-        setStockAging(results[idx++].rows || []);
-        setStockoutRisk(results[idx++].rows || []);
-        setForecastRows(results[idx++].rows || []);
-        setReplenishmentSmart(results[idx++].rows || []);
+        setDeadStock(list(results[idx++]));
+        setStockAging(list(results[idx++]));
+        setStockoutRisk(list(results[idx++]));
+        setForecastRows(list(results[idx++]));
+        setReplenishmentSmart(list(results[idx++]));
       }
       if (flags.reports_exceptions) {
-        setExceptions(results[idx++].rows || []);
+        setExceptions(list(results[idx++]));
+      }
+      if (failed.length) {
+        setError(`${failed.length} report(s) failed to load: ${failed[0].reason?.message || "unknown error"}`);
       }
     } catch (e) {
       setError(e.message || "Failed to load enhanced reports.");
@@ -261,7 +270,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                   Export
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-6">
                 <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Gross Sales: <b>{money(profitSummary?.gross_sales)}</b>
                 </div>
@@ -270,6 +279,17 @@ export default function ReportsPowerUpPanel({ flags }) {
                 </div>
                 <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Gross Profit: <b>{money(profitSummary?.gross_profit)}</b>
+                </div>
+                <div
+                  className="rounded-lg bg-(--ui-muted-surface) p-2"
+                  title="Refunds given, less the cost of items that went back into stock"
+                >
+                  Returns: <b>{money(profitSummary?.returns_value)}</b>
+                  {Number(profitSummary?.returns_profit || 0) !== 0 && (
+                    <span className="block text-(--ui-text-muted)">
+                      profit given back {money(profitSummary?.returns_profit)}
+                    </span>
+                  )}
                 </div>
                 <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Net Profit: <b>{money(profitSummary?.net_profit)}</b>

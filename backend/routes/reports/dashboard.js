@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
+const { returnsProfit } = require("../../services/returns-profit");
 
 module.exports = function (app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
@@ -172,10 +173,17 @@ module.exports = function (app, deps) {
       // Bill-level discounts come off gross profit (they were ignored, so the
       // dashboard overstated profit by every discount given). The *_discount
       // CTEs already strip tax from each bill's discount by that bill's own mix.
-      const todayGrossProfit = taxExclusive - totalCost - Number(profitMetrics.discount || 0);
+      // D17: returns give their profit back (refund ex tax, minus the cost of
+      // what went back on the shelf) on the day they happen.
+      const [todayReturns, monthReturns] = await Promise.all([
+        returnsProfit(db, { from: todayStart, to: todayEnd, outletIds }),
+        returnsProfit(db, { from: monthStart, to: todayEnd, outletIds }),
+      ]);
+      const todayGrossProfit = taxExclusive - totalCost - Number(profitMetrics.discount || 0) - todayReturns.profit_back_ex_tax;
       const monthTaxExclusive = Number(profitMetrics.month_tax_exclusive || 0);
       const monthTotalCost = Number(profitMetrics.month_total_cost || 0);
-      const monthGrossMargin = Number((monthTaxExclusive - monthTotalCost - Number(profitMetrics.month_discount || 0)).toFixed(2));
+      const monthGrossMargin = Number((monthTaxExclusive - monthTotalCost - Number(profitMetrics.month_discount || 0)
+        - monthReturns.profit_back_ex_tax).toFixed(2));
 
       // ─── Query 4: Expenses today ───
       const expOutlet = buildOutletClause("outlet_id", outletIds, 2);
@@ -229,8 +237,9 @@ module.exports = function (app, deps) {
          yesterdayStart, yesterdayEnd, ...yrOutlet.values])).rows[0] || {};
       const yesterdayRevenue = Number(yesterdayData.revenue || 0);
       const yesterdaySaleCount = Number(yesterdayData.sale_count || 0);
+      const yesterdayReturns = await returnsProfit(db, { from: yesterdayStart, to: yesterdayEnd, outletIds });
       const yesterdayProfit = Number((Number(yesterdayData.tax_exclusive || 0) - Number(yesterdayData.total_cost || 0)
-        - Number(yesterdayData.discount || 0)).toFixed(2));
+        - Number(yesterdayData.discount || 0) - yesterdayReturns.profit_back_ex_tax).toFixed(2));
       const yesterdayRefunds = Number(yesterdayData.refund_value || 0);
 
       // ─── Query 6: Month sales + purchases + refunds today (combined) ───

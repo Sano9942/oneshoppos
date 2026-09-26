@@ -2,6 +2,7 @@ const nodemailer = require("nodemailer");
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 const { uploadToR2 } = require("../../utils/r2");
 const { buildDigestEmailHtml } = require("../../utils/digestEmail");
+const { returnsProfit } = require("../../services/returns-profit");
 
 module.exports = function (app, deps, helpers) {
   const { db, requirePerm, requireAnyPerm, requireFeature, path, fs } = deps;
@@ -194,7 +195,26 @@ module.exports = function (app, deps, helpers) {
          WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2`,
         [todayStart, todayEnd],
       );
-      const grossProfit = Number(profitRow?.tax_exclusive || 0) - Number(profitRow?.total_cost || 0);
+      // Same definition as the dashboard: bill discounts (tax stripped by each
+      // bill's own mix) and the profit given back by today's returns come off.
+      const { rows: [billDiscRow] } = await db.query(
+        `SELECT ROUND(COALESCE(SUM(b.discount * CASE WHEN b.gross > 0 THEN b.ex_gross / b.gross ELSE 1 END), 0)::numeric, 2) AS discount
+           FROM (
+             SELECT s.id, COALESCE(s.discount_amount, 0) AS discount,
+                    SUM(si.quantity * si.price_at_sale) AS gross,
+                    SUM(CASE WHEN t.id IS NOT NULL
+                          THEN (si.quantity * si.price_at_sale) / (1 + (t.rate / 100.0))
+                          ELSE (si.quantity * si.price_at_sale) / (1 + (COALESCE(p.gst, 0) / 100.0)) END) AS ex_gross
+               FROM sales s JOIN sale_items si ON si.sale_id = s.id JOIN products p ON si.product_id = p.id
+               LEFT JOIN taxes t ON p.tax_id = t.id
+              WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2
+              GROUP BY s.id, s.discount_amount
+           ) b`,
+        [todayStart, todayEnd],
+      );
+      const todayReturns = await returnsProfit(db, { from: todayStart, to: todayEnd });
+      const grossProfit = Number(profitRow?.tax_exclusive || 0) - Number(profitRow?.total_cost || 0)
+        - Number(billDiscRow?.discount || 0) - todayReturns.profit_back_ex_tax;
       const { rows: [expRow] } = await db.query(
         `SELECT ROUND(COALESCE(SUM(amount), 0)::numeric, 2) AS total FROM expenses WHERE expense_date = $1`,
         [todayStr],
