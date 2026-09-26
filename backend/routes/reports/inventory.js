@@ -640,32 +640,57 @@ module.exports = function (app, deps, helpers) {
         1,
         Math.min(3650, parseInt(req.query.inactive_days || 90, 10)),
       );
-      const where = ["os.quantity > 0"];
+      const where = ["os.quantity > 0", "p.deleted_at IS NULL"];
       const params = [];
       applyOutletFilter(where, params, req.query.outlet_id);
       await applyInventoryProductFilters(where, params, req.query);
       const { text: whereText, values, nextIdx } = helpers.pgWhere(where, params);
+      // One row per product per outlet. The last sale is looked up per outlet
+      // in its own CTE: joining sale_items straight onto outlet_stock repeated
+      // each stock row once per past sale line, multiplying stock and value.
+      // An item that never sold is aged from when the product was created, so
+      // yesterday's new arrival isn't "dead". Old field names (current_stock,
+      // cost_value, last_sold_date, days_since_sold) are kept alongside the
+      // ones the Dead Stock page reads.
       const sql = `
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.sku,
-          p.barcode,
-          p.category_id,
-          COALESCE(cat.name, '-') AS category,
-          COALESCE(SUM(os.quantity), 0) AS current_stock,
-          MAX(s.timestamp) AS last_sold_date,
-          FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int AS days_since_sold,
-          ROUND(COALESCE(SUM(os.quantity), 0) * COALESCE(p.cost_price, 0), 2) AS cost_value
-        FROM outlet_stock os
-        JOIN products p ON p.id = os.product_id
-        LEFT JOIN categories cat ON cat.id = p.category_id
-        LEFT JOIN sale_items si ON si.product_id = p.id
-        LEFT JOIN sales s ON s.id = si.sale_id AND s.voided = false
-        WHERE ${whereText}
-        GROUP BY p.id, p.name, p.sku, p.barcode, p.category_id, cat.name, p.cost_price
-        HAVING COALESCE(FLOOR(EXTRACT(EPOCH FROM (NOW() - MAX(s.timestamp))) / 86400.0)::int, 99999) >= $${nextIdx}
-        ORDER BY cost_value DESC
+        WITH last_sale AS (
+          SELECT si.product_id, s.outlet_id, MAX(s.timestamp) AS last_sold
+            FROM sale_items si
+            JOIN sales s ON s.id = si.sale_id AND s.voided = false
+           GROUP BY si.product_id, s.outlet_id
+        )
+        SELECT * FROM (
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            p.sku,
+            p.barcode,
+            p.category_id,
+            COALESCE(cat.name, '-') AS category,
+            COALESCE(b.name, '-') AS brand,
+            COALESCE(sup.name, '-') AS supplier,
+            o.id AS outlet_id,
+            o.name AS outlet_name,
+            os.quantity AS stock_qty,
+            os.quantity AS current_stock,
+            ls.last_sold AS last_sold_at,
+            ls.last_sold AS last_sold_date,
+            FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(ls.last_sold, p.created_at))) / 86400.0)::int AS days_since_sale,
+            FLOOR(EXTRACT(EPOCH FROM (NOW() - ls.last_sold)) / 86400.0)::int AS days_since_sold,
+            ROUND(os.quantity * COALESCE(p.cost_price, 0), 2) AS stock_cost_value,
+            ROUND(os.quantity * COALESCE(p.cost_price, 0), 2) AS cost_value,
+            ROUND(os.quantity * COALESCE(p.price, 0), 2) AS stock_retail_value
+          FROM outlet_stock os
+          JOIN products p ON p.id = os.product_id
+          JOIN outlets o ON o.id = os.outlet_id
+          LEFT JOIN categories cat ON cat.id = p.category_id
+          LEFT JOIN brands b ON b.id = p.brand_id
+          LEFT JOIN suppliers sup ON sup.id = p.supplier_id
+          LEFT JOIN last_sale ls ON ls.product_id = os.product_id AND ls.outlet_id = os.outlet_id
+          WHERE ${whereText}
+        ) dead
+        WHERE COALESCE(days_since_sale, 99999) >= $${nextIdx}
+        ORDER BY stock_cost_value DESC
         LIMIT 500
       `;
       const { rows } = await db.query(sql, [...values, inactiveDays]);

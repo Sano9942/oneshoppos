@@ -259,6 +259,10 @@ export default function ReportsPowerUpPanel({ flags }) {
                         { header: "COGS", key: "cogs" },
                         { header: "Gross Profit", key: "gross_profit" },
                         { header: "Margin %", key: "margin_pct" },
+                        { header: "Returns", key: "returns_value" },
+                        { header: "Profit Given Back", key: "returns_profit" },
+                        { header: "Net Profit", key: "net_profit" },
+                        { header: "Net Margin %", key: "net_margin_pct" },
                       ],
                       filters,
                       currencyCode,
@@ -300,12 +304,12 @@ export default function ReportsPowerUpPanel({ flags }) {
                 </div>
               </div>
               <div className="mt-2 text-xs text-(--ui-text-muted)">
-                Top margin products:{" "}
+                Top products by profit (after returns):{" "}
                 {(profitByProduct || [])
                   .slice(0, 5)
                   .map(
                     (row) =>
-                      `${row.product_name} (${Number(row.margin_pct || 0).toFixed(1)}%)`,
+                      `${row.product_name} (${money(row.net_profit)}, ${Number(row.net_margin_pct || 0).toFixed(1)}%)`,
                   )
                   .join(", ") || "-"}
               </div>
@@ -313,7 +317,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                 Outlet leaders:{" "}
                 {(profitByOutlet || [])
                   .slice(0, 3)
-                  .map((row) => `${row.outlet_name} (${money(row.gross_profit)})`)
+                  .map((row) => `${row.outlet_name} (${money(row.net_profit)})`)
                   .join(", ") || "-"}
               </div>
               <div className="mt-1 text-xs text-(--ui-text-muted)">
@@ -352,7 +356,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                     Oldest:{" "}
                     {Math.max(
                       0,
-                      ...stockAging.map((row) => Number(row.days_since_sale || 0)),
+                      ...stockAging.map((row) => Number(row.age_days || 0)),
                     )}{" "}
                     days
                   </div>

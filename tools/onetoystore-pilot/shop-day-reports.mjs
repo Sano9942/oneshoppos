@@ -166,6 +166,19 @@ export async function assertReports(ctx) {
     check("profit summary net profit = sales after discounts and returns − cost of goods kept (D17)",
       num(s.net_profit), r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost)));
   }
+  const pp = body("profit-by-product");
+  if (pp) {
+    // Per-product profit has no bill-level discounts (they aren't per line), so
+    // it adds up to gross − cost − profit given back by returns.
+    const sum = r2((pp.items || []).reduce((t, r) => t + num(r.net_profit), 0));
+    check("profit by product: Σ net profit = gross − cost − (refunds − cost of returned stock) (D21)",
+      sum, r2(shadow.gross - shadow.cogs - (shadow.refunds - shadow.returnedCost)));
+  }
+  const po = body("profit-by-outlet");
+  if (po) {
+    check("profit by outlet (one outlet) = profit summary net profit (D21)",
+      num((po.items || [])[0]?.net_profit), r2(shadow.netAfterReturns - (shadow.cogs - shadow.returnedCost)));
+  }
 
   // ── E. Stock value, purchases, suppliers ──────────────────────────────────
   area("8e. Stock, purchases, supplier balances");

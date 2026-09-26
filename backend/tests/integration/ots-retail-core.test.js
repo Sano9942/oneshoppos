@@ -394,6 +394,57 @@ describe("D17 — profit reports take returns off", () => {
   });
 });
 
+// ─── D21 ────────────────────────────────────────────────────────────────────
+describe("D21 — profit by product and by outlet take returns off", () => {
+  // Drink E: price 75, cost 45. Returning 1 (restocked) gives back 75 − 45 = 30 profit.
+  const q = `date_from=${today()}&date_to=${today()}`;
+  const byProduct = async () => (await admin().get(`/api/reports/profit-by-product?${q}&limit=500`)).body.items.find((r) => r.product_id === 5);
+  const byOutlet = async () => (await admin().get(`/api/reports/profit-by-outlet?${q}`)).body.items.find((r) => r.outlet_id === 1);
+  const r2 = (n) => Math.round(n * 100) / 100;
+  let saleId;
+
+  beforeAll(async () => {
+    await closeAnyOpenTill();
+    await openTill();
+    await db.query("INSERT INTO feature_flags (key, enabled) VALUES ('reports_profit_layer', true) ON CONFLICT (key) DO UPDATE SET enabled = true");
+    const res = await sell({ cartItems: [{ id: 5, quantity: 2, price: 75 }], payments: [{ method: "Card", amount: 150 }] });
+    expect(res.status).toBe(200);
+    saleId = res.body.saleId;
+  });
+
+  it("a return comes off that product's and that outlet's profit", async () => {
+    const pBefore = await byProduct();
+    const oBefore = await byOutlet();
+    const ret = await admin().post("/api/returns").send({
+      original_sale_id: saleId, outlet_id: 1, employee_id: ADMIN_ID, total_refund: 75, refund_method: "Card",
+      items: [{ product_id: 5, quantity: 1, refund_price: 75 }],
+    });
+    expect(ret.status).toBe(200);
+    const pAfter = await byProduct();
+    const oAfter = await byOutlet();
+    expect(r2(Number(pBefore.net_profit) - Number(pAfter.net_profit))).toBe(30);
+    expect(r2(Number(pAfter.returns_value) - Number(pBefore.returns_value || 0))).toBe(75);
+    expect(r2(Number(oBefore.net_profit) - Number(oAfter.net_profit))).toBe(30);
+  });
+
+  it("a product only returned in the period (sold earlier) still shows, with negative profit", async () => {
+    const { id } = await one("INSERT INTO products (name, barcode, sku, price, cost_price, stock, status) VALUES ('Old Kite', 'D21-KITE', 'D21-KITE', 300, 100, 5, 'active') RETURNING id");
+    await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 5)", [id]);
+    const sale = await sell({ cartItems: [{ id, quantity: 1, price: 300 }], payments: [{ method: "Card", amount: 300 }] });
+    expect(sale.status).toBe(200);
+    await db.query("UPDATE sales SET timestamp = NOW() - INTERVAL '40 days' WHERE id = $1", [sale.body.saleId]);
+    const ret = await admin().post("/api/returns").send({
+      original_sale_id: sale.body.saleId, outlet_id: 1, employee_id: ADMIN_ID, total_refund: 300, refund_method: "Card",
+      items: [{ product_id: id, quantity: 1, refund_price: 300 }],
+    });
+    expect(ret.status).toBe(200);
+    const row = (await admin().get(`/api/reports/profit-by-product?${q}&limit=500`)).body.items.find((r) => r.product_id === id);
+    expect(row).toBeTruthy();
+    expect(Number(row.units_sold)).toBe(0);
+    expect(Number(row.net_profit)).toBe(-200);
+  });
+});
+
 // ─── D20 ────────────────────────────────────────────────────────────────────
 describe("D20 — stockout-risk report", () => {
   it("loads (it 500'd on every shop: ORDER BY used an output alias inside a CASE)", async () => {
@@ -401,6 +452,49 @@ describe("D20 — stockout-risk report", () => {
     const res = await admin().get("/api/reports/stockout-risk");
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
+  });
+});
+
+// ─── D22 ────────────────────────────────────────────────────────────────────
+describe("D22 — dead stock report", () => {
+  let slowId, freshId;
+  beforeAll(async () => {
+    await closeAnyOpenTill();
+    await openTill();
+    const mk = async (name, bc) => (await one(
+      `INSERT INTO products (name, barcode, sku, price, cost_price, stock, status) VALUES ($1, $2, $2, 200, 80, 10, 'active') RETURNING id`, [name, bc])).id;
+    slowId = await mk("Slow Puzzle", "D22-SLOW");
+    freshId = await mk("Fresh Puzzle", "D22-FRESH");
+    for (const id of [slowId, freshId]) {
+      await db.query("INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, 1, 12) ON CONFLICT (product_id, outlet_id) DO UPDATE SET quantity = 12", [id]);
+    }
+    // Slow Puzzle: two bills, both 100 days ago. Fresh Puzzle: sold today.
+    for (let i = 0; i < 2; i += 1) {
+      const r = await sell({ cartItems: [{ id: slowId, quantity: 1, price: 200 }], payments: [{ method: "Card", amount: 200 }] });
+      expect(r.status).toBe(200);
+      await db.query("UPDATE sales SET timestamp = NOW() - INTERVAL '100 days' WHERE id = $1", [r.body.saleId]);
+    }
+    const f = await sell({ cartItems: [{ id: freshId, quantity: 1, price: 200 }], payments: [{ method: "Card", amount: 200 }] });
+    expect(f.status).toBe(200);
+  });
+
+  it("lists an item unsold for 90+ days with its real stock and value (not multiplied by past sale lines)", async () => {
+    const res = await admin().get("/api/reports/dead-stock?inactive_days=90");
+    expect(res.status).toBe(200);
+    const row = res.body.items.find((r) => r.product_id === slowId);
+    const onHand = num((await one("SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = 1", [slowId])).quantity);
+    expect(row).toBeTruthy();
+    expect(num(row.stock_qty)).toBe(onHand);
+    expect(num(row.stock_cost_value)).toBe(onHand * 80);
+    expect(num(row.stock_retail_value)).toBe(onHand * 200);
+    expect(row.days_since_sale).toBeGreaterThanOrEqual(99);
+    expect(row.last_sold_at).toBeTruthy();
+    expect(row.outlet_name).toBeTruthy();
+  });
+
+  it("does not list an item sold today", async () => {
+    const res = await admin().get("/api/reports/dead-stock?inactive_days=90");
+    expect(res.body.items.some((r) => r.product_id === freshId)).toBe(false);
   });
 });
 

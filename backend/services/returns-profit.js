@@ -25,57 +25,66 @@
  * `ex_tax` figures strip each line's tax the same way the dashboard strips it
  * from sales (product tax rate, else products.gst).
  */
-async function returnsProfit(db, { from, to, outletIds = [], employeeId = null, categoryIds = null } = {}) {
-  const where = ['r.timestamp >= $1', 'r.timestamp < $2'];
-  const values = [from, to];
-  const ids = (outletIds || []).map(Number).filter(Boolean);
-  if (ids.length) {
-    values.push(ids);
-    where.push(`r.outlet_id = ANY($${values.length}::int[])`);
-  }
-  if (employeeId) {
-    values.push(Number(employeeId));
-    where.push(`r.employee_id = $${values.length}`);
-  }
-  let categoryClause = '';
-  if (Array.isArray(categoryIds)) {
-    values.push(categoryIds.map(Number));
-    categoryClause = `WHERE category_id = ANY($${values.length}::int[])`;
-  }
 
-  const { rows: [row] } = await db.query(
-    `WITH lines AS (
-       SELECT r.id AS return_id,
-              r.total_refund,
-              ri.quantity * ri.refund_price AS line_value,
-              SUM(ri.quantity * ri.refund_price) OVER (PARTITION BY r.id) AS return_value,
-              CASE WHEN t.id IS NOT NULL THEN t.rate ELSE COALESCE(p.gst, 0) END AS tax_rate,
-              CASE WHEN ri.restock_flag THEN ri.quantity * COALESCE(
-                (SELECT AVG(si.cost_price_at_sale) FROM sale_items si
-                  WHERE si.sale_id = r.original_sale_id
-                    AND si.product_id = ri.product_id
-                    AND si.variant_id IS NOT DISTINCT FROM ri.variant_id),
-                pv.cost_price, p.cost_price, 0)
-              ELSE 0 END AS cost_back,
-              p.category_id
-         FROM returns r
-         JOIN return_items ri ON ri.return_id = r.id
-         JOIN products p ON p.id = ri.product_id
-         LEFT JOIN product_variants pv ON pv.id = ri.variant_id
-         LEFT JOIN taxes t ON t.id = p.tax_id
-        WHERE ${where.join(' AND ')}
-     ),
-     allocated AS (
-       SELECT return_id, cost_back, tax_rate, category_id,
+/**
+ * SQL for a `ret_lines` CTE (no leading WITH) — one row per returned line with
+ * return_id, product_id, variant_id, outlet_id, category_id, refund, cost_back,
+ * tax_rate. Placeholders are numbered from `startIdx` so the block can sit in
+ * front of a report's own parameters.
+ */
+function returnLinesCte({ from, to, outletIds = [], employeeId = null, categoryIds = null } = {}, startIdx = 1) {
+  const values = [];
+  const ph = (v) => { values.push(v); return `$${startIdx + values.length - 1}`; };
+  const where = [`r.timestamp >= ${ph(from)}`, `r.timestamp < ${ph(to)}`];
+  const ids = (outletIds || []).map(Number).filter(Boolean);
+  if (ids.length) where.push(`r.outlet_id = ANY(${ph(ids)}::int[])`);
+  if (employeeId) where.push(`r.employee_id = ${ph(Number(employeeId))}`);
+  const categoryClause = Array.isArray(categoryIds)
+    ? `WHERE category_id = ANY(${ph(categoryIds.map(Number))}::int[])`
+    : '';
+
+  const sql = `ret_lines AS (
+       SELECT return_id, product_id, variant_id, outlet_id, category_id, tax_rate, cost_back,
               CASE WHEN return_value > 0 THEN line_value * total_refund / return_value ELSE 0 END AS refund
-         FROM lines
-     )
+         FROM (
+           SELECT r.id AS return_id,
+                  r.outlet_id,
+                  r.total_refund,
+                  ri.product_id,
+                  ri.variant_id,
+                  p.category_id,
+                  ri.quantity * ri.refund_price AS line_value,
+                  SUM(ri.quantity * ri.refund_price) OVER (PARTITION BY r.id) AS return_value,
+                  CASE WHEN t.id IS NOT NULL THEN t.rate ELSE COALESCE(p.gst, 0) END AS tax_rate,
+                  CASE WHEN ri.restock_flag THEN ri.quantity * COALESCE(
+                    (SELECT AVG(si.cost_price_at_sale) FROM sale_items si
+                      WHERE si.sale_id = r.original_sale_id
+                        AND si.product_id = ri.product_id
+                        AND si.variant_id IS NOT DISTINCT FROM ri.variant_id),
+                    pv.cost_price, p.cost_price, 0)
+                  ELSE 0 END AS cost_back
+             FROM returns r
+             JOIN return_items ri ON ri.return_id = r.id
+             JOIN products p ON p.id = ri.product_id
+             LEFT JOIN product_variants pv ON pv.id = ri.variant_id
+             LEFT JOIN taxes t ON t.id = p.tax_id
+            WHERE ${where.join(' AND ')}
+         ) lines
+       ${categoryClause}
+     )`;
+  return { sql, values };
+}
+
+async function returnsProfit(db, opts = {}) {
+  const cte = returnLinesCte(opts);
+  const { rows: [row] } = await db.query(
+    `WITH ${cte.sql}
      SELECT COUNT(DISTINCT return_id)::int AS returns_count,
             ROUND(COALESCE(SUM(refund), 0)::numeric, 2) AS refunds,
             ROUND(COALESCE(SUM(refund / (1 + tax_rate / 100.0)), 0)::numeric, 2) AS refunds_ex_tax,
             ROUND(COALESCE(SUM(cost_back), 0)::numeric, 2) AS cost_back
-       FROM allocated ${categoryClause}`,
-    values,
+       FROM ret_lines`,
+    cte.values,
   );
 
   const refunds = Number(row.refunds || 0);
@@ -91,8 +100,23 @@ async function returnsProfit(db, { from, to, outletIds = [], employeeId = null, 
   };
 }
 
+/**
+ * Build the returnLinesCte options from a profit report's query string, using
+ * the same filters buildReportFilterParts applies to the sales side.
+ */
+async function returnFiltersFromQuery(query, tz, { toUtcStart, toUtcEnd, getDescendantLeafIds, db }) {
+  const { date_from, date_to, outlet_id, employee_id, category_id } = query || {};
+  return {
+    from: date_from ? toUtcStart(date_from, tz) : '-infinity',
+    to: date_to ? toUtcEnd(date_to, tz) : 'infinity',
+    outletIds: outlet_id ? String(outlet_id).split(',') : [],
+    employeeId: employee_id || null,
+    categoryIds: category_id ? await getDescendantLeafIds(db, Number(category_id)) : null,
+  };
+}
+
 function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-module.exports = { returnsProfit };
+module.exports = { returnsProfit, returnLinesCte, returnFiltersFromQuery };

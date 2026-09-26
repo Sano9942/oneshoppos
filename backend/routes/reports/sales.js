@@ -1,6 +1,6 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 const { getDescendantLeafIds } = require("../../category-tree");
-const { returnsProfit } = require("../../services/returns-profit");
+const { returnsProfit, returnLinesCte, returnFiltersFromQuery } = require("../../services/returns-profit");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature, requirePerm } = deps;
@@ -9,6 +9,9 @@ module.exports = function (app, deps, helpers) {
   // middleware/permissions.js is only a backstop.
   const salesView = requirePerm("view_sales_reports");
   const financeView = requirePerm("view_financial_reports"); // margin rule: profit layer
+  // Returns get the same filters the profit reports apply to sales (D17/D21).
+  const returnFilters = (req) => returnFiltersFromQuery(req.query, req.company?.timezone || "UTC",
+    { toUtcStart, toUtcEnd, getDescendantLeafIds, db });
   const {
     pgWhere,
     buildCategoryMetaMap,
@@ -1445,15 +1448,7 @@ module.exports = function (app, deps, helpers) {
         // D17: returns in the period give their profit back (refund minus the
         // cost of anything that went back on the shelf). Same filters as the
         // sales side, applied to the return.
-        const { date_from, date_to, outlet_id, employee_id, category_id } = req.query;
-        const tz = req.company?.timezone || "UTC";
-        const ret = await returnsProfit(db, {
-          from: date_from ? toUtcStart(date_from, tz) : "-infinity",
-          to: date_to ? toUtcEnd(date_to, tz) : "infinity",
-          outletIds: outlet_id ? String(outlet_id).split(",") : [],
-          employeeId: employee_id || null,
-          categoryIds: category_id ? await getDescendantLeafIds(db, Number(category_id)) : null,
-        });
+        const ret = await returnsProfit(db, await returnFilters(req));
 
         const grossSales = Number(row.gross_sales || 0);
         const grossProfit = Number(row.gross_profit || 0);
@@ -1496,12 +1491,14 @@ module.exports = function (app, deps, helpers) {
           "revenue",
           "gross_profit",
           "margin_pct",
+          "net_profit",
+          "net_margin_pct",
           "units_sold",
           "product_name",
         ]);
         const sort = sortable.has(String(req.query.sort || ""))
           ? req.query.sort
-          : "gross_profit";
+          : "net_profit";
         const order =
           String(req.query.order || "desc").toLowerCase() === "asc"
             ? "ASC"
@@ -1509,36 +1506,58 @@ module.exports = function (app, deps, helpers) {
         const { limit, offset } = parsePaging(req);
         const { where, params } = await buildReportFilterParts(req);
         const { text, values, nextIdx } = pgWhere(where, params);
+        // D21: returns in the period come off each product's profit; a product
+        // only returned in the period (sold earlier) still gets a row.
+        const ret = returnLinesCte(await returnFilters(req), nextIdx);
+        const pageIdx = nextIdx + ret.values.length;
         const sql = `
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.barcode,
-          p.category_id,
-          COALESCE(cat.name, 'Uncategorized') AS category,
-          ROUND(COALESCE(SUM(si.quantity), 0), 2) AS units_sold,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale), 0), 2) AS revenue,
-          ROUND(COALESCE(SUM(si.quantity * si.cost_price_at_sale), 0), 2) AS cogs,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0), 2) AS gross_profit,
-          ROUND(
-            CASE
-              WHEN COALESCE(SUM(si.quantity * si.price_at_sale), 0) > 0
-                THEN (COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0) * 100.0)
-                   / COALESCE(SUM(si.quantity * si.price_at_sale), 1)
-              ELSE 0
-            END,
-            2
-          ) AS margin_pct
-        FROM sale_items si
-        JOIN sales s ON si.sale_id = s.id
-        JOIN products p ON si.product_id = p.id
-        LEFT JOIN categories cat ON p.category_id = cat.id
-        ${text ? `WHERE ${text}` : ""}
-        GROUP BY p.id, p.name, p.barcode, p.category_id, cat.name
+        WITH ${ret.sql},
+        sold AS (
+          SELECT si.product_id,
+                 SUM(si.quantity) AS units_sold,
+                 SUM(si.quantity * si.price_at_sale) AS revenue,
+                 SUM(si.quantity * si.cost_price_at_sale) AS cogs
+          FROM sale_items si
+          JOIN sales s ON si.sale_id = s.id
+          JOIN products p ON si.product_id = p.id
+          ${text ? `WHERE ${text}` : ""}
+          GROUP BY si.product_id
+        ),
+        ret AS (
+          SELECT product_id, SUM(refund) AS returns_value, SUM(refund - cost_back) AS returns_profit
+          FROM ret_lines GROUP BY product_id
+        ),
+        merged AS (
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            p.barcode,
+            p.category_id,
+            COALESCE(cat.name, 'Uncategorized') AS category,
+            ROUND(COALESCE(sold.units_sold, 0), 2) AS units_sold,
+            ROUND(COALESCE(sold.revenue, 0), 2) AS revenue,
+            ROUND(COALESCE(sold.cogs, 0), 2) AS cogs,
+            ROUND(COALESCE(sold.revenue - sold.cogs, 0), 2) AS gross_profit,
+            ROUND(CASE WHEN COALESCE(sold.revenue, 0) > 0
+                       THEN (sold.revenue - sold.cogs) * 100.0 / sold.revenue ELSE 0 END, 2) AS margin_pct,
+            ROUND(COALESCE(ret.returns_value, 0), 2) AS returns_value,
+            ROUND(COALESCE(ret.returns_profit, 0), 2) AS returns_profit,
+            ROUND(COALESCE(sold.revenue - sold.cogs, 0) - COALESCE(ret.returns_profit, 0), 2) AS net_profit,
+            ROUND(CASE WHEN COALESCE(sold.revenue, 0) - COALESCE(ret.returns_value, 0) > 0
+                       THEN (COALESCE(sold.revenue - sold.cogs, 0) - COALESCE(ret.returns_profit, 0)) * 100.0
+                            / (COALESCE(sold.revenue, 0) - COALESCE(ret.returns_value, 0))
+                       ELSE 0 END, 2) AS net_margin_pct
+          FROM (SELECT product_id FROM sold UNION SELECT product_id FROM ret) k
+          JOIN products p ON p.id = k.product_id
+          LEFT JOIN categories cat ON p.category_id = cat.id
+          LEFT JOIN sold ON sold.product_id = k.product_id
+          LEFT JOIN ret ON ret.product_id = k.product_id
+        )
+        SELECT * FROM merged
         ORDER BY ${sort} ${order}
-        LIMIT $${nextIdx} OFFSET $${nextIdx + 1}
+        LIMIT $${pageIdx} OFFSET $${pageIdx + 1}
       `;
-        const { rows } = await db.query(sql, [...values, limit, offset]);
+        const { rows } = await db.query(sql, [...values, ...ret.values, limit, offset]);
         const categoryMeta = await buildCategoryMetaMap();
         res.json({
           items: withCategoryPaths(rows, categoryMeta),
@@ -1564,33 +1583,63 @@ module.exports = function (app, deps, helpers) {
           outlet: "o",
           employee: "e",
         });
-        const { text, values } = pgWhere(where, params);
+        const { text, values, nextIdx } = pgWhere(where, params);
+        // D21: an outlet's net profit takes off its bill discounts and the
+        // profit given back by its returns — the same as the profit summary.
+        const ret = returnLinesCte(await returnFilters(req), nextIdx);
         const sql = `
+        WITH ${ret.sql},
+        sold AS (
+          SELECT s.outlet_id,
+                 COUNT(DISTINCT s.id) AS orders,
+                 SUM(si.quantity * si.price_at_sale) AS revenue,
+                 SUM(si.quantity * si.cost_price_at_sale) AS cogs
+          FROM sales s
+          JOIN outlets o ON s.outlet_id = o.id
+          JOIN sale_items si ON s.id = si.sale_id
+          JOIN products p ON si.product_id = p.id
+          ${text ? `WHERE ${text}` : ""}
+          GROUP BY s.outlet_id
+        ),
+        bill_discounts AS (
+          -- each matching bill's discount once, not once per line
+          SELECT outlet_id, SUM(discount_amount) AS discount_amount
+          FROM (
+            SELECT DISTINCT s.id, s.outlet_id, COALESCE(s.discount_amount, 0) AS discount_amount
+            FROM sales s
+            JOIN outlets o ON s.outlet_id = o.id
+            JOIN sale_items si ON s.id = si.sale_id
+            JOIN products p ON si.product_id = p.id
+            ${text ? `WHERE ${text}` : ""}
+          ) bills
+          GROUP BY outlet_id
+        ),
+        ret AS (
+          SELECT outlet_id, SUM(refund) AS returns_value, SUM(refund - cost_back) AS returns_profit
+          FROM ret_lines GROUP BY outlet_id
+        )
         SELECT
           o.id AS outlet_id,
           o.name AS outlet_name,
-          COUNT(DISTINCT s.id) AS orders,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale), 0), 2) AS revenue,
-          ROUND(COALESCE(SUM(si.quantity * si.cost_price_at_sale), 0), 2) AS cogs,
-          ROUND(COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0), 2) AS gross_profit,
-          ROUND(
-            CASE
-              WHEN COALESCE(SUM(si.quantity * si.price_at_sale), 0) > 0
-                THEN (COALESCE(SUM(si.quantity * si.price_at_sale - si.quantity * si.cost_price_at_sale), 0) * 100.0)
-                   / COALESCE(SUM(si.quantity * si.price_at_sale), 1)
-              ELSE 0
-            END,
-            2
-          ) AS margin_pct
-        FROM sales s
-        JOIN outlets o ON s.outlet_id = o.id
-        JOIN sale_items si ON s.id = si.sale_id
-        JOIN products p ON si.product_id = p.id
-        ${text ? `WHERE ${text}` : ""}
-        GROUP BY o.id, o.name
-        ORDER BY gross_profit DESC
+          COALESCE(sold.orders, 0) AS orders,
+          ROUND(COALESCE(sold.revenue, 0), 2) AS revenue,
+          ROUND(COALESCE(sold.cogs, 0), 2) AS cogs,
+          ROUND(COALESCE(sold.revenue - sold.cogs, 0), 2) AS gross_profit,
+          ROUND(CASE WHEN COALESCE(sold.revenue, 0) > 0
+                     THEN (sold.revenue - sold.cogs) * 100.0 / sold.revenue ELSE 0 END, 2) AS margin_pct,
+          ROUND(COALESCE(bd.discount_amount, 0), 2) AS discount_amount,
+          ROUND(COALESCE(ret.returns_value, 0), 2) AS returns_value,
+          ROUND(COALESCE(ret.returns_profit, 0), 2) AS returns_profit,
+          ROUND(COALESCE(sold.revenue - sold.cogs, 0) - COALESCE(bd.discount_amount, 0)
+                - COALESCE(ret.returns_profit, 0), 2) AS net_profit
+        FROM (SELECT outlet_id FROM sold UNION SELECT outlet_id FROM ret) k
+        JOIN outlets o ON o.id = k.outlet_id
+        LEFT JOIN sold ON sold.outlet_id = k.outlet_id
+        LEFT JOIN bill_discounts bd ON bd.outlet_id = k.outlet_id
+        LEFT JOIN ret ON ret.outlet_id = k.outlet_id
+        ORDER BY net_profit DESC
       `;
-        const { rows } = await db.query(sql, values);
+        const { rows } = await db.query(sql, [...values, ...ret.values]);
         res.json({ items: rows });
       } catch (err) {
         res.status(500).json({ error: err.message });
