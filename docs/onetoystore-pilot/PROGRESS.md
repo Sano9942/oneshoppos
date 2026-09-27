@@ -18,11 +18,11 @@
    - ✅ **6a** list + marking + clearing (below, "Step 6: labels to reprint"). Proven in tests and on screen
    - ✅ D25 fixed first (owner's call, 2026-09-27): editing a variant product no longer resets its stock
    - ✅ D27 fixed (2026-09-27): SKU-only variant products (Hot Wheels singles) save from the edit screen; rows labelled by SKU
-   - ⏭ **NEXT: 6b variant labels**: the label page can only add whole products; add variants (own barcode + price) to its product picker, and record `variant_id` in `barcode_print_jobs`. Variant rows from the list already print and clear correctly
-   - then 6c spreadsheet import updates **prices of existing items** (matched by SKU or barcode), with an old → new preview before confirming. Today `/import` rejects an existing SKU and `bulk-import` only inserts, so no import can change a price yet
+   - ✅ **6b variant labels** (2026-09-27): the label page's search lists each variant as its own label (own barcode + price, never the parent); the print log records `variant_id` (migration **v142**). See "Step 6b" below
+   - ⏭ **NEXT: 6c** spreadsheet import updates **prices of existing items** (matched by SKU or barcode), with an old → new preview before confirming. Today `/import` rejects an existing SKU and `bulk-import` only inserts, so no import can change a price yet
 7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
 
-**Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
+**Migration head: v142.** **Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
 
 **Shopify access on the owner's machine (checked 2026-09-26):** the Claude desktop Shopify connector and the Shopify CLI (3.91.1, theme login for `one-toy-store-dev.myshopify.com`) both point at the **LIVE** store. Neither is a test store. Don't use them for Phase C testing.
 
@@ -209,6 +209,21 @@ Screen checked in the browser (local shop): new button with a confirm box, plain
 - Neighbouring suites (products, import, Shopify, kits, packages, variants, pricing, ots-*): 274 pass. `pg-batch13-catalog-scheduler` fails the same way on the old code (Jest syntax).
 - On screen (Playwright, local backend, fresh shop-day shop): list showed the 28 new items incl. the Hot Wheels variants → "Label is fine" on all → Rubik's Cube edited Rs 1,500 → 1,650 in the product screen → listed as `Rs 1,500.00 → Rs 1,650.00` → "Print selected" → label printed "Rubik's Cube / 869000000012 / Rs 1,650.00" → list empty. `out/step6-labels-to-reprint.png`, `out/step6-print-queue.png`, `out/step6-after-print.png`.
 - Note: the setup wizard's 5 "(Sample)" products also show as new on a fresh shop.
+
+## Step 6b: variant labels (2026-09-27)
+
+**Before:** the label page's search (`/barcode-templates` → Print Labels) listed only whole products: a Hot Wheels single could only be printed with the parent's barcode and price, and `barcode_print_jobs` had no variant column, so a variant printed from the search couldn't be told apart in the log.
+
+**Now:**
+- The search lists **each variant as its own item** ("Hot Wheels Single Car – HW-DEORA", its own barcode, its own price; a variant without its own price uses the parent's). The parent of a product with variants is not listed. Search matches name, SKU or barcode (`labelReprints.js` `buildLabelPickList` / `searchLabelPickList`; variants come from `GET /api/products/catalogue`, the offline-catalogue endpoint from blocker 3). Long names wrap instead of being cut off, so the SKU stays readable.
+- `POST /api/barcode-print-jobs` stores `variant_id`, kept only when it really is a variant of that product (a foreign id is stored as NULL). Migration **v142** adds `barcode_print_jobs.variant_id` (FK, `ON DELETE SET NULL`), same column in `schema-pg.sql`. Clearing the "Labels to reprint" row already keyed on product + variant (6a).
+
+**Proof:**
+- `ots-label-reprints.test.js` +4 (23 total): variant label logged with its variant and clears only that variant; foreign variant id not stored; v142 skips a schema without the table, adds the column, idempotent; `schema-pg.sql` has the column. All 4 failed first. `ots-retail-core` still passes (72 together).
+- Frontend `label-variant-picker.test.jsx` (3, all failed first). Unit suite **281 / 281** (41 files).
+- Local DB migrated to v142 (all 73 tenant schemas have the column).
+- On screen (Playwright script, shop `otsacc_mujorxnl`): list cleared with "Label is fine" → Deora's price changed in the product edit screen (possible since D27) → listed → Print Labels, search "Hot Wheels" shows the 5-Pack and the three singles by SKU, no parent → added HW-DEORA → label printed "Hot Wheels Single Car – HW-DEORA / 027084120903 / Rs 520.00" → list empty ("All shelf labels are up to date."). Print log row: product 24, **variant 3**, barcode 027084120903, Rs 520. `out/step6b-variant-in-print-queue.png`, `out/step6b-variant-label.png`, `out/step6b-after-print.png`.
+- Note: a fresh shop has no label template; the proof created one ("Shelf 50x30").
 
 ## Retail core scorecard
 

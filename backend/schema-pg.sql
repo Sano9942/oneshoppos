@@ -1061,6 +1061,7 @@ CREATE TABLE IF NOT EXISTS barcode_print_jobs (
   id SERIAL PRIMARY KEY,
   template_id INTEGER REFERENCES barcode_templates(id),
   product_id INTEGER REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
   product_name TEXT,
   barcode TEXT,
   price NUMERIC(12,2),

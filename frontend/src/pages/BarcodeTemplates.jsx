@@ -4,7 +4,7 @@ import { Tag, Plus, Edit2, Trash2, X, RefreshCw, Printer, Check } from "lucide-r
 import { api } from '../api';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { fmtUtcDateTime } from '../utils/dates';
-import { queueKey, reprintRowToQueueItem, addToQueue } from './labelReprints';
+import { queueKey, reprintRowToQueueItem, addToQueue, buildLabelPickList, searchLabelPickList } from './labelReprints';
 
 // ── Minimal Code128B encoder ─────────────────────────────────────────────────
 const CODE128_TABLE = (() => {
@@ -197,6 +197,7 @@ export default function BarcodeTemplates() {
 
   const [printModal, setPrintModal] = useState(false);
   const [products, setProducts] = useState([]);
+  const [variants, setVariants] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [printTemplate, setPrintTemplate] = useState("");
   const [printItems, setPrintItems] = useState([]);
@@ -228,6 +229,8 @@ export default function BarcodeTemplates() {
     fetchTemplates();
     fetchReprints();
     api.get("/api/products").then((d) => setProducts(d.products || [])).catch(() => {});
+    // Variants for the search (step 6b): each one is its own label.
+    api.get("/api/products/catalogue").then((d) => setVariants(d?.variants || [])).catch(() => {});
   }, [fetchTemplates, fetchReprints]);
 
   const openAdd = () => { setForm(EMPTY); setFormError(""); setModal("add"); };
@@ -277,12 +280,8 @@ export default function BarcodeTemplates() {
     setPrintItems(initialItems); setProductSearch(""); setPrintModal(true);
   };
 
-  const addToPrintQueue = (product) => {
-    setPrintItems((prev) => addToQueue(prev, {
-      product_id: product.id, variant_id: null, name: product.name,
-      barcode: product.barcode || "", sku: product.sku || "", price: product.price,
-      brand: product.brand_name || "", copies: 1,
-    }));
+  const addToPrintQueue = (item) => {
+    setPrintItems((prev) => addToQueue(prev, { ...item, copies: 1 }));
   };
 
   const updateCopies = (key, val) => {
@@ -330,11 +329,7 @@ export default function BarcodeTemplates() {
   };
 
   const f = form;
-  const filteredProducts = products
-    .filter((p) =>
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (p.barcode || "").includes(productSearch)
-    ).slice(0, 40);
+  const filteredProducts = searchLabelPickList(buildLabelPickList(products, variants), productSearch).slice(0, 40);
 
   return (
     <div className="p-6 space-y-6">
@@ -555,14 +550,14 @@ export default function BarcodeTemplates() {
                 <label className="block text-sm font-medium text-(--ui-text) mb-1">Search Products</label>
                 <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-(--ui-focus)"
-                  placeholder="Name or barcode…" />
+                  placeholder="Name, SKU or barcode…" />
                 <div className="border rounded-lg divide-y max-h-56 overflow-y-auto">
                   {filteredProducts.length === 0 ? (
                     <div className="px-3 py-4 text-center text-(--ui-text-muted) text-sm">No products found</div>
                   ) : filteredProducts.map((p) => (
-                    <button key={p.id} type="button" onClick={() => addToPrintQueue(p)}
+                    <button key={queueKey(p)} type="button" onClick={() => addToPrintQueue(p)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-(--ui-muted-surface) flex justify-between items-center gap-2">
-                      <span className="truncate font-medium">{p.name}</span>
+                      <span className="min-w-0 break-words font-medium">{p.name}</span>
                       <span className="text-xs text-(--ui-text-muted) shrink-0">{p.barcode}</span>
                     </button>
                   ))}
@@ -578,7 +573,7 @@ export default function BarcodeTemplates() {
                     <div className="px-3 py-8 text-center text-(--ui-text-muted) text-sm">Click products to add</div>
                   ) : printItems.map((item) => (
                     <div key={queueKey(item)} className="flex items-center gap-2 px-3 py-2">
-                      <span className="flex-1 text-sm truncate">{item.name}</span>
+                      <span className="flex-1 min-w-0 text-sm break-words">{item.name}</span>
                       <input type="number" min="1" max="999" value={item.copies}
                         onChange={(e) => updateCopies(queueKey(item), e.target.value)}
                         className="w-14 border rounded px-2 py-1 text-xs text-center" />

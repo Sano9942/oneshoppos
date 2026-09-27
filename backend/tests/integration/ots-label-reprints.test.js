@@ -304,3 +304,84 @@ describe("clearing", () => {
     expect([401, 403]).toContain(res.status);
   });
 });
+
+// Step 6b: the label page adds single variants (own barcode + price), and the
+// print log records which variant was printed.
+describe("variant labels (step 6b)", () => {
+  async function variantProduct(name) {
+    const t = Date.now();
+    const id = await makeProduct(name, 450, {
+      has_variants: true,
+      variants: [
+        { sku: `LR-${name}-A-${t}`, barcode: `LR-${name}-A-BC-${t}`, price: 450, cost_price: 300 },
+        { sku: `LR-${name}-B-${t}`, barcode: `LR-${name}-B-BC-${t}`, price: 450, cost_price: 300 },
+      ],
+    });
+    const variants = (await db.query("SELECT id, sku, barcode FROM product_variants WHERE product_id = $1 ORDER BY id", [id])).rows;
+    return { id, variants };
+  }
+
+  it("a printed variant label is logged with its variant, and clears only that variant", async () => {
+    const { id, variants: [a, b] } = await variantProduct("VarLbl");
+    await db.query("UPDATE product_variants SET price = 475 WHERE product_id = $1", [id]);
+    expect((await list()).filter((i) => i.product_id === id)).toHaveLength(2);
+
+    const res = await admin().post("/api/barcode-print-jobs").send({
+      items: [{ product_id: id, variant_id: a.id, name: `VarLbl – ${a.sku}`, barcode: a.barcode, price: 475, copies: 2 }],
+    });
+    expect(res.status).toBe(200);
+
+    const job = await one("SELECT product_id, variant_id, barcode, copies FROM barcode_print_jobs WHERE product_id = $1", [id]);
+    expect(job).toMatchObject({ product_id: id, variant_id: a.id, barcode: a.barcode, copies: 2 });
+    const left = (await list()).filter((i) => i.product_id === id);
+    expect(left.map((i) => i.variant_id)).toEqual([b.id]);
+  });
+
+  it("a variant id from another product is not logged as that product's variant", async () => {
+    const { id } = await variantProduct("VarOwn");
+    const other = await variantProduct("VarOther");
+    const res = await admin().post("/api/barcode-print-jobs").send({
+      items: [{ product_id: id, variant_id: other.variants[0].id, name: "x", barcode: "x", price: 450, copies: 1 }],
+    });
+    expect(res.status).toBe(200);
+    const job = await one("SELECT variant_id FROM barcode_print_jobs WHERE product_id = $1", [id]);
+    expect(job.variant_id).toBeNull();
+  });
+
+  it("migration v142: adds barcode_print_jobs.variant_id; skips a schema without the table; idempotent", async () => {
+    const pool = require("../../db-pg");
+    const { MIGRATIONS } = require("../../migrate-pg");
+    const v142 = MIGRATIONS.find((m) => m.version === 142);
+    expect(v142).toBeTruthy();
+    const bare = `lr_bare2_${Date.now()}`;
+    const shop = `lr_shop2_${Date.now()}`;
+    const client = await pool.getClient();
+    try {
+      await client.query(`CREATE SCHEMA ${bare}; CREATE SCHEMA ${shop}`);
+      await client.query(`SET search_path = ${bare}`);
+      await v142.up(client);
+      await client.query(`SET search_path = ${shop}`);
+      await client.query(`CREATE TABLE products (id SERIAL PRIMARY KEY);
+        CREATE TABLE product_variants (id SERIAL PRIMARY KEY, product_id INTEGER REFERENCES products(id));
+        CREATE TABLE barcode_print_jobs (id SERIAL PRIMARY KEY, product_id INTEGER REFERENCES products(id))`);
+      await v142.up(client);
+      await v142.up(client);
+      const { rows } = await client.query(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'barcode_print_jobs' AND column_name = 'variant_id'`, [shop]);
+      expect(rows).toHaveLength(1);
+    } finally {
+      await client.query("SET search_path = public");
+      await client.query(`DROP SCHEMA IF EXISTS ${bare} CASCADE; DROP SCHEMA IF EXISTS ${shop} CASCADE`);
+      client.release();
+    }
+  });
+
+  it("schema-pg.sql has barcode_print_jobs.variant_id", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const schema = fs.readFileSync(path.join(__dirname, "../../schema-pg.sql"), "utf8");
+    const table = schema.slice(schema.indexOf("CREATE TABLE IF NOT EXISTS barcode_print_jobs"));
+    expect(table.slice(0, table.indexOf(");"))).toMatch(/variant_id INTEGER REFERENCES product_variants\(id\) ON DELETE SET NULL/);
+  });
+});

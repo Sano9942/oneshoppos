@@ -158,8 +158,10 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     if (!items.length) return res.status(400).json({ error: "No items" });
     try {
       for (const item of items) {
+        // variant_id is kept only when it is a variant of that product.
         await db.query(
-          "INSERT INTO barcode_print_jobs (template_id, product_id, product_name, barcode, price, copies) VALUES ($1,$2,$3,$4,$5,$6)",
+          `INSERT INTO barcode_print_jobs (template_id, product_id, variant_id, product_name, barcode, price, copies)
+           VALUES ($1, $2, (SELECT id FROM product_variants WHERE id = $7::int AND product_id = $2), $3, $4, $5, $6)`,
           [
             template_id || null,
             item.product_id || null,
@@ -167,6 +169,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
             item.barcode || "",
             item.price || 0,
             item.copies || 1,
+            item.variant_id || null,
           ]
         );
         if (item.product_id) {

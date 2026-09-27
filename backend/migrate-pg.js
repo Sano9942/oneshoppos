@@ -10123,6 +10123,28 @@ const MIGRATIONS = [
       await client.query(LABEL_REPRINTS_DDL);
     },
   },
+  {
+    version: 142,
+    description:
+      "One Toy Store pilot, Phase B step 6b (variant labels). barcode_print_jobs.variant_id: the print log records which variant a label was printed for (the label page can now add single variants, each with its own barcode and price). NULL = a whole product. ON DELETE SET NULL keeps the log when a variant is deleted. Tenant-only; guarded on barcode_print_jobs + product_variants existing. Idempotent.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTables } = await client.query(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('barcode_print_jobs', 'product_variants')`
+      );
+      if (schema === "public" || hasTables.length < 2) {
+        console.log(`[migrate-pg v142] ${schema}: no barcode_print_jobs / product_variants — skipped`);
+        return;
+      }
+      await client.query(
+        `ALTER TABLE barcode_print_jobs
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL`
+      );
+    },
+  },
 ];
 
 /**
