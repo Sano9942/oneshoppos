@@ -25,10 +25,13 @@ import VoidCompModal from "./pos/restaurant/VoidCompModal";
 
 const formatDate = fmtUtcDateTime;
 
+// The number printed on the receipt; "#id" only for sales that never got one.
+const billNo = (sale) => sale.invoice_number || `#${sale.id}`;
+
 function exportCsv(rows) {
   if (!rows.length) return;
   const headers = [
-    "id",
+    "bill_no",
     "timestamp",
     "cashier",
     "outlet",
@@ -40,7 +43,7 @@ function exportCsv(rows) {
   ];
   const body = rows.map((s) =>
     [
-      s.id,
+      billNo(s),
       s.timestamp,
       s.employee_name || "",
       s.outlet_name || "",
@@ -200,7 +203,7 @@ export default function SalesHistoryRedesign() {
     if (!detail?.sale || !detail?.items) return;
     const s = detail.sale;
     const slip = {
-      invoiceNumber: s.invoice_number || `#${s.id}`,
+      invoiceNumber: billNo(s),
       timestamp: formatDate(s.timestamp),
       total: s.total_amount,
       cart: detail.items.map((i) => ({
@@ -359,7 +362,7 @@ export default function SalesHistoryRedesign() {
                       className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-(--ui-muted-surface)" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
-                      <td className="px-3 py-2 font-medium text-(--ui-text)">#{r.id}</td>
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">{billNo(r)}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{formatDate(r.timestamp)}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "-"}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
@@ -406,7 +409,7 @@ export default function SalesHistoryRedesign() {
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-(--ui-text)">Receipt #{selected.id}</h3>
+                <h3 className="text-lg font-semibold text-(--ui-text)">Receipt {billNo(selected)}</h3>
                 <p className="text-xs text-(--ui-text-muted)">{formatDate(selected.timestamp)}</p>
               </div>
               {/* F4 (Apr 28 2026): surface refund context from GET /api/sales/:id
