@@ -3,7 +3,7 @@ import { RefreshCw, Link2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
 
 export default function ShopifyMappings() {
-  const { apiFetch, config, status, outlets, setError, setSuccess, loadAll } =
+  const { apiFetch, outlets, locationMappings, setError, setSuccess, loadAll } =
     useShopify();
 
   const [loadingLocations, setLoadingLocations] = useState(false);
@@ -21,11 +21,6 @@ export default function ShopifyMappings() {
   const [uatChecklist, setUatChecklist] = useState(null);
   const [liveValidation, setLiveValidation] = useState(null);
 
-  // Sync internal mapping counts/status
-  const locationMappings = useMemo(
-    () => status?.location_mappings || [],
-    [status],
-  );
   const mappingByOutlet = useMemo(() => {
     const map = {};
     locationMappings.forEach((m) => (map[m.outlet_id] = m));
@@ -70,12 +65,13 @@ export default function ShopifyMappings() {
     if (!shopifyLocationId) return;
     setSavingLocationOutletId(outletId);
     try {
-      const res = await apiFetch(`/api/integrations/mappings/locations`, {
-        method: "POST",
+      const loc = liveLocations.find((l) => l.id === shopifyLocationId);
+      const res = await apiFetch(`/api/integrations/mappings/locations/${outletId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          outlet_id: outletId,
           shopify_location_id: shopifyLocationId,
+          shopify_location_name: loc?.name || null,
         }),
       });
       if (!res.ok) {
@@ -94,11 +90,12 @@ export default function ShopifyMappings() {
   const loadSuggestions = async () => {
     setLoadingSuggestions(true);
     try {
-      const res = await apiFetch(`/api/integrations/shopify/suggestions`);
+      const res = await apiFetch(`/api/integrations/mappings/products/auto-live`, { method: "POST" });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate suggestions");
       setLiveSuggestions(data.suggestions || []);
-      if (res.ok)
-        setSuccess(`Found ${data.suggestions?.length || 0} suggestions.`);
+      setExcludedSuggestionKeys({});
+      setSuccess(`Found ${data.suggestions?.length || 0} matches among ${data.remote_count ?? 0} Shopify items.`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -134,7 +131,7 @@ export default function ShopifyMappings() {
     setApplySuggestionConflicts([]);
     try {
       const res = await apiFetch(
-        `/api/integrations/shopify/suggestions/apply`,
+        `/api/integrations/mappings/products/apply-suggestions`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -143,8 +140,9 @@ export default function ShopifyMappings() {
       );
       const data = await res.json();
       if (res.ok) {
-        setSuccess(`Successfully applied ${data.applied_count} mappings.`);
+        setSuccess(`Linked ${data.applied ?? 0} item(s)${data.skipped ? `, ${data.skipped} skipped` : ""}.`);
         setApplySuggestionConflicts(data.conflicts || []);
+        setLiveSuggestions([]);
         loadAll();
       } else {
         setError(data.error || "Failed to apply suggestions");
@@ -330,8 +328,8 @@ export default function ShopifyMappings() {
           </div>
         ) : (
           <div className="p-12 text-center text-(--ui-text-muted) italic text-sm">
-            No suggestions generated. Click "Generate Suggestions" to use
-            AI-assisted matching.
+            No suggestions yet. "Generate Suggestions" matches SanoPOS items to
+            Shopify items by barcode, then by SKU.
           </div>
         )}
       </div>

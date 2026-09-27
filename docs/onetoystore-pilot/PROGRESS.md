@@ -21,7 +21,7 @@
    - ✅ **6b variant labels** (2026-09-27): the label page's search lists each variant as its own label (own barcode + price, never the parent); the print log records `variant_id` (migration **v142**). See "Step 6b" below
    - ✅ **6c price sheet** (2026-09-27): Import → **Update prices** updates selling price + cost of existing items (products and variants) from a CSV, matched by SKU else barcode, with an old → new preview and a tick box per row; never adds items. See "Step 6c" below
 7. ✅ Product **History tab** (2026-09-27): stock ledger with running balance (per branch or all, per variant), price & cost changes with who/why, sales by bill no with returns as minus lines. Migration **v143**. See "Step 7" below
-   - ▶ **Phase C started 2026-09-27** (see "Phase C" below): test store `ots-sanopos-test.myshopify.com` created by the owner. Found + built **C1** (Shopify now only allows Dev Dashboard apps with a 24-hour token → SanoPOS stores Client ID + secret and renews the token itself, migration **v144**) and fixed **D29** (the Shopify Settings tab couldn't connect a store: 7 of 8 buttons called missing routes). **Waiting on owner: C-0** (create + install the "SanoPOS test" app)
+   - ▶ **Phase C started 2026-09-27** (see "Phase C" below): test store `ots-sanopos-test.myshopify.com` created by the owner. Found + built **C1** (Shopify now only allows Dev Dashboard apps with a 24-hour token → SanoPOS stores Client ID + secret and renews the token itself, migration **v144**) and fixed **D29** (the Shopify Settings tab couldn't connect a store: 7 of 8 buttons called missing routes). C-0, C-1, C-2 ✅ (D30 + D31 fixed on the way). **Next: C-3**
    - ⏭ **NEXT:** Phase B is done. Next is Phase C (Shopify on a test dev store: needs the dev store from the owner) or Phase D (iPOS item file converter: needs the full iPOS export). Open small items: ~~D28~~ ✅ fixed; ~~frontend-coverage drift~~ ✅ fixed; ~~Sales History shows "#10" instead of the invoice number~~ ✅ fixed 2026-09-27 (list, receipt heading, CSV and reprint show the invoice no; "#id" only for a sale without one; test `frontend/tests/unit/sales-history-bill-no.test.jsx`, failed before). **All small items closed; only Phase C/D (owner inputs) remain**
 
 **Migration head: v144.** **Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
@@ -315,13 +315,26 @@ Only Verify worked. Same class as D1.
 
 Connections default to API version `2025-10`. Shopify keeps a version for about a year, so it is close to being retired. Step 2a picks the compare-and-set field name by version (`compareQuantity` before 2026-04, `changeFromQuantity` from 2026-04) and retries with the other spelling. **On the test store, connect with a current version (2026-07) and confirm a real count set works.**
 
+### D30 + D31: the Mappings tab could not map anything (fixed 2026-09-27)
+
+**D31**, Shopify Mappings + Events tabs (`ShopifyMappings.jsx`, `ShopifyEvents.jsx`, `ShopifyContext.jsx`) called 4 missing routes. Same class as D1/D29. Rewired:
+- suggestions → `POST /mappings/products/auto-live`
+- apply → `/mappings/products/apply-suggestions`
+- save location → `PUT /mappings/locations/:outletId`
+- event retry → `/sync/retry-event/:id`
+- Also: the tab read `status.location_mappings` (a number) as a list, so it would crash once a location was linked.
+
+**D30**, backend matching (`routes/shopify/mappings.js` auto-live): a variant's barcode was selected as NULL and a plain item's SKU was ignored, so the Hot Wheels variants could not match by barcode and SKU-only plain items never matched. Now a variant row matches on its own barcode, then its own SKU (never the parent's barcode); a plain row on the product barcode, then the product SKU. **Test:** `backend/tests/integration/ots-shopify-mappings.test.js`, 5 tests, 4 failed on the old code.
+
+**On screen (owner, local, 2026-09-27):** Fetch Live Locations → Packages Mall → "Shop location" → Save → "Location mapping updated", row shows Shop location (the old tab would have crashed here). Generate Suggestions → 7 rows, all EXACT_BARCODE (HW5, BARBIE, LEGOP, RUBIK + Twin Mill, Bone Shaker, Deora) → Apply Approved (7) → "Linked 7 item(s)." DB: 7 active `shopify_product_map` rows (3 with variant_id 1–3 on product 24), `shopify_location_map` outlet 1 → `gid://shopify/Location/89763872990`.
+
 ### Phase C checklist (on `ots-sanopos-test`)
 
 | # | Check | Result |
 |---|---|---|
 | C-0 | Owner: Dev Dashboard app "SanoPOS test" with scopes `read_products, read_inventory, write_inventory, read_locations, read_orders`, released and installed on `ots-sanopos-test` | ✅ 2026-09-27, owner |
 | C-1 | SanoPOS Settings → Dev Dashboard app → Save gets a token (owner types Client ID + secret into SanoPOS, not chat); Verify + Live Check pass | ✅ 2026-09-27: owner saved it on the Settings screen (tenant `otsacc_mujsufsd`, local backend). Green "Connected", Verify OK, Live Check: store ots-sanopos-test, 1 location, 0 sample items (no products yet). DB: `shop_domain` = ots-sanopos-test.myshopify.com, API 2026-07, client_id + secret stored, token expires 2026-09-28 16:01 UTC, no error. **First real proof of C1: a Dev Dashboard app's client credentials work** |
-| C-2 | Test toys on the store with the same SKUs as SanoPOS (incl. a variant product); location map set | ⏳ |
+| C-2 | Test toys on the store with the same SKUs as SanoPOS (incl. a variant product); location map set | ✅ 2026-09-27: toys created by `tools/onetoystore-pilot/phase-c-seed-shopify.cjs` (HW5, BARBIE, LEGOP, RUBIK + Hot Wheels Single Car with 3 variants, all at 2 on Shopify). Packages Mall → Shop location; 7 items linked on screen after D30/D31 (above) |
 | C-3 | "Set Shopify to SanoPOS counts" sets exact counts (real field name for the API version, 2a) | ⏳ |
 | C-4 | A till sale lowers the Shopify count (2h everyday sync) | ⏳ |
 | C-5 | Webhooks registered (`orders/create`, `orders/updated`, `orders/cancelled`) to a public tunnel address; a COD test order lowers shop stock | ⏳ needs tunnel (ask before installing) |

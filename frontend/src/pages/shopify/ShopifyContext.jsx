@@ -45,6 +45,7 @@ export const ShopifyProvider = ({ children }) => {
   const [config, setConfig] = useState(emptyConfig);
   const [status, setStatus] = useState(null);
   const [outlets, setOutlets] = useState([]);
+  const [locationMappings, setLocationMappings] = useState([]);
   const [mappingCounts, setMappingCounts] = useState({
     products: 0,
     locations: 0,
@@ -99,6 +100,7 @@ export const ShopifyProvider = ({ children }) => {
       setConfig(next);
       setStatus(st);
       setOutlets(outletsData.outlets || []);
+      setLocationMappings(lm.mappings || []);
       setMappingCounts({
         products: (pm.mappings || []).length,
         locations: (lm.mappings || []).length,
@@ -123,6 +125,7 @@ export const ShopifyProvider = ({ children }) => {
     success,
     setSuccess,
     config,
+    locationMappings,
     setConfig,
     status,
     setStatus,

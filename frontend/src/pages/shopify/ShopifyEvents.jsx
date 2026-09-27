@@ -42,7 +42,7 @@ export default function ShopifyEvents() {
   const retrySingleEvent = async (id) => {
     try {
       const res = await apiFetch(
-        `/api/integrations/shopify/events/${id}/retry`,
+        `/api/integrations/shopify/sync/retry-event/${id}`,
         { method: "POST" },
       );
       if (res.ok) {

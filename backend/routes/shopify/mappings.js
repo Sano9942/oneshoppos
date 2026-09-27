@@ -97,8 +97,9 @@ module.exports = function registerShopifyMappingRoutes(app, deps) {
         const remoteVariants = await fetchShopifyVariantCatalog(conn, limit);
 
         const { rows: localRows } = await db.query(
-          `SELECT p.id as product_id, p.name as product_name, p.barcode as product_barcode,
-                  pv.id as variant_id, pv.sku as variant_sku, NULL as variant_barcode
+          `SELECT p.id as product_id, p.name as product_name,
+                  p.barcode as product_barcode, p.sku as product_sku,
+                  pv.id as variant_id, pv.sku as variant_sku, pv.barcode as variant_barcode
            FROM products p
            LEFT JOIN product_variants pv ON pv.product_id = p.id`
         );
@@ -127,8 +128,12 @@ module.exports = function registerShopifyMappingRoutes(app, deps) {
 
         const suggestions = [];
         for (const lr of localRows || []) {
-          const localBarcode = String(lr.variant_barcode || lr.product_barcode || "").trim().toLowerCase();
-          const localSku = String(lr.variant_sku || "").trim().toLowerCase();
+          // A variant row matches on its own codes only: the parent's barcode
+          // belongs to the parent, not to any one variant.
+          const rawBarcode = lr.variant_id ? lr.variant_barcode : lr.product_barcode;
+          const rawSku = lr.variant_id ? lr.variant_sku : lr.product_sku;
+          const localBarcode = String(rawBarcode || "").trim().toLowerCase();
+          const localSku = String(rawSku || "").trim().toLowerCase();
 
           let match = null;
           let confidence = "";
@@ -151,8 +156,8 @@ module.exports = function registerShopifyMappingRoutes(app, deps) {
             product_id: lr.product_id,
             product_name: lr.product_name,
             variant_id: lr.variant_id || null,
-            local_sku: lr.variant_sku || null,
-            local_barcode: lr.variant_barcode || lr.product_barcode || null,
+            local_sku: rawSku || null,
+            local_barcode: rawBarcode || null,
             shopify_product_id: match.product_id || null,
             shopify_variant_id: match.variant_id || null,
             shopify_inventory_item_id: match.inventory_item_id || null,
