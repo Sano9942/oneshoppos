@@ -837,6 +837,29 @@ describe("Blocker 1 — Shopify online orders move shop stock", () => {
     expect(m).toMatchObject({ kind: "online_order", ref_type: "web_order", ref_no: payload.name });
     expect(num(m.qty_change)).toBe(-1);
   });
+
+  // D34 (Phase C, C-5, 2026-09-27): the owner never fills the Settings tab's
+  // raw "default location ID", so the real test order moved no stock.
+  it("D34: with no default location set, the one linked Shopify location decides the branch; with two it refuses", async () => {
+    await db.query("UPDATE shopify_connections SET default_location_id = NULL WHERE is_active = true");
+    await db.query("INSERT INTO shopify_location_map (outlet_id, shopify_location_id) VALUES (2, 'loc-2')");
+    try {
+      const o = order([{ sku: "OTS-PUZZLE", quantity: 1 }]);
+      const before = await stockOf(skuOnlyId);
+      expect((await sendHook(o)).status).toBe(200);
+      expect(await stockOf(skuOnlyId)).toBe(before); // two linked locations: which branch? refuse
+
+      await db.query("DELETE FROM shopify_location_map WHERE shopify_location_id = 'loc-2'");
+      // Shopify's next orders/updated for the same order now applies it, once.
+      expect((await sendHook({ ...o, updated_at: "2026-09-26T10:05:00Z" }, { topic: "orders/updated" })).status).toBe(200);
+      expect(await stockOf(skuOnlyId)).toBe(before - 1);
+      expect((await sendHook({ ...o, updated_at: "2026-09-26T10:06:00Z" }, { topic: "orders/updated" })).status).toBe(200);
+      expect(await stockOf(skuOnlyId)).toBe(before - 1);
+    } finally {
+      await db.query("DELETE FROM shopify_location_map WHERE shopify_location_id = 'loc-2'");
+      await db.query("UPDATE shopify_connections SET default_location_id = 'loc-1' WHERE is_active = true");
+    }
+  });
 });
 
 // ─── D25 ────────────────────────────────────────────────────────────────────

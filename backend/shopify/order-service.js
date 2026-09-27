@@ -41,8 +41,17 @@ module.exports = function createOrderService(db, getActiveShopifyConnection) {
 
     const conn = await getActiveShopifyConnection();
     if (!conn?.default_location_id) {
+      // No default set (the usual case: the Settings field wants a raw Shopify
+      // location id). With exactly one Shopify location linked to a branch
+      // there is only one answer; with several we can't guess (OTS D34).
+      const { rows: linked } = await q.query(
+        "SELECT DISTINCT outlet_id FROM shopify_location_map WHERE outlet_id IS NOT NULL LIMIT 2",
+      );
+      if (linked.length === 1) return Number(linked[0].outlet_id);
       throw new Error(
-        "Order has no outlet_id and no default Shopify location is configured",
+        linked.length === 0
+          ? "Order has no outlet_id and no Shopify location is linked to a branch"
+          : "Order has no outlet_id and several Shopify locations are linked: set a default Shopify location",
       );
     }
 
