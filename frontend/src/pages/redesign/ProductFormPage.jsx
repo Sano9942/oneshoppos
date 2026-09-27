@@ -195,7 +195,9 @@ export default function ProductFormPage() {
   const save = async () => {
     if (!form.name.trim()) { setError("Product name is required."); return; }
     if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
-    if (form.has_variants && !form.attribute_set_id) { setError("Select an attribute set for variant products."); return; }
+    // Only when creating: the set generates the rows. On edit the box is locked,
+    // and SKU-only variants (no attribute set) must still save (OTS D27).
+    if (!isEdit && form.has_variants && !form.attribute_set_id) { setError("Select an attribute set for variant products."); return; }
     if (form.has_variants && variants.length === 0) { setError("No variants generated. Select an attribute set."); return; }
     if (form.bom_type !== "standard" && bundleComponents.length === 0) { setError("A kit / assembled product needs at least one component."); return; }
     if (form.bom_type !== "standard" && bundleComponents.some((c) => !(Number(c.quantity) > 0))) { setError("Every component needs a quantity greater than zero."); return; }
@@ -451,7 +453,7 @@ export default function ProductFormPage() {
           setVariants(varD.variants.map(v => ({
             id: v.id,
             _key: v.options?.map(o => o.option_value).join("|") || String(v.id),
-            label: v.options?.map(o => o.option_value).join(" / ") || `Variant ${v.id}`,
+            label: v.options?.map(o => o.option_value).join(" / ") || v.sku || `Variant ${v.id}`,
             price: v.price ?? "",
             cost_price: v.cost_price ?? "",
             stock: v.stock ?? 0,
@@ -889,7 +891,7 @@ export default function ProductFormPage() {
                         setVariants(buildVariantRows(attrSet, form.price, form.cost_price));
                       }}
                     >
-                      <option value="">Select attribute set…</option>
+                      <option value="">{isEdit ? "None (variants by SKU)" : "Select attribute set…"}</option>
                       {attributeSets.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
