@@ -10145,6 +10145,28 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 143,
+    description:
+      "One Toy Store pilot, Phase B step 7 (product History tab). stock_movements + price_changes tables and triggers on outlet_stock / variant_outlet_stock (quantity) and products / product_variants (price, cost_price): the database records every stock and price/cost change from any writer; routes tag who/why via services/product-history.js tagChanges(). Existing non-zero stock gets one 'opening' line per item (nothing earlier is reconstructed, owner decision). DDL shared with schema-pg.sql. Tenant-only; guarded on the stock + product tables existing. Idempotent.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTables } = await client.query(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = current_schema()
+           AND table_name IN ('products', 'product_variants', 'outlet_stock', 'variant_outlet_stock')`
+      );
+      if (schema === "public" || hasTables.length < 4) {
+        console.log(`[migrate-pg v143] ${schema}: no products / stock tables — skipped`);
+        return;
+      }
+      const { PRODUCT_HISTORY_DDL, OPENING_BALANCES_SQL } = require("./services/product-history");
+      await client.query(PRODUCT_HISTORY_DDL);
+      await client.query(OPENING_BALANCES_SQL);
+    },
+  },
 ];
 
 /**

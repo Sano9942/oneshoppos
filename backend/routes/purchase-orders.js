@@ -2,6 +2,7 @@ const { validate } = require("../middleware/validate");
 const { CreatePOSchema } = require("../schemas/purchase-orders");
 const batchStock = require("../services/batch-stock");
 const stockLedger = require("../services/stock-ledger");
+const productHistory = require("../services/product-history");
 
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -553,6 +554,11 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
             );
           }
 
+          // OTS step 7: the received stock and any cost change → History, as this GRN.
+          await productHistory.tagChanges(client, {
+            kind: "delivery", refType: "grn", refId: newGrnId,
+            employeeId: productHistory.actorOf(req) ?? (received_by || null),
+          });
           return { grnId: newGrnId, fullyReceived, receiveQty };
         });
 

@@ -68,4 +68,10 @@ describe("product edit: SKU-only variants (no attribute set)", () => {
     expect(payload.variants.find((v) => v.id === 91).price).toBe(450);
     expect(screen.queryByText(/Select an attribute set/)).toBeNull();
   });
+
+  it("edit screen shows the History section (OTS step 7)", async () => {
+    await renderEdit();
+    expect(screen.getByTestId("product-history")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Price & cost" })).toBeTruthy();
+  });
 });

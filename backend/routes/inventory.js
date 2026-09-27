@@ -3,6 +3,7 @@ const { CreateTransferSchema, CreateAdjustmentSchema } = require("../schemas/inv
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
 const stockLedger = require("../services/stock-ledger");
+const productHistory = require("../services/product-history");
 
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
@@ -176,6 +177,10 @@ module.exports = function registerInventoryRoutes(app, deps) {
           qty: quantity,
           refType: "transfer",
           refId: transferRow.id,
+        });
+        await productHistory.tagChanges(client, {
+          kind: "transfer", refType: "transfer", refId: transferRow.id,
+          employeeId: productHistory.actorOf(req) ?? (employee_id || null), note: note || null,
         });
       });
 
@@ -367,6 +372,10 @@ module.exports = function registerInventoryRoutes(app, deps) {
           movementType: isWriteOff ? "write_off" : "adjust",
           refType: "adjustment",
           refId: adjustmentId,
+        });
+        await productHistory.tagChanges(client, {
+          kind: "adjustment", refType: "adjustment", refId: adjustmentId,
+          employeeId: productHistory.actorOf(req) ?? (employee_id || null), note: reason,
         });
       });
 
@@ -708,6 +717,10 @@ module.exports = function registerInventoryRoutes(app, deps) {
             });
           }
         }
+        await productHistory.tagChanges(client, {
+          kind: "count", refType: "stock_count", refId: Number(req.params.id),
+          employeeId: productHistory.actorOf(req),
+        });
       });
 
       // Return variance summary. Variance figures cover the lines the count

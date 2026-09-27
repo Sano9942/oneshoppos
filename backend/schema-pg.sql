@@ -1139,6 +1139,148 @@ CREATE TRIGGER trg_label_reprints_variants
   AFTER INSERT OR UPDATE OF price ON product_variants
   FOR EACH ROW EXECUTE FUNCTION label_reprints_variants_trg();
 
+-- Product History tab (OTS pilot step 7) — copy of services/product-history.js PRODUCT_HISTORY_DDL; keep identical.
+CREATE TABLE IF NOT EXISTS stock_movements (
+  id BIGSERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER,
+  outlet_id INTEGER NOT NULL,
+  qty_change NUMERIC(12,3) NOT NULL,
+  balance_after NUMERIC(12,3) NOT NULL,
+  kind TEXT,
+  ref_type TEXT,
+  ref_id INTEGER,
+  ref_no TEXT,
+  note TEXT,
+  employee_id INTEGER,
+  txid BIGINT NOT NULL DEFAULT txid_current(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_stock_movements_item
+  ON stock_movements (product_id, (COALESCE(variant_id, 0)), outlet_id, id);
+CREATE INDEX IF NOT EXISTS ix_stock_movements_untagged
+  ON stock_movements (txid) WHERE kind IS NULL;
+
+CREATE TABLE IF NOT EXISTS price_changes (
+  id BIGSERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER,
+  field TEXT NOT NULL CHECK (field IN ('price', 'cost_price')),
+  old_value NUMERIC(12,2),
+  new_value NUMERIC(12,2),
+  kind TEXT,
+  ref_type TEXT,
+  ref_id INTEGER,
+  ref_no TEXT,
+  note TEXT,
+  employee_id INTEGER,
+  txid BIGINT NOT NULL DEFAULT txid_current(),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_price_changes_item ON price_changes (product_id, id);
+CREATE INDEX IF NOT EXISTS ix_price_changes_untagged ON price_changes (txid) WHERE kind IS NULL;
+
+CREATE OR REPLACE FUNCTION stock_movement_note(p_product INTEGER, p_variant INTEGER, p_outlet INTEGER,
+                                               p_change NUMERIC, p_balance NUMERIC)
+RETURNS void LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF p_product IS NULL OR p_change IS NULL OR p_change = 0 THEN RETURN; END IF;
+  INSERT INTO stock_movements (product_id, variant_id, outlet_id, qty_change, balance_after)
+  VALUES (p_product, p_variant, p_outlet, p_change, COALESCE(p_balance, 0));
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION stock_movements_outlet_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    PERFORM stock_movement_note(NEW.product_id, NULL, NEW.outlet_id, NEW.quantity, NEW.quantity);
+  ELSIF TG_OP = 'UPDATE' THEN
+    PERFORM stock_movement_note(NEW.product_id, NULL, NEW.outlet_id, NEW.quantity - OLD.quantity, NEW.quantity);
+  ELSE
+    PERFORM stock_movement_note(OLD.product_id, NULL, OLD.outlet_id, -OLD.quantity, 0);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION stock_movements_variant_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+DECLARE pid INTEGER;
+BEGIN
+  -- A variant deleted with its stock rows (ON DELETE CASCADE) is already gone:
+  -- nothing to record.
+  SELECT product_id INTO pid FROM product_variants
+   WHERE id = CASE WHEN TG_OP = 'DELETE' THEN OLD.variant_id ELSE NEW.variant_id END;
+  IF TG_OP = 'INSERT' THEN
+    PERFORM stock_movement_note(pid, NEW.variant_id, NEW.outlet_id, NEW.quantity, NEW.quantity);
+  ELSIF TG_OP = 'UPDATE' THEN
+    PERFORM stock_movement_note(pid, NEW.variant_id, NEW.outlet_id, NEW.quantity - OLD.quantity, NEW.quantity);
+  ELSE
+    PERFORM stock_movement_note(pid, OLD.variant_id, OLD.outlet_id, -OLD.quantity, 0);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION price_change_note(p_product INTEGER, p_variant INTEGER, p_field TEXT,
+                                             p_old NUMERIC, p_new NUMERIC)
+RETURNS void LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF p_old IS NOT DISTINCT FROM p_new THEN RETURN; END IF;
+  INSERT INTO price_changes (product_id, variant_id, field, old_value, new_value)
+  VALUES (p_product, p_variant, p_field, p_old, p_new);
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION price_changes_products_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    PERFORM price_change_note(NEW.id, NULL, 'price', NULL, NEW.price);
+    PERFORM price_change_note(NEW.id, NULL, 'cost_price', NULL, NULLIF(NEW.cost_price, 0));
+  ELSE
+    PERFORM price_change_note(NEW.id, NULL, 'price', OLD.price, NEW.price);
+    PERFORM price_change_note(NEW.id, NULL, 'cost_price', OLD.cost_price, NEW.cost_price);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION price_changes_variants_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    PERFORM price_change_note(NEW.product_id, NEW.id, 'price', NULL, NEW.price);
+    PERFORM price_change_note(NEW.product_id, NEW.id, 'cost_price', NULL, NULLIF(NEW.cost_price, 0));
+  ELSE
+    PERFORM price_change_note(NEW.product_id, NEW.id, 'price', OLD.price, NEW.price);
+    PERFORM price_change_note(NEW.product_id, NEW.id, 'cost_price', OLD.cost_price, NEW.cost_price);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_stock_movements_outlet ON outlet_stock;
+CREATE TRIGGER trg_stock_movements_outlet
+  AFTER INSERT OR UPDATE OF quantity OR DELETE ON outlet_stock
+  FOR EACH ROW EXECUTE FUNCTION stock_movements_outlet_trg();
+
+DROP TRIGGER IF EXISTS trg_stock_movements_variant ON variant_outlet_stock;
+CREATE TRIGGER trg_stock_movements_variant
+  AFTER INSERT OR UPDATE OF quantity OR DELETE ON variant_outlet_stock
+  FOR EACH ROW EXECUTE FUNCTION stock_movements_variant_trg();
+
+DROP TRIGGER IF EXISTS trg_price_changes_products ON products;
+CREATE TRIGGER trg_price_changes_products
+  AFTER INSERT OR UPDATE OF price, cost_price ON products
+  FOR EACH ROW EXECUTE FUNCTION price_changes_products_trg();
+
+DROP TRIGGER IF EXISTS trg_price_changes_variants ON product_variants;
+CREATE TRIGGER trg_price_changes_variants
+  AFTER INSERT OR UPDATE OF price, cost_price ON product_variants
+  FOR EACH ROW EXECUTE FUNCTION price_changes_variants_trg();
+
 -- ── Receipt Templates & Action History ────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS receipt_templates (

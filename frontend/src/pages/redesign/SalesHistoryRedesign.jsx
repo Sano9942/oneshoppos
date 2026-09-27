@@ -74,7 +74,8 @@ export default function SalesHistoryRedesign() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  // ?q= pre-fills the search, e.g. a bill no linked from a product's History tab.
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") || "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");

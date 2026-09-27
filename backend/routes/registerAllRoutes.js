@@ -542,6 +542,7 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- ROUTES: PRODUCTS (INVENTORY) ---
   require("./products")(app, deps);
+  require("./product-history")(app, deps); // OTS step 7: History tab
 
   // --- ROUTES: SUPPLIERS ---
   require("./suppliers")(app, deps);

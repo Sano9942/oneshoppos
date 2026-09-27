@@ -827,6 +827,16 @@ describe("Blocker 1 — Shopify online orders move shop stock", () => {
     expect(res.status).toBe(401);
     expect(await stockOf(skuOnlyId)).toBe(before);
   });
+
+  it("OTS step 7: the online order's stock movement is tagged in the History with the Shopify order no", async () => {
+    const payload = order([{ sku: "OTS-PUZZLE", quantity: 1 }]);
+    expect((await sendHook(payload)).status).toBe(200);
+    const m = await one(
+      "SELECT kind, ref_type, ref_no, qty_change FROM stock_movements WHERE product_id = $1 AND variant_id IS NULL ORDER BY id DESC LIMIT 1",
+      [skuOnlyId]);
+    expect(m).toMatchObject({ kind: "online_order", ref_type: "web_order", ref_no: payload.name });
+    expect(num(m.qty_change)).toBe(-1);
+  });
 });
 
 // ─── D25 ────────────────────────────────────────────────────────────────────

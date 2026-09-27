@@ -11,6 +11,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
 import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag, Layers, Sparkles } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
+import ProductHistory from "./ProductHistory";
 
 function cartesian(arrays) {
   return arrays.reduce(
@@ -1364,6 +1365,13 @@ export default function ProductFormPage() {
 
         </div>
       </div>
+
+      {/* History tab (OTS step 7): stock ledger, price & cost changes, sales by bill no */}
+      {isEdit && (
+        <div className="mt-6" data-testid="product-history">
+          <ProductHistory productId={Number(id)} variants={variants} />
+        </div>
+      )}
 
       {/* Reviews section — edit mode only */}
       {isEdit && (

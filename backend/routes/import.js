@@ -2,6 +2,7 @@ const Papa = require("papaparse");
 const { asyncStore } = require("../tenant-db-proxy-pg");
 const labelReprints = require("../services/label-reprints");
 const priceSheet = require("../services/price-sheet");
+const productHistory = require("../services/product-history");
 const {
   getMapper,
   getTemplate,
@@ -462,6 +463,7 @@ module.exports = function mountImportRoutes(app, deps) {
             imported++;
           }
           if (alreadyLabelled) await labelReprints.clearAlreadyLabelled(client, importedIds);
+          await productHistory.tagChanges(client, { kind: "import", employeeId: productHistory.actorOf(req) });
           await client.query("COMMIT");
         } catch (err) {
           await client.query("ROLLBACK");
@@ -515,6 +517,7 @@ module.exports = function mountImportRoutes(app, deps) {
         try {
           await client.query("BEGIN");
           updated = await priceSheet.applyPriceSheet(client, results, selected);
+          await productHistory.tagChanges(client, { kind: "price_sheet", employeeId: productHistory.actorOf(req) });
           await client.query("COMMIT");
         } catch (err) {
           await client.query("ROLLBACK");

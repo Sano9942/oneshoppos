@@ -7,6 +7,7 @@ const { resolvePriceForContext } = require("../services/pricing");
 const { verifyManagerPin } = require("../services/manager-pin");
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
+const productHistory = require("../services/product-history");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -498,6 +499,9 @@ module.exports = function registerSalesRoutes(app, deps) {
               [sale.customer_invoice_id]
             );
           }
+          await productHistory.tagChanges(client, {
+            kind: "void", refType: "sale", refId: Number(id), employeeId: productHistory.actorOf(req), note: void_reason,
+          });
         });
 
         const syncChanges = items.map((item) => ({
@@ -2672,6 +2676,10 @@ module.exports = function registerSalesRoutes(app, deps) {
           );
         }
 
+        // OTS step 7: this sale's stock movements (and kit components) → History.
+        await productHistory.tagChanges(client, {
+          kind: "sale", refType: "sale", refId: newSaleId, employeeId: authenticatedEmployeeId,
+        });
         return newSaleId;
       });
 

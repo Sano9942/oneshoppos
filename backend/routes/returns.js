@@ -4,6 +4,7 @@ const { validate } = require("../middleware/validate");
 const { CreateReturnSchema } = require("../schemas/returns");
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
+const productHistory = require("../services/product-history");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 const { verifyManagerPin } = require("../services/manager-pin");
 const { recordApprovalEvent } = require("../services/approval-policy");
@@ -713,6 +714,10 @@ module.exports = function registerReturnsRoutes(app, deps) {
           }
         }
 
+        await productHistory.tagChanges(client, {
+          kind: "return", refType: "return", refId: retId,
+          employeeId: productHistory.actorOf(req) ?? (processed_by_employee_id || employee_id || null),
+        });
         return retId;
       });
 

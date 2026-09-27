@@ -1,4 +1,5 @@
 const stockLedger = require("../services/stock-ledger");
+const productHistory = require("../services/product-history");
 
 module.exports = function registerSupplierReturnsRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
@@ -107,6 +108,10 @@ module.exports = function registerSupplierReturnsRoutes(app, deps) {
           });
         }
 
+        await productHistory.tagChanges(client, {
+          kind: "supplier_return", refType: "supplier_return", refId: returnId,
+          employeeId: productHistory.actorOf(req) ?? (employee_id || null), note: reason || null,
+        });
         return returnId;
       });
 

@@ -5,6 +5,7 @@ const {
 } = require("../category-tree");
 const kitEngine = require("../services/kit-engine");
 const stockLedger = require("../services/stock-ledger");
+const productHistory = require("../services/product-history");
 const { decodeEmbeddedBarcode } = require("../services/embedded-barcode");
 
 module.exports = function registerProductRoutes(app, deps) {
@@ -1101,6 +1102,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
         await replaceProductMedia(client, newProductId, productMediaItems);
 
+        // OTS step 7: first price/cost and opening stock → History.
+        await productHistory.tagChanges(client, { kind: "new_item", employeeId: productHistory.actorOf(req) });
         return { id: newProductId, barcode, name, has_variants };
       });
 
@@ -1550,6 +1553,7 @@ module.exports = function registerProductRoutes(app, deps) {
         if (shouldReplaceMedia) {
           await replaceProductMedia(client, id, productMediaItems);
         }
+        await productHistory.tagChanges(client, { kind: "edit", employeeId: productHistory.actorOf(req) });
       });
 
       res.json({ message: "Product updated successfully" });

@@ -287,6 +287,11 @@ module.exports = function createOrderService(db, getActiveShopifyConnection) {
            WHERE id = $5`,
           [heldAfter, moves.length > 0, note, outletId, webOrderId],
         );
+        // OTS step 7: these stock moves → History, as this Shopify order.
+        await require("../services/product-history").tagChanges(client, {
+          kind: "online_order", refType: "web_order", refId: webOrderId,
+          refNo: order.external_order_number || null, note: action || null,
+        });
 
         return {
           action,
