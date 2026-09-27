@@ -901,3 +901,47 @@ describe("D25 — editing a product with variants never touches stock", () => {
     expect(await counts(blue.id)).toEqual({ rollup: 4, outlet: 4 });
   });
 });
+
+// ─── D28 ────────────────────────────────────────────────────────────────────
+// PUT /api/products/:id wrote gst, barcode, sku, category, brand, product type,
+// vendor, tags and supplier straight from the body, so a partial save such as
+// { price } set them all to NULL: the item lost its barcode and stopped
+// scanning. The product screen always sends the whole form, so no one hit it,
+// but any other caller would. An omitted field must be left alone; a field
+// sent empty is still cleared (that's how the screen removes a value).
+describe("D28 — a partial product save leaves the fields it didn't send alone", () => {
+  let productId, categoryId, brandId;
+  const FIELDS = "price, gst, barcode, sku, category_id, brand_id, product_type, vendor, tags, supplier_id";
+  beforeAll(async () => {
+    categoryId = (await one("INSERT INTO categories (name) VALUES ('D28 Cars') RETURNING id")).id;
+    brandId = (await one("INSERT INTO brands (name) VALUES ('D28 Brand') RETURNING id")).id;
+    const res = await admin().post("/api/products").send({
+      name: "D28 Truck", sku: "D28-TRUCK", barcode: "D28-TRUCK-BC", price: 900, cost_price: 600, gst: 18,
+      category_id: categoryId, brand_id: brandId, product_type: "Die-cast", vendor: "Mattel",
+      tags: "trucks", supplier_id: 1, outlet_id: 1,
+    });
+    expect(res.status).toBe(200);
+    productId = res.body.id;
+  });
+
+  it("PUT { price } changes the price and keeps SKU, barcode, category, brand, GST, type, vendor, tags, supplier", async () => {
+    const before = await one(`SELECT ${FIELDS} FROM products WHERE id = $1`, [productId]);
+    expect(before).toMatchObject({ sku: "D28-TRUCK", barcode: "D28-TRUCK-BC", category_id: categoryId, brand_id: brandId, supplier_id: 1 });
+
+    const res = await admin().put(`/api/products/${productId}`).send({ price: 950 });
+    expect(res.status).toBe(200);
+
+    const after = await one(`SELECT ${FIELDS} FROM products WHERE id = $1`, [productId]);
+    expect(num(after.price)).toBe(950);
+    expect({ ...after, price: undefined }).toEqual({ ...before, price: undefined });
+  });
+
+  it("a field sent empty is still cleared; the fields not sent are kept", async () => {
+    const res = await admin().put(`/api/products/${productId}`).send({ vendor: "", tags: null, brand_id: null });
+    expect(res.status).toBe(200);
+    const after = await one(`SELECT ${FIELDS} FROM products WHERE id = $1`, [productId]);
+    expect(after).toMatchObject({ vendor: null, tags: null, brand_id: null });
+    expect(after).toMatchObject({ sku: "D28-TRUCK", barcode: "D28-TRUCK-BC", category_id: categoryId, product_type: "Die-cast", supplier_id: 1 });
+    expect(num(after.gst)).toBe(18);
+  });
+});

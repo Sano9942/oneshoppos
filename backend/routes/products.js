@@ -1310,46 +1310,48 @@ module.exports = function registerProductRoutes(app, deps) {
           "name = COALESCE($1, name)",
           "price = COALESCE($2, price)",
           "cost_price = COALESCE($3, cost_price)",
-          "gst = $4",
-          "barcode = $5",
-          "sku = $6",
-          "category_id = $7",
-          "tax_id = COALESCE($8, tax_id)",
-          "brand_id = $9",
-          "min_qty = COALESCE($10, min_qty)",
-          "max_qty = COALESCE($11, max_qty)",
-          "unit = COALESCE($12, unit)",
-          "description_html = COALESCE($13, description_html)",
-          "compare_at_price = COALESCE($14, compare_at_price)",
-          "product_type = $15",
-          "vendor = $16",
-          "tags = $17",
-          "status = COALESCE($18, status)",
-          "supplier_id = $19",
+          "tax_id = COALESCE($4, tax_id)",
+          "min_qty = COALESCE($5, min_qty)",
+          "max_qty = COALESCE($6, max_qty)",
+          "unit = COALESCE($7, unit)",
+          "description_html = COALESCE($8, description_html)",
+          "compare_at_price = COALESCE($9, compare_at_price)",
+          "status = COALESCE($10, status)",
         ];
         const updateParams = [
           name,
           price,
           cost_price,
-          gst === "" ? null : gst,
-          barcodeValue,
-          sku || null,
-          category_id || null,
           tax_id || null,
-          brand_id || null,
           min_qty !== undefined ? min_qty : null,
           max_qty !== undefined ? max_qty : null,
           unit || null,
           description_html || null,
           compare_at_price !== undefined ? compare_at_price : null,
-          product_type || null,
-          vendor || null,
-          tags || null,
           status || null,
-          supplier_id !== undefined ? (supplier_id || null) : null,
         ];
 
-        let nextParam = 20;
+        let nextParam = 11;
+        // OTS D28: these can be cleared, so they're written only when the
+        // caller sent the key. Writing them unconditionally made a partial
+        // save like { price } wipe the SKU and barcode (item stops scanning).
+        const clearableFields = [
+          ["gst", gst === "" ? null : gst],
+          ["barcode", barcodeValue],
+          ["sku", sku || null],
+          ["category_id", category_id || null],
+          ["brand_id", brand_id || null],
+          ["product_type", product_type || null],
+          ["vendor", vendor || null],
+          ["tags", tags || null],
+          ["supplier_id", supplier_id || null],
+        ];
+        for (const [column, value] of clearableFields) {
+          if (!Object.prototype.hasOwnProperty.call(req.body || {}, column)) continue;
+          updateFields.push(`${column} = $${nextParam}`);
+          updateParams.push(value);
+          nextParam++;
+        }
         if (imageUrlProvided) {
           updateFields.push(`image_url = $${nextParam}`);
           updateParams.push(req.body.image_url || null);
