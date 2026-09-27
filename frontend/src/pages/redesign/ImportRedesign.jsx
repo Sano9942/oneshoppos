@@ -52,6 +52,9 @@ export default function ImportRedesign() {
   const [scanning, setScanning] = useState(false);
   const [invoiceMarkup, setInvoiceMarkup] = useState(25);
   const [dlTemplate, setDlTemplate] = useState(false);
+  // OTS pilot step 6: imported items whose shelf labels are already right
+  // (the iPOS switchover) stay off "Labels to reprint".
+  const [alreadyLabelled, setAlreadyLabelled] = useState(false);
   const { success, error: showError } = useToast();
 
   const resetState = useCallback(() => {
@@ -175,7 +178,8 @@ export default function ImportRedesign() {
       if (mapMode && Object.keys(columnMap).length) {
         fd.append("column_map", JSON.stringify(columnMap));
       }
-      const res = await api.upload(`/api/import/${activeTab}`, fd);
+      const labelled = activeTab === "products" && alreadyLabelled ? "?already_labelled=1" : "";
+      const res = await api.upload(`/api/import/${activeTab}${labelled}`, fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Import failed");
       success(`Imported ${data.imported ?? data.count ?? 0} ${activeTab} successfully`);
@@ -186,7 +190,7 @@ export default function ImportRedesign() {
     } finally {
       setImporting(false);
     }
-  }, [file, activeTab, mapMode, columnMap, success, showError, resetState]);
+  }, [file, activeTab, mapMode, columnMap, alreadyLabelled, success, showError, resetState]);
 
   // AI invoice-photo scan: image -> extracted rows -> CSV -> existing preview.
   const handleInvoiceScan = useCallback(
@@ -542,7 +546,13 @@ export default function ImportRedesign() {
 
             {/* Import button */}
             {validRows.length > 0 && (
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-4">
+                {activeTab === "products" && (
+                  <label className="flex items-center gap-2 text-sm text-(--ui-text) cursor-pointer">
+                    <input type="checkbox" checked={alreadyLabelled} onChange={(e) => setAlreadyLabelled(e.target.checked)} />
+                    These items already have shelf labels (keep them off Labels to reprint)
+                  </label>
+                )}
                 <Button
                   tone="primary"
                   disabled={importing}

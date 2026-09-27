@@ -3,6 +3,8 @@ import { Tag, Plus, Edit2, Trash2, X, RefreshCw, Printer, Check } from "lucide-r
 
 import { api } from '../api';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { fmtUtcDateTime } from '../utils/dates';
+import { queueKey, reprintRowToQueueItem, addToQueue } from './labelReprints';
 
 // ── Minimal Code128B encoder ─────────────────────────────────────────────────
 const CODE128_TABLE = (() => {
@@ -200,6 +202,19 @@ export default function BarcodeTemplates() {
   const [printItems, setPrintItems] = useState([]);
   const [printing, setPrinting] = useState(false);
 
+  // Labels to reprint (OTS pilot step 6)
+  const [reprints, setReprints] = useState([]);
+  const [reprintSel, setReprintSel] = useState(() => new Set());
+  const [reprintBusy, setReprintBusy] = useState(false);
+
+  const fetchReprints = useCallback(async () => {
+    try {
+      const data = await api.get("/api/label-reprints");
+      setReprints(data.items || []);
+    } catch { setReprints([]); }
+    setReprintSel(new Set());
+  }, []);
+
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
     try {
@@ -211,8 +226,9 @@ export default function BarcodeTemplates() {
 
   useEffect(() => {
     fetchTemplates();
+    fetchReprints();
     api.get("/api/products").then((d) => setProducts(d.products || [])).catch(() => {});
-  }, [fetchTemplates]);
+  }, [fetchTemplates, fetchReprints]);
 
   const openAdd = () => { setForm(EMPTY); setFormError(""); setModal("add"); };
   const openEdit = (t) => {
@@ -255,28 +271,24 @@ export default function BarcodeTemplates() {
     fetchTemplates();
   };
 
-  const openPrint = () => {
+  const openPrint = (initialItems = []) => {
     const def = templates.find((t) => t.is_default) || templates[0] || null;
     setPrintTemplate(def ? String(def.id) : "");
-    setPrintItems([]); setProductSearch(""); setPrintModal(true);
+    setPrintItems(initialItems); setProductSearch(""); setPrintModal(true);
   };
 
   const addToPrintQueue = (product) => {
-    setPrintItems((prev) => {
-      const existing = prev.find((i) => i.product_id === product.id);
-      if (existing) return prev.map((i) => i.product_id === product.id ? { ...i, copies: i.copies + 1 } : i);
-      return [...prev, {
-        product_id: product.id, name: product.name,
-        barcode: product.barcode || "", price: product.price,
-        brand: product.brand_name || "", copies: 1,
-      }];
-    });
+    setPrintItems((prev) => addToQueue(prev, {
+      product_id: product.id, variant_id: null, name: product.name,
+      barcode: product.barcode || "", sku: product.sku || "", price: product.price,
+      brand: product.brand_name || "", copies: 1,
+    }));
   };
 
-  const updateCopies = (product_id, val) => {
+  const updateCopies = (key, val) => {
     const n = parseInt(val);
-    if (!n || n <= 0) { setPrintItems((prev) => prev.filter((i) => i.product_id !== product_id)); return; }
-    setPrintItems((prev) => prev.map((i) => i.product_id === product_id ? { ...i, copies: n } : i));
+    if (!n || n <= 0) { setPrintItems((prev) => prev.filter((i) => queueKey(i) !== key)); return; }
+    setPrintItems((prev) => prev.map((i) => queueKey(i) === key ? { ...i, copies: n } : i));
   };
 
   const handlePrint = async () => {
@@ -286,9 +298,35 @@ export default function BarcodeTemplates() {
     setPrinting(true);
     printLabels(tpl, printItems, fmt);
     try {
+      // Logging the job also takes items printed at their current price off
+      // "Labels to reprint".
       await api.post("/api/barcode-print-jobs", { template_id: tpl.id, items: printItems });
+      await fetchReprints();
     } catch { /* non-critical */ }
     setPrinting(false);
+  };
+
+  const selectedReprints = reprints.filter((r) => reprintSel.has(r.id));
+  const allReprintsSelected = reprints.length > 0 && reprints.every((r) => reprintSel.has(r.id));
+  const toggleReprint = (id) => setReprintSel((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAllReprints = () =>
+    setReprintSel(allReprintsSelected ? new Set() : new Set(reprints.map((r) => r.id)));
+
+  const printSelectedReprints = () =>
+    openPrint(selectedReprints.reduce((q, r) => addToQueue(q, reprintRowToQueueItem(r)), []));
+
+  const dismissSelectedReprints = async () => {
+    if (!selectedReprints.length) return;
+    setReprintBusy(true);
+    try {
+      await api.post("/api/label-reprints/dismiss", { ids: selectedReprints.map((r) => r.id) });
+      await fetchReprints();
+    } catch (err) { alert(err.body?.error || err.message || "Could not update the list"); }
+    finally { setReprintBusy(false); }
   };
 
   const f = form;
@@ -304,12 +342,73 @@ export default function BarcodeTemplates() {
         <button onClick={fetchTemplates} className="flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-(--ui-muted-surface) text-(--ui-text) rounded-full hover:bg-(--ui-border-strong)">
           <RefreshCw size={14} /> Refresh
         </button>
-        <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 bg-(--ui-muted-surface) text-(--ui-text) rounded-full text-sm font-semibold hover:bg-(--ui-border-strong)">
+        <button onClick={() => openPrint()} className="flex items-center gap-2 px-4 py-2 bg-(--ui-muted-surface) text-(--ui-text) rounded-full text-sm font-semibold hover:bg-(--ui-border-strong)">
           <Printer size={16} /> Print Labels
         </button>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-(--ui-primary) text-(--ui-on-primary) rounded-full text-sm font-semibold hover:bg-(--ui-primary-strong)">
           <Plus size={16} /> New Template
         </button>
+      </div>
+
+      {/* Labels to reprint (OTS pilot step 6): every item whose selling price
+          changed, or that is new, since its last label. */}
+      <div data-testid="label-reprints" className="bg-(--ui-surface) border rounded-xl overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-(--ui-border)">
+          <div>
+            <h2 className="font-semibold text-(--ui-text)">Labels to reprint ({reprints.length})</h2>
+            <p className="text-xs text-(--ui-text-muted)">Items whose price changed, or that are new, since their last label. Printing the label takes them off.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={dismissSelectedReprints} disabled={!selectedReprints.length || reprintBusy}
+              className="px-3 py-2 text-sm font-semibold bg-(--ui-muted-surface) text-(--ui-text) rounded-full hover:bg-(--ui-border-strong) disabled:opacity-50">
+              <Check size={14} className="inline mr-1" />Label is fine
+            </button>
+            <button onClick={printSelectedReprints} disabled={!selectedReprints.length}
+              className="px-4 py-2 text-sm font-semibold bg-(--ui-primary) text-(--ui-on-primary) rounded-full hover:bg-(--ui-primary-strong) disabled:opacity-50">
+              <Printer size={14} className="inline mr-1" />Print selected ({selectedReprints.length})
+            </button>
+          </div>
+        </div>
+        {reprints.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-(--ui-text-muted)">All shelf labels are up to date.</div>
+        ) : (
+          <div className="max-h-96 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-(--ui-muted-surface) border-b border-(--ui-border)">
+                <tr>
+                  <th className="px-4 py-2 w-8">
+                    <input type="checkbox" aria-label="Select all labels to reprint" checked={allReprintsSelected} onChange={toggleAllReprints} />
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-(--ui-text-muted)">Item</th>
+                  <th className="px-4 py-2 text-left font-medium text-(--ui-text-muted)">Barcode</th>
+                  <th className="px-4 py-2 text-left font-medium text-(--ui-text-muted)">Label price → New price</th>
+                  <th className="px-4 py-2 text-left font-medium text-(--ui-text-muted)">Changed</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {reprints.map((r) => (
+                  <tr key={r.id} data-testid={`reprint-row-${r.id}`} className="hover:bg-(--ui-muted-surface)">
+                    <td className="px-4 py-2">
+                      <input type="checkbox" aria-label={`Select ${r.name}${r.variant_sku ? ` ${r.variant_sku}` : ""}`}
+                        checked={reprintSel.has(r.id)} onChange={() => toggleReprint(r.id)} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-medium text-(--ui-text)">{r.name}</span>
+                      {r.variant_sku && <span className="ml-2 text-xs text-(--ui-text-muted)">{r.variant_sku}</span>}
+                    </td>
+                    <td className="px-4 py-2 text-(--ui-text-muted) font-mono text-xs">{r.barcode || "—"}</td>
+                    <td className="px-4 py-2">
+                      {r.is_new
+                        ? <span><span className="text-xs bg-(--ui-muted-surface) text-(--ui-text-muted) px-2 py-0.5 rounded-full mr-2">New</span><strong>{fmt(r.new_price)}</strong></span>
+                        : <span><span className="text-(--ui-text-muted) line-through">{fmt(r.old_price)}</span> → <strong>{fmt(r.new_price)}</strong></span>}
+                    </td>
+                    <td className="px-4 py-2 text-(--ui-text-muted)">{fmtUtcDateTime(r.changed_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -474,17 +573,17 @@ export default function BarcodeTemplates() {
                 <label className="block text-sm font-medium text-(--ui-text) mb-1">
                   Print Queue ({printItems.length} items)
                 </label>
-                <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                <div data-testid="print-queue" className="border rounded-lg divide-y max-h-64 overflow-y-auto">
                   {printItems.length === 0 ? (
                     <div className="px-3 py-8 text-center text-(--ui-text-muted) text-sm">Click products to add</div>
                   ) : printItems.map((item) => (
-                    <div key={item.product_id} className="flex items-center gap-2 px-3 py-2">
+                    <div key={queueKey(item)} className="flex items-center gap-2 px-3 py-2">
                       <span className="flex-1 text-sm truncate">{item.name}</span>
                       <input type="number" min="1" max="999" value={item.copies}
-                        onChange={(e) => updateCopies(item.product_id, e.target.value)}
+                        onChange={(e) => updateCopies(queueKey(item), e.target.value)}
                         className="w-14 border rounded px-2 py-1 text-xs text-center" />
                       <span className="text-xs text-(--ui-text-muted)">×</span>
-                      <button onClick={() => setPrintItems((prev) => prev.filter((i) => i.product_id !== item.product_id))}
+                      <button onClick={() => setPrintItems((prev) => prev.filter((i) => queueKey(i) !== queueKey(item)))}
                         className="text-(--ui-text-muted) hover:text-(--ui-danger-fg)"><X size={13} /></button>
                     </div>
                   ))}

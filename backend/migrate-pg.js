@@ -10103,6 +10103,26 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 141,
+    description:
+      "One Toy Store pilot, Phase B step 6 (labels to reprint). label_reprints table + triggers on products.price / product_variants.price: every selling-price change, from any writer, and every new item (not packages/services, not the parent of a variant product) opens a row showing the price on the last label and the current price; the label routes clear it. DDL shared with schema-pg.sql via services/label-reprints.js. Existing items are NOT listed (their labels are assumed right). Tenant-only; guarded on products + product_variants existing. Idempotent.",
+    up: async (client) => {
+      const {
+        rows: [{ schema }],
+      } = await client.query("SELECT current_schema() AS schema");
+      const { rows: hasTables } = await client.query(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('products', 'product_variants')`
+      );
+      if (schema === "public" || hasTables.length < 2) {
+        console.log(`[migrate-pg v141] ${schema}: no products tables — skipped`);
+        return;
+      }
+      const { LABEL_REPRINTS_DDL } = require("./services/label-reprints");
+      await client.query(LABEL_REPRINTS_DDL);
+    },
+  },
 ];
 
 /**

@@ -1,5 +1,6 @@
 const Papa = require("papaparse");
 const { asyncStore } = require("../tenant-db-proxy-pg");
+const labelReprints = require("../services/label-reprints");
 const {
   getMapper,
   getTemplate,
@@ -434,6 +435,10 @@ module.exports = function mountImportRoutes(app, deps) {
         // validated resolver via resolveContext (Step 9) — never the raw header.
         const outletId = req.context?.outletId || null;
         let imported = 0;
+        // "These items already have labels" tick (OTS pilot step 6, the iPOS
+        // switchover): keep the imported items off "Labels to reprint".
+        const alreadyLabelled = req.query.already_labelled === "1";
+        const importedIds = [];
         const client = await db.getClient();
         try {
           await client.query("BEGIN");
@@ -444,6 +449,7 @@ module.exports = function mountImportRoutes(app, deps) {
               [p.name, p.sku, p.barcode, p.price, p.cost_price, p.category_id, p.brand_id, p.tax_id, p.unit, p.supplier_id, p.status],
             );
             const productId = ins[0].id;
+            importedIds.push(productId);
 
             if (p.stock_quantity > 0 && outletId) {
               await client.query(
@@ -454,6 +460,7 @@ module.exports = function mountImportRoutes(app, deps) {
             }
             imported++;
           }
+          if (alreadyLabelled) await labelReprints.clearAlreadyLabelled(client, importedIds);
           await client.query("COMMIT");
         } catch (err) {
           await client.query("ROLLBACK");

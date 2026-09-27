@@ -14,10 +14,13 @@
 3. ✅ Online orders reduce shop stock (blocker 1, 1a–1f) — `f92533b5`. Proven locally in tests and on the real backend with a signed webhook and no login. **Still to prove on the Shopify dev store** (Phase C): real Shopify payloads, and registering the 3 webhooks
 4. ✅ "Set Shopify to SanoPOS counts" button + daily drift check (blocker 2, 2a–2h). Found on the way: **the everyday sync was never switched on** (2h), so no till sale ever reached Shopify. Proven locally against a fake Shopify in tests. **Still to prove on the Shopify dev store** (Phase C): the exact field name Shopify's API version wants for the set (see 2a), and a real count set
 5. ✅ Offline counter (blocker 3, 3a–3j): catalogue copy in the browser, scan/search/variants offline, offline reload keeps selling, queued sales land at their own time and till and are accepted past stock. Proven in tests and in a real browser on a production build (see Blocker 3). **Still to prove in the shop** (Phase E): the real counter PC, scanner and router, with the internet unplugged
-6. ⏭ **NEXT: "Labels to reprint" list.** Any change to an item's selling price, from anywhere (product edit, bulk import, Shopify import), marks it "label needs reprint"; the list shows name, old → new price and when; printing its label (from the list or the existing label page, which logs `barcode_print_jobs`) clears the mark. Replaces the suggested-price idea (owner, 2026-09-27). First job: find **every** code path that writes `products.price` / `product_variants.price` (a quick grep for `SET price =` found none, so the writes are built dynamically; check each)
+6. 🟡 **"Labels to reprint" list.** Split into three (owner decisions 2026-09-27, see Decisions log):
+   - ✅ **6a** list + marking + clearing (below, "Step 6: labels to reprint"). Proven in tests and on screen
+   - ⏭ **NEXT: 6b variant labels**: the label page can only add whole products; add variants (own barcode + price) to its product picker, and record `variant_id` in `barcode_print_jobs`. Variant rows from the list already print and clear correctly
+   - 6c spreadsheet import updates **prices of existing items** (matched by SKU or barcode), with an old → new preview before confirming. Today `/import` rejects an existing SKU and `bulk-import` only inserts, so no import can change a price yet
 7. Product **History tab**: price/cost changes, sales by bill no, full stock ledger with running balance (owner request, see Decisions log)
 
-**Current proof:** shop-day **112 pass, 0 fail** (re-run after blocker 2); `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
+**Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
 
 **Shopify access on the owner's machine (checked 2026-09-26):** the Claude desktop Shopify connector and the Shopify CLI (3.91.1, theme login for `one-toy-store-dev.myshopify.com`) both point at the **LIVE** store. Neither is a test store. Don't use them for Phase C testing.
 
@@ -46,7 +49,7 @@
 | Phase | What | Status |
 |---|---|---|
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
-| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–5 done (all 3 blockers) |
+| **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | 🟡 in progress: steps 1–5 done (all 3 blockers), step 6a done |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ⏳ needs dev store from owner |
 | **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
@@ -178,6 +181,33 @@ Screen checked in the browser (local shop): new button with a confirm box, plain
 
 ---
 
+## Step 6: labels to reprint (2026-09-27)
+
+**Every writer of a selling price, checked one by one** (a grep for `SET price =` finds nothing; the writes are built dynamically):
+
+| # | Writer | Writes | Covered |
+|---|---|---|---|
+| W1 | Product edit `PUT /api/products/:id` (`routes/products.js`, dynamic field list) | `products.price` | ✅ trigger |
+| W2 | Same request, variant rows | `product_variants.price` (`v.price || price`: a blank variant price falls back to the parent's) | ✅ trigger |
+| W3 | Shopify import, update path (`routes/shopify/import.js`) | `products.price` on **every** import (each Shopify variant is its own product row; never writes `product_variants`) | ✅ trigger; an unchanged price is not listed |
+| W4 | Scheduled catalogue changes (`services/catalog-scheduler.js`, `UPDATE ${table} SET ${field}`) | either table; only runs with `SCHEDULED_CATALOG_WORKER_ENABLED` | ✅ trigger |
+| W5 | WooCommerce import (`routes/woocommerce.js`) | `selling_price`, **a column that doesn't exist**: fails before writing (D26) | n/a |
+| New | Product form create (+ variants), inventory bulk-import, `/import` spreadsheet, Shopify import new-item path | first price | ✅ listed as "new" |
+| Out | Packages and preset seed data (service/package items); price lists / per-shop prices / price books (`price_list_items`, flags off for one shop) | | not listed, by design |
+
+**How it works.** Marking is done by the database, not route code: triggers on `products` and `product_variants` (migration **v141**, same DDL in `schema-pg.sql`, shared from `services/label-reprints.js`) open one row per item in `label_reprints` with the price on the last label and the current price. That way no writer can skip it, including future ones. These are the **first database triggers in the repo**. New items open a row with no old price. A second change before a reprint updates the same row; a price moved back to the label's price removes it. A product with variants is listed per variant, never as the parent. Existing items at migration time are **not** listed (their labels are assumed right).
+
+**Clearing.** `POST /api/barcode-print-jobs` clears an item printed **at its current price** (a stale page printing the old price doesn't clear it). "Label is fine" (`POST /api/label-reprints/dismiss`) clears without printing. The `/import` tick box "These items already have shelf labels" (`?already_labelled=1`) keeps imported items off, for the iPOS switchover.
+
+**Screen.** A "Labels to reprint" section at the top of the label page (`/barcode-templates`): item (variant SKU for variants), barcode, label price → new price (or "New"), when; select rows, then "Print selected" (fills the print queue at the new price; variants keep their own barcode) or "Label is fine".
+
+**Proof.**
+- `backend/tests/integration/ots-label-reprints.test.js`: 19 tests. 17 failed before the build (no table). With only the triggers dropped, 13 fail (the other 4 are "must not list" cases). The migration test caught a real bug in my first v141 (unquoted table names: FATAL on the public schema), failing on it and passing on the fix.
+- Frontend: `label-reprints.test.jsx` (5), `import-already-labelled.test.jsx` (2), both failing first.
+- Neighbouring suites (products, import, Shopify, kits, packages, variants, pricing, ots-*): 274 pass. `pg-batch13-catalog-scheduler` fails the same way on the old code (Jest syntax).
+- On screen (Playwright, local backend, fresh shop-day shop): list showed the 28 new items incl. the Hot Wheels variants → "Label is fine" on all → Rubik's Cube edited Rs 1,500 → 1,650 in the product screen → listed as `Rs 1,500.00 → Rs 1,650.00` → "Print selected" → label printed "Rubik's Cube / 869000000012 / Rs 1,650.00" → list empty. `out/step6-labels-to-reprint.png`, `out/step6-print-queue.png`, `out/step6-after-print.png`.
+- Note: the setup wizard's 5 "(Sample)" products also show as new on a fresh shop.
+
 ## Retail core scorecard
 
 **How it's measured:** `tools/onetoystore-pilot/shop-day.mjs` creates a brand-new throwaway shop in the **local** database and plays a full day through the **real** server: 20 products (2 with variants), 5 purchase orders with partial deliveries, 13 bills, returns, an exchange, a supplier return, an adjustment, a transfer, a till open/close and a stock count. It keeps its own independent ledger of what every number *should* be, then runs ~105 checks. To run it, start the backend (`node backend/index.js`; the banner must say LOCAL DB), then `node tools/onetoystore-pilot/shop-day.mjs --dump`.
@@ -297,6 +327,8 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D22 | 🔴 | Dead stock: "value tied Rs 0" | 🛠️ fixed, and it was worse: (1) the panel summed `stock_cost_value`, the API returned `cost_value`; (2) the **Dead Stock report page** expected a per-outlet row (`stock_qty`, `stock_cost_value`, `stock_retail_value`, `days_since_sale`, `last_sold_at`, outlet, brand, supplier) the API never returned, so most columns were blank; (3) the query joined every past sale line onto stock, **multiplying stock and value** for anything that had ever sold. Rewritten per product per outlet with the last sale in its own CTE; a never-sold item is aged from when it was created; deleted products excluded; old field names kept. Also the panel's stock-aging "Oldest" read `days_since_sale`, the API returns `age_days`. Proven on screen (`out/dead-stock-report.png`) |
 | D23 | 🔴 | Sales & Stock report: stock and sales joined together, so every sale was multiplied by the number of outlet rows and `SUM(DISTINCT os.quantity)` counted two outlets holding the same stock once; **voided bills counted as sales**; deleted products listed; the page's date / time / outlet filters were **ignored** (always all-time, all outlets) | 🛠️ fixed: stock and sales totalled in separate CTEs, voided bills excluded, deleted products excluded, filters applied (times in the shop's time zone). In the test: 4 → 8 stock, 6 → 2 units sold. Screen: `out/sales-and-stock.png` |
 | D24 | 🟠 | Picking a product **with variants** from the search results adds the parent product itself (no variant picker), online and offline; the sale is then booked against the parent, not a variant | 🛠️ fixed 2026-09-27: a search pick (click or Enter) of a product with variants opens the variant picker (or says to scan the variant if the picker is switched off). Found on the way: the picker showed **SKU-only variants** (no size/colour options, like the Hot Wheels singles) as one "—" cell, so only the first could be picked; they now get one row each, by SKU. Tests: `pos-search-variants` (3 of 4 fail on the old code), SKU-only picker test in `pos-offline-inputs`. Proven in the real POS (`out/d24-variant-picker.png`) |
+| D25 | 🔴 | **Saving a product with variants overwrites each variant's stock** with the number the edit form loaded: `PUT /api/products/:id` writes `stock = v.stock || 0` on every variant row (`routes/products.js`, variant update). A sale made while the edit screen was open is lost from the count, and only the `product_variants` rollup changes, not the per-outlet row | ⏳ found in step 6, not fixed |
+| D26 | 🟡 | WooCommerce import writes `products.selling_price`, which doesn't exist: every WooCommerce product import/update fails | ⏳ found in step 6, not fixed (OTS doesn't use WooCommerce) |
 | D19 | 🟡 | Scanning a variant runs the modifier lookup with the variant id as a product id (harmless 403 today; pre-existing pattern shared with the variant picker) | open, low |
 
 ---
@@ -313,6 +345,8 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | Backend unit, **after blocker 3** (2026-09-27) | **748 / 752 pass** | 4 failures, none from blocker 3: the 3 baseline ones (worker-status ×2, payment-gateway env) plus `frontend-coverage-drift`, which flags 2 endpoints from blockers 1/2 with no screen calling them: `POST …/shopify/webhooks/orders/:tenantSlug` (headless by design → belongs in `frontend-coverage-baseline.json`) and `POST …/shopify/reconciliation/:id/fix` (its per-row buttons were removed in 2j; retire the endpoint or baseline it). Open |
 | Frontend unit, **after blocker 3** (2026-09-27) | **262 / 262 pass** (35 files) | +61 blocker 3 tests |
 | Frontend unit, **after D24** (2026-09-27) | **267 / 267 pass** (36 files) | +5 D24 tests |
+| Backend unit, **after step 6a** (2026-09-27) | **748 / 752 pass** | the same 4 failures as after blocker 3; the drift guard names only the same 2 endpoints (the new label endpoints have a screen) |
+| Frontend unit, **after step 6a** (2026-09-27) | **274 / 274 pass** (38 files) | +7 step-6a tests. One run showed 2 failures while other jobs ran alongside it; 3 re-runs clean |
 | Backend integration, **after blocker 2** (2026-09-26, ~34 min) | **1,866 pass, 26 fail, 29 skipped** | 1,848 + the 18 new `ots-shopify-stock` tests, exactly. The same 12 stale-fixture files fail; none is a Shopify, stock, sales or returns file. |
 
 ---
@@ -328,6 +362,7 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-26 | Offline: **yes**, keep a catalogue copy (names, barcodes, prices; not stock) in the counter's browser so scanning and search work offline; sales queue and replay | **Owner** | Blocker 3 |
 | 2026-09-26 | Cost method: OTS prices **cost-plus a fixed margin that differs by category/brand**. Keep cost = latest purchase price. When a delivery arrives at a different cost, SanoPOS **suggests** the new selling price (cost × (1 + margin), rounded to the **nearest Rs 50**); the owner confirms per item, and repriced items are flagged for label reprint. Not automatic | **Owner** | Matches how OTS prices today. Needs a margin % per category/brand, to be collected |
 | 2026-09-27 | **Drop the suggested selling price** (no margins per category/brand needed). Keep only the reprint flag: any selling-price change, **wherever it comes from** (product edit, bulk import, Shopify import), marks the item "label needs reprint"; printing the label clears it. Nothing reprices automatically | **Owner** | Simpler; a shelf label is wrong whichever way the price changed. Supersedes the suggest-and-confirm part of the 2026-09-26 cost-method row |
+| 2026-09-27 | Labels to reprint, details: (1) **new items go on the list too** ("new, Rs X") until their first label; (2) spreadsheet import should be able to **update prices of existing items** (step 6c); (3) **variants get their own labels**, not the parent's; (4) import tick box **"these items already have labels"** plus a **"Label is fine"** button (with select-all) take items off without printing | **Owner** | (4) so the iPOS switchover doesn't put the whole shop on the list |
 | 2026-09-26 | Profit reports **subtract returns** (D17): a returned item's profit comes back out | **Owner** | Profit should match money kept |
 | 2026-09-26 | Product **History tab** (as in the iPOS item file): (1) price & cost change history with who, when and why (hand edit / delivery / accepted suggestion); (2) sales with date, **bill no** (links to the bill), qty, price, cashier, returns as minus lines; (3) a **full stock ledger** (purchases, sales, returns, adjustments, transfers, counts) with running balance, per variant. Today: price changes are only a free-text activity-log line (employee usually "Unknown", GRN cost changes not logged); `/api/reports/history-sale` shows sale id not bill no, caps at 500 rows, no variant split; no per-item ledger exists | **Owner** | Staff need to see an item's price and movement history in one click |
 | 2026-09-26 | Shopify dev store: **later**. Phase B starts locally; Shopify-facing parts are tested on a dev store afterwards | **Owner** | |

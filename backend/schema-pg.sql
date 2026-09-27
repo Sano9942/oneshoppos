@@ -1068,6 +1068,76 @@ CREATE TABLE IF NOT EXISTS barcode_print_jobs (
   printed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Labels to reprint (OTS pilot step 6) — copy of services/label-reprints.js LABEL_REPRINTS_DDL; keep identical.
+CREATE TABLE IF NOT EXISTS label_reprints (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+  old_price NUMERIC(12,2),
+  new_price NUMERIC(12,2),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  cleared_at TIMESTAMPTZ,
+  cleared_how TEXT CHECK (cleared_how IN ('printed', 'dismissed', 'already_labelled'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_label_reprints_open
+  ON label_reprints (product_id, (COALESCE(variant_id, 0))) WHERE cleared_at IS NULL;
+
+CREATE OR REPLACE FUNCTION label_reprint_note(p_product INTEGER, p_variant INTEGER, p_old NUMERIC, p_new NUMERIC)
+RETURNS void LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  INSERT INTO label_reprints (product_id, variant_id, old_price, new_price)
+  VALUES (p_product, p_variant, p_old, p_new)
+  ON CONFLICT (product_id, (COALESCE(variant_id, 0))) WHERE cleared_at IS NULL
+  DO UPDATE SET new_price = EXCLUDED.new_price, changed_at = NOW();
+  DELETE FROM label_reprints
+   WHERE product_id = p_product AND COALESCE(variant_id, 0) = COALESCE(p_variant, 0)
+     AND cleared_at IS NULL AND old_price IS NOT NULL AND old_price = new_price;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION label_reprints_products_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  -- Packages/services carry no shelf label; a product with variants is
+  -- labelled per variant.
+  IF COALESCE(NEW.product_type, '') IN ('service', 'package') OR NEW.has_variants IS TRUE THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    PERFORM label_reprint_note(NEW.id, NULL, NULL, NEW.price);
+  ELSIF NEW.price IS DISTINCT FROM OLD.price THEN
+    PERFORM label_reprint_note(NEW.id, NULL, OLD.price, NEW.price);
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION label_reprints_variants_trg() RETURNS trigger
+LANGUAGE plpgsql SET search_path FROM CURRENT AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    PERFORM label_reprint_note(NEW.product_id, NEW.id, NULL,
+      COALESCE(NEW.price, (SELECT price FROM products WHERE id = NEW.product_id)));
+    -- The item is now labelled per variant, not as the parent.
+    DELETE FROM label_reprints
+     WHERE product_id = NEW.product_id AND variant_id IS NULL AND cleared_at IS NULL;
+  ELSIF NEW.price IS DISTINCT FROM OLD.price THEN
+    PERFORM label_reprint_note(NEW.product_id, NEW.id, OLD.price, NEW.price);
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_label_reprints_products ON products;
+CREATE TRIGGER trg_label_reprints_products
+  AFTER INSERT OR UPDATE OF price ON products
+  FOR EACH ROW EXECUTE FUNCTION label_reprints_products_trg();
+
+DROP TRIGGER IF EXISTS trg_label_reprints_variants ON product_variants;
+CREATE TRIGGER trg_label_reprints_variants
+  AFTER INSERT OR UPDATE OF price ON product_variants
+  FOR EACH ROW EXECUTE FUNCTION label_reprints_variants_trg();
+
 -- ── Receipt Templates & Action History ────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS receipt_templates (

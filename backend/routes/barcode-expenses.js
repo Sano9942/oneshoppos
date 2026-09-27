@@ -1,5 +1,6 @@
 module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   const { db, requirePerm, requireFeature, multer, path, fs, runtimeState } = deps;
+  const labelReprints = require("../services/label-reprints");
 
   // --- CREATE TABLE statements removed — schema-pg.sql has them ---
 
@@ -126,7 +127,32 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     },
   );
 
-  // POST /api/barcode-print-jobs — log a batch print event
+  // --- LABELS TO REPRINT (OTS pilot step 6) ---
+  // The database marks items (see services/label-reprints.js); these read the
+  // list and take rows off it without printing ("Label is fine").
+
+  app.get("/api/label-reprints", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      res.json({ items: await labelReprints.listOpen(db) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/label-reprints/dismiss", requirePerm("manage_inventory"), async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (!ids.length) return res.status(400).json({ error: "No items" });
+    try {
+      res.json({ cleared: await labelReprints.dismiss(db, ids) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/barcode-print-jobs — log a batch print event. A label printed at
+  // the item's current price also takes it off "Labels to reprint".
   app.post("/api/barcode-print-jobs", requirePerm("manage_inventory"), async (req, res) => {
     const { template_id, items = [] } = req.body;
     if (!items.length) return res.status(400).json({ error: "No items" });
@@ -143,6 +169,13 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
             item.copies || 1,
           ]
         );
+        if (item.product_id) {
+          await labelReprints.clearPrinted(db, {
+            productId: item.product_id,
+            variantId: item.variant_id,
+            price: item.price || 0,
+          });
+        }
       }
       res.json({ logged: items.length });
     } catch (err) {
