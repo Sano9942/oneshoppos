@@ -22,6 +22,50 @@ function previewBody(text, max = 180) {
     .slice(0, max);
 }
 
+// Dev Dashboard apps (Shopify stopped allowing admin-created custom apps) have
+// no permanent token: the app's client ID + secret are exchanged for one that
+// lasts 24 hours (client credentials grant). Works only for a store in the same
+// Shopify organization as the app.
+async function requestClientCredentialsToken({ shop_domain, client_id, client_secret }) {
+  const shopDomain = sanitizeShopDomain(shop_domain);
+  if (!shopDomain || !client_id || !client_secret) {
+    throw new Error("Shop domain, Client ID and Client secret are all required");
+  }
+  const res = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: String(client_id),
+      client_secret: String(client_secret),
+    }).toString(),
+  });
+  const rawBody = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(rawBody);
+  } catch {
+    // not JSON; reported below
+  }
+  if (!res.ok || !json?.access_token) {
+    const reason = [json?.error, json?.error_description].filter(Boolean).join(": ") ||
+      (json?.errors ? JSON.stringify(json.errors) : previewBody(rawBody));
+    const hint = /shop_not_permitted/.test(rawBody)
+      ? " The store and the app must be in the same Shopify organization (create the store from the Dev Dashboard)."
+      : "";
+    throw new Error(`Shopify refused the app's Client ID/secret (${res.status}): ${reason}.${hint}`);
+  }
+  const expiresIn = Number(json.expires_in) > 0 ? Number(json.expires_in) : 86399;
+  return {
+    access_token: json.access_token,
+    expires_at: new Date(Date.now() + expiresIn * 1000),
+    scope: json.scope || "",
+  };
+}
+
 async function shopifyGraphqlRequest(
   connection,
   query,
@@ -638,5 +682,6 @@ module.exports = {
   fetchInventoryLevelsBatch,
   setShopifyInventory,
   fetchRecentOrders,
+  requestClientCredentialsToken,
   toGid,
 };

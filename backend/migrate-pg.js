@@ -10167,6 +10167,24 @@ const MIGRATIONS = [
       await client.query(OPENING_BALANCES_SQL);
     },
   },
+  {
+    version: 144,
+    description:
+      "One Toy Store pilot, Phase C: Shopify Dev Dashboard apps. Shopify no longer lets anyone create admin custom apps (the permanent shpat_ token); a Dev Dashboard app's client ID + secret are exchanged for a token that lasts 24 hours (client credentials grant). shopify_connections gains client_id, client_secret (encrypted) and access_token_expires_at; shopify/utils.js getActiveShopifyConnection() renews the token before it runs out. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'shopify_connections'`
+      );
+      if (!rows.length) return;
+      await client.query(`
+        ALTER TABLE shopify_connections
+          ADD COLUMN IF NOT EXISTS client_id TEXT,
+          ADD COLUMN IF NOT EXISTS client_secret TEXT,
+          ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ
+      `);
+    },
+  },
 ];
 
 /**

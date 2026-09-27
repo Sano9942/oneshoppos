@@ -1963,6 +1963,12 @@ CREATE TABLE IF NOT EXISTS shopify_connections (
   access_token TEXT NOT NULL,
   api_version TEXT DEFAULT '2025-10',
   webhook_secret TEXT,
+  -- Dev Dashboard app (v144): client ID + encrypted secret are exchanged for a
+  -- 24-hour access_token, renewed before access_token_expires_at. NULL client_id
+  -- = a permanent admin-created token.
+  client_id TEXT,
+  client_secret TEXT,
+  access_token_expires_at TIMESTAMPTZ,
   default_location_id TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   last_sync_at TIMESTAMPTZ,

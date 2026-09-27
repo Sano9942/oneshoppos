@@ -1,327 +1,244 @@
 import React, { useState } from "react";
-import {
-  Link2,
-  Unplug,
-  CheckCircle2,
-  ShieldAlert,
-  RefreshCw,
-  Upload,
-  Download,
-} from "lucide-react";
+import { Link2, Unplug, CheckCircle2, ShieldAlert, RefreshCw } from "lucide-react";
+import { Button, Input, Select, Badge } from "../../ui/primitives";
+import { fmtUtcDateTime } from "../../utils/dates";
 import { useShopify } from "./ShopifyContext";
 
+// Every button here calls a route that exists (OTS D29: Save sent POST to a
+// PUT-only route, Disconnect sent DELETE, and five more buttons called
+// addresses the backend never had, so no store could be connected from here).
 export default function ShopifySettings() {
   const { config, setConfig, apiFetch, status, loadAll, setError, setSuccess } =
     useShopify();
 
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [runningLiveValidation, setRunningLiveValidation] = useState(false);
-  const [syncingPush, setSyncingPush] = useState(false);
-  const [syncingPull, setSyncingPull] = useState(false);
+  const [validating, setValidating] = useState(false);
   const [processingQueue, setProcessingQueue] = useState(false);
   const [retryingFailed, setRetryingFailed] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  const saveConfig = async (e) => {
+  const isApp = config.auth_mode !== "token";
+  const set = (key) => (e) => setConfig((p) => ({ ...p, [key]: e.target.value }));
+
+  const call = async (path, method, body) => {
+    const res = await apiFetch(path, {
+      method,
+      ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  };
+
+  const run = async (setBusy, work) => {
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await work();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveConfig = (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError("");
-    setSuccess("");
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error || "Failed to save configuration");
-      setSuccess("Configuration saved successfully");
+    run(setSaving, async () => {
+      const body = {
+        shop_domain: config.shop_domain,
+        api_version: config.api_version,
+        default_location_id: config.default_location_id,
+        ...(isApp
+          ? { client_id: config.client_id, client_secret: config.client_secret }
+          : { access_token: config.access_token, webhook_secret: config.webhook_secret }),
+      };
+      await call("/api/integrations/shopify/config", "PUT", body);
+      setSuccess(isApp ? "Connected. SanoPOS renews the access key by itself every day." : "Connection saved");
       await loadAll();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
-  const disconnect = async () => {
-    if (!window.confirm("Disconnect Shopify? This will clear credentials."))
-      return;
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/config`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to disconnect");
-      setSuccess("Disconnected successfully");
+  const disconnect = () => {
+    if (!window.confirm("Disconnect Shopify? Stock and orders stop syncing until you connect again.")) return;
+    run(setSaving, async () => {
+      await call("/api/integrations/shopify/disconnect", "POST");
+      setSuccess("Disconnected");
       await loadAll();
-    } catch (err) {
-      setError(err.message);
-    }
+    });
   };
 
-  const verify = async () => {
-    setVerifying(true);
-    setError("");
-    setSuccess("");
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/verify`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Verification failed");
-      setSuccess("Connection verified! API access is active.");
+  const verify = () =>
+    run(setVerifying, async () => {
+      await call("/api/integrations/shopify/verify", "POST");
+      setSuccess("Connection verified: SanoPOS can reach the store.");
       await loadAll();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setVerifying(false);
-    }
-  };
+    });
 
-  const runLiveValidation = async () => {
-    setRunningLiveValidation(true);
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/validate`, {
-        method: "POST",
-      });
-      if (res.ok)
-        setSuccess("Live validation triggered. Check results in Mappings tab.");
-    } catch (err) {
-      setError("Validation failed: " + err.message);
-    } finally {
-      setRunningLiveValidation(false);
-    }
-  };
+  const validate = () =>
+    run(setValidating, async () => {
+      const d = await call("/api/integrations/shopify/live-validation", "POST");
+      const sample = d.checks?.mapped_inventory_sample;
+      const parts = [
+        `Store: ${d.checks?.shop_connection?.shop_name || d.checks?.shop_connection?.myshopify_domain || "reached"}`,
+        `${d.checks?.locations?.count ?? 0} location(s)`,
+        sample ? `${sample.total - sample.failed} of ${sample.total} sample item counts read` : null,
+      ].filter(Boolean);
+      (d.ok ? setSuccess : setError)(`${d.ok ? "Live check passed" : "Live check found problems"}: ${parts.join(", ")}.`);
+    });
 
-  const runPush = async () => {
-    setSyncingPush(true);
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/sync/inventory`, {
-        method: "POST",
-      });
-      if (res.ok) setSuccess("Dry-run inventory push triggered.");
-    } catch (err) {
-      setError("Sync failed: " + err.message);
-    } finally {
-      setSyncingPush(false);
-    }
-  };
+  const processPending = () =>
+    run(setProcessingQueue, async () => {
+      const d = await call("/api/integrations/shopify/sync/process-pending", "POST");
+      setSuccess(d.message || "Waiting stock changes sent.");
+      await loadAll();
+    });
 
-  const runPull = async () => {
-    setSyncingPull(true);
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/sync/orders`, {
-        method: "POST",
-      });
-      if (res.ok) setSuccess("Dry-run order pull triggered.");
-    } catch (err) {
-      setError("Sync failed: " + err.message);
-    } finally {
-      setSyncingPull(false);
-    }
-  };
+  const retryFailed = () =>
+    run(setRetryingFailed, async () => {
+      const d = await call("/api/integrations/shopify/sync/retry-failed", "POST");
+      setSuccess(`${d.queued ?? 0} failed stock change(s) queued to send again.`);
+      await loadAll();
+    });
 
-  const processPending = async () => {
-    setProcessingQueue(true);
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/queue/process`, {
-        method: "POST",
-      });
-      if (res.ok) setSuccess("Queue processing triggered.");
-    } catch (err) {
-      setError("Queue processing failed: " + err.message);
-    } finally {
-      setProcessingQueue(false);
-    }
-  };
-
-  const retryFailed = async () => {
-    setRetryingFailed(true);
-    try {
-      const res = await apiFetch(`/api/integrations/shopify/queue/retry`, {
-        method: "POST",
-      });
-      if (res.ok) setSuccess("Retrying failed events...");
-    } catch (err) {
-      setError("Retry failed: " + err.message);
-    } finally {
-      setRetryingFailed(false);
-    }
-  };
-
-  const statusClass = (value) => {
-    if (value === "success") return "bg-(--ui-success-bg) text-(--ui-success-fg)";
-    if (value === "failed") return "bg-(--ui-danger-bg) text-(--ui-danger-fg)";
-    if (value === "running") return "bg-(--ui-muted-surface) text-(--ui-link)";
-    return "bg-(--ui-muted-surface) text-(--ui-text)";
-  };
+  const statusTone = (value) =>
+    value === "success" ? "success" : value === "failed" ? "danger" : "default";
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
       <div className="xl:col-span-2 bg-(--ui-surface) border border-(--ui-border) rounded-xl p-5">
-        <h3 className="text-lg font-semibold text-(--ui-text) mb-4">
-          Connection Settings
-        </h3>
+        <h3 className="text-lg font-semibold text-(--ui-text) mb-4">Connection Settings</h3>
         <form onSubmit={saveConfig} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-(--ui-text-muted)">Shop Domain</label>
-              <input
+            <label className="text-xs text-(--ui-text-muted)">
+              Shop Domain
+              <Input
                 value={config.shop_domain}
-                onChange={(e) =>
-                  setConfig((p) => ({ ...p, shop_domain: e.target.value }))
-                }
+                onChange={set("shop_domain")}
                 placeholder="your-store.myshopify.com"
-                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
+                className="mt-1 w-full"
                 required
               />
-            </div>
-            <div>
-              <label className="text-xs text-(--ui-text-muted)">API Version</label>
-              <input
-                value={config.api_version}
-                onChange={(e) =>
-                  setConfig((p) => ({ ...p, api_version: e.target.value }))
-                }
-                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="text-xs text-(--ui-text-muted)">
-                Admin Access Token
-              </label>
-              <input
-                type="password"
-                value={config.access_token}
-                onChange={(e) =>
-                  setConfig((p) => ({ ...p, access_token: e.target.value }))
-                }
-                placeholder={
-                  config.connected ? "Enter new token to rotate" : "shpat_..."
-                }
-                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
-                required={!config.connected}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-(--ui-text-muted)">
-                Webhook Secret (optional)
-              </label>
-              <input
-                type="password"
-                value={config.webhook_secret}
-                onChange={(e) =>
-                  setConfig((p) => ({ ...p, webhook_secret: e.target.value }))
-                }
-                placeholder="whsec_..."
-                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-(--ui-text-muted)">
-                Default Shopify Location ID
-              </label>
-              <input
+            </label>
+            <label className="text-xs text-(--ui-text-muted)">
+              API Version
+              <Input value={config.api_version} onChange={set("api_version")} className="mt-1 w-full" required />
+            </label>
+            <label className="text-xs text-(--ui-text-muted) md:col-span-2">
+              How SanoPOS connects
+              <Select value={isApp ? "app" : "token"} onChange={set("auth_mode")} className="mt-1 w-full">
+                <option value="app">Dev Dashboard app (Client ID + Client secret)</option>
+                <option value="token">Admin API access token (apps made before 2026)</option>
+              </Select>
+            </label>
+            {isApp ? (
+              <>
+                <label className="text-xs text-(--ui-text-muted)">
+                  Client ID
+                  <Input value={config.client_id} onChange={set("client_id")} className="mt-1 w-full" required autoComplete="off" />
+                </label>
+                <label className="text-xs text-(--ui-text-muted)">
+                  Client secret
+                  <Input
+                    type="password"
+                    value={config.client_secret}
+                    onChange={set("client_secret")}
+                    placeholder={config.saved_auth_mode === "app" ? "Saved. Type a new one to change it" : ""}
+                    className="mt-1 w-full"
+                    required={config.saved_auth_mode !== "app"}
+                    autoComplete="new-password"
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="text-xs text-(--ui-text-muted)">
+                  Admin Access Token
+                  <Input
+                    type="password"
+                    value={config.access_token}
+                    onChange={set("access_token")}
+                    placeholder={config.connected ? "Enter new token to rotate" : "shpat_..."}
+                    className="mt-1 w-full"
+                    required={config.saved_auth_mode !== "token"}
+                    autoComplete="new-password"
+                  />
+                </label>
+                <label className="text-xs text-(--ui-text-muted)">
+                  Webhook Secret (optional)
+                  <Input
+                    type="password"
+                    value={config.webhook_secret}
+                    onChange={set("webhook_secret")}
+                    className="mt-1 w-full"
+                    autoComplete="new-password"
+                  />
+                </label>
+              </>
+            )}
+            <label className="text-xs text-(--ui-text-muted)">
+              Default Shopify Location ID
+              <Input
                 value={config.default_location_id}
-                onChange={(e) =>
-                  setConfig((p) => ({
-                    ...p,
-                    default_location_id: e.target.value,
-                  }))
-                }
+                onChange={set("default_location_id")}
                 placeholder="Location ID"
-                className="mt-1 w-full px-3 py-2 border border-(--ui-border) rounded-lg text-sm"
+                className="mt-1 w-full"
               />
-            </div>
+            </label>
           </div>
+
+          {config.connected && (
+            <div className="text-xs text-(--ui-text-muted) space-y-1">
+              {config.saved_auth_mode === "app" && config.access_token_expires_at && (
+                <p>
+                  Access key renews automatically. Current one valid until{" "}
+                  {fmtUtcDateTime(config.access_token_expires_at)}.
+                </p>
+              )}
+              {config.last_error && <p className="text-(--ui-danger-fg)">Last error: {config.last_error}</p>}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
-            >
+            <Button type="submit" tone="primary" disabled={saving}>
               <Link2 size={14} />
               {saving ? "Saving..." : "Save Connection"}
-            </button>
-            <button
-              type="button"
-              onClick={disconnect}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold"
-            >
+            </Button>
+            <Button type="button" onClick={disconnect} disabled={saving || !config.connected}>
               <Unplug size={14} />
               Disconnect
-            </button>
-            <button
-              type="button"
-              onClick={verify}
-              disabled={verifying}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
-            >
+            </Button>
+            <Button type="button" onClick={verify} disabled={verifying || !config.connected}>
               <CheckCircle2 size={14} />
               {verifying ? "Verifying..." : "Verify Connection"}
-            </button>
-            <button
-              type="button"
-              onClick={runLiveValidation}
-              disabled={runningLiveValidation}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
-            >
+            </Button>
+            <Button type="button" onClick={validate} disabled={validating || !config.connected}>
               <ShieldAlert size={14} />
-              {runningLiveValidation ? "Validating..." : "Run Live Validation"}
-            </button>
+              {validating ? "Checking..." : "Run Live Check"}
+            </Button>
           </div>
         </form>
       </div>
 
       <div className="bg-(--ui-surface) border border-(--ui-border) rounded-xl p-5 space-y-3">
-        <h3 className="text-lg font-semibold text-(--ui-text)">Manual Sync</h3>
+        <h3 className="text-lg font-semibold text-(--ui-text)">Stock sync</h3>
         <p className="text-xs text-(--ui-text-muted)">
-          Use these controls to validate connector plumbing before live API
-          automation.
+          Till sales and other stock moves are sent to Shopify automatically. To make
+          Shopify match SanoPOS exactly, use "Set Shopify to SanoPOS counts" on the
+          Reconciliation tab. Online orders arrive by webhook.
         </p>
-        <button
-          onClick={runPush}
-          disabled={syncingPush}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-success-fg) hover:bg-(--ui-success-fg) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
-        >
-          <Upload size={14} />
-          {syncingPush ? "Running..." : "Push Inventory (Dry Run)"}
-        </button>
-        <button
-          onClick={runPull}
-          disabled={syncingPull}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
-        >
-          <Download size={14} />
-          {syncingPull ? "Running..." : "Pull Orders (Dry Run)"}
-        </button>
-        <button
-          onClick={processPending}
-          disabled={processingQueue}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-(--ui-primary) hover:bg-(--ui-primary-strong) text-(--ui-on-primary) rounded-lg text-sm font-semibold disabled:opacity-60"
-        >
+        <Button onClick={processPending} disabled={processingQueue || !config.connected} className="w-full">
           <RefreshCw size={14} />
-          {processingQueue ? "Running..." : "Process Pending Queue"}
-        </button>
-        <button
-          onClick={retryFailed}
-          disabled={retryingFailed}
-          className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-(--ui-border-strong) text-(--ui-text) hover:bg-(--ui-muted-surface) rounded-lg text-sm font-semibold disabled:opacity-60"
-        >
+          {processingQueue ? "Sending..." : "Send waiting stock changes now"}
+        </Button>
+        <Button onClick={retryFailed} disabled={retryingFailed || !config.connected} className="w-full">
           <RefreshCw size={14} />
-          {retryingFailed ? "Running..." : "Retry Failed Events"}
-        </button>
+          {retryingFailed ? "Queuing..." : "Retry failed stock changes"}
+        </Button>
         <div className="text-xs text-(--ui-text-muted) border-t border-(--ui-border) pt-3">
-          Last run:{" "}
-          {status?.last_run?.finished_at || status?.last_run?.started_at || "-"}
-          <span
-            className={`ml-2 px-2 py-0.5 rounded-full ${statusClass(status?.last_run?.status)}`}
-          >
-            {status?.last_run?.status || "n/a"}
-          </span>
+          Last run: {status?.last_run?.finished_at || status?.last_run?.started_at || "-"}{" "}
+          <Badge tone={statusTone(status?.last_run?.status)}>{status?.last_run?.status || "n/a"}</Badge>
         </div>
       </div>
     </div>

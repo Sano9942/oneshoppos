@@ -21,9 +21,10 @@
    - ✅ **6b variant labels** (2026-09-27): the label page's search lists each variant as its own label (own barcode + price, never the parent); the print log records `variant_id` (migration **v142**). See "Step 6b" below
    - ✅ **6c price sheet** (2026-09-27): Import → **Update prices** updates selling price + cost of existing items (products and variants) from a CSV, matched by SKU else barcode, with an old → new preview and a tick box per row; never adds items. See "Step 6c" below
 7. ✅ Product **History tab** (2026-09-27): stock ledger with running balance (per branch or all, per variant), price & cost changes with who/why, sales by bill no with returns as minus lines. Migration **v143**. See "Step 7" below
+   - ▶ **Phase C started 2026-09-27** (see "Phase C" below): test store `ots-sanopos-test.myshopify.com` created by the owner. Found + built **C1** (Shopify now only allows Dev Dashboard apps with a 24-hour token → SanoPOS stores Client ID + secret and renews the token itself, migration **v144**) and fixed **D29** (the Shopify Settings tab couldn't connect a store: 7 of 8 buttons called missing routes). **Waiting on owner: C-0** (create + install the "SanoPOS test" app)
    - ⏭ **NEXT:** Phase B is done. Next is Phase C (Shopify on a test dev store: needs the dev store from the owner) or Phase D (iPOS item file converter: needs the full iPOS export). Open small items: ~~D28~~ ✅ fixed; ~~frontend-coverage drift~~ ✅ fixed; ~~Sales History shows "#10" instead of the invoice number~~ ✅ fixed 2026-09-27 (list, receipt heading, CSV and reprint show the invoice no; "#id" only for a sale without one; test `frontend/tests/unit/sales-history-bill-no.test.jsx`, failed before). **All small items closed; only Phase C/D (owner inputs) remain**
 
-**Migration head: v143.** **Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
+**Migration head: v144.** **Current proof:** shop-day **112 pass, 0 fail** (re-run after step 6a, with the price triggers in place); `ots-label-reprints.test.js` 19 tests; `ots-retail-core.test.js` 47 tests; `ots-shopify-stock.test.js` 18 tests (17 fail on the old code); online-order webhook proof on the real backend **7 pass, 0 fail**; blocker 3: `ots-offline.test.js` 14 backend tests + 11 new frontend test files, browser proof under Blocker 3. Everything committed on `onetoystore-pilot`, not pushed.
 
 **Shopify access on the owner's machine (checked 2026-09-26):** the Claude desktop Shopify connector and the Shopify CLI (3.91.1, theme login for `one-toy-store-dev.myshopify.com`) both point at the **LIVE** store. Neither is a test store. Don't use them for Phase C testing.
 
@@ -53,7 +54,7 @@
 |---|---|---|
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
 | **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | ✅ done 2026-09-27: steps 1–7 (all 3 blockers, labels + price sheet, History tab) |
-| **C** | Shopify sync on a TEST development store: repeatable checklist | ⏳ needs dev store from owner |
+| **C** | Shopify sync on a TEST development store: repeatable checklist | ▶ started 2026-09-27: store created; C1 + D29 built; waiting on owner for the app (C-0) |
 | **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
 | **F** | 2-week parallel run with a nightly comparison, then switch on owner's go-ahead | ⏳ |
@@ -262,6 +263,71 @@ Screen checked in the browser (local shop): new button with a confirm box, plain
 - Local DB migrated to v143 (74 schemas). **Shop-day 112 pass, 0 fail** with the triggers in place. On the fresh shop-day shop every `outlet_stock` and `variant_outlet_stock` row equals the sum of its ledger (**0 mismatches**); of 70 movements only the 5 setup-wizard sample products are untagged.
 - On screen (Playwright script, shop `otsacc_mujsufsd`): Hot Wheels Single Car, All branches: New item +5 ×3 (the three cars) → Sale INV-2026-00009 −1 → Sale INV-2026-00010 −1 → Stock count −4, balance 9 = on hand 9; Twin Mill at Packages Mall: balance 3 = on hand 3; Twin Mill price edited 450 → 480 on screen → Price & cost shows "Product edit, Owner" (who comes from the signed-in employee on the real multi-tenant backend); Sales tab lists both bills; clicking INV-2026-00010 opens Sales History filtered to that one bill. `out/step7-history-stock-all.png`, `out/step7-history-stock-variant.png`, `out/step7-history-prices.png`, `out/step7-history-sales.png`, `out/step7-bill-link.png`.
 - Noticed, not changed: Sales History lists receipts as "#<sale id>", not the invoice number the History tab and receipts show.
+
+## Phase C: Shopify on a test development store (started 2026-09-27)
+
+**Test store:** `ots-sanopos-test.myshopify.com`. The owner created it from the Dev dashboard (Basic plan, no generated test data, no feature preview), in the same Shopify organization as the owner's Partners account (`oneshop349@gmail.com`). **Never** `one-toy-store-dev.myshopify.com`, which is the live store.
+
+**Tools checked (2026-09-27):**
+- Claude desktop Shopify connector: works, but is connected to the LIVE store. Its "switch store" can move it to the test store to add test toys and read counts/orders. Ask the owner before switching, and confirm the store before every write.
+- Shopify CLI 3.91.1: works when run with `CI=1` (it hangs on its update check otherwise). Logged in as `oneshop349@gmail.com`. It **can't create a dev store** and isn't needed.
+
+### C1: Shopify's new kind of app (found 2026-09-27, built)
+
+Shopify's docs now say "You can no longer create new admin-created custom apps". Those were the only kind SanoPOS supported: one permanent `shpat_` Admin API token. A new app is a **Dev Dashboard app**: its **Client ID + Client secret** are exchanged for a token that **lasts 24 hours** (client credentials grant, only for stores in the app's own organization). Without renewal, SanoPOS would sync for a day and then quietly stop. **This applies to the live store at go-live too**, unless it already has an admin-created app from before the change (not checked yet).
+
+Built (migration **v144**):
+- `shopify_connections` has new columns `client_id`, `client_secret` (encrypted) and `access_token_expires_at`.
+- **Saving:** Settings → "How SanoPOS connects" = Dev Dashboard app. Saving gets the first token straight away, so wrong credentials are refused with Shopify's reason and nothing is saved. `shop_not_permitted` adds "must be in the same Shopify organization".
+- **Renewing:** `shopify/utils.js` `getActiveShopifyConnection()` renews the token when less than 1 hour is left. Every Shopify caller (routes, the orders route's own copy, now shared, and the workers) goes through it. Two callers at once share one renewal. A refused renewal never throws: the reason goes into `last_error` and the old token is tried.
+- **Webhooks:** an app's webhooks are signed with its **client secret**, so it is used when no separate webhook secret is saved.
+- **Old connections:** a permanent-token connection works as before, and saving a token switches back to token mode.
+- **Settings screen:** shows no part of the client secret.
+- **Tests:** `ots-shopify-app-auth.test.js`, 10 tests, all failed before. Fake Shopify, no real store.
+
+### D29: the Shopify Settings tab could not connect a store (found 2026-09-27, fixed)
+
+7 of its 8 buttons called addresses the backend doesn't have:
+
+| Button | What it called | What the backend has |
+|---|---|---|
+| Save | `POST /config` | `PUT` only |
+| Disconnect | `DELETE /config` | `POST /disconnect` |
+| Run Live Validation | `/validate` | `/live-validation` |
+| Push Inventory | `/sync/inventory` | `/sync/push-inventory` |
+| Pull Orders | `/sync/orders` | `/sync/pull-orders` |
+| Process queue | `/queue/process` | `/sync/process-pending` |
+| Retry | `/queue/retry` | `/sync/retry-failed` |
+
+Only Verify worked. Same class as D1.
+
+**Fixed:**
+- Save, Disconnect, Live Check (now shows its result), "Send waiting stock changes now" and "Retry failed stock changes" all call real routes.
+- The two **"(Dry Run)"** buttons are removed, not rewired, because their real endpoints are not dry runs:
+  - `push-inventory` with no rows sets every Shopify count.
+  - `pull-orders` imports real orders.
+
+  "Set Shopify to SanoPOS counts" on the Reconciliation tab does the push properly, and orders arrive by webhook.
+- The form uses the shared UI components (lint baseline now 5 below).
+- **Test:** `frontend/tests/unit/shopify-settings.test.jsx`, 4 tests, all failed on the old screen. One test clicks every button and checks each route against the backend's list.
+
+### C2: API version to check on the test store
+
+Connections default to API version `2025-10`. Shopify keeps a version for about a year, so it is close to being retired. Step 2a picks the compare-and-set field name by version (`compareQuantity` before 2026-04, `changeFromQuantity` from 2026-04) and retries with the other spelling. **On the test store, connect with a current version (2026-07) and confirm a real count set works.**
+
+### Phase C checklist (on `ots-sanopos-test`)
+
+| # | Check | Result |
+|---|---|---|
+| C-0 | Owner: Dev Dashboard app "SanoPOS test" with scopes `read_products, read_inventory, write_inventory, read_locations, read_orders`, released and installed on `ots-sanopos-test` | ⏳ owner |
+| C-1 | SanoPOS Settings → Dev Dashboard app → Save gets a token (owner types Client ID + secret into SanoPOS, not chat); Verify + Live Check pass | ⏳ |
+| C-2 | Test toys on the store with the same SKUs as SanoPOS (incl. a variant product); location map set | ⏳ |
+| C-3 | "Set Shopify to SanoPOS counts" sets exact counts (real field name for the API version, 2a) | ⏳ |
+| C-4 | A till sale lowers the Shopify count (2h everyday sync) | ⏳ |
+| C-5 | Webhooks registered (`orders/create`, `orders/updated`, `orders/cancelled`) to a public tunnel address; a COD test order lowers shop stock | ⏳ needs tunnel (ask before installing) |
+| C-6 | Cancelling / refunding the test order puts the stock back | ⏳ |
+| C-7 | Daily drift check catches a difference made on Shopify | ⏳ |
+| C-8 | A token past 24 hours is renewed on the real store (force expiry in the DB, then Verify) | ⏳ |
 
 ## Retail core scorecard
 

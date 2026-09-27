@@ -732,21 +732,9 @@ module.exports = function registerOrderRoutes(app, deps) {
     }
   }
 
+  // The shared loader: it also renews a Dev Dashboard app's 24-hour token.
   async function getActiveShopifyConnection() {
-    const { rows: [row] } = await db.query(
-      `SELECT *
-       FROM shopify_connections
-       WHERE is_active = true
-       ORDER BY id DESC
-       LIMIT 1`,
-      [],
-    );
-    if (!row) return null;
-    return {
-      ...row,
-      access_token: decryptShopifySecret(row.access_token),
-      webhook_secret: decryptShopifySecret(row.webhook_secret),
-    };
+    return require("../shopify/utils").getActiveShopifyConnection(db, decryptShopifySecret);
   }
 
   const { upsertWebOrderFromShopifyPayload, applyWebOrderStockPolicy } = require('../shopify/order-service')(db, getActiveShopifyConnection);

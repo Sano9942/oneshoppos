@@ -18,20 +18,31 @@ export const useShopify = () => {
   return context;
 };
 
+// Secrets are never loaded back: the form shows them empty and an empty field
+// keeps the saved value. New connections default to a Dev Dashboard app, the
+// only kind of app Shopify lets you create now.
+const emptyConfig = {
+  connected: false,
+  shop_domain: "",
+  api_version: "2025-10",
+  default_location_id: "",
+  auth_mode: "app",
+  saved_auth_mode: null,
+  client_id: "",
+  client_secret: "",
+  access_token: "",
+  webhook_secret: "",
+  access_token_expires_at: null,
+  last_error: null,
+};
+
 export const ShopifyProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   // Shared State
-  const [config, setConfig] = useState({
-    connected: false,
-    shop_domain: "",
-    access_token: "",
-    api_version: "2025-10",
-    webhook_secret: "",
-    default_location_id: "",
-  });
+  const [config, setConfig] = useState(emptyConfig);
   const [status, setStatus] = useState(null);
   const [outlets, setOutlets] = useState([]);
   const [mappingCounts, setMappingCounts] = useState({
@@ -72,21 +83,18 @@ export const ShopifyProvider = ({ children }) => {
       const next =
         cfg.connected && cfg.config
           ? {
+              ...emptyConfig,
               connected: true,
               shop_domain: cfg.config.shop_domain || "",
-              access_token: "",
               api_version: cfg.config.api_version || "2025-10",
-              webhook_secret: "",
               default_location_id: cfg.config.default_location_id || "",
+              auth_mode: cfg.config.auth_mode || "token",
+              saved_auth_mode: cfg.config.auth_mode || "token",
+              client_id: cfg.config.client_id || "",
+              access_token_expires_at: cfg.config.access_token_expires_at || null,
+              last_error: cfg.config.last_error || null,
             }
-          : {
-              connected: false,
-              shop_domain: "",
-              access_token: "",
-              api_version: "2025-10",
-              webhook_secret: "",
-              default_location_id: "",
-            };
+          : emptyConfig;
 
       setConfig(next);
       setStatus(st);
