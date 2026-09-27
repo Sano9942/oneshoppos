@@ -541,17 +541,6 @@ describe("Shopify Reconciliation", () => {
     expect(res.status).toBe(404);
   });
 
-  it("POST reconciliation/:id/fix creates approval request", async () => {
-    // Reset to open
-    await db.query("UPDATE inventory_reconciliation SET resolution_status = 'open' WHERE id = 1");
-    const res = await request(app)
-      .post("/api/integrations/shopify/reconciliation/1/fix")
-      .set(authHeaders)
-      .send({ mode: "adjust_local", note: "Test fix" });
-    expect(res.status).toBe(200);
-    expect(res.body.approval_request_id).toBeDefined();
-  });
-
   it("POST reconciliation/bulk ignores rows", async () => {
     const res = await request(app)
       .post("/api/integrations/shopify/reconciliation/bulk")

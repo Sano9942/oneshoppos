@@ -8,7 +8,6 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
     db,
     requirePerm,
     requireAnyPerm,
-    requireFeature,
     canApproveReconciliationRequest,
     createNotification,
     adjustShopifyInventory,
@@ -182,49 +181,10 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
     },
   );
 
-  // POST request fix (creates approval request)
-  app.post(
-    "/api/integrations/shopify/reconciliation/:id/fix",
-    requirePerm("manage_inventory"),
-    requireFeature("approvals"),
-    async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { mode, note } = req.body || {};
-        const requesterEmployeeId = req.headers["x-employee-id"]
-          ? Number(req.headers["x-employee-id"])
-          : null;
-
-        const { rows } = await db.query(
-          "SELECT * FROM inventory_reconciliation WHERE id = $1", [id]
-        );
-        const row = rows[0];
-        if (!row) return res.status(404).json({ error: "Not found" });
-
-        const notes = JSON.stringify({
-          mode, note,
-          diff: row.diff,
-          local_qty: row.local_qty,
-          external_qty: row.external_qty,
-          product_id: row.product_id,
-          outlet_id: row.outlet_id,
-          requester_employee_id: requesterEmployeeId,
-          requested_at: new Date().toISOString(),
-        });
-
-        const { rows: insRows } = await db.query(
-          `INSERT INTO approval_requests (request_type, reference_id, reference_type, requested_by, notes)
-           VALUES ('reconciliation_fix', $1, 'reconciliation', $2, $3)
-           RETURNING id`,
-          [id, requesterEmployeeId ? String(requesterEmployeeId) : null, notes]
-        );
-        logActionHistory(req, "reconciliation_fix_request", `Fix requested for row #${id}`);
-        res.json({ message: "Approval request submitted", approval_request_id: insRows[0].id });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    },
-  );
+  // (OTS 2j) POST /reconciliation/:id/fix is gone: it filed an approval request
+  // that the Approvals screen could never carry out (it posts no mode, so
+  // approve-fix refused every one). "Set Shopify to N" and the bulk actions
+  // below replace it.
 
   // POST bulk action
   app.post(

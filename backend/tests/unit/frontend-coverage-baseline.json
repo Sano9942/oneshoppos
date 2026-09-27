@@ -73,6 +73,7 @@
     "POST /api/integrations/shopify/sync/retry-event/:id",
     "POST /api/integrations/shopify/sync/retry-failed",
     "POST /api/integrations/shopify/webhooks/orders-create",
+    "POST /api/integrations/shopify/webhooks/orders/:tenantSlug",
     "POST /api/inventory-intelligence/cycle-sessions/:id/complete",
     "POST /api/lab-orders/:id/result",
     "POST /api/loyalty/customers/:id/adjust",
