@@ -1,6 +1,7 @@
 const Papa = require("papaparse");
 const { asyncStore } = require("../tenant-db-proxy-pg");
 const labelReprints = require("../services/label-reprints");
+const priceSheet = require("../services/price-sheet");
 const {
   getMapper,
   getTemplate,
@@ -472,6 +473,58 @@ module.exports = function mountImportRoutes(app, deps) {
         return res.json({ imported, errors });
       } catch (err) {
         console.error("Import products error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // POST /api/import/prices — a price sheet updates the selling price and cost
+  // of EXISTING items (OTS pilot step 6c; rules in services/price-sheet.js).
+  // ?preview=1 returns old → new per row. Applying needs a `rows` form field
+  // (JSON array of the ticked line numbers); the sheet is matched again here,
+  // so only rows that are still a "change" are written. Never creates items.
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/api/import/prices",
+    requirePerm("all_access"),
+    withTenantContext(upload.single("file")),
+    async (req, res) => {
+      try {
+        const badFile = rejectNonCsv(req.file);
+        if (badFile) return res.status(400).json({ error: badFile });
+        const rows = parseFile(req.file.buffer).map(normaliseRow);
+        if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
+
+        const isPreview = req.query.preview === "1";
+        let selected = null;
+        if (!isPreview) {
+          try { selected = JSON.parse(req.body?.rows ?? "null"); } catch { selected = null; }
+          if (!Array.isArray(selected)) {
+            return res.status(400).json({ error: "Tick the rows to update (rows: [line numbers])" });
+          }
+        }
+
+        const results = await priceSheet.matchPriceSheet(db, rows);
+        if (isPreview) {
+          return res.json({ preview: true, rows: results, summary: priceSheet.summarise(results) });
+        }
+
+        const client = await db.getClient();
+        let updated;
+        try {
+          await client.query("BEGIN");
+          updated = await priceSheet.applyPriceSheet(client, results, selected);
+          await client.query("COMMIT");
+        } catch (err) {
+          await client.query("ROLLBACK");
+          throw err;
+        } finally {
+          client.release();
+        }
+        return res.json({ updated, summary: priceSheet.summarise(results) });
+      } catch (err) {
+        console.error("Import prices error:", err);
         return res.status(500).json({ error: err.message });
       }
     },
@@ -995,6 +1048,14 @@ module.exports = function mountImportRoutes(app, deps) {
             ["Widget B", "WDG-002", "1234567890124", 49.99, 25.00, "Accessories", "Acme", "GST 17%", "pcs", 50, "active"],
           ];
           break;
+        case "prices":
+          // name is for the reader only; matching is by sku, else barcode.
+          headers = ["sku", "barcode", "name", "selling_price", "cost_price"];
+          exampleRows = [
+            ["WDG-001", "1234567890123", "Widget A", 32.99, ""],
+            ["", "1234567890124", "Widget B", 52.5, 26.00],
+          ];
+          break;
         case "customers":
           headers = ["name", "mobile", "email", "address", "cnic", "occupation"];
           exampleRows = [
@@ -1024,7 +1085,7 @@ module.exports = function mountImportRoutes(app, deps) {
           ];
           break;
         default:
-          return res.status(400).json({ error: `Unknown entity "${entity}". Supported: products, customers, suppliers, expenses, payments` });
+          return res.status(400).json({ error: `Unknown entity "${entity}". Supported: products, prices, customers, suppliers, expenses, payments` });
       }
 
       return sendCsvTemplate(res, entity, headers, exampleRows);

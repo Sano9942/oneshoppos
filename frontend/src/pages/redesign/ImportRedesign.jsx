@@ -3,9 +3,12 @@ import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, 
 import { PageShell, SectionCard, Button } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
+import PriceSheetImport from "./PriceSheetImport";
 
 const TABS = [
   { key: "products", label: "Products" },
+  // OTS step 6c: a price sheet updates existing items (own screen).
+  { key: "prices", label: "Update prices" },
   { key: "customers", label: "Customers" },
   { key: "suppliers", label: "Suppliers" },
   { key: "expenses", label: "Expenses" },
@@ -263,6 +266,7 @@ export default function ImportRedesign() {
         ))}
       </div>
 
+      {activeTab === "prices" ? <PriceSheetImport /> : (
       <SectionCard className="p-5">
         {/* Template download */}
         <div className="mb-5 flex items-center justify-between">
@@ -575,6 +579,7 @@ export default function ImportRedesign() {
           </div>
         )}
       </SectionCard>
+      )}
     </PageShell>
   );
 }
