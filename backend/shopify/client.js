@@ -177,16 +177,24 @@ async function fetchShopifyLocations(connection) {
   }));
 }
 
+// Applies +/- changes to Shopify's "available" count. From API 2026-04 Shopify
+// requires changeFromQuantity on every change and an @idempotent key. A +/-
+// change is right whatever the current count is, so we send null (opt out of
+// the compare). Pass a key that stays the same across retries of one change
+// (the sync event's own key) so a retry can never apply it twice.
 async function adjustShopifyInventory(
   connection,
   adjustments,
   reason = "correction",
+  { idempotencyKey = null } = {},
 ) {
+  const newStyle = apiVersionAtLeast(connection, "2026-04");
   const changes = (adjustments || [])
     .map((item) => ({
       delta: Number(item.delta || 0),
       inventoryItemId: toGid("InventoryItem", item.inventory_item_id),
       locationId: toGid("Location", item.location_id),
+      ...(newStyle ? { changeFromQuantity: null } : {}),
     }))
     .filter((c) => c.delta !== 0 && c.inventoryItemId && c.locationId);
 
@@ -194,7 +202,25 @@ async function adjustShopifyInventory(
     return { applied: 0, userErrors: [] };
   }
 
-  const mutation = `
+  const mutation = newStyle
+    ? `
+    mutation AdjustInventory($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+      inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+        userErrors {
+          field
+          message
+        }
+        inventoryAdjustmentGroup {
+          reason
+          changes {
+            name
+            delta
+          }
+        }
+      }
+    }
+  `
+    : `
     mutation AdjustInventory($input: InventoryAdjustQuantitiesInput!) {
       inventoryAdjustQuantities(input: $input) {
         userErrors {
@@ -219,6 +245,9 @@ async function adjustShopifyInventory(
       changes,
     },
   };
+  if (newStyle) {
+    variables.idempotencyKey = idempotencyKey || require("crypto").randomUUID();
+  }
 
   const data = await shopifyGraphqlRequest(connection, mutation, variables);
   const result = data?.inventoryAdjustQuantities || {};

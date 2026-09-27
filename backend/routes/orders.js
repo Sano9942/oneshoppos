@@ -923,7 +923,7 @@ module.exports = function registerOrderRoutes(app, deps) {
       };
 
     const { rows } = await db.query(
-      `SELECT id, payload, attempt_count
+      `SELECT id, payload, attempt_count, idempotency_key
      FROM external_sync_events
      WHERE direction = 'outbound'
        AND entity_type = 'inventory'
@@ -982,6 +982,8 @@ module.exports = function registerOrderRoutes(app, deps) {
             },
           ],
           shopifyReason,
+          // Same key on every retry of this change: Shopify applies it once.
+          { idempotencyKey: row.idempotency_key || `shopify-inventory-event-${row.id}` },
         );
         if ((result.userErrors || []).length > 0) {
           failed += 1;

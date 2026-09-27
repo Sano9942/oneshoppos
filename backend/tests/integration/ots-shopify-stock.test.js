@@ -32,6 +32,7 @@ const shop = {
     this.levels.clear();
     this.calls = [];
     this.beforeNextSet = null;
+    this.adjustKeys = new Set();
   },
   stock(itemGid, qty, loc = LOC) {
     this.known.add(itemGid);
@@ -90,7 +91,29 @@ function fakeShopifyFetch(url, init) {
       data = { inventorySetQuantities: { userErrors: [] } };
     }
   } else if (query.includes("inventoryAdjustQuantities")) {
-    for (const c of variables.input.changes) {
+    // Like the real store (C-4, 2026-09-27): from 2026-04 every change must
+    // carry changeFromQuantity (null opts out of the compare) and the call an
+    // @idempotent key; older versions don't know the field.
+    const version = String(url).match(/\/admin\/api\/([^/]+)\//)?.[1] || "";
+    const changes = variables.input.changes;
+    if (version >= "2026-04") {
+      if (changes.some((c) => !("changeFromQuantity" in c))) {
+        errors = [{ message: "InventoryChangeInput must include the following argument: changeFromQuantity." }];
+      } else if (!/@idempotent\(key:/.test(query) || !variables.idempotencyKey) {
+        errors = [{ message: "The @idempotent directive is required for this mutation." }];
+      }
+    } else if (changes.some((c) => "changeFromQuantity" in c)) {
+      errors = [{ message: "InventoryChangeInput isn't a defined input type (on changeFromQuantity)" }];
+    }
+    if (errors) return Promise.resolve(new Response(JSON.stringify({ errors }), { status: 200 }));
+    shop.adjustKeys = shop.adjustKeys || new Set();
+    if (variables.idempotencyKey && shop.adjustKeys.has(variables.idempotencyKey)) {
+      // Shopify replays the first result for a repeated key; nothing is applied twice.
+      data = { inventoryAdjustQuantities: { userErrors: [], inventoryAdjustmentGroup: null } };
+      return Promise.resolve(new Response(JSON.stringify({ data }), { status: 200 }));
+    }
+    if (variables.idempotencyKey) shop.adjustKeys.add(variables.idempotencyKey);
+    for (const c of changes) {
       const k = `${c.inventoryItemId}|${c.locationId}`;
       shop.levels.set(k, (shop.levels.get(k) || 0) + c.delta);
     }
@@ -499,5 +522,57 @@ describe("Blocker 2f — no stock change is dropped as a 'duplicate'", () => {
     const ev = await waitFor(async () => (await outboundEvents()).find((e) => e.p.reason === "return"));
     expect(ev.p.variant_id).toBe(vid);
     expect(ev.p.shopify_inventory_item_id).toBe(item(103));
+  });
+});
+
+// ─── D32 (Phase C, C-4) ──────────────────────────────────────────────────────
+// The real test store (API 2026-07) refused every till sale's -1 with
+// "InventoryChangeInput must include the following argument: changeFromQuantity",
+// so no counter sale ever reached Shopify on a current API version.
+describe("D32 — till sales reach Shopify on API 2026-04 and later", () => {
+  beforeEach(resetShop);
+  afterAll(async () => {
+    await db.query("UPDATE shopify_connections SET api_version = '2025-10'");
+  });
+
+  const sellOneOfProduct2 = async () => {
+    await openTill();
+    await setLocal(2, 30);
+    shop.stock(item(102), 30);
+    const res = await admin().post("/api/sales").send({
+      outlet_id: 1, employee_id: ADMIN_ID,
+      cartItems: [{ id: 2, quantity: 1, price: 200 }],
+      payments: [{ method: "Card", amount: 200 }],
+    });
+    expect(res.status).toBe(200);
+    await waitFor(async () => (await outboundEvents()).find((e) => e.p.reason === "sale"));
+  };
+  const processPending = () =>
+    admin().post("/api/integrations/shopify/sync/process-pending").send({ limit: 5 }).timeout(5000);
+
+  it("a till sale lowers Shopify's count on 2026-07", async () => {
+    await db.query("UPDATE shopify_connections SET api_version = '2026-07'");
+    await sellOneOfProduct2();
+    await processPending();
+    const ev = (await outboundEvents()).find((e) => e.p.reason === "sale");
+    expect(ev.status).toBe("processed");
+    expect(shop.qty(item(102))).toBe(29);
+  });
+
+  it("the same change sent twice (a retry) is applied once", async () => {
+    await db.query("UPDATE shopify_connections SET api_version = '2026-07'");
+    await sellOneOfProduct2();
+    await processPending();
+    // Pretend the answer was lost and the worker sends it again.
+    await db.query("UPDATE external_sync_events SET status = 'retry', next_retry_at = NULL WHERE direction = 'outbound'");
+    await processPending();
+    expect(shop.qty(item(102))).toBe(29);
+  });
+
+  it("an older API version still works (no new field sent)", async () => {
+    await db.query("UPDATE shopify_connections SET api_version = '2025-10'");
+    await sellOneOfProduct2();
+    await processPending();
+    expect(shop.qty(item(102))).toBe(29);
   });
 });
