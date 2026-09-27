@@ -319,8 +319,8 @@ Connections default to API version `2025-10`. Shopify keeps a version for about 
 
 | # | Check | Result |
 |---|---|---|
-| C-0 | Owner: Dev Dashboard app "SanoPOS test" with scopes `read_products, read_inventory, write_inventory, read_locations, read_orders`, released and installed on `ots-sanopos-test` | ⏳ owner |
-| C-1 | SanoPOS Settings → Dev Dashboard app → Save gets a token (owner types Client ID + secret into SanoPOS, not chat); Verify + Live Check pass | ⏳ |
+| C-0 | Owner: Dev Dashboard app "SanoPOS test" with scopes `read_products, read_inventory, write_inventory, read_locations, read_orders`, released and installed on `ots-sanopos-test` | ✅ 2026-09-27, owner |
+| C-1 | SanoPOS Settings → Dev Dashboard app → Save gets a token (owner types Client ID + secret into SanoPOS, not chat); Verify + Live Check pass | ✅ 2026-09-27: owner saved it on the Settings screen (tenant `otsacc_mujsufsd`, local backend). Green "Connected", Verify OK, Live Check: store ots-sanopos-test, 1 location, 0 sample items (no products yet). DB: `shop_domain` = ots-sanopos-test.myshopify.com, API 2026-07, client_id + secret stored, token expires 2026-09-28 16:01 UTC, no error. **First real proof of C1: a Dev Dashboard app's client credentials work** |
 | C-2 | Test toys on the store with the same SKUs as SanoPOS (incl. a variant product); location map set | ⏳ |
 | C-3 | "Set Shopify to SanoPOS counts" sets exact counts (real field name for the API version, 2a) | ⏳ |
 | C-4 | A till sale lowers the Shopify count (2h everyday sync) | ⏳ |
