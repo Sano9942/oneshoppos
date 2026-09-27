@@ -296,7 +296,7 @@ export default function ProductFormPage() {
             barcode: v.barcode || null,
             price: v.price !== "" ? Number(v.price) : Number(form.price),
             cost_price: v.cost_price !== "" ? Number(v.cost_price) : 0,
-            stock: v.stock !== "" ? Number(v.stock) : 0,
+            // No stock (OTS D25): a save must never move stock.
           }));
       }
 
@@ -912,7 +912,7 @@ export default function ProductFormPage() {
                         </thead>
                         <tbody>
                           {variants.map((v) => (
-                            <tr key={v._key} className="border-b border-(--ui-border) last:border-0">
+                            <tr key={v._key} data-testid={v.id ? `variant-row-${v.id}` : undefined} className="border-b border-(--ui-border) last:border-0">
                               <td className="py-2 pr-3 font-medium text-(--ui-text) whitespace-nowrap">{v.label}</td>
                               <td className="py-2 pr-3">
                                 <Input type="number" min="0" step="0.01" value={v.price}
@@ -925,9 +925,15 @@ export default function ProductFormPage() {
                                   className="w-24 text-right" />
                               </td>
                               <td className="py-2 pr-3">
-                                <Input type="number" min="0" value={v.stock}
-                                  onChange={(e) => updVariant(v._key, "stock", e.target.value)}
-                                  className="w-20 text-right" />
+                                {isEdit && v.id ? (
+                                  // Read-only on edit (OTS D25): change stock with an
+                                  // adjustment or a stock count, like a simple product.
+                                  <span className="block w-20 text-right text-(--ui-text)" title="Use Inventory Adjustments to change stock">{v.stock}</span>
+                                ) : (
+                                  <Input type="number" min="0" value={v.stock}
+                                    onChange={(e) => updVariant(v._key, "stock", e.target.value)}
+                                    className="w-20 text-right" />
+                                )}
                               </td>
                               <td className="py-2 pr-3">
                                 <Input value={v.sku}

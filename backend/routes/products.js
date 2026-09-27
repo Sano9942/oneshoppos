@@ -1492,9 +1492,13 @@ module.exports = function registerProductRoutes(app, deps) {
         if (Array.isArray(variants) && variants.length > 0) {
           for (const v of variants) {
             // Only update existing variants for now (v.id)
+            // Never stock (OTS D25): the edit screen sends the count it loaded,
+            // so writing it back erased sales made meanwhile, and it only moved
+            // the rollup, not the per-outlet row. Stock moves through sales,
+            // receiving, adjustments and counts.
             if (v.id && !String(v.id).startsWith("temp-")) {
               await client.query(
-                `UPDATE product_variants SET sku = $1, barcode = $2, price = $3, cost_price = $4, compare_at_price = $5, weight = $6, weight_unit = $7, stock = $8 WHERE id = $9`,
+                `UPDATE product_variants SET sku = $1, barcode = $2, price = $3, cost_price = $4, compare_at_price = $5, weight = $6, weight_unit = $7 WHERE id = $8`,
                 [
                   v.sku,
                   v.barcode || null,
@@ -1503,7 +1507,6 @@ module.exports = function registerProductRoutes(app, deps) {
                   v.compare_at_price || v.price || price || 0,
                   v.weight || 0,
                   v.weight_unit || "kg",
-                  v.stock || 0,
                   v.id,
                 ]
               );

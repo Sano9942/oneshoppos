@@ -828,3 +828,66 @@ describe("Blocker 1 — Shopify online orders move shop stock", () => {
     expect(await stockOf(skuOnlyId)).toBe(before);
   });
 });
+
+// ─── D25 ────────────────────────────────────────────────────────────────────
+// Saving a product with variants wrote each variant's stock from the number the
+// edit screen had loaded (stock = v.stock || 0), so a sale made while the screen
+// was open vanished from the count, and only the product_variants rollup moved
+// (not the per-outlet row a sale checks). A product edit must never move stock:
+// stock moves through sales, receiving, adjustments and counts only.
+describe("D25 — editing a product with variants never touches stock", () => {
+  let productId, red, blue;
+  beforeAll(async () => {
+    await closeAnyOpenTill();
+    await openTill();
+    const res = await admin().post("/api/products").send({
+      name: "D25 Car", sku: "D25-CAR", price: 500, cost_price: 300, has_variants: true, outlet_id: 1,
+      variants: [
+        { sku: "D25-RED", barcode: "D25-RED-BC", price: 500, cost_price: 300, initial_stock: 6 },
+        { sku: "D25-BLUE", barcode: "D25-BLUE-BC", price: 500, cost_price: 300, initial_stock: 4 },
+      ],
+    });
+    expect(res.status).toBe(200);
+    productId = res.body.id;
+    [red, blue] = (await db.query("SELECT id, sku, barcode FROM product_variants WHERE product_id = $1 ORDER BY sku DESC", [productId])).rows;
+    expect(red.sku).toBe("D25-RED");
+  });
+
+  const counts = async (variantId) => ({
+    rollup: num((await one("SELECT stock FROM product_variants WHERE id = $1", [variantId])).stock),
+    outlet: num((await one("SELECT quantity FROM variant_outlet_stock WHERE variant_id = $1 AND outlet_id = 1", [variantId])).quantity),
+  });
+
+  it("a sale made while the edit screen was open survives the save", async () => {
+    // The edit screen loads: red 6, blue 4.
+    const loaded = (await admin().get(`/api/products/${productId}/variants`)).body.variants;
+    const loadedRed = loaded.find((v) => v.id === red.id);
+    expect(num(loadedRed.stock)).toBe(6);
+
+    // Meanwhile the counter sells one red.
+    const sale = await sell({ cartItems: [{ id: productId, variant_id: red.id, quantity: 1, price: 500 }], payments: [{ method: "Card", amount: 500 }] });
+    expect(sale.status).toBe(200);
+    expect(await counts(red.id)).toEqual({ rollup: 5, outlet: 5 });
+
+    // The owner changes red's price and saves, sending the stock the screen loaded.
+    const res = await admin().put(`/api/products/${productId}`).send({
+      variants: [
+        { id: red.id, sku: red.sku, barcode: red.barcode, price: 550, cost_price: 300, stock: 6 },
+        { id: blue.id, sku: blue.sku, barcode: blue.barcode, price: 500, cost_price: 300, stock: 4 },
+      ],
+    });
+    expect(res.status).toBe(200);
+
+    expect(await counts(red.id)).toEqual({ rollup: 5, outlet: 5 });
+    expect(await counts(blue.id)).toEqual({ rollup: 4, outlet: 4 });
+    expect(num((await one("SELECT price FROM product_variants WHERE id = $1", [red.id])).price)).toBe(550);
+  });
+
+  it("a variant row sent without stock keeps its stock (no reset to 0)", async () => {
+    const res = await admin().put(`/api/products/${productId}`).send({
+      variants: [{ id: blue.id, sku: blue.sku, barcode: blue.barcode, price: 520, cost_price: 300 }],
+    });
+    expect(res.status).toBe(200);
+    expect(await counts(blue.id)).toEqual({ rollup: 4, outlet: 4 });
+  });
+});
