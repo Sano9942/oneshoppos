@@ -10184,6 +10184,19 @@ const MIGRATIONS = [
           ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ
       `);
     },
+  },  {
+    version: 145,
+    description:
+      "One Toy Store pilot, D13: pay suppliers ON ACCOUNT. suppliers gains opening_balance (+ opening_balance_date) for the balance carried over from the paper registers; supplier_payments.supplier_invoice_id becomes nullable so a lump-sum payment can lower the supplier's balance without naming a bill (owner decision: balance only, no bill is marked paid). DDL shared with schema-pg.sql via services/supplier-balance.js. Tenant-only; guarded on both tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('suppliers', 'supplier_payments')`
+      );
+      if (rows[0].n < 2) return;
+      const { SUPPLIER_ACCOUNT_DDL } = require("./services/supplier-balance");
+      await client.query(SUPPLIER_ACCOUNT_DDL);
+    },
   },
 ];
 

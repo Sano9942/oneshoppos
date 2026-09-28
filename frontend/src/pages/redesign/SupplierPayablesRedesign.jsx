@@ -16,6 +16,18 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
+import PaySupplierModal from "./PaySupplierModal";
+
+// Supplier ledger line types (GET /api/supplier-ledger). D36: this page read
+// `amount` / `payment` / type "purchase", which the server never sends.
+const LEDGER_TYPES = {
+  opening: { label: "Opening balance", tone: "default" },
+  brought_forward: { label: "Brought forward", tone: "default" },
+  invoice: { label: "Bill", tone: "warning" },
+  grn: { label: "Goods received", tone: "default" },
+  payment: { label: "Payment", tone: "success" },
+  return: { label: "Return", tone: "success" },
+};
 
 const STATUS_TONE = {
   paid: "success",
@@ -54,6 +66,7 @@ export default function SupplierPayablesRedesign() {
   const [payBy, setPayBy] = useState("");
   const [payNotes, setPayNotes] = useState("");
   const [paying, setPaying] = useState(false);
+  const [payAccount, setPayAccount] = useState(null); // { id, name, balance } — D13 pay on account
 
   // Invoice payment expansion (for Void)
   const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
@@ -230,9 +243,9 @@ export default function SupplierPayablesRedesign() {
       right={
         <div className="flex gap-2">
           <Button onClick={() => {
-            if (tab === "aging") downloadCsv(["supplier","0_30","31_60","61_90","over_90","total"], aging.map(a => [a.supplier_name||"", a.days_0_30||0, a.days_31_60||0, a.days_61_90||0, a.over_90||0, a.total_outstanding||0]), "supplier_aging");
+            if (tab === "aging") downloadCsv(["supplier","invoices","invoiced","paid","outstanding"], aging.map(a => [a.supplier_name||"", a.invoice_count||0, a.total_invoiced||0, a.total_paid||0, a.total_due||0]), "supplier_aging");
             else if (tab === "invoices") downloadCsv(["invoice","supplier","date","reference","amount","paid","balance","status"], invoices.map(i => [i.invoice_number||i.id, i.supplier_name||"", i.invoice_date||"", i.reference_number||"", i.amount||0, i.amount_paid||0, calcDue(i), i.status||""]), "supplier_invoices");
-            else downloadCsv(["date","invoice","supplier","description","debit","credit","balance"], (ledger?.entries||[]).map(l => [l.date||"", l.invoice_number||"", l.supplier_name||"", l.description||"", l.debit||0, l.credit||0, l.balance||0]), "supplier_ledger");
+            else downloadCsv(["date","type","reference","notes","debit","credit","balance"], (ledger?.entries||[]).map(l => [l.date||"", LEDGER_TYPES[l.type]?.label || l.type || "", l.reference||"", l.notes||"", l.debit||0, l.credit||0, l.running_balance||0]), "supplier_ledger");
           }}><Download size={13} className="mr-1 inline" />Export CSV</Button>
           <Button onClick={refreshCurrent}>
             <RefreshCw size={13} className="mr-1 inline" />
@@ -322,6 +335,7 @@ export default function SupplierPayablesRedesign() {
                   <th className="px-3 py-2 text-left">Supplier</th>
                   <th className="px-3 py-2 text-left">Phone</th>
                   <th className="px-3 py-2 text-right">Invoices</th>
+                  <th className="px-3 py-2 text-right">Opening</th>
                   <th className="px-3 py-2 text-right">Invoiced</th>
                   <th className="px-3 py-2 text-right">Paid</th>
                   <th className="px-3 py-2 text-right">Outstanding</th>
@@ -338,18 +352,31 @@ export default function SupplierPayablesRedesign() {
                       <td className="px-3 py-2 font-medium text-(--ui-text)">{row.supplier_name}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{row.phone || "-"}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{row.invoice_count}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{money(row.opening_balance || 0)}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{money(row.total_invoiced)}</td>
                       <td className="px-3 py-2 text-right text-(--ui-success-fg)">{money(row.total_paid)}</td>
                       <td className="px-3 py-2 text-right font-semibold text-(--ui-danger-fg)">
                         {money(row.total_due)}
                       </td>
                       <td className="px-3 py-2 text-right text-(--ui-text-muted)">
-                        {expandedSupplierId === row.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        <div className="inline-flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            tone="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPayAccount({ id: row.id, name: row.supplier_name, balance: row.total_due });
+                            }}
+                          >
+                            Pay on account
+                          </Button>
+                          {expandedSupplierId === row.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </div>
                       </td>
                     </tr>
                     {expandedSupplierId === row.id ? (
                       <tr className="border-t border-(--ui-border) bg-(--ui-muted-surface)/70">
-                        <td colSpan={7} className="px-4 py-3">
+                        <td colSpan={8} className="px-4 py-3">
                           {(supplierInvoices[row.id] || []).length === 0 ? (
                             <p className="text-xs text-(--ui-text-muted)">No invoices found</p>
                           ) : (
@@ -532,8 +559,9 @@ export default function SupplierPayablesRedesign() {
           <SectionCard className="p-4">
             <div className="flex flex-wrap gap-3 items-end">
               <div>
-                <label className="text-xs text-(--ui-text-muted) block mb-1">Supplier</label>
+                <label htmlFor="ledger-supplier" className="text-xs text-(--ui-text-muted) block mb-1">Supplier</label>
                 <select
+                  id="ledger-supplier"
                   value={ledgerSupplierId}
                   onChange={(e) => setLedgerSupplierId(e.target.value)}
                   className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm bg-(--ui-surface) min-w-48"
@@ -594,17 +622,17 @@ export default function SupplierPayablesRedesign() {
                       <tr key={i} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                         <td className="px-3 py-2 text-(--ui-text-muted)">{row.date?.slice(0, 10) || "-"}</td>
                         <td className="px-3 py-2">
-                          <Badge tone={row.type === "purchase" ? "warning" : "success"}>
-                            {row.type === "purchase" ? "Purchase" : "Payment"}
+                          <Badge tone={LEDGER_TYPES[row.type]?.tone || "default"}>
+                            {LEDGER_TYPES[row.type]?.label || row.type}
                           </Badge>
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{row.reference || "-"}</td>
                         <td className="px-3 py-2 text-(--ui-text-muted)">{row.notes || "-"}</td>
                         <td className="px-3 py-2 text-right text-(--ui-danger-fg) font-medium">
-                          {row.amount > 0 ? money(row.amount) : "—"}
+                          {row.debit > 0 ? money(row.debit) : "—"}
                         </td>
                         <td className="px-3 py-2 text-right text-(--ui-success-fg) font-medium">
-                          {row.payment > 0 ? money(row.payment) : "—"}
+                          {row.credit > 0 ? money(row.credit) : "—"}
                         </td>
                         <td className={`px-3 py-2 text-right font-semibold ${row.running_balance > 0 ? "text-(--ui-danger-fg)" : "text-(--ui-success-fg)"}`}>
                           {money(row.running_balance)}
@@ -705,6 +733,18 @@ export default function SupplierPayablesRedesign() {
           </>
         ) : null}
       </Modal>
+      <PaySupplierModal
+        supplier={payAccount}
+        balance={payAccount?.balance}
+        fmt={money}
+        onClose={() => setPayAccount(null)}
+        onPaid={async () => {
+          setNotice("Payment recorded.");
+          setSupplierInvoices({});
+          await fetchAging();
+          if (tab === "ledger") await fetchLedger();
+        }}
+      />
       <Modal
         open={!!voidModal}
         onClose={voiding ? undefined : () => setVoidModal(null)}

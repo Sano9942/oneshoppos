@@ -1,3 +1,4 @@
+const { SUPPLIER_TOTALS_SQL } = require("../services/supplier-balance");
 const { validate } = require("../middleware/validate");
 const { CreatePOSchema } = require("../schemas/purchase-orders");
 const batchStock = require("../services/batch-stock");
@@ -83,20 +84,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
       }
 
       const { rows: [supplier] } = await db.query(
-        `SELECT s.payment_terms, s.credit_limit,
-                COALESCE(outstanding.balance, 0) AS running_balance
+        `SELECT s.payment_terms, s.credit_limit, t.balance AS running_balance
          FROM suppliers s
-         LEFT JOIN (
-           SELECT si.supplier_id,
-                  SUM(si.amount - COALESCE(sp.paid_amount, 0)) AS balance
-           FROM supplier_invoices si
-           LEFT JOIN (
-             SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-             FROM supplier_payments GROUP BY supplier_invoice_id
-           ) sp ON sp.supplier_invoice_id = si.id
-           WHERE si.status != 'paid'
-           GROUP BY si.supplier_id
-         ) outstanding ON outstanding.supplier_id = s.id
+         JOIN (${SUPPLIER_TOTALS_SQL}) t ON t.supplier_id = s.id
          WHERE s.id = $1`,
         [supplier_id]
       );

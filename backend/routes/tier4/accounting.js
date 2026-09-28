@@ -1,3 +1,4 @@
+const { SUPPLIER_TOTALS_SQL } = require("../../services/supplier-balance");
 const express = require("express");
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 const { returnsProfit } = require("../../services/returns-profit");
@@ -161,7 +162,7 @@ module.exports = function createAccountingRouter({
         // paid_at is TIMESTAMPTZ — filter with tenant-tz UTC bounds, not a
         // bare ::date cast (which evaluates in the DB session timezone).
         const { rows: [supplierRow] } = await db.query(
-          "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE paid_at >= $1 AND paid_at < $2",
+          "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE voided IS NOT TRUE AND paid_at >= $1 AND paid_at < $2",
           [toUtcStart(from, tz), toUtcEnd(to, tz)]
         );
 
@@ -265,13 +266,9 @@ module.exports = function createAccountingRouter({
     async (req, res) => {
       try {
         const { rows: [apRow] } = await db.query(
-          `SELECT COALESCE(SUM(si.amount - COALESCE(sp.paid_amount, 0)), 0) AS total_ap
-           FROM supplier_invoices si
-           LEFT JOIN (
-             SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-             FROM supplier_payments GROUP BY supplier_invoice_id
-           ) sp ON sp.supplier_invoice_id = si.id
-           WHERE si.status != 'paid'`
+          // What we owe suppliers: one definition (services/supplier-balance.js),
+          // so opening balances, payments on account, returns and voids count.
+          `SELECT COALESCE(SUM(t.balance), 0) AS total_ap FROM (${SUPPLIER_TOTALS_SQL}) t`
         );
 
         const { rows: [arRow] } = await db.query(
@@ -312,6 +309,7 @@ module.exports = function createAccountingRouter({
            LEFT JOIN (
              SELECT supplier_invoice_id, COALESCE(SUM(amount), 0) AS paid_amount
              FROM supplier_payments
+             WHERE voided IS NOT TRUE
              GROUP BY supplier_invoice_id
            ) sp ON sp.supplier_invoice_id = si.id
            WHERE ${where.join(" AND ")}
@@ -446,13 +444,9 @@ module.exports = function createAccountingRouter({
 
         // Liabilities: supplier AP outstanding
         const { rows: [apRow] } = await db.query(
-          `SELECT COALESCE(SUM(si.amount - COALESCE(sp.paid_amount, 0)), 0) AS supplier_ap
-           FROM supplier_invoices si
-           LEFT JOIN (
-             SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-             FROM supplier_payments GROUP BY supplier_invoice_id
-           ) sp ON sp.supplier_invoice_id = si.id
-           WHERE si.status != 'paid'`
+          // What we owe suppliers: one definition (services/supplier-balance.js),
+          // so opening balances, payments on account, returns and voids count.
+          `SELECT COALESCE(SUM(t.balance), 0) AS supplier_ap FROM (${SUPPLIER_TOTALS_SQL}) t`
         );
         const supplierAp = Number(apRow?.supplier_ap || 0);
 
@@ -537,7 +531,7 @@ module.exports = function createAccountingRouter({
            LEFT JOIN suppliers s ON s.id = si.supplier_id
            LEFT JOIN (
              SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-             FROM supplier_payments GROUP BY supplier_invoice_id
+             FROM supplier_payments WHERE voided IS NOT TRUE GROUP BY supplier_invoice_id
            ) sp ON sp.supplier_invoice_id = si.id
            WHERE si.status != 'paid'
              AND (si.amount - COALESCE(sp.paid_amount, 0)) > 0
@@ -622,8 +616,8 @@ module.exports = function createAccountingRouter({
                   si.invoice_number, s.name AS supplier_name
            FROM supplier_payments sp
            LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
-           LEFT JOIN suppliers s ON s.id = si.supplier_id
-           WHERE ${where.join(" AND ")}
+           LEFT JOIN suppliers s ON s.id = sp.supplier_id
+           WHERE sp.voided IS NOT TRUE AND ${where.join(" AND ")}
            ORDER BY sp.paid_at DESC, sp.id DESC`,
           params
         );
@@ -1366,9 +1360,11 @@ module.exports = function createAccountingRouter({
         } else if (cheque.type === "payable" && cheque.party_type === "supplier") {
           // We paid supplier — record payment
           await client.query(
-            `INSERT INTO supplier_payments (supplier_invoice_id, amount, payment_method, notes, paid_at)
-             VALUES (NULL, $1, 'cheque', $2, NOW())`,
-            [amt, `PDC cleared: ${cheque.cheque_number}`]
+            // D39: this insert named no supplier (supplier_id is NOT NULL), so
+            // clearing any supplier cheque failed. It is a payment on account (D13).
+            `INSERT INTO supplier_payments (supplier_invoice_id, supplier_id, amount, payment_method, reference, notes, paid_at)
+             VALUES (NULL, $1, $2, 'Cheque', $3, $4, NOW())`,
+            [cheque.party_id, amt, cheque.cheque_number || null, `PDC cleared: ${cheque.cheque_number}`]
           );
         }
 

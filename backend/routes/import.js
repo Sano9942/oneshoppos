@@ -950,7 +950,7 @@ module.exports = function mountImportRoutes(app, deps) {
 
             // Update invoice status based on total payments
             const { rows: totals } = await client.query(
-              "SELECT COALESCE(SUM(amount), 0) AS total_paid FROM supplier_payments WHERE supplier_invoice_id = $1",
+              "SELECT COALESCE(SUM(amount), 0) AS total_paid FROM supplier_payments WHERE supplier_invoice_id = $1 AND voided IS NOT TRUE",
               [p.supplier_invoice_id],
             );
             const totalPaid = Number(totals[0].total_paid);

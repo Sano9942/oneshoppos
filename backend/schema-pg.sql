@@ -6179,3 +6179,12 @@ CREATE TABLE IF NOT EXISTS outlet_business_modules (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (outlet_id, module_key)
 );
+
+-- One Toy Store pilot (D13, migration v145): suppliers carry an opening balance
+-- (from the paper registers at switchover), and a supplier payment may be made
+-- ON ACCOUNT (no bill). Same statements as services/supplier-balance.js
+-- SUPPLIER_ACCOUNT_DDL.
+ALTER TABLE suppliers
+  ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS opening_balance_date DATE;
+ALTER TABLE supplier_payments ALTER COLUMN supplier_invoice_id DROP NOT NULL;

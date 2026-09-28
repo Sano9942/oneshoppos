@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const { SUPPLIER_TOTALS_SQL } = require("../services/supplier-balance");
 
 module.exports = function registerGRNRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, requireFeature, createNotification } = deps;
@@ -363,7 +364,7 @@ module.exports = function registerGRNRoutes(app, deps) {
            si.amount - COALESCE(SUM(sp.amount), 0) as amount_due
     FROM supplier_invoices si
     JOIN suppliers s ON si.supplier_id = s.id
-    LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+    LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id AND sp.voided IS NOT TRUE
     ${whereSql}
     GROUP BY si.id, s.name
     ORDER BY si.created_at DESC`;
@@ -420,7 +421,7 @@ module.exports = function registerGRNRoutes(app, deps) {
         const { rows: [inv] } = await db.query(
           `SELECT si.*, COALESCE(SUM(sp.amount), 0) as amount_paid
      FROM supplier_invoices si
-     LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+     LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id AND sp.voided IS NOT TRUE
      WHERE si.id = $1
      GROUP BY si.id`,
           [id],
@@ -481,19 +482,18 @@ module.exports = function registerGRNRoutes(app, deps) {
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
+        // One definition of what we owe (services/supplier-balance.js): the old
+        // join counted a bill once per payment on it and ignored returns and
+        // voids (D38). Lists every supplier with a balance, including an
+        // opening balance only or an advance (negative).
         const { rows } = await db.query(
-          `SELECT s.id, s.name as supplier_name, s.phone,
-            COUNT(DISTINCT si.id) as invoice_count,
-            COALESCE(SUM(si.amount), 0) as total_invoiced,
-            COALESCE(SUM(sp.amount), 0) as total_paid,
-            COALESCE(SUM(si.amount), 0) - COALESCE(SUM(sp.amount), 0) as total_due
-     FROM suppliers s
-     LEFT JOIN supplier_invoices si ON si.supplier_id = s.id
-     LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
-     GROUP BY s.id, s.name, s.phone
-     HAVING COALESCE(SUM(si.amount), 0) > 0
-     ORDER BY COALESCE(SUM(si.amount), 0) - COALESCE(SUM(sp.amount), 0) DESC`,
-          [],
+          `SELECT s.id, s.name AS supplier_name, s.phone, s.payment_terms, s.credit_days,
+                  t.invoice_count, t.opening_balance, t.total_invoiced, t.total_paid,
+                  t.total_returned, t.balance AS total_due
+             FROM suppliers s
+             JOIN (${SUPPLIER_TOTALS_SQL}) t ON t.supplier_id = s.id
+            WHERE ABS(t.balance) >= 0.005
+            ORDER BY t.balance DESC, s.name`,
         );
         res.json({ aging: rows });
       } catch (err) {
@@ -519,20 +519,18 @@ module.exports = function registerGRNRoutes(app, deps) {
         if (!payment) return res.status(404).json({ error: "Payment not found" });
         if (payment.voided) return res.status(400).json({ error: "Payment is already voided" });
 
-        let newStatus;
+        let newStatus = null;
         await db.transaction(async (client) => {
           await client.query(
             "UPDATE supplier_payments SET voided = true, void_reason = $1 WHERE id = $2",
             [reason || null, id],
           );
+          // A payment on account (D13) has no bill to recalculate.
+          if (payment.supplier_invoice_id == null) return;
 
-          // Reverse the effect on the invoice: reduce amount_paid
-          await client.query(
-            "UPDATE supplier_invoices SET amount_paid = GREATEST(0, COALESCE(amount_paid, 0) - $1) WHERE id = $2",
-            [Number(payment.amount), payment.supplier_invoice_id],
-          );
-
-          // Recalculate invoice status based on new payment totals
+          // Recalculate the bill's status from its remaining payments. (D40: an
+          // UPDATE of supplier_invoices.amount_paid stood here, a column that
+          // doesn't exist, so voiding any bill payment failed and rolled back.)
           const { rows: [row] } = await client.query(
             `SELECT si.amount,
                     COALESCE(SUM(CASE WHEN sp.voided = false OR sp.voided IS NULL THEN sp.amount ELSE 0 END), 0) AS total_paid
@@ -581,109 +579,95 @@ module.exports = function registerGRNRoutes(app, deps) {
         const page = Math.max(0, parseInt(pageParam, 10) || 0);
         const PAGE_SIZE = 50;
 
-        // Each UNION branch uses $1 = supplier_id; date filters share $2/$3
-        const baseParams = [supplier_id];
-        let dateSql = "";
-        if (from) {
-          baseParams.push(toUtcStart(from, tz));
-          dateSql += ` AND __COL__ >= $${baseParams.length}`;
-        }
-        if (to) {
-          baseParams.push(toUtcEnd(to, tz));
-          dateSql += ` AND __COL__ <= $${baseParams.length}`;
-        }
+        // Every line the supplier has ever had, with a running balance over ALL
+        // of them; the date range only picks which lines to show. So a range
+        // starts from the balance brought forward and its closing balance is
+        // what is owed at its end (D37: it used to start at 0). The opening
+        // balance (D13) always comes first, whatever its date. Voided payments
+        // are left out, as everywhere else (services/supplier-balance.js).
+        const allSql = `
+          WITH lines AS (
+            SELECT 0 AS ord, 0 AS line_id, s.opening_balance_date::timestamptz AS date, 'opening' AS type,
+                   'Opening balance' AS reference, s.opening_balance AS debit, 0 AS credit, NULL::text AS notes
+              FROM suppliers s WHERE s.id = $1 AND COALESCE(s.opening_balance, 0) <> 0
+            UNION ALL
+            SELECT 1, si.id, si.created_at, 'invoice', COALESCE(si.invoice_number, 'INV-' || si.id),
+                   si.amount, 0, si.notes
+              FROM supplier_invoices si WHERE si.supplier_id = $1
+            UNION ALL
+            SELECT 1, g.id, g.received_at, 'grn', g.grn_number, 0, 0, g.notes
+              FROM goods_received_notes g JOIN purchase_orders po ON po.id = g.po_id
+             WHERE po.supplier_id = $1
+            UNION ALL
+            SELECT 1, sp.id, sp.paid_at, 'payment',
+                   COALESCE(sp.reference, si2.invoice_number, 'PAY-' || sp.id),
+                   0, sp.amount,
+                   CONCAT_WS(' · ', sp.payment_method,
+                             CASE WHEN sp.supplier_invoice_id IS NULL THEN 'on account'
+                                  ELSE 'bill ' || COALESCE(si2.invoice_number, 'INV-' || si2.id) END,
+                             sp.notes)
+              FROM supplier_payments sp
+              LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
+             WHERE sp.supplier_id = $1 AND sp.voided IS NOT TRUE
+            UNION ALL
+            SELECT 1, sr.id, sr.return_date, 'return', COALESCE(sr.reference_number, 'RET-' || sr.id),
+                   0, sr.total_value, sr.reason
+              FROM supplier_returns sr WHERE sr.supplier_id = $1
+          )
+          SELECT *, SUM(debit - credit) OVER (ORDER BY ord, date, type, line_id ROWS UNBOUNDED PRECEDING) AS running_balance
+            FROM lines`;
 
-        const invDate = dateSql.replace(/__COL__/g, "si.created_at");
-        const payDate = dateSql.replace(/__COL__/g, "sp.paid_at");
-        const grnDate = dateSql.replace(/__COL__/g, "g.received_at");
-        const retDate = dateSql.replace(/__COL__/g, "sr.return_date");
+        const params = [supplier_id];
+        const fromUtc = from ? toUtcStart(from, tz) : null;
+        const toUtc = to ? toUtcEnd(to, tz) : null;
+        params.push(fromUtc, toUtc);
+        // In range: the opening line only when no start date is chosen (with a
+        // start date it is part of the balance brought forward).
+        const inRange = `((ord = 0 AND $2::timestamptz IS NULL)
+                          OR (ord = 1 AND ($2::timestamptz IS NULL OR date >= $2::timestamptz)
+                                      AND ($3::timestamptz IS NULL OR date <= $3::timestamptz)))`;
 
-        const unionSql = `
-          -- Supplier invoices (debit — we owe them)
-          SELECT si.created_at AS date,
-                 'invoice' AS type,
-                 COALESCE(si.invoice_number, 'INV-' || si.id) AS reference,
-                 si.amount AS debit,
-                 0 AS credit,
-                 si.notes AS notes
-          FROM supplier_invoices si
-          WHERE si.supplier_id = $1${invDate}
-
-          UNION ALL
-
-          -- GRN receipts (informational — goods received)
-          SELECT g.received_at AS date,
-                 'grn' AS type,
-                 g.grn_number AS reference,
-                 0 AS debit,
-                 0 AS credit,
-                 g.notes AS notes
-          FROM goods_received_notes g
-          JOIN purchase_orders po ON po.id = g.po_id
-          WHERE po.supplier_id = $1${grnDate}
-
-          UNION ALL
-
-          -- Payments (credit — we paid them)
-          SELECT sp.paid_at AS date,
-                 'payment' AS type,
-                 COALESCE(si2.invoice_number, 'PAY-' || sp.id) AS reference,
-                 0 AS debit,
-                 sp.amount AS credit,
-                 COALESCE(sp.notes, sp.payment_method) AS notes
-          FROM supplier_payments sp
-          LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
-          WHERE sp.supplier_id = $1 AND (sp.voided IS NOT TRUE)${payDate}
-
-          UNION ALL
-
-          -- Supplier returns (credit — reduces what we owe)
-          SELECT sr.return_date AS date,
-                 'return' AS type,
-                 COALESCE(sr.reference_number, 'RET-' || sr.id) AS reference,
-                 0 AS debit,
-                 sr.total_value AS credit,
-                 sr.reason AS notes
-          FROM supplier_returns sr
-          WHERE sr.supplier_id = $1${retDate}`;
-
-        // Count total
-        const { rows: [countRow] } = await db.query(
-          `SELECT COUNT(*) AS total FROM (${unionSql}) AS combined`,
-          baseParams,
+        const { rows: [tot] } = await db.query(
+          `SELECT COUNT(*) FILTER (WHERE ${inRange})::int AS total,
+                  COALESCE(SUM(debit - credit) FILTER (WHERE $2::timestamptz IS NOT NULL
+                                                        AND (ord = 0 OR date < $2::timestamptz)), 0) AS brought_forward,
+                  COALESCE(SUM(debit - credit) FILTER (WHERE ord = 0 OR $3::timestamptz IS NULL OR date <= $3::timestamptz), 0) AS closing
+             FROM (${allSql}) a`,
+          params,
         );
-        const total_count = Number(countRow?.total || 0);
+        const total_count = tot.total;
         const total_pages = Math.ceil(total_count / PAGE_SIZE);
 
-        // Fetch with window-function running balance so pagination is correct
-        const limitIdx = baseParams.length + 1;
-        const offsetIdx = baseParams.length + 2;
         const { rows } = await db.query(
-          `SELECT *,
-                  SUM(debit - credit) OVER (ORDER BY date ASC, type ASC) AS running_balance
-           FROM (${unionSql}) AS combined
-           ORDER BY date DESC, type ASC
-           LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-          [...baseParams, PAGE_SIZE, page * PAGE_SIZE],
+          `SELECT date, type, reference, debit, credit, notes, running_balance
+             FROM (${allSql}) a
+            WHERE ${inRange}
+            ORDER BY ord DESC, date DESC, type DESC, line_id DESC
+            LIMIT $4 OFFSET $5`,
+          [...params, PAGE_SIZE, page * PAGE_SIZE],
         );
 
+        const money = (v) => Number(Number(v || 0).toFixed(2));
         const entries = (rows || []).map((r) => ({
           ...r,
-          debit: Number(r.debit || 0),
-          credit: Number(r.credit || 0),
-          running_balance: Number(Number(r.running_balance || 0).toFixed(2)),
+          debit: money(r.debit),
+          credit: money(r.credit),
+          running_balance: money(r.running_balance),
         }));
-
-        // Closing balance = total across all entries (not just this page)
-        const { rows: [balRow] } = await db.query(
-          `SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM (${unionSql}) AS combined`,
-          baseParams,
-        );
-        const closing_balance = Number(Number(balRow?.balance || 0).toFixed(2));
+        const brought_forward = from ? money(tot.brought_forward) : null;
+        // The brought-forward line sits at the bottom (oldest) of the last page.
+        if (from && page >= Math.max(0, total_pages - 1)) {
+          entries.push({
+            date: from, type: "brought_forward", reference: "Balance brought forward",
+            debit: 0, credit: 0, notes: null, running_balance: brought_forward,
+          });
+        }
+        const closing_balance = money(tot.closing);
 
         res.json({
           supplier,
           entries,
+          brought_forward,
           closing_balance,
           total_count,
           page,

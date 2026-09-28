@@ -1,3 +1,4 @@
+const { SUPPLIER_TOTALS_SQL } = require("../../services/supplier-balance");
 const { toUtcStart, toUtcEnd, isValidTz, tenantToday } = require("../../utils/tz");
 
 module.exports = function registerFinanceReports(app, deps, helpers) {
@@ -13,6 +14,26 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     let idx = 1;
     const text = sql.replace(/\?/g, () => `$${idx++}`);
     return { text, values: params };
+  }
+
+  // Suppliers with a balance, as of now: opening + bills − payments − returns
+  // (services/supplier-balance.js). Only the supplier and search filters apply.
+  function supplierBalanceQuery(query, limitSql) {
+    const where = ["ABS(t.balance) >= 0.005"];
+    const params = [];
+    if (query?.supplier_id) { where.push("s.id = ?"); params.push(Number(query.supplier_id)); }
+    if (query?.search) { where.push("s.name ILIKE ?"); params.push(`%${query.search}%`); }
+    return {
+      text: `
+        SELECT s.id, s.name AS supplier_name, s.phone, t.invoice_count, t.opening_balance,
+               t.total_invoiced, t.total_paid, t.total_returned, t.balance AS total_due
+          FROM suppliers s
+          JOIN (${SUPPLIER_TOTALS_SQL}) t ON t.supplier_id = s.id
+         WHERE ${where.join(" AND ")}
+         ORDER BY t.balance DESC, s.name ASC
+         ${limitSql}`,
+      params,
+    };
   }
 
   function applyRangeFilters(where, params, query, opts = {}, tz = "UTC") {
@@ -167,13 +188,13 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         columnType: "local",
       }, tz);
 
-      const supplierPaymentWhere = ["1 = 1"];
+      const supplierPaymentWhere = ["sp.voided IS NOT TRUE"];
       const supplierPaymentParams = [];
       applyRangeFilters(supplierPaymentWhere, supplierPaymentParams, req.query, {
         dateColumn: "sp.paid_at",
         timeColumn: "sp.paid_at",
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
-        supplierColumn: "si.supplier_id",
+        supplierColumn: "sp.supplier_id",
         searchSql:
           "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
         searchParams: [1, 1, 1],
@@ -249,8 +270,8 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `
           SELECT ROUND(COALESCE(SUM(sp.amount), 0), 2) AS supplier_payments
           FROM supplier_payments sp
-          JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
-          JOIN suppliers s ON s.id = si.supplier_id
+          LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
+          JOIN suppliers s ON s.id = sp.supplier_id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
           LEFT JOIN (
             SELECT po_id, MIN(outlet_id) AS outlet_id
@@ -300,36 +321,11 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       );
       const { rows: invoiceRows } = await db.query(invoiceQ.text, invoiceQ.values);
 
-      const supplierAgingQ = pgify(
-        `
-          SELECT
-            s.id,
-            s.name AS supplier_name,
-            COUNT(DISTINCT si.id) AS invoice_count,
-            ROUND(COALESCE(SUM(si.amount), 0), 2) AS total_invoiced,
-            ROUND(COALESCE(SUM(pay.paid_amount), 0), 2) AS total_paid,
-            ROUND(COALESCE(SUM(si.amount), 0) - COALESCE(SUM(pay.paid_amount), 0), 2) AS total_due
-          FROM suppliers s
-          LEFT JOIN supplier_invoices si ON si.supplier_id = s.id
-          LEFT JOIN (
-            SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-            FROM supplier_payments
-            GROUP BY supplier_invoice_id
-          ) pay ON pay.supplier_invoice_id = si.id
-          LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
-          LEFT JOIN (
-            SELECT po_id, MIN(outlet_id) AS outlet_id
-            FROM goods_received_notes
-            GROUP BY po_id
-          ) grn_po ON grn_po.po_id = si.po_id
-          WHERE ${invoiceWhere.join(" AND ")}
-          GROUP BY s.id, s.name
-          HAVING COALESCE(SUM(si.amount), 0) > 0
-          ORDER BY total_due DESC
-          LIMIT 8
-        `,
-        invoiceParams,
-      );
+      // What we owe each supplier: one definition (services/supplier-balance.js),
+      // so opening balances, payments on account, returns and voids all count.
+      // A balance is as of now, so only the supplier/search filters apply.
+      const balanceQ = supplierBalanceQuery(req.query, "LIMIT 8");
+      const supplierAgingQ = pgify(balanceQ.text, balanceQ.params);
       const { rows: supplierAging } = await db.query(supplierAgingQ.text, supplierAgingQ.values);
 
       const recentSupplierPaymentsQ = pgify(
@@ -344,8 +340,8 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             COALESCE(od.name, op.name, 'Unassigned') AS outlet_name
           FROM supplier_payments sp
-          JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
-          JOIN suppliers s ON s.id = si.supplier_id
+          LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
+          JOIN suppliers s ON s.id = sp.supplier_id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
           LEFT JOIN outlets od ON od.id = grn_direct.outlet_id
           LEFT JOIN (
@@ -483,6 +479,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           LEFT JOIN (
             SELECT supplier_invoice_id, SUM(amount) AS paid_amount
             FROM supplier_payments
+            WHERE voided IS NOT TRUE
             GROUP BY supplier_invoice_id
           ) pay ON pay.supplier_invoice_id = si.id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
@@ -534,7 +531,55 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         returnParams,
       );
       const { rows: supplierReturns } = await db.query(supplierReturnQ.text, supplierReturnQ.values);
-      const supplierAp = [...supplierInvoices, ...supplierReturns];
+      // D13: opening balances (from the paper registers) and payments made on
+      // account (no bill) change what we owe too, as in the supplier ledger
+      // (one definition: services/supplier-balance.js).
+      const openingWhere = ["COALESCE(s.opening_balance, 0) <> 0"];
+      const openingParams = [];
+      applyRangeFilters(openingWhere, openingParams, req.query, {
+        dateColumn: "s.opening_balance_date",
+        columnType: "local",
+        supplierColumn: "s.id",
+        searchSql: "(s.name ILIKE ?)",
+        searchParams: [1],
+      }, tz);
+      const openingQ = pgify(
+        `
+          SELECT s.id, 'Opening balance' AS invoice_number, s.opening_balance_date AS invoice_date,
+                 NULL::date AS due_date, ROUND(s.opening_balance, 2) AS amount, 0 AS paid_amount,
+                 ROUND(s.opening_balance, 2) AS outstanding, 'opening_balance' AS status,
+                 s.name AS supplier_name, 'Unassigned' AS outlet_name, 0 AS days_open
+            FROM suppliers s
+           WHERE ${openingWhere.join(" AND ")}
+        `,
+        openingParams,
+      );
+      const { rows: supplierOpenings } = await db.query(openingQ.text, openingQ.values);
+
+      const onAccountWhere = ["sp.supplier_invoice_id IS NULL", "sp.voided IS NOT TRUE"];
+      const onAccountParams = [];
+      applyRangeFilters(onAccountWhere, onAccountParams, req.query, {
+        dateColumn: "sp.paid_at",
+        supplierColumn: "sp.supplier_id",
+        searchSql: "(s.name ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
+        searchParams: [1, 1],
+      }, tz);
+      const onAccountQ = pgify(
+        `
+          SELECT sp.id, COALESCE(sp.reference, 'PAY-' || LPAD(sp.id::text, 4, '0')) AS invoice_number,
+                 sp.paid_at AS invoice_date, NULL::date AS due_date,
+                 ROUND(-sp.amount, 2) AS amount, 0 AS paid_amount, ROUND(-sp.amount, 2) AS outstanding,
+                 'payment_on_account' AS status, s.name AS supplier_name, 'Unassigned' AS outlet_name, 0 AS days_open
+            FROM supplier_payments sp
+            JOIN suppliers s ON s.id = sp.supplier_id
+           WHERE ${onAccountWhere.join(" AND ")}
+           ORDER BY sp.id DESC
+        `,
+        onAccountParams,
+      );
+      const { rows: supplierOnAccount } = await db.query(onAccountQ.text, onAccountQ.values);
+
+      const supplierAp = [...supplierOpenings, ...supplierInvoices, ...supplierReturns, ...supplierOnAccount];
 
       const customerArQ = pgify(
         `
@@ -687,13 +732,13 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         // created_at is TIMESTAMPTZ — UTC-bounds path (see paid_at note).
       }, tz);
 
-      const paymentWhere = ["1 = 1"];
+      const paymentWhere = ["sp.voided IS NOT TRUE"];
       const paymentParams = [];
       applyRangeFilters(paymentWhere, paymentParams, req.query, {
         dateColumn: "sp.paid_at",
         timeColumn: "sp.paid_at",
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
-        supplierColumn: "si.supplier_id",
+        supplierColumn: "sp.supplier_id",
         searchSql:
           "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
         searchParams: [1, 1, 1],
@@ -706,36 +751,9 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         invoiceParams.push(req.query.status);
       }
 
-      const agingQ = pgify(
-        `
-          SELECT
-            s.id,
-            s.name AS supplier_name,
-            s.phone,
-            COUNT(DISTINCT si.id) AS invoice_count,
-            ROUND(COALESCE(SUM(si.amount), 0), 2) AS total_invoiced,
-            ROUND(COALESCE(SUM(pay.paid_amount), 0), 2) AS total_paid,
-            ROUND(COALESCE(SUM(si.amount), 0) - COALESCE(SUM(pay.paid_amount), 0), 2) AS total_due
-          FROM suppliers s
-          LEFT JOIN supplier_invoices si ON si.supplier_id = s.id
-          LEFT JOIN (
-            SELECT supplier_invoice_id, SUM(amount) AS paid_amount
-            FROM supplier_payments
-            GROUP BY supplier_invoice_id
-          ) pay ON pay.supplier_invoice_id = si.id
-          LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
-          LEFT JOIN (
-            SELECT po_id, MIN(outlet_id) AS outlet_id
-            FROM goods_received_notes
-            GROUP BY po_id
-          ) grn_po ON grn_po.po_id = si.po_id
-          WHERE ${invoiceWhere.join(" AND ")}
-          GROUP BY s.id, s.name, s.phone
-          HAVING COALESCE(SUM(si.amount), 0) > 0
-          ORDER BY total_due DESC, supplier_name ASC
-        `,
-        invoiceParams,
-      );
+      // Per supplier: one definition of what we owe (services/supplier-balance.js).
+      const balanceQ = supplierBalanceQuery(req.query, "");
+      const agingQ = pgify(balanceQ.text, balanceQ.params);
       const { rows: aging } = await db.query(agingQ.text, agingQ.values);
 
       const invoicesQ = pgify(
@@ -762,6 +780,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
               COUNT(*) AS payment_count,
               MAX(paid_at) AS last_payment_at
             FROM supplier_payments
+            WHERE voided IS NOT TRUE
             GROUP BY supplier_invoice_id
           ) pay ON pay.supplier_invoice_id = si.id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
@@ -793,7 +812,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             COALESCE(od.name, op.name, 'Unassigned') AS outlet_name
           FROM supplier_payments sp
-          JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
+          LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
           JOIN suppliers s ON s.id = sp.supplier_id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
           LEFT JOIN outlets od ON od.id = grn_direct.outlet_id
@@ -841,13 +860,13 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "s.outlet_id",
       }, tz);
 
-      const supplierPaymentWhere = ["1 = 1"];
+      const supplierPaymentWhere = ["sp.voided IS NOT TRUE"];
       const supplierPaymentParams = [];
       applyRangeFilters(supplierPaymentWhere, supplierPaymentParams, req.query, {
         dateColumn: "sp.paid_at",
         timeColumn: "sp.paid_at",
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
-        supplierColumn: "si.supplier_id",
+        supplierColumn: "sp.supplier_id",
       }, tz);
 
       const saleMixQ = pgify(
@@ -893,7 +912,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             ROUND(COALESCE(SUM(sp.amount), 0), 2) AS total,
             COUNT(*) AS payment_count
           FROM supplier_payments sp
-          JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
+          LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
           LEFT JOIN goods_received_notes grn_direct ON grn_direct.id = si.grn_id
           LEFT JOIN (
             SELECT po_id, MIN(outlet_id) AS outlet_id

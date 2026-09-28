@@ -15,14 +15,19 @@ import {
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
 import { fmtUtcDateTime } from "../../utils/dates";
+import PaySupplierModal from "./PaySupplierModal";
 
 const TYPE_LABELS = {
-  invoice: "Invoice",
+  opening: "Opening balance",
+  brought_forward: "Brought forward",
+  invoice: "Bill",
   grn: "GRN Receipt",
   payment: "Payment",
   return: "Return",
 };
 const TYPE_TONES = {
+  opening: "default",
+  brought_forward: "default",
   invoice: "danger",
   grn: "default",
   payment: "success",
@@ -39,6 +44,7 @@ function SupplierLedger({ supplier, fmt, onBack }) {
   const [totalCount, setTotalCount] = useState(0);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [paying, setPaying] = useState(null);
 
   const load = async (p = 0) => {
     setLoading(true);
@@ -80,6 +86,7 @@ function SupplierLedger({ supplier, fmt, onBack }) {
           )}>
             <Download size={14} className="mr-1 inline" />Export CSV
           </Button>
+          <Button tone="primary" onClick={() => setPaying(supplier)}>Pay supplier</Button>
           <Button onClick={onBack}>
             <ArrowLeft size={14} className="mr-1 inline" />Back
           </Button>
@@ -184,6 +191,13 @@ function SupplierLedger({ supplier, fmt, onBack }) {
           </div>
         )}
       </SectionCard>
+      <PaySupplierModal
+        supplier={paying}
+        balance={from || to ? null : closingBalance}
+        fmt={fmt}
+        onClose={() => setPaying(null)}
+        onPaid={() => load(0)}
+      />
     </PageShell>
   );
 }
@@ -203,6 +217,8 @@ const EMPTY = {
   // 2-G.8 Inventory Intelligence — supplier-level default; product override
   // wins; empty string means "inherit the tenant default".
   default_lead_time_days: "",
+  // D13: what was owed to this supplier on switchover day (from the registers).
+  opening_balance: "",
 };
 
 export default function SuppliersRedesign() {
@@ -215,6 +231,7 @@ export default function SuppliersRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [ledgerSupplier, setLedgerSupplier] = useState(null);
+  const [paySupplier, setPaySupplier] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -260,6 +277,7 @@ export default function SuppliersRedesign() {
       credit_days: row.credit_days || 0,
       credit_limit: row.credit_limit || 0,
       default_lead_time_days: row.default_lead_time_days ?? "",
+      opening_balance: row.opening_balance != null && Number(row.opening_balance) !== 0 ? String(Number(row.opening_balance)) : "",
     });
     setModalOpen(true);
   };
@@ -283,6 +301,7 @@ export default function SuppliersRedesign() {
           form.default_lead_time_days !== "" && form.default_lead_time_days != null
             ? Number(form.default_lead_time_days)
             : null,
+        opening_balance: form.opening_balance === "" ? 0 : Number(form.opening_balance),
       };
       if (isEdit) {
         await api.put(`/api/suppliers/${form.id}`, payload);
@@ -320,7 +339,7 @@ export default function SuppliersRedesign() {
       subtitle="Manage supplier accounts, credit terms, and outstanding balances."
       right={
         <div className="flex items-center gap-2">
-          <Button onClick={() => downloadCsv(["id","name","contact_person","phone","email","credit_days","outstanding"], visibleRows.map(r => [r.id, r.name||"", r.contact_person||"", r.phone||"", r.email||"", r.credit_days||0, r.outstanding_balance||0]), "suppliers")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button onClick={() => downloadCsv(["id","name","contact_person","phone","email","credit_days","outstanding"], visibleRows.map(r => [r.id, r.name||"", r.contact_person||"", r.phone||"", r.email||"", r.credit_days||0, r.running_balance||0]), "suppliers")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
           <Button tone="primary" onClick={openCreate}>
             <Plus size={14} className="mr-1 inline" />
             Add Supplier
@@ -422,6 +441,8 @@ export default function SuppliersRedesign() {
                             <p className="text-xs text-(--ui-danger-fg)">Over limit</p>
                           )}
                         </div>
+                      ) : balance < 0 ? (
+                        <span className="text-xs text-(--ui-success-fg)">{fmt(-balance)} advance</span>
                       ) : (
                         <span className="text-xs text-(--ui-text-muted)">Clear</span>
                       )}
@@ -429,6 +450,7 @@ export default function SuppliersRedesign() {
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" tone="primary" onClick={() => setLedgerSupplier(row)}>Ledger</Button>
+                        <Button size="sm" onClick={() => setPaySupplier(row)}>Pay</Button>
                         <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
                         <Button size="sm" tone="danger" onClick={() => remove(row)}>
                           <Trash2 size={12} className="mr-1 inline" />Delete
@@ -561,6 +583,24 @@ export default function SuppliersRedesign() {
                 )}
               </div>
 
+              {/* D13: balance carried over from the paper registers */}
+              <div className="rounded-lg border border-(--ui-border) p-3">
+                <label htmlFor="supplier-opening" className="mb-1 block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                  Opening balance (owed on switchover day)
+                </label>
+                <Input
+                  id="supplier-opening"
+                  type="number"
+                  step="0.01"
+                  placeholder="0"
+                  value={form.opening_balance}
+                  onChange={(e) => setForm((p) => ({ ...p, opening_balance: e.target.value }))}
+                />
+                <p className="mt-1 text-xs text-(--ui-text-muted)">
+                  What you owed this supplier when you started using SanoPOS. Leave blank for none.
+                </p>
+              </div>
+
               {/* 2-G.8 Inventory Intelligence — supplier-level lead time default */}
               <div className="rounded-lg border border-(--ui-border) p-3">
                 <label className="mb-1 block text-xs font-semibold uppercase text-(--ui-text-muted)">
@@ -588,6 +628,13 @@ export default function SuppliersRedesign() {
               </ModalFooter>
         </form>
       </Modal>
+      <PaySupplierModal
+        supplier={paySupplier}
+        balance={paySupplier ? Number(paySupplier.running_balance || 0) : null}
+        fmt={fmt}
+        onClose={() => setPaySupplier(null)}
+        onPaid={load}
+      />
     </PageShell>
   );
 }

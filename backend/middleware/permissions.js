@@ -240,6 +240,11 @@ const PERMISSION_RULES = [
     path: /^\/api\/supplier-invoices\/\d+\/pay$/,
     anyPerms: ["manage_orders"],
   },
+  {
+    methods: ["POST"],
+    path: /^\/api\/suppliers\/\d+\/payments$/,
+    anyPerms: ["manage_orders"],
+  },
   { methods: ["POST"], path: /^\/api\/returns$/, anyPerms: ["manage_orders"] },
 
   // Approval workflow

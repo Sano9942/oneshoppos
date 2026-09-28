@@ -320,7 +320,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
             si.due_date,
             COALESCE(SUM(sp.amount), 0) AS amount_paid
           FROM supplier_invoices si
-          LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+          LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id AND sp.voided IS NOT TRUE
           GROUP BY si.id, si.po_id, si.amount, si.status, si.due_date
         )
         SELECT
