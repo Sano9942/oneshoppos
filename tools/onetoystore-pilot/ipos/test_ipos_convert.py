@@ -245,3 +245,19 @@ def test_products_carry_the_brand():
     out = {p["sku"]: p for p in ic.build_products(items)}
     assert out["027084120134"]["brand"] == "Hot Wheels"
     assert out["0107"]["brand"] == ""
+
+
+@pytest.mark.parametrize("name,leaf", [
+    ("KITCHE SET-GT-88-2C", "Kitchen Sets & Food Play"),
+    ("FARM HORSE 2PACK -1258", "Animals & Play Sets"),
+    ("MAGIC WATER PAINTING FARM-WX-HS", "Colouring, Painting & DIY"),
+])
+def test_word_boundaries_hold(name, leaf):
+    assert ic.categorise(name)[1] == leaf
+
+
+def test_no_control_characters_in_patterns():
+    # a "\b" typed into a non-raw string once became a backspace and silently
+    # switched word-boundary checks off
+    src = open(ic.__file__, "rb").read()
+    assert b"\x08" not in src

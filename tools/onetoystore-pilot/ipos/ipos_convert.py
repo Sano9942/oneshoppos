@@ -103,7 +103,7 @@ RULES = [
     ("Vehicles", "Track Sets & Trains", r"TRACK|TRAIN\b|TRAINS\b|RAILWAY|\bRAIL\b"),
     ("Building Blocks", "Blocks & LEGO", r"BLOCK|BOLCK|LEPIN|LEGO|\bLPN\b|BRICK|BUILDING|CONSTRUCTION|MEGA BLOKS"),
     ("Action Figures & Hero Play", "Action Figures & Robots", r"FIGURE|\bFIG\b|AVENGERS|SPIDER ?MAN|SPIDERNAN|BEY ?BLADE|ROBLOX|JOKER|BATMAN|SUPERMAN|IRON ?MAN|HULK|TRANSFORMER|ROBOT|DINOSAUR|\bDINO\b|WRESTLING|POKEMON|MINECRAFT|NINJA|CAPTAIN|DRAGON BALL|MARVEL|JURASSIC|GODZILLA|HERO"),
-    ("Action Figures & Hero Play", "Animals & Play Sets", r"ANIMAL|\bZOO\b|\bFARM\b|PLAY ?SET|CITY RESCUE|SPACE (TRAVEL|EXPLORATION)|FERRIS WHEEL|SUBMARINE"),
+    ("Action Figures & Hero Play", "Animals & Play Sets", r"^(?!.*PAINT.*FARM).*(?:ANIMAL|\bZOO\b|\bFARM\b|PLAY ?SET|CITY RESCUE|SPACE (TRAVEL|EXPLORATION)|FERRIS WHEEL|SUBMARINE)"),
     ("Dolls & Pretend Play", "Kitchen Sets & Food Play", r"KITCHEN|KITCHE\b|STOVE|TABLEWARE|COOK|ICE ?CREAM|FAST FOOD|\bFOOD\b|TEA SET|DINNER SET|FRUIT CUT|\bBBQ\b|COFFEE|CUTTING"),
     ("Dolls & Pretend Play", "Make Up Sets & Jewellery", r"BEAUTY|MAKE ?UP|NAIL|JEWEL|\bHAIR|ORNAMENT|BANGLE|BRACELET|NECKLACE|DRESSING|COSMETIC|LIPSTICK|LIP GLOSS"),
     ("Dolls & Pretend Play", "Doctor, Tools & Role Play", r"DOCTOR|\bTOOLS?\b|POLICE SET|SHOPPING|CASH REGISTER|CASHIER|SUPER ?MARKET|FIREMAN|ENGINEER|CLEANING|IRON SET|WASHING|WALKIE|WALKI TALKI"),
@@ -263,6 +263,30 @@ def main(src, out_dir):
             w.writerow({**p, "supplier": p["supplier"] or ""})
     below = [p for p in products if p["_below_zero"]]
     uncategorised = [p for p in products if p["category"] == FALLBACK[1]]
+    # What the dry run sets up first and then checks against.
+    with open(os.path.join(out_dir, "ipos-category-tree.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["group", "category"])
+        w.writerows(CATEGORY_TREE_LEAVES)
+    with open(os.path.join(out_dir, "ipos-below-zero.csv"), "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["code", "name", "ipos_qty", "imported_qty", "supplier"])
+        for p in sorted(below, key=lambda p: p["_ipos_qty"]):
+            w.writerow([p["sku"], p["name"], p["_ipos_qty"], 0, p["supplier"] or ""])
+    import json
+    with open(os.path.join(out_dir, "ipos-summary.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "items": len(products),
+            "ipos_totals": totals,
+            "import_units": sum(p["stock_quantity"] for p in products),
+            "import_cost_value": round(sum(p["stock_quantity"] * p["cost_price"] for p in products), 2),
+            "import_sale_value": round(sum(p["stock_quantity"] * p["selling_price"] for p in products), 2),
+            "below_zero_items": len(below),
+            "below_zero_units": -sum(p["_ipos_qty"] for p in below),
+            "needs_a_category": len(uncategorised),
+            "suppliers": sorted({p["supplier"] for p in products if p["supplier"]}),
+            "brands": sorted({p["brand"] for p in products if p["brand"]}),
+        }, f, indent=1)
     print(f"{len(products)} items; totals match iPOS ({totals['qty']:,.0f} units, "
           f"cost {totals['cost']:,.0f}, sale {totals['sale']:,.0f})")
     print(f"below zero -> 0: {len(below)} items, {-sum(p['_ipos_qty'] for p in below):,} units")

@@ -14,6 +14,14 @@
       "runtimeArgs": ["index.js"],
       "cwd": "backend",
       "port": 5000
+    },
+    {
+      "name": "backend-5001",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["index.js"],
+      "cwd": "backend",
+      "env": { "PORT": "5001" },
+      "port": 5001
     }
   ]
 }

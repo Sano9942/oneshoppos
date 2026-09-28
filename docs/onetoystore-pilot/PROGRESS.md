@@ -8,7 +8,7 @@
 
 ## ▶ Where we are / next (updated 2026-09-28)
 
-**Phase D started 2026-09-28** — see "Phase D" below. Waiting on the owner to check `ipos-categories-to-check.xlsx`; then brands, import fixes (supplier by name, category tree), dry run.
+**Phase D started 2026-09-28** — see "Phase D" below. Category sheet approved, brands set, D35 fixed, **dry run passed 18/0** into `otsipos_mul06eh1`. Phase D code is done; what's left is the go-live import (needs the owner's go-ahead and a fresh export on the day).
 
 **Phase B order** (agreed with owner 2026-09-26):
 1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
@@ -57,7 +57,7 @@
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
 | **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | ✅ done 2026-09-27: steps 1–7 (all 3 blockers, labels + price sheet, History tab) |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ▶ started 2026-09-27: store created; C1 + D29 built; waiting on owner for the app (C-0) |
-| **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ▶ started 2026-09-28: source file in, decisions made, converter built (see "Phase D"); owner checking categories |
+| **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ✅ dry run passed 2026-09-28 (see "Phase D"); the real import waits for go-live |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
 | **F** | 2-week parallel run with a nightly comparison, then switch on owner's go-ahead | ⏳ |
 
@@ -389,7 +389,28 @@ Run on the real file (2026-09-28): 10,044 items, totals match iPOS; 220 below ze
 
 `POST /api/import/products` only read `supplier_id`; a file naming the supplier imported every item with **no supplier and no error**. **Fixed:** a `supplier` column is matched to a supplier by name (ignoring case and repeated spaces); an unknown name is a row error in the preview; `supplier_id` still works. **Test:** `backend/tests/integration/ots-ipos-import.test.js` (2 of 5 failed on the old code); with the other 3 import test files, 54 pass.
 
-**Next in Phase D:** (1) ✅ owner checked the category sheet 2026-09-28: no changes; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) dry run into a throwaway local tenant and a what-came-in / what-was-skipped report.
+### Phase D dry run (2026-09-28): ✅ 18 pass, 0 fail
+
+`tools/onetoystore-pilot/ipos/dry-run.mjs <converter output dir>` (local only; refuses a non-localhost DB or API). Makes a throwaway shop (Packages Mall + Store Room, Owner / 4321), removes the setup samples, creates the 14 groups + 31 categories, 22 brands, 22 suppliers, previews and imports the converter CSV into Packages Mall with "already have labels" ticked, then reads every item back from the DB and the till scan. Last run: tenant **`otsipos_mul06eh1`**, backend on port 5001 (launch config `backend-5001`; port 5000 belonged to another session with older code).
+
+| Check | Result |
+|---|---|
+| Preview | 10,044 valid, 0 errors, no SKU made up (0.8 s) |
+| Import | 10,044 imported, 0 errors (**15 s**) |
+| Every item vs the converter: name, price, cost, category + group, brand, supplier, Packages Mall stock, Store Room 0 | ✅ all 10,044 identical |
+| Units / cost value / sale value in Packages Mall | ✅ 22,168 / Rs 13,551,132.24 / Rs 32,991,600 (iPOS net 21,428 + the 740 below-zero units now at 0) |
+| Below-zero items at 0 | ✅ 220 |
+| Labels to reprint | ✅ none open; all 10,044 marked "already labelled" |
+| Categories | ✅ exactly the approved tree (45) |
+| History tab | 4,512 opening lines, 22,168 units |
+| Till scan by iPOS code | ✅ `0107`, `001`, `027084120134` (Hot Wheels, 251), `6939143104280.`, `X000UO7NQD`, `2011009434138` (a 2-prefix 13-digit code; not taken for a scale label) |
+| On screen (Owner) | ✅ Products list "10044 items"; search `0107` → MASK AVENGERS, Rs 1,150 / 395, 12, Action Figures & Robots; its page shows supplier HAFIZ NAWAZ, no brand; `027084120134` → 251 in Die-cast & Hot Wheels; Categories page 14 top level / 31 leaf |
+
+**Found on the way:** (a) every new shop gets **5 "(Sample)" products with 100 units each** plus 3 sample categories from setup (`seeds/preset-seed-data.js`, no opt-out). The app's delete only hides a product and keeps its stock, and a category with hidden products can't be deleted, so the dry run removes them outright while the shop has no sales. **Go-live step:** do the same on the real shop before its import (ask the owner first: production). (b) The category rules had 5 word-boundary checks switched off by a typing slip (a `` became a backspace); fixed, with a test that the file has no control characters. Versus the sheet the owner approved, exactly **2 items** moved, both out of "Needs a Category": KITCHE SET-GT-88-2C → Kitchen Sets, FARM HORSE 2PACK → Animals & Play Sets. "Needs a Category" is now 693.
+
+**Go-live order (real shop, needs the owner's go-ahead):** fresh iPOS export on the day → converter (must match iPOS totals) → owner glance at the check sheet → new One Toy Store shop → remove samples → tree, brands, suppliers → import with "already have labels" → the dry-run checks → staff count the 220 below-zero items and move Store Room stock.
+
+**Next in Phase D:** (1) ✅ owner checked the category sheet 2026-09-28: no changes; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) ✅ dry run (above).
 
 ## Retail core scorecard
 
