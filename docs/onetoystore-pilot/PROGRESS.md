@@ -6,7 +6,9 @@
 
 **Branch:** `onetoystore-pilot`
 
-## ▶ Where we are / next (updated 2026-09-27)
+## ▶ Where we are / next (updated 2026-09-28)
+
+**Phase D started 2026-09-28** — see "Phase D" below. Waiting on the owner to check `ipos-categories-to-check.xlsx`; then brands, import fixes (supplier by name, category tree), dry run.
 
 **Phase B order** (agreed with owner 2026-09-26):
 1. ✅ Stock count: unscanned left alone + "full count" tick box (D6) — `45b63ffb`
@@ -55,7 +57,7 @@
 | **A** | Prove the retail core works: (1) test-suite baseline, (2) shop-day acceptance script that checks the numbers at every step, (3) scorecard | ✅ done 2026-09-26 (post-fix full integration run: 0 new failures) |
 | **B** | Owner-decision fixes + the 3 blockers + owner requests (order below) | ✅ done 2026-09-27: steps 1–7 (all 3 blockers, labels + price sheet, History tab) |
 | **C** | Shopify sync on a TEST development store: repeatable checklist | ▶ started 2026-09-27: store created; C1 + D29 built; waiting on owner for the app (C-0) |
-| **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ⏳ needs the full iPOS item file export |
+| **D** | iPOS item file → SanoPOS CSV converter, dry run into a test tenant | ▶ started 2026-09-28: source file in, decisions made, converter built (see "Phase D"); owner checking categories |
 | **E** | In-shop checklist: printer, scanner, label printer, speed, offline, cash closing, real delivery | ⏳ |
 | **F** | 2-week parallel run with a nightly comparison, then switch on owner's go-ahead | ⏳ |
 
@@ -358,6 +360,31 @@ Found by C-5. `shopify/order-service.js` resolveWebOrderOutletId needed `shopify
 | C-7 | Daily drift check catches a difference made on Shopify | ✅ 2026-09-28: owner changed Barbie on the test store 9 → 7; Reconciliation → Check now: "Checked 7 item(s): 6 the same, 1 different", row Barbie / Packages Mall / SanoPOS 9 / Shopify 7 / DIFFERENT (+2). Neither count changed (DB 9, Shopify 7). Check now runs the same `shopify/stock-check.js` compareCounts + saveCheck as the daily worker |
 | C-8 | A token past 24 hours is renewed on the real store (force expiry in the DB, then Verify) | ✅ 2026-09-28: `phase-c-seed-shopify.cjs otsacc_mujsufsd --renew` marked the token expired → **PASS**, renewed against the real Shopify, valid until 2026-09-29 07:55 UTC, no error; the counts on Shopify were untouched |
 
+## Phase D: iPOS item file → SanoPOS (started 2026-09-28)
+
+**Source file (owner, 2026-09-28):** `C:\Users\HP\Downloads\pspsupplier.xls` = iPOS **"Present Stock Position by Supplier"**, printed 2026-09-25, 221 pages. Per item: code, description, on hand, unit cost, unit sale price; grouped under a supplier heading (supplier code + name).
+
+| Check | Result |
+|---|---|
+| Items | **10,044**, under **29 suppliers** (biggest: TOYS AND TOYS LAHORE 3,421; "AUDIT REPORT MARCH 2025" 2,093 — not a real supplier; BABY LAND LAHORE 1,174) |
+| Ties out to iPOS's own grand totals | ✅ exactly: net **21,428** units, cost **Rs 13,267,140**, sale **Rs 32,318,450** |
+| Duplicate codes | **0** |
+| Stock | 4,512 in stock, 5,312 at zero, **220 below zero**; all whole numbers |
+| Prices | 1 item with cost 0, none with sale 0 |
+| Codes | lengths 2–14 digits; 3,113 look like real barcodes (12–13 digits); **7 odd codes** (`X000UO7NQD`, trailing `.`/`_`/`I`) |
+| vs the older `psps1.xls` (21 Sep) | all 9,873 present; 171 new items; 220 quantities changed |
+| Hot Wheels | one line `027084120134 MATTLE HW DINKEY-C4982-TT`, **251 units**; the individual cars are not in iPOS. Shopify (saved `shopify-variants.json`, LIVE store export, read-only) has ~594 variant rows mentioning Hot Wheels, many sharing SKU `027084120134` |
+
+**What the current import can't do** (checked in `backend/routes/import.js:289-475`): stock goes to the one outlet in context only; no variants; category/brand must already exist (else the row errors); negative stock is silently dropped (`> 0` check); no supplier by name (`supplier_id` only).
+
+**Not in the file:** location split (see decisions: iPOS has one count), category, brand.
+
+**Converter:** `tools/onetoystore-pilot/ipos/ipos_convert.py` (Python: `xlrd` reads the .xls, `openpyxl` writes the check sheet; the repo dropped the JS `xlsx` package). Tests: `python -m pytest tools/onetoystore-pilot/ipos -q` → **39 pass** (failed first: module missing). It reads the report (supplier headings repeat per page; codes kept as text), **refuses to continue unless the items add up to iPOS's own grand totals**, applies the supplier decisions, puts the iPOS code in SKU exactly as it is (the till scan matches barcode OR sku, `routes/products.js:498`), rounds cost to 2 decimals (`products.cost_price` is `NUMERIC(12,2)`), imports below-zero at 0 and flags it, and sorts every item into a category by keywords in its name.
+
+Run on the real file (2026-09-28): 10,044 items, totals match iPOS; 220 below zero → 0 (**740 units**); 22 suppliers; **695 items (7%) "Needs a Category"**; 31 categories (the approved tree + "Animals & Play Sets" under Action Figures & Hero Play, added for ~160 animal sets). Outputs (kept out of git, business data): `ipos-categories-to-check.xlsx` (every item, its group/category, a blank "Change category to" column; a second sheet with the tree and counts) and `ipos-products.csv`.
+
+**Next in Phase D:** (1) owner checks the category sheet; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) dry run into a throwaway local tenant and a what-came-in / what-was-skipped report.
+
 ## Retail core scorecard
 
 **How it's measured:** `tools/onetoystore-pilot/shop-day.mjs` creates a brand-new throwaway shop in the **local** database and plays a full day through the **real** server: 20 products (2 with variants), 5 purchase orders with partial deliveries, 13 bills, returns, an exchange, a supplier return, an adjustment, a transfer, a till open/close and a stock count. It keeps its own independent ledger of what every number *should* be, then runs ~105 checks. To run it, start the backend (`node backend/index.js`; the banner must say LOCAL DB), then `node tools/onetoystore-pilot/shop-day.mjs --dump`.
@@ -515,6 +542,14 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | Date | Decision | Who | Why |
 |---|---|---|---|
 | 2026-09-25 | Work on branch `onetoystore-pilot`, push only, no PR unless asked | repo convention | |
+| 2026-09-28 | Phase D source = iPOS "Present Stock Position by Supplier" (`pspsupplier.xls`) | **Owner** | Has unit cost + sale price and ties out to iPOS totals |
+| 2026-09-28 | iPOS keeps **one stock count** (no Packages Mall / Store Room split). Import it all into Packages Mall; Store Room stock is moved or counted later | **Owner** | The split isn't recorded anywhere in iPOS |
+| 2026-09-28 | iPOS has **no real categories or brands**, only supplier names. Claude proposes a toy category tree + brands; owner approves before anything is applied | **Owner** | |
+| 2026-09-28 | Hot Wheels come in as **one item** (`027084120134`, the iPOS count); staff count the cars later and it becomes variants then | **Owner** | Neither iPOS nor Shopify knows the per-car count |
+| 2026-09-28 | The 220 **below-zero** items import at **0** and go on a "check these" list for staff to count; the import report states the unit difference vs iPOS | **Owner** | A minus count would show as a problem everywhere until counted |
+| 2026-09-28 | **All 10,044 items** come across, zero-stock ones included and active | **Owner** | Any old barcode still scans with its price |
+| 2026-09-28 | Suppliers: **555 AUDIT REPORT MARCH 2025 merges into 99 TOYS AND TOYS LAHORE** (same supplier; 5,514 items); **04 A TO Z CONSUMERS + 146 A TO Z CONSUMER merge** (94 items); **102 OPEN ITMES, 173 STOCK ADJUDSTMENT, 017 SHOPIFY ORDERS, 998 ADJUSTMENT** are not suppliers → items get **no supplier** (97 items, plus the 5 above the first heading). Result: **22 suppliers** | **Owner** | |
+| 2026-09-28 | Categories = a **"kind of toy" tree** (one home per item), named after the website's wording where one fits, plus a **Small Toys & Pocket Money** group. Boys/Girls, age, price bands and "Best Seller" stay **website collections**, not SanoPOS categories; brands go in the **Brand** field. Items are sorted by name keywords; the owner checks an item-by-item sheet before import | **Owner** (Claude's suggestion) | Shopify product types mix kind/gender/marketing labels with 3 spellings of the same thing; ~7,300 iPOS items aren't on the website at all |
 | 2026-09-25 | Acceptance script runs against the **real** backend (`index.js`, multi-tenant mode) on local Postgres, with a fresh throwaway tenant each run, not against the test harness's re-implemented middleware | Claude | The test harness (`tests/helpers/createTestApp-pg.js`) re-implements auth/permissions, so it can't prove the real server works |
 | 2026-09-25 | Margin reports' cost = the cost recorded **on each sale line at the moment of sale** (now read from the DB, D2). The product's cost itself = **latest purchase price** | code as-is | iPOS may use weighted average; see open question |
 | 2026-09-26 | Stock count (D6): items not scanned are **left alone** by default; an explicit "full count: zero everything not counted" tick box does the wall-to-wall version | **Owner** | Shelf-by-shelf counting at 10k items |
