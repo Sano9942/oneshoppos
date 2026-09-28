@@ -6,7 +6,9 @@
 
 **Branch:** `onetoystore-pilot`
 
-## ▶ Where we are / next (updated 2026-09-28)
+## ▶ Where we are / next (updated 2026-09-28, evening)
+
+**GO-LIVE IN PROGRESS on prod (sanopos.com), branch `onetoystore-golive`** — see "Go-live on prod (2026-09-28)" below. The real shop `onetoystore` exists (Pro, set up, samples removed, category tree + brands + suppliers in). **Next (2026-09-29):** owner brings a fresh iPOS "Present Stock Position by Supplier" → converter (must match iPOS totals, diff vs 25 Sep file) → preview → **import with "already have labels" ticked** → dry-run checks against prod → counter PC (step 8) → Phase F plan.
 
 **Phase D started 2026-09-28** — see "Phase D" below. Category sheet approved, brands set, D35 fixed, **dry run passed 18/0** into `otsipos_mul06eh1`. Phase D code is done; what's left is the go-live import (needs the owner's go-ahead and a fresh export on the day).
 
@@ -412,6 +414,22 @@ Run on the real file (2026-09-28): 10,044 items, totals match iPOS; 220 below ze
 
 **Next in Phase D:** (1) ✅ owner checked the category sheet 2026-09-28: no changes; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) ✅ dry run (above).
 
+## Go-live on prod (2026-09-28)
+
+Owner in the shop, Claude watching (Playwright tab on sanopos.com, read-only SQL, `railway logs`). Prod = `65d476a7`, migration head v145, all 6 old test shops deleted first (backup `D:\newprojects\sanopos-backups\sanopos-prod-before-reset-2026-09-28.dump`). Supabase **Free** plan (owner's choice).
+
+| Step | What happened | Checked |
+|---|---|---|
+| 1. iPOS export | Owner has no fresh export today → **old file (25 Sep, `pspsupplier.xls`) used for everything except the real import**; still converts: 10,044 items, matches iPOS totals, 220 below zero (740 units), 693 "Needs a Category", 22 suppliers | converter run |
+| 2. Create shop | Owner chose the **real sign-up** at sanopos.com/signup (store name "One Toy Store" → slug **`onetoystore`**, tenant id **134**) + email confirm link; then /admin → Edit → **Pro**, time zone Asia/Karachi, max staff 0 / products 0 (= unlimited), max outlets **1** | DB: `plan=pro, payment_status=active`, no trial/expiry, verified; schema at v145, 326 tables |
+| Store Room | **Owner decision: one location for everything** (as iPOS). No Store Room outlet | |
+| 3. Setup wizard | Retail Store; One Toy Store, Pakistan, Lahore, phone 042 32184836, email = owner's; Asia/Karachi, Rs/PKR, notes 5000–10, year from July; **not GST registered** (tax_mode none, FBR off); outlet **Packages Mall**, "Shop G017, Ground Floor , Packages Mall, Lahore"; owner PIN typed by the owner | DB `company_profile` + `outlets` as entered; `setup/complete` 200, console clean |
+| 4. Setup samples | **Owner decision: through the app, nothing hard-deleted.** 5 "(Sample)" products → category "Needs a Category", stock −100 each by adjustment ("Setup sample item removed before go-live"), label list cleared ("Label is fine"), archived; the 3 sample categories (Electronics, Clothing, Accessories) then deleted | DB: 0 live products, 5 archived at stock 0 (both tables), History +100/−100 each, 0 labels open, 14 top-level + 31 categories |
+| 5. Tree, brands, suppliers | Owner OK'd a script in the logged-in tab calling the same POSTs as the screens: 14 groups + 31 categories, 22 brands, 22 suppliers (names only; opening balances later from the registers) | DB: no duplicate names; avg 263 ms/call, no errors in Railway log |
+| 6. Import **preview only** (old file) | Import → Products, `ipos-products.csv` from the 25 Sep file: **10,044 valid rows, 0 errors**, SKUs = iPOS codes, prices as iPOS (row 1: 3,050 / 1,195). **Not imported** (waits for the fresh file). The "Markup % 25" box on that screen belongs to *Scan invoice photo* only and does not affect a CSV | DB still 0 live products; DB **262 MB** / 500, shop schema 17 MB before import |
+
+**Tomorrow (2026-09-29), in order:** fresh export → converter + diff vs 25 Sep → preview → import with "These items already have shelf labels" ticked → dry-run checks on prod (10,044 items; units / cost / sale totals vs the converter summary; 220 below-zero at 0; scans `0107`, `027084120134`, `X000UO7NQD`, `6939143104280.`; 0 labels open) → counter PC (open sanopos.com online, log in, POS, scanner, test receipt) → Phase F plan + "ready" rules.
+
 ## D13: paying suppliers on account (2026-09-28)
 
 Owner: credit suppliers (1, 2 months…) are paid **lump sums** by cash or bank transfer whenever money is available; a lump sum lowers the **balance only** (no bill marked paid). Cash suppliers are still paid bill by bill.
@@ -567,6 +585,9 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | D37 | 🔴 | Supplier ledger over a date range started at 0: its "closing balance" was the period's movement, not what is owed (the Payables tab opens on "this month") | 🛠️ fixed 2026-09-28: balance brought forward line; closing = owed at the end of the range |
 | D38 | 🟠 | Supplier aging counted a bill once per payment made on it (fan-out), and ignored returns and voids; 4 more places each had their own "owed" sum | 🛠️ fixed 2026-09-28: one shared definition (`services/supplier-balance.js`) |
 | D39 | 🔴 | Clearing a post-dated cheque to a supplier always failed (the payment insert named no supplier) | 🛠️ fixed 2026-09-28: it is recorded as a payment on account for that supplier |
+| D41 | 🟠 | **/admin → tenant → Edit: switching Plan to Pro keeps the old Free limits.** The form sends the Max Employees/Products/Outlets boxes it loaded (3/100/1), and `PUT /api/admin/tenants/:id` only applies the new plan's defaults when those keys are missing (`routes/admin/tenants.js:188-190`). So a Free→Pro upgrade from this screen stays capped at 3 staff and 100 products (would have blocked the 10,044-item import). Repro: sign up (Free) → /admin → the shop → Edit → Plan: Pro → Save → Max Products still 100. Worked around on OTS by typing 0/0/1 by hand | open, not blocking |
+| D42 | 🟡 | Self sign-up takes **~21.5 s** on the server (`POST /api/auth/signup`, Railway log 2026-09-28 17:01; provisions 326 tables) with no progress message; a merchant may think it froze and click again | open |
+| D43 | 🟡 | A browser still holding a login for a **deleted** shop keeps calling it: on /admin/login the console shows `403 /api/company-profile/currency?tenant=livetestauto` and `401 /api/roles/1/permissions`. Harmless, but the stale session is never cleared | open, low |
 | D40 | 🔴 | Voiding a payment made against a bill always failed (UPDATE of a column that doesn't exist, `supplier_invoices.amount_paid`), and voided payments still counted as paid in 9 queries | 🛠️ fixed 2026-09-28 |
 
 ---
@@ -613,6 +634,11 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-28 | Brand field = **makers only**; characters stay in the name. W.F = Winfun, HSB = Hasbro, L.T = Little Tikes; TB (Tooba Stuff) is a supplier, not a brand; other short codes left alone | **Owner** | |
 | 2026-09-28 | **D13 must be fixed before deploy.** Suppliers are either cash or on credit with different terms (1 month, 2 months…); credit suppliers are paid **lump sums on account** (cash by hand or bank transfer) whenever money is available, not bill by bill. Today this lives in paper registers | **Owner** | SanoPOS only pays one delivery invoice at a time |
 | 2026-09-28 | At go-live every credit supplier needs an **opening balance** (what is owed today, from the registers) | Claude, from the above | Otherwise the supplier ledger starts at 0 |
+| 2026-09-28 | Go-live shop web name (slug) = **`onetoystore`**, created through the real **self sign-up**, then made **Pro** in /admin | **Owner** | Same path a real merchant takes, watched end to end |
+| 2026-09-28 | **One location** (Packages Mall) for everything, Store Room included, like iPOS | **Owner** | Matches iPOS for the side-by-side run; can split later |
+| 2026-09-28 | Not GST registered; no tax on bills | **Owner** | |
+| 2026-09-28 | Setup samples removed **through the app** (move → adjust to 0 → label fine → archive → delete empty categories), nothing hard-deleted on prod | **Owner** | Least destructive, leaves a trail |
+| 2026-09-28 | No fresh iPOS export today: shop set up + preview with the 25 Sep file; the **real import waits for tomorrow's fresh file** | **Owner** | Stock from 25 Sep would be stale, and nothing can bulk-correct stock after import |
 | 2026-09-28 | Item cost stays the **latest purchase price** (not weighted average) | **Owner** | Closes the open question from 2026-09-25 |
 | 2026-09-28 | Order to go live: fix D13 → full test run + deploy plan (DB size, workers/env the pilot needs) → owner pushes + deploy (migrations v138–v144) → verify live → Supabase back to **Pro** (backups) before real shop data → Phase E → Phase F. Deferred: Hot Wheels variants on a PO (until the cars are split), D14 for all shops (go-live clean-up covers OTS), D15 (switch on at go-live), D19, D26 | **Owner** (Claude's suggestion) | |
 | 2026-09-25 | Acceptance script runs against the **real** backend (`index.js`, multi-tenant mode) on local Postgres, with a fresh throwaway tenant each run, not against the test harness's re-implemented middleware | Claude | The test harness (`tests/helpers/createTestApp-pg.js`) re-implements auth/permissions, so it can't prove the real server works |
