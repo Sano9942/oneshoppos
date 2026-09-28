@@ -383,7 +383,13 @@ Found by C-5. `shopify/order-service.js` resolveWebOrderOutletId needed `shopify
 
 Run on the real file (2026-09-28): 10,044 items, totals match iPOS; 220 below zero → 0 (**740 units**); 22 suppliers; **695 items (7%) "Needs a Category"**; 31 categories (the approved tree + "Animals & Play Sets" under Action Figures & Hero Play, added for ~160 animal sets). Outputs (kept out of git, business data): `ipos-categories-to-check.xlsx` (every item, its group/category, a blank "Change category to" column; a second sheet with the tree and counts) and `ipos-products.csv`.
 
-**Next in Phase D:** (1) owner checks the category sheet; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) dry run into a throwaway local tenant and a what-came-in / what-was-skipped report.
+**Brands** (owner 2026-09-28: makers only): `brand_for()` in the converter, 23 brands, **811 items** get one (Yalong 124, Winfun 114, Lepin 114, Intex 85, Barbie 79, Hasbro 55, Maisto 50, Hot Wheels 47, …). Owner named the short codes: **W.F = Winfun, HSB = Hasbro, L.T = Little Tikes; TB = supplier Tooba Stuff (not a brand)**; TORY, MBK, GT, H.B etc. left alone. Known miss: "WATCH LEGO DESIGN" gets LEGO. Tests: 64 pass.
+
+### D35: the product import silently dropped a `supplier` column (fixed 2026-09-28)
+
+`POST /api/import/products` only read `supplier_id`; a file naming the supplier imported every item with **no supplier and no error**. **Fixed:** a `supplier` column is matched to a supplier by name (ignoring case and repeated spaces); an unknown name is a row error in the preview; `supplier_id` still works. **Test:** `backend/tests/integration/ots-ipos-import.test.js` (2 of 5 failed on the old code); with the other 3 import test files, 54 pass.
+
+**Next in Phase D:** (1) ✅ owner checked the category sheet 2026-09-28: no changes; (2) brands (propose from names: Maisto, Burago, Lepin, Intex, Crayola, Mattel/Barbie, LEGO…); (3) the import has to take a supplier by name and create the tree (it only takes `supplier_id` and existing categories today) — fix with a failing test first; (4) dry run into a throwaway local tenant and a what-came-in / what-was-skipped report.
 
 ## Retail core scorecard
 
@@ -550,6 +556,8 @@ Legend: ✅ works (proven by a check that ran) · 🔴 broken · 🛠️ fixed (
 | 2026-09-28 | **All 10,044 items** come across, zero-stock ones included and active | **Owner** | Any old barcode still scans with its price |
 | 2026-09-28 | Suppliers: **555 AUDIT REPORT MARCH 2025 merges into 99 TOYS AND TOYS LAHORE** (same supplier; 5,514 items); **04 A TO Z CONSUMERS + 146 A TO Z CONSUMER merge** (94 items); **102 OPEN ITMES, 173 STOCK ADJUDSTMENT, 017 SHOPIFY ORDERS, 998 ADJUSTMENT** are not suppliers → items get **no supplier** (97 items, plus the 5 above the first heading). Result: **22 suppliers** | **Owner** | |
 | 2026-09-28 | Categories = a **"kind of toy" tree** (one home per item), named after the website's wording where one fits, plus a **Small Toys & Pocket Money** group. Boys/Girls, age, price bands and "Best Seller" stay **website collections**, not SanoPOS categories; brands go in the **Brand** field. Items are sorted by name keywords; the owner checks an item-by-item sheet before import | **Owner** (Claude's suggestion) | Shopify product types mix kind/gender/marketing labels with 3 spellings of the same thing; ~7,300 iPOS items aren't on the website at all |
+| 2026-09-28 | Category sheet approved **as is**, including the 695 "Needs a Category" items | **Owner** | |
+| 2026-09-28 | Brand field = **makers only**; characters stay in the name. W.F = Winfun, HSB = Hasbro, L.T = Little Tikes; TB (Tooba Stuff) is a supplier, not a brand; other short codes left alone | **Owner** | |
 | 2026-09-25 | Acceptance script runs against the **real** backend (`index.js`, multi-tenant mode) on local Postgres, with a fresh throwaway tenant each run, not against the test harness's re-implemented middleware | Claude | The test harness (`tests/helpers/createTestApp-pg.js`) re-implements auth/permissions, so it can't prove the real server works |
 | 2026-09-25 | Margin reports' cost = the cost recorded **on each sale line at the moment of sale** (now read from the DB, D2). The product's cost itself = **latest purchase price** | code as-is | iPOS may use weighted average; see open question |
 | 2026-09-26 | Stock count (D6): items not scanned are **left alone** by default; an explicit "full count: zero everything not counted" tick box does the wall-to-wall version | **Owner** | Shelf-by-shelf counting at 10k items |

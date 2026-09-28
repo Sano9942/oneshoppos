@@ -254,11 +254,12 @@ module.exports = function mountImportRoutes(app, deps) {
         const isPreview = req.query.preview === "1";
 
         // Pre-fetch lookup tables + existing non-NULL SKUs (for F9 DB-collision check)
-        const [catRows, brandRows, taxRows, skuRows] = await Promise.all([
+        const [catRows, brandRows, taxRows, skuRows, supplierRows] = await Promise.all([
           db.query("SELECT id, name, default_margin_percent FROM categories"),
           db.query("SELECT id, name FROM brands"),
           db.query("SELECT id, name FROM taxes"),
           db.query("SELECT sku FROM products WHERE sku IS NOT NULL"),
+          db.query("SELECT id, name FROM suppliers"),
         ]);
         const catMap = new Map(catRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         // WS4 cost→price: category id → default markup %. Used to auto-fill a
@@ -270,6 +271,11 @@ module.exports = function mountImportRoutes(app, deps) {
         );
         const brandMap = new Map(brandRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const taxMap = new Map(taxRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
+        // A `supplier` column names the supplier (OTS pilot Phase D, D35: it was
+        // silently dropped, only `supplier_id` was read). Matched on the name,
+        // ignoring case and repeated spaces.
+        const supplierKey = (v) => String(v).trim().replace(/\s+/g, " ").toLowerCase();
+        const supplierMap = new Map(supplierRows.rows.map((r) => [supplierKey(r.name), r.id]));
         const dbSkus = new Set(skuRows.rows.map((r) => String(r.sku).toLowerCase()));
 
         // Auto-SKU (Phase 1 fast-entry): mint codes for code-less rows so nothing
@@ -347,6 +353,11 @@ module.exports = function mountImportRoutes(app, deps) {
             brand_id = brandMap.get(String(r.brand).toLowerCase()) || null;
             if (!brand_id) rowErrors.push(`brand "${r.brand}" not found`);
           }
+          let supplier_id = r.supplier_id ? parseInt(r.supplier_id, 10) : null;
+          if (!supplier_id && String(r.supplier || "").trim()) {
+            supplier_id = supplierMap.get(supplierKey(r.supplier)) || null;
+            if (!supplier_id) rowErrors.push(`supplier "${String(r.supplier).trim()}" not found`);
+          }
           let tax_id = null;
           if (r.tax || r.tax_group) {
             const taxName = String(r.tax || r.tax_group).toLowerCase();
@@ -387,7 +398,7 @@ module.exports = function mountImportRoutes(app, deps) {
               tax_id,
               unit: r.unit || "pcs",
               stock_quantity: parseInt(r.stock_quantity || "0", 10) || 0,
-              supplier_id: r.supplier_id ? parseInt(r.supplier_id, 10) : null,
+              supplier_id,
               status: r.status || "active",
             });
           }

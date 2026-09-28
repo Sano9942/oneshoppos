@@ -103,8 +103,8 @@ RULES = [
     ("Vehicles", "Track Sets & Trains", r"TRACK|TRAIN\b|TRAINS\b|RAILWAY|\bRAIL\b"),
     ("Building Blocks", "Blocks & LEGO", r"BLOCK|BOLCK|LEPIN|LEGO|\bLPN\b|BRICK|BUILDING|CONSTRUCTION|MEGA BLOKS"),
     ("Action Figures & Hero Play", "Action Figures & Robots", r"FIGURE|\bFIG\b|AVENGERS|SPIDER ?MAN|SPIDERNAN|BEY ?BLADE|ROBLOX|JOKER|BATMAN|SUPERMAN|IRON ?MAN|HULK|TRANSFORMER|ROBOT|DINOSAUR|\bDINO\b|WRESTLING|POKEMON|MINECRAFT|NINJA|CAPTAIN|DRAGON BALL|MARVEL|JURASSIC|GODZILLA|HERO"),
-    ("Action Figures & Hero Play", "Animals & Play Sets", r"ANIMAL|ZOO|FARM|PLAY ?SET|CITY RESCUE|SPACE (TRAVEL|EXPLORATION)|FERRIS WHEEL|SUBMARINE"),
-    ("Dolls & Pretend Play", "Kitchen Sets & Food Play", r"KITCHEN|KITCHE|STOVE|TABLEWARE|COOK|ICE ?CREAM|FAST FOOD|\bFOOD\b|TEA SET|DINNER SET|FRUIT CUT|\bBBQ\b|COFFEE|CUTTING"),
+    ("Action Figures & Hero Play", "Animals & Play Sets", r"ANIMAL|\bZOO\b|\bFARM\b|PLAY ?SET|CITY RESCUE|SPACE (TRAVEL|EXPLORATION)|FERRIS WHEEL|SUBMARINE"),
+    ("Dolls & Pretend Play", "Kitchen Sets & Food Play", r"KITCHEN|KITCHE\b|STOVE|TABLEWARE|COOK|ICE ?CREAM|FAST FOOD|\bFOOD\b|TEA SET|DINNER SET|FRUIT CUT|\bBBQ\b|COFFEE|CUTTING"),
     ("Dolls & Pretend Play", "Make Up Sets & Jewellery", r"BEAUTY|MAKE ?UP|NAIL|JEWEL|\bHAIR|ORNAMENT|BANGLE|BRACELET|NECKLACE|DRESSING|COSMETIC|LIPSTICK|LIP GLOSS"),
     ("Dolls & Pretend Play", "Doctor, Tools & Role Play", r"DOCTOR|\bTOOLS?\b|POLICE SET|SHOPPING|CASH REGISTER|CASHIER|SUPER ?MARKET|FIREMAN|ENGINEER|CLEANING|IRON SET|WASHING|WALKIE|WALKI TALKI"),
     ("Dolls & Pretend Play", "Dolls & Doll Houses", r"DOLL|BARBIE|\bLOL\b|PRINCESS|FROZEN|ELSA|VILLA|CASTLE|PONY"),
@@ -145,6 +145,46 @@ def categorise(name):
     return FALLBACK
 
 
+# --- brands: makers only (owner, 2026-09-28) -------------------------------------------
+# Characters (Avengers, Frozen...) stay in the name. Short codes the owner named:
+# W.F = Winfun, HSB = Hasbro, L.T = Little Tikes; TB is the supplier Tooba Stuff,
+# the rest (TORY, MBK, GT, H.B...) are left alone. First match wins, so a famous
+# line (Hot Wheels, Barbie, Nerf) beats its maker.
+BRANDS = [
+    ("Hot Wheels", r"HOT ?WHEEL|\bH\.?W\b"),
+    ("Barbie", r"BARBIE"),
+    ("Nerf", r"\bNERF\b"),
+    ("Play-Doh", r"PLAY ?-?DOH"),
+    ("Mattel", r"MATTEL|MATTLE"),
+    ("Hasbro", r"HASBRO|\bHSB\b"),
+    ("Winfun", r"WIN ?FUN|\bW\.?F\b"),
+    ("Little Tikes", r"LITTLE TIKES|\bL\.T\b"),
+    ("LEGO", r"\bLEGO\b"),
+    ("Lepin", r"LEPIN|\bLPN\b"),
+    ("Intex", r"INTEX"),
+    ("Bestway", r"BESTWAY"),
+    ("Maisto", r"MAISTO"),
+    ("Burago", r"B?BURAGO"),
+    ("Crayola", r"CRAYOLA"),
+    ("Yalong", r"YALONG"),
+    ("Chicco", r"CHICCO"),
+    ("Graco", r"GRACO"),
+    ("Mastela", r"MASTELA"),
+    ("Fisher-Price", r"FISHER ?-?PRICE|\bFISHER\b"),
+    ("Pelikan", r"PELIKAN"),
+    ("Deli", r"\bDELI\b"),
+]
+_BRANDS = [(b, re.compile(p)) for b, p in BRANDS]
+
+
+def brand_for(name):
+    text = str(name).upper()
+    for b, rx in _BRANDS:
+        if rx.search(text):
+            return b
+    return ""
+
+
 # --- SanoPOS rows ---------------------------------------------------------------------------
 def build_products(items):
     out = []
@@ -158,7 +198,7 @@ def build_products(items):
             "selling_price": round(i["sale"], 2),
             "cost_price": round(i["cost"], 2),
             "category": leaf,
-            "brand": "",
+            "brand": brand_for(i["name"]),
             "supplier": supplier_for(i["supplier_code"], i["supplier_name"]),
             "stock_quantity": max(qty, 0),
             "_group": group,

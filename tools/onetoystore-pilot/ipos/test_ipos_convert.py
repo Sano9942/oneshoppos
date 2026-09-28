@@ -203,3 +203,45 @@ def test_leaf_names_are_unique_and_never_reuse_a_group_name():
 ])
 def test_categorise_specific_before_general(name, leaf):
     assert ic.categorise(name)[1] == leaf
+
+
+# --- brands: makers only (owner, 2026-09-28) ----------------------------------------
+
+@pytest.mark.parametrize("name,brand", [
+    ("MATTLE HW DINKEY-C4982-TT", "Hot Wheels"),
+    ("H.W ACTION TRACK-GBF89", "Hot Wheels"),
+    ("MATTEL BARBIE DOLL-GTW30", "Barbie"),
+    ("MATTEL UNO CARDS", "Mattel"),
+    ("W.F PENGUIN MUSIC PLAYER-02514A", "Winfun"),
+    ("WF PULL ALONG PAL ELEPHANT-230202", "Winfun"),
+    ("HSB IRONMAN FIGURE-B6156", "Hasbro"),
+    ("NERF GUN-E3312", "Nerf"),
+    ("L.T SQUISHY PIANO-647352", "Little Tikes"),
+    ("LPN MINE CRAFT 304PCS-8004", "Lepin"),
+    ("LEPIN BLOCKS MIX-3411 TO 3428", "Lepin"),
+    ("INTEX SWIMING POOL-57135", "Intex"),
+    ("MAISTO BMW M4GTS-31246", "Maisto"),
+    ("BURAGO MODEL CAR-12016", "Burago"),
+    ("YALONG ERASER-231532", "Yalong"),
+    ("CRAYOLA COLOR KIT", "Crayola"),
+    ("CHICCO BABY CARRIER-1405-4", "Chicco"),
+])
+def test_brand_from_name(name, brand):
+    assert ic.brand_for(name) == brand
+
+
+@pytest.mark.parametrize("name", [
+    "STUFF BEAR BROWN&WHITE TB",       # TB = Tooba Stuff, a supplier
+    "FIGURE AVENGERS MIX-8818-92557",  # a character, not a maker
+    "TORI PUSH CAR-606", "MBK BEAD SET", "KITCHEN SET-GT-0100", "H.B BABY ALIVE-E8716",
+    "LT BLUE BALL",                    # "LT" without the dot is not Little Tikes
+])
+def test_no_brand(name):
+    assert ic.brand_for(name) == ""
+
+
+def test_products_carry_the_brand():
+    items, _ = ic.parse_report(sample_report())
+    out = {p["sku"]: p for p in ic.build_products(items)}
+    assert out["027084120134"]["brand"] == "Hot Wheels"
+    assert out["0107"]["brand"] == ""
