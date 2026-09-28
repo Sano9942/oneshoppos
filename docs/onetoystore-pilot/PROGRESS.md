@@ -425,6 +425,20 @@ Owner: credit suppliers (1, 2 months…) are paid **lump sums** by cash or bank 
 - **On screen** (trial shop `otsipos_mul06eh1`, frontend 5174 → backend 5001): TOYS AND TOYS opening Rs 250,000 → Pay Rs 100,000 bank transfer HBL-TRX-5521 → row Rs 150,000; ledger: Opening 250,000, Payment (Bank Transfer · on account) → 150,000. Payables: Pay on account Rs 25,000 dated 25 Sep → aging Opening 250,000 / Paid 125,000 / Outstanding 125,000; ledger from 26 Sep starts "Balance brought forward 225,000" dated 26 Sep, closing 125,000.
 - Launch configs added: `backend-5001` (CORS for 5173 + 5174) and `frontend-5174` (→ 5001), so a session can test its own code while another session holds 5000/5173.
 
+## Deploy plan (drafted 2026-09-28, needs the owner's go-ahead)
+
+**Live state, checked read-only 2026-09-28:** api.sanopos.com health OK, sanopos.com 200; last Railway deploy 2026-09-03 (SUCCESS). Supabase org plan **free**; DB **334 MB of 500 MB**; 6 tenants, all at schema **v138**. Railway has `INTEGRATION_SECRET_KEY` and `SHOPIFY_SECRET_KEY` (needed to decrypt the Shopify client secret, C1). Shopify sync + daily stock check are opt-out workers and are **not** disabled; email, shift auto-close, hold expiry and attendance auto-close are on; everything else off. The branch adds **no new env vars**.
+
+| Step | What | Who |
+|---|---|---|
+| 1 | Full backend suite on the branch; any failing file re-run on `main` in a worktree; only branch-only failures count | Claude: ✅ **2026-09-28 done.** Full suite (exact baseline command, `--no-file-parallelism`): **62 red vs 72 in the July baseline**; `check-baseline.js` flagged 2 "new" (pg-batch14 blocked-time slots, pg-f06 parallel-booking race) — both files give the **identical 4 failures on `main`** (worktree at `1d72ff7c`), so date/env drift, not the branch. 12 baseline entries now pass. **No branch-caused failure** |
+| 2 | `onetoystore-pilot` → `main` (fast-forward: main has not moved), push | **Owner** (branch stays local until then) |
+| 3 | Railway builds and `start.sh` runs migrations **v139–v145** on all 6 tenants; Vercel builds the frontend | automatic |
+| 4 | Verify: health, every schema at v145 in the deploy log and by read-only SQL, `/admin` worker status, a login + supplier page on a test tenant | Claude |
+| 5 | Before any real One Toy Store data: Supabase back to **Pro** (daily backups; Free has none) | **Owner** |
+
+Rollback: redeploy the previous Railway deployment; the 7 migrations only add tables/columns/triggers (v145 also relaxes a NOT NULL), so old code runs against the new schema.
+
 ## Retail core scorecard
 
 **How it's measured:** `tools/onetoystore-pilot/shop-day.mjs` creates a brand-new throwaway shop in the **local** database and plays a full day through the **real** server: 20 products (2 with variants), 5 purchase orders with partial deliveries, 13 bills, returns, an exchange, a supplier return, an adjustment, a transfer, a till open/close and a stock count. It keeps its own independent ledger of what every number *should* be, then runs ~105 checks. To run it, start the backend (`node backend/index.js`; the banner must say LOCAL DB), then `node tools/onetoystore-pilot/shop-day.mjs --dump`.
