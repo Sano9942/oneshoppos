@@ -124,6 +124,34 @@ describe("iPOS-style receipt: printed slip", () => {
     expect(css).not.toMatch(/#999|#666|#888/);
   });
 
+  // First real slips (2026-09-29) printed a barcode no scanner could read:
+  // bars were 1.2 CSS px (~2.5 dots on a 203 dpi head, so they came out
+  // 2 or 3 dots at random) with no blank quiet zone. Each bar must be a whole
+  // number of printer dots (0.125 mm steps) with a 10-bar quiet zone each side.
+  it("prints a scannable invoice barcode: whole-dot bars, quiet zones, sharp edges", async () => {
+    await buildReceiptHtml(SLIP, { ...TEMPLATE, show_barcode: true }, "Rs", {}, { onPrint: () => {} });
+    const d = frameDoc();
+    const svg = d.querySelector(".barcode svg");
+    expect(svg).toBeTruthy();
+    const [, , vbW] = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+    const widthMm = parseFloat(svg.style.width);
+    expect(svg.style.width).toMatch(/mm$/);
+    const moduleMm = widthMm / vbW;
+    expect(Math.abs(moduleMm * 8 - Math.round(moduleMm * 8))).toBeLessThan(1e-6); // whole 0.125 mm dots
+    expect(moduleMm).toBeGreaterThanOrEqual(0.25);
+    expect(widthMm).toBeLessThanOrEqual(72);
+    // jsbarcode draws the bars in <g transform="translate(x, y)">; x is the
+    // left quiet zone, and the right one is what's left of the width.
+    const g = svg.querySelector("g");
+    const offsetX = Number((g.getAttribute("transform") || "").match(/translate\(\s*([\d.]+)/)?.[1]);
+    const bars = [...g.querySelectorAll("rect")];
+    const barsEnd = Math.max(...bars.map((r) => Number(r.getAttribute("x")) + Number(r.getAttribute("width"))));
+    expect(offsetX).toBeGreaterThanOrEqual(10);
+    expect(vbW - offsetX - barsEnd).toBeGreaterThanOrEqual(10);
+    expect(d.querySelector("style").textContent).toMatch(/crispEdges/);
+    expect(d.querySelector(".barcode").textContent).toContain("INV-2026-00012");
+  });
+
   it("uses a 48mm print width on a 58mm roll", async () => {
     await buildReceiptHtml(SLIP, { ...TEMPLATE, paper_width: 32 }, "Rs", {}, { onPrint: () => {} });
     expect(frameDoc().querySelector("style").textContent).toMatch(/body\{[^}]*width:48mm/);

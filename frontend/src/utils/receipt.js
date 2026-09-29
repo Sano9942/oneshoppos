@@ -157,7 +157,8 @@ const RECEIPT_CSS = (printMm) => [
   // Qty sits between two money columns; centred with room either side so
   // "1" and "8,950.00" can never read as "18,950.00".
   "table.items .q{text-align:center;white-space:nowrap;padding:2px 6px 2px 10px}",
-  "svg{max-width:100%}",
+  ".barcode{text-align:center;margin:6px 0 2px}",
+  ".barcode svg{display:block;margin:0 auto;shape-rendering:crispEdges}",
   ".code,.small{font-size:10px}",
   ".ret{font-style:italic}",
   ".grand{font-size:15px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:2px 0;margin:3px 0}",
@@ -384,23 +385,38 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
   b.appendChild(foot);
 
   // Barcode — 2-G.11 renders a CODE128 SVG so scanning the printed receipt
-  // looks up the sale. jsbarcode is loaded lazily.
+  // (Return / Exchange box) looks up the sale. jsbarcode is loaded lazily.
+  // Thermal heads print whole dots (203 dpi = 8 dots/mm), so each bar is sized
+  // in mm to a whole number of dots (0.25 mm = 2 dots, wider if it fits) with
+  // a 10-bar blank quiet zone each side; anything else prints uneven bars that
+  // scanners reject.
   if (s.showBarcode) {
     const wrap = d.createElement("div");
-    wrap.style.cssText = "text-align:center;margin:6px 0 2px";
+    wrap.className = "barcode";
     const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
     wrap.appendChild(svg);
+    wrap.appendChild(txt("div", s.invoiceNumber, "c small"));
     b.appendChild(wrap);
     pending.push(
       import("jsbarcode")
         .then(({ default: JsBarcode }) => {
+          const QUIET = 10;
           JsBarcode(svg, String(s.invoiceNumber || ""), {
-            format: "CODE128", height: 40, width: 1.2, displayValue: true, fontSize: 11, margin: 0,
+            format: "CODE128", width: 1, height: 48, displayValue: false,
+            marginTop: 0, marginBottom: 0, marginLeft: QUIET, marginRight: QUIET,
+            background: "#ffffff", lineColor: "#000000",
           });
+          const units = parseFloat(svg.getAttribute("width")) || 0; // "198px"
+          const moduleMm = [0.5, 0.375, 0.25].find((m) => units * m <= printMm) || 0.25;
+          svg.setAttribute("viewBox", `0 0 ${units} 48`);
+          svg.setAttribute("preserveAspectRatio", "none");
+          svg.removeAttribute("width");
+          svg.removeAttribute("height");
+          svg.style.width = `${units * moduleMm}mm`;
+          svg.style.height = "12mm";
         })
         .catch(() => {
-          wrap.textContent = s.invoiceNumber;
-          wrap.style.cssText = "text-align:center;font-size:11px;letter-spacing:3px";
+          svg.remove();
         }),
     );
   }
