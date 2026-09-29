@@ -452,6 +452,11 @@ Playwright can only upload from inside the repo, so the CSV was copied to `.play
 
 **Next:** counter PC (step 8) → Phase F plan.
 
+**Counter PC (step 8), 2026-09-29** (separate PC in the shop; Claude watches only via `railway logs` + SQL, can't see its screen):
+- ✅ Chrome → sanopos.com, owner logged in (`POST /api/auth/mt-login` 200 at 13:38 PKT), shop onetoystore / Packages Mall; no 4xx/5xx after.
+- The till (**New Sale**) will not open at all without an open shift (`POSOpeningGateModal`), so opening a shift is a prod write, pending the owner's OK.
+- ✅ Scanner tested on Catalog → Products search instead (no writes): owner scanned 3 printed barcodes + 3 short iPOS codes, all found. Log shows e.g. `6987657899185` MARKER SET 18PCS Rs 1,890, `6935539616238` SLIME-7507 Rs 650, `7976` CHU CHU RUBBER TOYS Rs 850, `7034` MAGIC CUBE Rs 550.
+
 **Tomorrow (2026-09-29), in order:** fresh export → converter + diff vs 25 Sep → preview → import with "These items already have shelf labels" ticked → dry-run checks on prod (10,044 items; units / cost / sale totals vs the converter summary; 220 below-zero at 0; scans `0107`, `027084120134`, `X000UO7NQD`, `6939143104280.`; 0 labels open) → counter PC (open sanopos.com online, log in, POS, scanner, test receipt) → Phase F plan + "ready" rules.
 
 ## D13: paying suppliers on account (2026-09-28)
