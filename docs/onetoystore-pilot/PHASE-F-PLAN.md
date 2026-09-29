@@ -115,7 +115,7 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 ## Questions for the owner (one at a time)
 
 - ~~**Q1 (R7):** backups~~ ✅ answered 2026-09-29: **no Supabase Pro**; nightly **Download Backup** from the Backup & Restore page (proven, see R7 proof).
-- **Q2 (F2):** one **"Online"** button with a reference box, or separate EasyPaisa / JazzCash / Bank transfer buttons?
+- ~~**Q2 (F2)**~~ ✅ answered 2026-09-29: **one "Online" button**; pressing it shows **ready-made choices to click** (no typing), e.g. EasyPaisa / JazzCash / Bank app. The exact list is to be confirmed with the owner.
 - **Q3 (R1):** is 7 clean trading days in a row the right bar?
 - **Q4 (F1):** leave day 1's Rs 40 on INV-00004 as recorded (with a note), or correct it once the fix exists?
 - **Q5 (F3):** the expense categories the register uses (e.g. tea, transport, staff advance…).
