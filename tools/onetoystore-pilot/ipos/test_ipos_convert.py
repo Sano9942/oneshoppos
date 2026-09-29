@@ -261,3 +261,16 @@ def test_no_control_characters_in_patterns():
     # switched word-boundary checks off
     src = open(ic.__file__, "rb").read()
     assert b"\x08" not in src
+
+def test_reads_the_newer_excel_format_even_named_xls(tmp_path):
+    # iPOS's 29 Sep 2026 export is an .xlsx file saved as ".xls"; the 25 Sep one was a real .xls.
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.append([None, "Item Code", None, None, "Description", None, None, "On Hand"])
+    ws.append([None, "0107", None, None, "BALL", None, None, 3, None, 12.5])
+    path = tmp_path / "pspsupplier.xls"
+    wb.save(path)
+    rows = ic.read_xls(str(path))
+    assert rows[1][:10] == ["", "0107", "", "", "BALL", "", "", "3", "", "12.5"]
+    assert ic._num(rows[1][7]) == 3

@@ -211,6 +211,14 @@ def build_products(items):
 
 # --- file I/O (not unit-tested; run against the real report) ---------------------------------
 def read_xls(path):
+    # iPOS has exported both a real .xls (25 Sep) and an .xlsx named ".xls" (29 Sep): go by content.
+    with open(path, "rb") as f:
+        is_xlsx = f.read(2) == b"PK"
+    if is_xlsx:
+        from openpyxl import load_workbook
+        with open(path, "rb") as f:
+            sheet = load_workbook(f, read_only=True, data_only=True).worksheets[0]
+            return [["" if v is None else str(v) for v in r] for r in sheet.iter_rows(values_only=True)]
     import xlrd
     sheet = xlrd.open_workbook(path).sheet_by_index(0)
     return [[str(v) for v in sheet.row_values(i)] for i in range(sheet.nrows)]
