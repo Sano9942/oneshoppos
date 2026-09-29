@@ -49,6 +49,43 @@ All must be true. Claude checks each one and records it; the owner decides.
 
 **Nightly habit (added to the routine):** after Close Shift, open **Backup & Restore → Download Backup**, then move the file into a Google Drive folder (e.g. "SanoPOS backups"). Later: make it automatic (a server job that writes the file somewhere safe every night), so it doesn't depend on someone remembering.
 
+## Testing the whole app: sidebar check + page list (2026-09-29, owner question)
+
+Owner: "a lot of moving parts… how will we test each and every part? First I want to be sure everything we built is actually showing on screen."
+
+**Check 1: code vs sidebar (Playwright, admin login `hassan`, prod, 2026-09-29 23:20).** `frontend/src/ui/nav-config.js` defines **122** sidebar entries in 21 groups. The shop sees **75** in 13 groups: **every entry it's allowed to see is there.** The **47 hidden** are all explained by switches that are off for a toy shop: Field Sales (4), Restaurant (12), Appointments (5), Service Operations (3), Rentals (3), Rooms (5), Clinical (6) groups; Subscriptions, Production (`kit_bom_engine`), Expiring Soon (`batch_expiry_tracking`), Backorders (`wholesale_backorders`), Commissions (mode off), FBR Invoices (`fbr_integration`), Customer Notifications, Manufacturer Partners, Forms. Nothing the shop should have is missing.
+
+**Check 2: routes with no sidebar link.** `routes/appRoutes.jsx` has 159 routes; 42 have no sidebar entry. All reachable from inside another page (product edit/History `/products/:id`, Shopify/WooCommerce settings from Integrations, the 20 `/reports/*` from Reports, `/profile` from the account menu, price book from Customer Groups, etc.) **except 4 empty placeholders** (`/lookup`, `/custom-fields`, `/partners`, `/shopcast`: "coming soon", nothing built). The pilot's own work is all reachable: labels to reprint (Barcode Templates), Update prices (Import), product History tab (Products → item), Pay supplier (Suppliers / Supplier Payables), backup (Backup & Restore).
+
+**Check 3: every one of the 75 pages opened** (view only, 25 s each max): **75/75 load**, **0 failed server calls (no 4xx/5xx)**, no error screens. Four flags were false alarms (item codes containing "404"; Integrations cards say "automatic background sync coming soon" for Woo/Instagram/WhatsApp/Google). Side effects of just opening pages: `POST /api/pos-devices/register` (POS page records this browser's "last seen" in `pos_device_registry`, row 9) and `POST /api/attendance/pin-outlets` (read-only list). No sales/stock/shift data touched. Seen on the way: Promotions renders all 10,044 items into its page (237k characters of text), the D44 pattern.
+
+**How the whole app gets tested (answer to the owner):**
+
+1. **Switch off what the shop doesn't use** (Setup → Business Modules, one module at a time, using its impact preview, owner OK each: prod write). Fewer pages = less to break, less to confuse staff.
+2. **Every page the shop does use gets a real task done once in the shop with Claude watching** (like day 1: sale, exchange, adjustment, close shift, backup), plus the automated tests that already cover the retail core (shop-day 112, `ots-retail-core` 47, `ots-supplier-account` 23, `ots-label-reprints` 19, `ots-shopify-stock` 18, `ots-offline` 14).
+3. **The nightly dual-run check** catches money and stock mistakes on every page that touches them, every day.
+4. A page switched on later is tested when it's switched on.
+
+**Claude's suggested split of the 75 (owner to confirm or change):**
+
+| Group | Use: must work | Not now: switch off / leave alone |
+|---|---|---|
+| Overview | Dashboard, Notifications | |
+| Sell | POS, Kiosk (clock-in), Returns, Parked Sales, Sales History | Orders (web orders: after Shopify goes live), Quotations, Holds & Layaway, Return Policies |
+| Customers | Customers | Customer Groups, CRM, Loyalty Tiers, Gift Cards, Customer Invoices, Inbox, Campaigns, Review Moderation |
+| Catalog | Products, Categories, Brands, Promotions | Attribute Sets, Price Lists, Smart Collections, Scheduled Changes |
+| Inventory | Inventory Audit (stock count), Stock Adjustments, Reorder Alerts | Transfers (one location only), Intelligence |
+| Procurement | Suppliers, Purchase Orders, Supplier Returns, Supplier Payables | |
+| Fulfillment | | Fulfillment, Courier Settings, COD Settlements |
+| Finance | Cash Management, Expenses | Approvals, Accounting, Chart of Accounts, Journal Entries, Credit/Debit Notes, Post-Dated Cheques |
+| Insights | Reports | Report Builder, Retail Risk (page only: its variance-PIN rule stays on) |
+| People | Employees, Attendance | Scheduling, HR |
+| Compliance | | Taxes, FBR Settings, Tax Lookup (not GST registered) |
+| Setup | Company Profile, Receipt Templates, Barcode Templates, Printer Settings, Import Data, Backup & Restore, Business Modules, Integrations (Shopify, later) | View Storefront, Outlets, Outlet Tax Profiles, POS Layouts, Import from Shopify/Square |
+| Account | Billing, My Tickets, Administrator, Action History | |
+
+About **41 to prove, about 34 to switch off**. Some "not now" pages have no module switch; those are just left unused. Loyalty points are earned at the till today (day 1 test customer got 48): decide whether to keep them.
+
 ## Fixes, in order
 
 Each fix follows the same path: write a test that **fails on today's code** → fix → full related tests pass → try it on screen locally → owner OK → deploy (push `main`, Vercel + Railway) → check live → first real use in the shop. Recorded in `PROGRESS.md` under its D number.
@@ -116,7 +153,7 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 
 - ~~**Q1 (R7):** backups~~ ✅ answered 2026-09-29: **no Supabase Pro**; nightly **Download Backup** from the Backup & Restore page (proven, see R7 proof).
 - ~~**Q2 (F2)**~~ ✅ answered 2026-09-29: **one "Online" button**; pressing it shows **ready-made choices to click** (no typing), in this order: **EasyPaisa, JazzCash** (most used), then the shop's bank accounts **Allied, Meezan, MCB, HBL, Alfalah** (for bank transfers). Saved/shown as e.g. "Online – JazzCash". Keep the list editable later (banks change).
-- **Q3 (R1):** is 7 clean trading days in a row the right bar?
+- ~~**Q3 (R1)**~~ ✅ answered 2026-09-29: **7 days is fine**; more if needed.
 - **Q4 (F1):** leave day 1's Rs 40 on INV-00004 as recorded (with a note), or correct it once the fix exists?
 - **Q5 (F3):** the expense categories the register uses (e.g. tea, transport, staff advance…).
 - **Q6:** does iPOS hold anything else the shop relies on (customer credit / udhaar, supplier balances, staff salaries)? If so it must move before R9.
