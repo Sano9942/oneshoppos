@@ -8,7 +8,9 @@
 
 ## ▶ Where we are / next (updated 2026-09-29)
 
-**2026-09-29: the real iPOS import is DONE on prod and checked** (10,044 items, totals exact, 225 below-zero at 0, scans OK, 0 labels open, DB 274 MB). **Next: counter PC (step 8), then the Phase F plan.**
+**2026-09-29 (end of session, ~16:00): LIVE DUAL-RUN STARTED.** Real iPOS import done + checked on prod (10,044 items, totals exact). Counter PC set up (Chrome, scanner, thermal printer via Chrome print box, kiosk clock-in, shift 1 opened 13:51 float Rs 32,870). Every sale is rung in **both** iPOS and SanoPOS. By 15:53: **11 real bills, Rs 58,860 = Cash 13,920 + Card 44,940**, one exchange. New iPOS-style receipt (D45) + scannable barcode (D49) **deployed** (main `a62b155d`); prod receipt template set. Details under "Go-live on prod" → "Counter PC (step 8)".
+
+**Next, in order:** (1) **close shift 1 at closing** and reconcile: SanoPOS cash vs drawer, SanoPOS card vs bank machine (**expect SanoPOS +Rs 40**, D48), SanoPOS day total vs iPOS; (2) write the **Phase F plan** ("ready to drop iPOS" rules + fixes: **D48** exchange can't discount 🔴, **D44** Adjustments/Transfers can't search by code 🔴, D47 voids hidden in Sales History, D46 sandbox card gateway on prod, email receipt header). Branch `onetoystore-golive` = `main` + docs commits (local only).
 
 **GO-LIVE IN PROGRESS on prod (sanopos.com), branch `onetoystore-golive`** — see "Go-live on prod (2026-09-28)" below. The real shop `onetoystore` exists (Pro, set up, samples removed, category tree + brands + suppliers in). **Next (2026-09-29):** owner brings a fresh iPOS "Present Stock Position by Supplier" → converter (must match iPOS totals, diff vs 25 Sep file) → preview → **import with "already have labels" ticked** → dry-run checks against prod → counter PC (step 8) → Phase F plan.
 
