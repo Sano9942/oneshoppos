@@ -6,7 +6,9 @@
 
 **Branch:** `onetoystore-pilot`
 
-## ▶ Where we are / next (updated 2026-09-28, evening)
+## ▶ Where we are / next (updated 2026-09-29)
+
+**2026-09-29: the real iPOS import is DONE on prod and checked** (10,044 items, totals exact, 225 below-zero at 0, scans OK, 0 labels open, DB 274 MB). **Next: counter PC (step 8), then the Phase F plan.**
 
 **GO-LIVE IN PROGRESS on prod (sanopos.com), branch `onetoystore-golive`** — see "Go-live on prod (2026-09-28)" below. The real shop `onetoystore` exists (Pro, set up, samples removed, category tree + brands + suppliers in). **Next (2026-09-29):** owner brings a fresh iPOS "Present Stock Position by Supplier" → converter (must match iPOS totals, diff vs 25 Sep file) → preview → **import with "already have labels" ticked** → dry-run checks against prod → counter PC (step 8) → Phase F plan.
 
@@ -429,6 +431,26 @@ Owner in the shop, Claude watching (Playwright tab on sanopos.com, read-only SQL
 | 6. Import **preview only** (old file) | Import → Products, `ipos-products.csv` from the 25 Sep file: **10,044 valid rows, 0 errors**, SKUs = iPOS codes, prices as iPOS (row 1: 3,050 / 1,195). **Not imported** (waits for the fresh file). The "Markup % 25" box on that screen belongs to *Scan invoice photo* only and does not affect a CSV | DB still 0 live products; DB **262 MB** / 500, shop schema 17 MB before import |
 
 **2026-09-29 (morning):** fresh export `C:/Users/HP/Downloads/pspsupplier2992026.xls` (iPOS 29 Sep 13:05, 242 pages) is an **.xlsx saved as .xls**; converter taught to read both (`7d74f570`, test first, 69 pass; 25 Sep output byte-identical). Result: **10,044 items, totals match iPOS: 20,892 units, cost 13,004,323, sale 31,674,300**; 225 below zero -> 0 (756 units); 694 Needs a Category; 22 suppliers. Import totals (below-zero at 0): **21,648 units, cost 13,294,932.50, sale 32,363,380**. vs 25 Sep: same 10,044 codes; 249 items down (547 units = 4 days of sales); COLOUR BOOK JUMBO (9789695000472) 0->27, price 690->790, cost 336->378; item `00` renamed WRAPPING SHEET -> SHEET (now Needs a Category). Import file: **`C:/Users/HP/Downloads/ipos-products-2026-09-29.csv`**. Prod checked read-only before import: `tenant_onetoystore` has only the 5 soft-deleted samples, 45 categories, 22 suppliers, 22 brands; DB 261 MB. **Not imported yet**: owner wants Claude watching in Playwright (MCP failed to connect this session, so a new session).
+
+**2026-09-29: ✅ REAL IMPORT DONE on prod** (Claude watching in Playwright + read-only SQL + `railway logs`; owner OK'd the Import press). Owner was already logged in (`hassan`, Packages Mall).
+
+| Check | Result |
+|---|---|
+| Before | 0 live products, 5 archived samples, 45 categories, 22 suppliers, 22 brands; DB 262 MB |
+| Preview (`POST /api/import/products?preview=1`, 200, 2.8 s) | **10,044 valid, 0 errors**; 0 SKUs made up; all prices from the file; all have a category; 9,942 with supplier, 811 with brand (same as the CSV); preview sums 21,648 units / cost 13,294,932.50 / sale 32,363,380 |
+| Import (`?already_labelled=1`, 200, **68 s**) | `{"imported":10044,"errors":[]}`; console clean; no errors in Railway log |
+| Items | **10,044** live, 10,044 distinct SKUs, 1 outlet |
+| Units / cost / sale (outlet_stock × product) | ✅ **21,648 / 13,294,932.50 / 32,363,380** (exact) |
+| Below zero | ✅ all **225** codes from the converter's `ipos-below-zero.csv` (re-run into scratch; its import CSV is byte-identical to the one imported, sha256 `49ee8018…`) found, all at 0; 0 negative anywhere |
+| Stock spread | 4,473 in stock, 5,571 at 0 |
+| Labels to reprint | ✅ 0 open; 10,044 "already labelled" |
+| History | 4,483 movements (4,473 opening + the 10 sample ±100), net 21,648 |
+| Till scan (`/api/products/scan/…?outlet_id=1`) | ✅ `0107` MASK AVENGERS-7790 Rs 1,150 (12); `027084120134` MATTLE HW DINKEY Rs 550 (**247**, was 251 on 25 Sep); `X000UO7NQD` UNCORN GLITTER ART SET Rs 1,590 (1); `6939143104280.` LUNCH BOX NO-372 Rs 2,190 (0). Stock is in `local_stock` (what the till reads); the old `stock` field is 0 for all, as expected |
+| Size | DB **274 MB** / 500; shop schema 33 MB |
+
+Playwright can only upload from inside the repo, so the CSV was copied to `.playwright-mcp/` (git-ignored) first.
+
+**Next:** counter PC (step 8) → Phase F plan.
 
 **Tomorrow (2026-09-29), in order:** fresh export → converter + diff vs 25 Sep → preview → import with "These items already have shelf labels" ticked → dry-run checks on prod (10,044 items; units / cost / sale totals vs the converter summary; 220 below-zero at 0; scans `0107`, `027084120134`, `X000UO7NQD`, `6939143104280.`; 0 labels open) → counter PC (open sanopos.com online, log in, POS, scanner, test receipt) → Phase F plan + "ready" rules.
 
