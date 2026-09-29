@@ -310,9 +310,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       // refunded) of qty" and disable the Return button when fully refunded.
       const { rows: items } = await db.query(
         `SELECT si.*, p.name as product_name, p.barcode,
+                COALESCE(pv.sku, p.sku) AS sku,
                 COALESCE(rsum.refunded_qty, 0) AS refunded_qty
          FROM sale_items si
          JOIN products p ON si.product_id = p.id
+         LEFT JOIN product_variants pv ON pv.id = si.variant_id
          LEFT JOIN (
            SELECT ri.product_id, ri.variant_id, SUM(ri.quantity) AS refunded_qty
              FROM return_items ri

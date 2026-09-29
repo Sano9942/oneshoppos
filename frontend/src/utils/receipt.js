@@ -31,6 +31,13 @@ export function formatPaymentMethodLabel(method) {
     .join(" ");
 }
 
+function splitLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
 /**
  * Single source of truth for receipt data.
  * Both printSlip (popup) and POSReceiptModal (screen) consume this.
@@ -55,10 +62,21 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     (p) => p.method !== "Return Credit",
   );
 
+  // Header: first line is the shop name (printed big), the rest are address /
+  // phone lines. Footer: one printed line per line typed in the template.
+  const headerAll = splitLines(template?.header_text);
+  const shopName = headerAll[0] || slip.outlet?.name || "SanoPOS";
+  const footerLines = splitLines(template?.footer_text);
+  if (footerLines.length === 0) footerLines.push("Thank you for your purchase!");
+  const discountAmount = Number(slip.discountAmount || 0);
+
   return {
     // Branding — from template with fallbacks
-    storeName: template?.header_text || slip.outlet?.name || "SanoPOS",
-    footerText: template?.footer_text || "Thank you for your purchase!",
+    shopName,
+    headerLines: headerAll.slice(1),
+    footerLines,
+    storeName: shopName,
+    footerText: footerLines.join(" "),
     showBarcode: Boolean(template?.show_barcode),
 
     // Bucket F designer v2. Undefined/null defaults to TRUE/sensible defaults
@@ -82,6 +100,7 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     isExchange,
     returnedItems: slip.returnedItems || [],
     cartItems: slip.cart || [],
+    itemCount: (slip.cart || []).reduce((n, i) => n + Number(i.quantity || 0), 0),
     subtotal,
 
     // Adjustments
@@ -92,8 +111,9 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     taxBreakdown: Array.isArray(slip.tax_breakdown) ? slip.tax_breakdown : [],
     taxInclusive: !!slip.taxInclusive,
     exchangeCredit: Number(slip.exchangeCredit || 0),
-    discountAmount: Number(slip.discountAmount || 0),
+    discountAmount,
     discountType: slip.discountType || "fixed",
+    savings: slip.exchangeCredit > 0 ? 0 : discountAmount,
 
     // Totals
     totalLabel,
@@ -112,39 +132,74 @@ function makeFmt(symbol = "$") {
   return (n) => `${symbol} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Printable width per roll (paper width minus the printer's unprintable edges),
+// keyed by the template's character width. Sizing the slip in mm stops Chrome
+// shrinking it to fit, which made the old 341px slip print small and faint.
+const PRINT_MM = { 48: 72, 42: 64, 32: 48, 30: 46 };
+const FRAME_ID = "sanopos-receipt-frame";
+
+const RECEIPT_CSS = (printMm) => [
+  "@page{margin:0}",
+  "*{box-sizing:border-box}",
+  "html,body{margin:0;padding:0;background:#fff}",
+  `body{width:${printMm}mm;margin:0 auto;padding:2mm 1mm 5mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}`,
+  ".c{text-align:center}",
+  ".shop{font-size:22px;font-weight:bold;letter-spacing:1px;text-align:center;margin:1mm 0 1mm}",
+  ".addr{font-size:11px;text-align:center}",
+  ".row{display:flex;justify-content:space-between;gap:6px}",
+  "hr{border:none;border-top:1px dashed #000;margin:4px 0}",
+  ".label{font-size:11px;font-weight:bold;text-transform:uppercase;padding-top:3px}",
+  "table.items{width:100%;border-collapse:collapse;font-size:11px;margin:2px 0}",
+  "table.items th{font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:2px 0}",
+  "table.items td{padding:2px 0;vertical-align:top}",
+  "th.d,td.d{text-align:left}",
+  "table.items .n{text-align:right;white-space:nowrap;padding:2px 0 2px 8px}",
+  // Qty sits between two money columns; centred with room either side so
+  // "1" and "8,950.00" can never read as "18,950.00".
+  "table.items .q{text-align:center;white-space:nowrap;padding:2px 6px 2px 10px}",
+  "svg{max-width:100%}",
+  ".code,.small{font-size:10px}",
+  ".ret{font-style:italic}",
+  ".grand{font-size:15px;font-weight:bold;border-top:1px solid #000;border-bottom:1px solid #000;padding:2px 0;margin:3px 0}",
+  ".bold{font-weight:bold}",
+  ".saved{text-align:center;font-weight:bold;margin-top:4px}",
+  ".foot{text-align:center;font-weight:bold;margin-top:2px}",
+  ".logo{max-width:100%;max-height:60px;display:block;margin:0 auto 4px}",
+  ".qr{display:block;margin:6px auto;max-width:60%;height:auto}",
+].join("\n");
+
 /**
- * Opens a browser print popup with the receipt rendered as HTML.
- * Uses buildReceiptSections internally — no logic duplication.
+ * Prints the receipt: iPOS-style layout (big shop name, address/phone lines,
+ * Description / Price / Qty / Amount table with item codes, bold grand total,
+ * payments + change, footer lines, optional invoice barcode).
+ *
+ * Renders into a hidden iframe and prints that, so Chrome's pop-up blocker
+ * can't stop it even when printing follows an await (return, hold).
+ * Waits (briefly) for the logo, barcode and QR before opening the print box.
  *
  * @param {object} slip     - The sale slip object
  * @param {object|null} template - Active receipt template (null = use defaults)
+ * @param {object} [opts]   - { onPrint } replaces the print call (tests)
+ * @returns {Promise<void>}
  */
-export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = {}) {
+export async function buildReceiptHtml(slip, template, currencySymbol = "$", labels = {}, opts = {}) {
   const fmt = makeFmt(currencySymbol);
+  const num = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const s = buildReceiptSections(slip, template, currencySymbol);
+  const printMm = PRINT_MM[s.paperWidth] || Math.round(s.paperWidth * 1.5);
 
-  // Bucket F: paper-width-aware popup. Width tracks the active template's
-  // paper_width so 58mm rolls render at ~227px and 80mm rolls at ~341px.
-  const popupPx = pxForChars(s.paperWidth);
-  const winW = Math.max(popupPx + 60, 320);
-  const w = window.open("", "_blank", `width=${winW},height=620`);
-  if (!w) {
-    alert("Pop-up blocked. Please allow pop-ups for this site to print receipts.");
-    return;
-  }
-  const d = w.document;
+  document.getElementById(FRAME_ID)?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = FRAME_ID;
+  frame.title = "Receipt";
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = `position:fixed;left:-10000px;top:0;width:${Math.round(printMm * 3.78)}px;height:800px;border:0`;
+  document.body.appendChild(frame);
+  const d = frame.contentDocument;
+  const pending = [];
 
   const style = d.createElement("style");
-  style.textContent = [
-    `body{font-family:monospace;font-size:13px;width:${popupPx}px;margin:0 auto;padding:12px}`,
-    ".row{display:flex;justify-content:space-between}",
-    ".c{text-align:center}",
-    "hr{border:none;border-top:1px dashed #999;margin:6px 0}",
-    ".label{font-size:11px;font-weight:bold;text-transform:uppercase;color:#666;margin:4px 0 2px}",
-    ".ret{color:#c0392b}",
-    ".logo{max-width:100%;max-height:60px;display:block;margin:0 auto 6px}",
-    ".qr{display:block;margin:6px auto;max-width:80%;height:auto}",
-  ].join(" ");
+  style.textContent = RECEIPT_CSS(printMm);
   d.head.appendChild(style);
   d.title = `Receipt ${s.invoiceNumber}`;
 
@@ -164,200 +219,193 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
     return e;
   };
   const hr = () => d.createElement("hr");
+  const waitForImg = (img) => {
+    pending.push(new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    }));
+  };
 
-  // Header — logo first when template has one (Bucket F)
+  // ── Header: logo, shop name, address / phone lines ──
   if (s.logoUrl) {
     const img = d.createElement("img");
-    img.src = s.logoUrl;
     img.className = "logo";
     img.alt = "";
+    waitForImg(img);
+    img.src = s.logoUrl;
     b.appendChild(img);
   }
-  b.appendChild(txt("div", s.storeName, "c"));
-  b.appendChild(txt("div", s.timestamp, "c"));
+  b.appendChild(txt("div", s.shopName, "shop"));
+  s.headerLines.forEach((line) => b.appendChild(txt("div", line, "addr")));
+  b.appendChild(hr());
+
+  // ── Bill details ──
+  b.appendChild(row(s.timestamp, s.employee ? `Cashier: ${s.employee.name}` : ""));
   // 2-G.9: hold slip gets a prominent "HOLD SLIP" header and renames the
   // invoice line to a hold number. The rest of the layout is reused verbatim
   // so scanner barcode, item list, and deposit/balance lines all come through.
   if (slip.isHoldSlip) {
-    const h = txt("div", "*** HOLD SLIP ***", "c");
-    h.style.cssText = "font-size:14px;font-weight:bold;margin:2px 0";
-    b.appendChild(h);
-    b.appendChild(txt("div", `Hold #: ${s.invoiceNumber}`, "c"));
+    b.appendChild(txt("div", "*** HOLD SLIP ***", "c bold"));
+    b.appendChild(txt("div", `Hold #: ${s.invoiceNumber}`));
   } else {
-    b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`, "c"));
+    b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`));
   }
-  if (s.returnedFrom)
-    b.appendChild(txt("div", `Exchange for: ${s.returnedFrom}`, "c"));
-  if (s.employee)
-    b.appendChild(txt("div", `Staff: ${s.employee.name}`, "c"));
+  if (s.returnedFrom) b.appendChild(txt("div", `Exchange for: ${s.returnedFrom}`));
   if (s.customer)
-    b.appendChild(txt("div", `${labels.customer || "Customer"}: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`, "c"));
-  b.appendChild(hr());
+    b.appendChild(txt("div", `${labels.customer || "Customer"}: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`));
 
-  // M5: format weighted item rows with decimal qty + unit; add gross/tare breakdown when tare > 0
+  // ── Items table ──
+  // M5: weighted items show decimal qty + unit, with a gross/tare line when tare > 0
   const WEIGHT_UNITS = ["kg", "g", "lb", "oz", "m", "cm"];
   const isWeighted = (item) => item.unit && WEIGHT_UNITS.includes(String(item.unit).toLowerCase());
-  const qtyLabel = (item) => isWeighted(item)
+  const qtyText = (item) => isWeighted(item)
     ? `${Number(item.quantity).toFixed(3)} ${item.unit}`
-    : `x${item.quantity}`;
-  const appendItemRow = (item, prefix = "") => {
+    : String(Number(item.quantity));
+
+  const table = d.createElement("table");
+  table.className = "items";
+  const thead = d.createElement("thead");
+  const headRow = d.createElement("tr");
+  [["Description", "d"], ["Price", "n"], ["Qty", "q"], ["Amount", "n"]].forEach(([h, cls]) => headRow.appendChild(txt("th", h, cls)));
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = d.createElement("tbody");
+  table.appendChild(tbody);
+
+  const labelRow = (text) => {
+    const tr = d.createElement("tr");
+    const td = txt("td", text, "label");
+    td.colSpan = 4;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  };
+  const itemRow = (item, returned = false) => {
+    const tr = d.createElement("tr");
+    if (returned) tr.className = "ret";
+    const desc = d.createElement("td");
+    desc.className = "d";
     // 2-R.8: prefix seat chip "[S#]" when line belongs to a dine-in seat.
-    // Retail items pass seat_number=null and render as before.
     const seatChip = item.seat_number != null ? `[S${item.seat_number}] ` : "";
-    const label = `${seatChip}${item.name} ${qtyLabel(item)}`;
-    b.appendChild(row(label, `${prefix}${fmt(item.price * item.quantity)}`, prefix ? "ret" : ""));
-    // Breakdown line for weighted items with tare
+    desc.appendChild(txt("div", `${seatChip}${item.name}`));
+    const code = item.sku || item.barcode;
+    if (code) desc.appendChild(txt("div", String(code), "code"));
     if (isWeighted(item) && Number(item.tare_weight || 0) > 0) {
       const g = Number(item.gross_weight || item.quantity).toFixed(3);
       const t = Number(item.tare_weight).toFixed(3);
       const n = Number(item.quantity).toFixed(3);
-      const note = d.createElement("div");
-      note.className = "small";
-      note.textContent = `  gross ${g} − tare ${t} = net ${n} ${item.unit}`;
-      b.appendChild(note);
+      desc.appendChild(txt("div", `gross ${g} − tare ${t} = net ${n} ${item.unit}`, "small"));
     }
-    // 2-G.6: print one sub-line per serial stamped on this cart line, with
-    // the warranty end date when available. Graceful when `serials` is
-    // absent (non-serialized sales) or is a raw id array (no warranty info).
+    // 2-G.6: one sub-line per serial on this cart line, with warranty end date
+    // when known. Graceful when `serials` is absent or a raw id array.
     const serials = Array.isArray(item.serials) ? item.serials : null;
     const serialDetails = Array.isArray(item.serialDetails) ? item.serialDetails : null;
     if (serialDetails && serialDetails.length) {
-      for (const s of serialDetails) {
-        const wty = s.warranty_end_date ? ` wty: ${s.warranty_end_date}` : "";
-        const ln = d.createElement("div");
-        ln.className = "small";
-        ln.textContent = `  SN: ${s.serial_number}${wty}`;
-        b.appendChild(ln);
+      for (const sd of serialDetails) {
+        const wty = sd.warranty_end_date ? ` wty: ${sd.warranty_end_date}` : "";
+        desc.appendChild(txt("div", `SN: ${sd.serial_number}${wty}`, "small"));
       }
     } else if (serials && serials.length) {
-      for (const id of serials) {
-        const ln = d.createElement("div");
-        ln.className = "small";
-        ln.textContent = `  SN: #${id}`;
-        b.appendChild(ln);
-      }
+      for (const id of serials) desc.appendChild(txt("div", `SN: #${id}`, "small"));
     }
+    tr.appendChild(desc);
+    tr.appendChild(txt("td", num(item.price), "n"));
+    tr.appendChild(txt("td", qtyText(item), "q"));
+    tr.appendChild(txt("td", `${returned ? "-" : ""}${num(item.price * item.quantity)}`, "n"));
+    tbody.appendChild(tr);
   };
 
-  // Returned items (exchange receipts only)
   if (s.returnedItems.length > 0) {
-    b.appendChild(txt("div", "Returned", "label"));
-    s.returnedItems.forEach((item) => appendItemRow(item, "- "));
-    b.appendChild(hr());
-    b.appendChild(txt("div", "New Items", "label"));
+    labelRow("Returned");
+    s.returnedItems.forEach((item) => itemRow(item, true));
+    labelRow("New Items");
   }
+  s.cartItems.forEach((item) => itemRow(item));
+  b.appendChild(table);
 
-  // Cart items
-  s.cartItems.forEach((item) => appendItemRow(item));
-  b.appendChild(hr());
-
-  // Totals block
-  b.appendChild(row("Subtotal", fmt(s.subtotal)));
+  // ── Totals ──
+  b.appendChild(txt("div", `Items: ${s.itemCount}`));
+  b.appendChild(row("Sub Total", num(s.subtotal)));
 
   // P8 (3.14): per-rate tax breakdown when available; legacy single line
-  // otherwise. Inclusive shows "GST 17% Rs 14.53"; exclusive shows
-  // "GST 17% +Rs 17.00" so the cashier can tell the tax sits on top.
+  // otherwise. Inclusive shows "GST 17% 14.53"; exclusive shows "+17.00".
   if (s.showTaxBreakdown && s.taxBreakdown && s.taxBreakdown.length > 0) {
     const prefix = s.taxInclusive ? "" : "+";
     for (const b1 of s.taxBreakdown) {
-      const rateLabel = `GST ${Number(b1.rate).toFixed(0)}%`;
-      b.appendChild(row(rateLabel, `${prefix}${fmt(b1.amount)}`));
+      b.appendChild(row(`GST ${Number(b1.rate).toFixed(0)}%`, `${prefix}${num(b1.amount)}`));
     }
   } else if (s.showTaxBreakdown && s.taxAmount > 0) {
     const prefix = s.taxInclusive ? "" : "+";
-    const label = s.taxInclusive ? "GST (incl.)" : "GST";
-    b.appendChild(row(label, `${prefix}${fmt(s.taxAmount)}`));
+    b.appendChild(row(s.taxInclusive ? "GST (incl.)" : "GST", `${prefix}${num(s.taxAmount)}`));
   }
 
   if (s.exchangeCredit > 0) {
-    b.appendChild(row("Return Credit", `- ${fmt(s.exchangeCredit)}`, "ret"));
+    b.appendChild(row("Return Credit", `-${num(s.exchangeCredit)}`));
   } else if (s.discountAmount > 0) {
-    const label = s.discountType === "percent" ? "Discount (%)" : "Discount";
-    b.appendChild(row(label, `- ${fmt(s.discountAmount)}`));
+    b.appendChild(row(s.discountType === "percent" ? "Discount (%)" : "Discount", `-${num(s.discountAmount)}`));
   }
 
-  const totalEl = row(s.totalLabel, fmt(s.totalValue));
-  totalEl.style.fontWeight = "bold";
-  b.appendChild(totalEl);
+  const grand = row(s.isExchange ? "BALANCE DUE" : "GRAND TOTAL", fmt(s.totalValue));
+  grand.classList.add("grand");
+  b.appendChild(grand);
 
   // 2-G.9 hold slip: show deposit + remaining balance instead of payments.
   if (slip.isHoldSlip) {
-    b.appendChild(row("Deposit Paid", fmt(Number(slip.depositPaid || 0))));
-    const bal = row("Balance Due", fmt(Number(slip.balanceDue || 0)));
-    bal.style.fontWeight = "bold";
-    b.appendChild(bal);
+    b.appendChild(row("Deposit Paid", num(slip.depositPaid)));
+    b.appendChild(row("Balance Due", num(slip.balanceDue), "bold"));
   } else {
-    s.payments.forEach((p) => b.appendChild(row(formatPaymentMethodLabel(p.method), fmt(p.amount))));
+    s.payments.forEach((p) => b.appendChild(row(formatPaymentMethodLabel(p.method), num(p.amount))));
   }
 
   if (s.refundToCustomer != null)
-    b.appendChild(row("Refund to Customer", fmt(s.refundToCustomer), "ret"));
+    b.appendChild(row("Refund to Customer", num(s.refundToCustomer), "bold"));
 
-  if (s.change > 0)
-    b.appendChild(row("Change", fmt(s.change)));
+  if (s.change > 0) b.appendChild(row("Change", num(s.change), "bold"));
+
+  if (s.savings > 0) b.appendChild(txt("div", `You saved ${fmt(s.savings)}`, "saved"));
 
   // Phase 2-G Wave 2 (2-G.2) — gift-card codes issued on this sale.
   if (Array.isArray(slip.issuedGiftCards) && slip.issuedGiftCards.length > 0) {
     b.appendChild(hr());
     b.appendChild(txt("div", "Gift Cards Issued", "label"));
-    slip.issuedGiftCards.forEach((gc) => {
-      const line = d.createElement("div");
-      line.className = "row";
-      line.appendChild(txt("span", gc.code));
-      line.appendChild(txt("span", fmt(gc.initial_value)));
-      b.appendChild(line);
-    });
-    const note = txt(
-      "div",
-      "Keep the code safe — required at checkout.",
-      "c",
-    );
-    note.style.cssText = "font-size:10px;color:#666;margin-top:2px";
-    b.appendChild(note);
+    slip.issuedGiftCards.forEach((gc) => b.appendChild(row(gc.code, num(gc.initial_value))));
+    b.appendChild(txt("div", "Keep the code safe — required at checkout.", "c small"));
   }
 
-  // Order note
   if (s.orderNote) {
     b.appendChild(hr());
     b.appendChild(txt("div", `Note: ${s.orderNote}`, "c"));
   }
 
+  // ── Footer lines (return policy, thanks) ──
+  b.appendChild(hr());
+  const foot = d.createElement("div");
+  foot.className = "foot";
+  s.footerLines.forEach((line) => foot.appendChild(txt("div", line)));
+  b.appendChild(foot);
+
   // Barcode — 2-G.11 renders a CODE128 SVG so scanning the printed receipt
-  // looks up the sale. jsbarcode is loaded lazily so its ~50KB is only paid
-  // by tenants who actually print from the browser.
+  // looks up the sale. jsbarcode is loaded lazily.
   if (s.showBarcode) {
-    b.appendChild(hr());
     const wrap = d.createElement("div");
-    wrap.style.cssText = "text-align:center;margin:4px 0";
+    wrap.style.cssText = "text-align:center;margin:6px 0 2px";
     const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
     wrap.appendChild(svg);
     b.appendChild(wrap);
-    // Render after appending so layout is correct.
-    import("jsbarcode")
-      .then(({ default: JsBarcode }) => {
-        try {
+    pending.push(
+      import("jsbarcode")
+        .then(({ default: JsBarcode }) => {
           JsBarcode(svg, String(s.invoiceNumber || ""), {
-            format: "CODE128",
-            height: 40,
-            width: 1.6,
-            displayValue: true,
-            fontSize: 11,
-            margin: 0,
+            format: "CODE128", height: 40, width: 1.2, displayValue: true, fontSize: 11, margin: 0,
           });
-        } catch {
+        })
+        .catch(() => {
           wrap.textContent = s.invoiceNumber;
-          wrap.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
-        }
-      })
-      .catch(() => {
-        wrap.textContent = s.invoiceNumber;
-        wrap.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
-      });
+          wrap.style.cssText = "text-align:center;font-size:11px;letter-spacing:3px";
+        }),
+    );
   }
 
   // FBR Digital Invoice reference — toggles respected (Bucket F).
-  // Dynamic qrcode import keeps the ~40KB library out of initial bundle;
-  // only fetched when a template actually renders the QR.
   if (s.showFbr && slip.fbr_irn) {
     b.appendChild(hr());
     b.appendChild(txt("div", `FBR Ref: ${slip.fbr_irn}`, "c"));
@@ -368,36 +416,41 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
       b.appendChild(qrImg);
       const raw = String(slip.fbr_qr_code);
       if (raw.startsWith("data:") || raw.startsWith("http")) {
-        // Already an image — use directly.
+        waitForImg(qrImg);
         qrImg.src = raw;
       } else {
         // Raw payload string — encode client-side. Lazy-loaded.
-        import("qrcode")
-          .then((mod) => (mod.default || mod).toDataURL(raw, { margin: 1, width: 140 }))
-          .then((url) => { qrImg.src = url; })
-          .catch(() => { qrImg.remove(); });
+        pending.push(
+          import("qrcode")
+            .then((mod) => (mod.default || mod).toDataURL(raw, { margin: 1, width: 140 }))
+            .then((url) => { qrImg.src = url; })
+            .catch(() => { qrImg.remove(); }),
+        );
       }
     }
   } else if (slip.fbr_status === "pending") {
     b.appendChild(hr());
-    const fbrNote = txt("div", "FBR: Processing...", "c");
-    fbrNote.style.cssText = "font-size:11px;color:#888";
-    b.appendChild(fbrNote);
+    b.appendChild(txt("div", "FBR: Processing...", "c small"));
   }
 
-  // Offline notice
   if (s.offlineNote) {
     b.appendChild(hr());
-    const note = txt("div", s.offlineNote, "c");
-    note.style.cssText = "font-style:italic;color:#c0392b;font-size:11px";
-    b.appendChild(note);
+    b.appendChild(txt("div", s.offlineNote, "c small"));
   }
 
-  // Footer
-  b.appendChild(hr());
-  b.appendChild(txt("div", s.footerText, "c"));
+  if (pending.length) {
+    await Promise.race([
+      Promise.allSettled(pending),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+  }
 
-  w.print();
+  if (opts.onPrint) {
+    opts.onPrint(frame);
+  } else {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  }
 }
 
 /**

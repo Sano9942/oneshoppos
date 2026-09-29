@@ -100,6 +100,24 @@ describe("openDrawer (factory behavior)", () => {
   });
 });
 
+// One Toy Store pilot (2026-09-29): a shop with no receipt printer set up
+// prints through Chrome's print box. The POS needs to tell "no printer set
+// up" (print the browser slip straight away) from "printer didn't answer"
+// (show Print failed), so the not-configured result carries a code.
+describe("printReceipt with no printer set up", () => {
+  it("returns code PRINTER_NOT_CONFIGURED when there is no printer row", async () => {
+    const service = printerModule({ query: vi.fn().mockResolvedValue({ rows: [] }) });
+    const result = await service.printReceipt({ cart: [], payments: [] }, null);
+    expect(result).toMatchObject({ fallback: true, code: "PRINTER_NOT_CONFIGURED" });
+  });
+
+  it("returns code PRINTER_NOT_CONFIGURED when the printer is switched off", async () => {
+    const service = printerModule({ query: vi.fn().mockResolvedValue({ rows: [{ is_active: false }] }) });
+    const result = await service.printReceipt({ cart: [], payments: [] }, null);
+    expect(result).toMatchObject({ fallback: true, code: "PRINTER_NOT_CONFIGURED" });
+  });
+});
+
 describe("printer factory exports", () => {
   it("exposes openDrawer on the service instance", () => {
     const mockDb = { query: vi.fn() };

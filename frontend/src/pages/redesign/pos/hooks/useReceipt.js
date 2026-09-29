@@ -46,11 +46,18 @@ export function useReceipt({ selectedOutletId }) {
   const printSlip = useCallback(async (s) => {
     const result = await printToHardware(s, receiptTemplate, presetLabels);
     if (result && result.ok) return { ok: true };
+    // No receipt printer set up at all (the shop prints through Chrome's own
+    // print box): print the browser slip straight away. "Print failed" is
+    // only for a set-up printer that didn't answer.
+    if (result?.code === "PRINTER_NOT_CONFIGURED") {
+      buildReceiptHtml(s, receiptTemplate, currencySymbol, presetLabels);
+      return { ok: true, browser: true };
+    }
     // Hardware failed — arm the retry modal instead of silently popping the
     // browser window. Caller decides whether to keep going.
     setRetryPrompt({ slip: s, error: result?.error || "Printer offline" });
     return { ok: false, error: result?.error || "Printer offline", fallback: true };
-  }, [receiptTemplate, presetLabels]);
+  }, [receiptTemplate, currencySymbol, presetLabels]);
 
   const dismissRetryPrompt = useCallback(() => setRetryPrompt(null), []);
 

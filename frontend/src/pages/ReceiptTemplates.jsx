@@ -42,7 +42,15 @@ function ReceiptPreview({ template, symbol }) {
             className="mx-auto mb-2 max-h-10 object-contain"
           />
         )}
-        <div className="font-bold text-sm">{template.header_text || "Store Name"}</div>
+        {(() => {
+          const [name, ...rest] = String(template.header_text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          return (
+            <>
+              <div className="font-bold text-base">{name || "Store Name"}</div>
+              {rest.map((line, i) => <div key={i} className="text-[11px]">{line}</div>)}
+            </>
+          );
+        })()}
         <div className="text-(--ui-text-muted) text-[11px] mt-1">Receipt #1042</div>
       </div>
       <div className="space-y-1 mb-3">
@@ -74,8 +82,8 @@ function ReceiptPreview({ template, symbol }) {
           )}
         </div>
       )}
-      <div className="border-t border-dashed border-(--ui-border-strong) pt-2 text-center text-[11px] text-(--ui-text-muted)">
-        {template.footer_text || ""}
+      <div className="border-t border-dashed border-(--ui-border-strong) pt-2 text-center text-[11px] font-bold">
+        {String(template.footer_text || "").split(/\r?\n/).filter((l) => l.trim()).map((line, i) => <div key={i}>{line}</div>)}
       </div>
     </div>
   );
@@ -321,14 +329,14 @@ export default function ReceiptTemplates() {
                     <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-1.5">
                       Header Text
                     </label>
-                    <input
-                      type="text"
+                    <textarea
                       value={form.header_text}
                       onChange={(e) => setForm({ ...form, header_text: e.target.value })}
-                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm"
-                      placeholder="Store name or tagline"
+                      rows={3}
+                      className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm resize-none"
+                      placeholder={"Shop name\nAddress\nPhone"}
                     />
-                    <p className="text-xs text-(--ui-text-muted) mt-1">Appears at the top of the receipt</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Top of the receipt. The first line prints large as the shop name; each line after it (address, phone) prints on its own line.</p>
                   </div>
 
                   <div>
@@ -342,7 +350,7 @@ export default function ReceiptTemplates() {
                       className="w-full px-4 py-2 border-2 border-(--ui-border) rounded-xl focus:outline-none focus:border-(--ui-primary) text-sm resize-none"
                       placeholder="Thank you message, return policy, website…"
                     />
-                    <p className="text-xs text-(--ui-text-muted) mt-1">Appears at the bottom of the receipt</p>
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Bottom of the receipt, in bold. Each line prints on its own line.</p>
                   </div>
 
                   {/* Bucket F: logo upload */}

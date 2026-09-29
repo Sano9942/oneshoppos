@@ -96,6 +96,15 @@ describe("F2 — GET /api/sales/:id exposes refund context", () => {
     expect(Number(item2.refunded_qty)).toBe(0);
   });
 
+  // One Toy Store pilot (2026-09-29): the Sales History reprint prints each
+  // item's code under its name, so the sale detail carries each line's SKU.
+  it("each item carries the product's sku", async () => {
+    await db.query("UPDATE products SET sku = 'OTS-2703' WHERE id = 1");
+    const res = await makeRequest(app, ADMIN_ID).get(`/api/sales/${saleId}`);
+    const item1 = res.body.items.find((i) => Number(i.product_id) === 1);
+    expect(item1.sku).toBe("OTS-2703");
+  });
+
   it("response includes a top-level refund_total", async () => {
     const res = await makeRequest(app, ADMIN_ID).get(`/api/sales/${saleId}`);
     expect(res.status).toBe(200);

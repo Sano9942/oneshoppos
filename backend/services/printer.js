@@ -315,7 +315,9 @@ module.exports = function makePrinterService(db) {
     }
 
     if (!cfg || !cfg.is_active) {
-      return { error: "Printer not configured or inactive.", fallback: true };
+      // code: the POS prints the browser slip straight away for a shop with
+      // no receipt printer set up, instead of showing "Print failed".
+      return { error: "Printer not configured or inactive.", fallback: true, code: "PRINTER_NOT_CONFIGURED" };
     }
 
     let printer;

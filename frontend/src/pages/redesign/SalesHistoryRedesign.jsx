@@ -199,15 +199,25 @@ export default function SalesHistoryRedesign() {
     }
   };
 
-  const handleReprint = () => {
+  const handleReprint = async () => {
     if (!detail?.sale || !detail?.items) return;
     const s = detail.sale;
+    // Reprint with the shop's active receipt template (name, address, policy
+    // lines), same as the till does.
+    let template = null;
+    try {
+      template = (await api.get("/api/receipt-templates/active"))?.template || null;
+    } catch { /* print with defaults */ }
     const slip = {
       invoiceNumber: billNo(s),
       timestamp: formatDate(s.timestamp),
       total: s.total_amount,
+      employee: s.employee_name ? { name: s.employee_name } : null,
+      discountAmount: Number(s.discount_amount || 0),
+      discountType: s.discount_type || "fixed",
       cart: detail.items.map((i) => ({
         name: i.product_name,
+        sku: i.sku || i.barcode || null,
         price: i.price_at_sale,
         quantity: i.quantity,
       })),
@@ -217,7 +227,7 @@ export default function SalesHistoryRedesign() {
       })),
       customer: s.customer_name ? { name: s.customer_name } : null,
     };
-    buildReceiptHtml(slip, null, currencySymbol);
+    buildReceiptHtml(slip, template, currencySymbol);
   };
 
   const handleShareReceipt = async () => {
