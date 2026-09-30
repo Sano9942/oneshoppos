@@ -157,7 +157,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 - Per staff member: advances (from Paid out) + **toys taken at cost price**; settled by cash paid back into the till (a "Paid in") or **cut from salary**, sometimes carried to the next month's salary on request. Salaries are paid in cash from the drawer at month end (Q5.4). The owner wants SanoPOS to track all of it.
 
-### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) 🔴 tomorrow morning
+### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) ✅ DEPLOYED 2026-09-30 ~23:25 with D57 + D58 (`4432ece8`, v148)
 
 - **Problem:** the owner tops up the drawer from the bank (30 Sep: Rs 220,000 from Bank Alfalah) or other sources; the register adds it to the note count. SanoPOS has no way to record it, so Close Shift shows it as "over" (and trips the Rs 500 variance-PIN rule).
 - **Build:** a **Paid in** button beside Paid out: **From bank** (pick account, same list as the Online button), **From owner / home**, **Staff pays back** (links to F3b). Close Shift expected = float + cash sales − cash refunds − paid-outs **+ paid-ins**; same in the dashboard cash position, Cash Audit and the F4 slip. Not a sale, not profit. Removable while the shift is open.
