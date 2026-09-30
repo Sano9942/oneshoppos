@@ -108,8 +108,9 @@ export default function POSPaidOutModal({ open, onClose, shift, onSaved }) {
   };
 
   const describe = (p) =>
-    p.category_name || p.supplier_name || p.staff_name ||
-    (p.invoice_number ? `Bill ${p.invoice_number}` : null) ||
+    (p.invoice_number ? `Discount after sale · bill ${p.invoice_number}` : null) ||
+    p.category_name || p.supplier_name ||
+    (p.staff_name ? `Advance · ${p.staff_name}` : null) ||
     options?.kinds?.find((k) => k.key === p.kind)?.label || p.kind;
 
   return (

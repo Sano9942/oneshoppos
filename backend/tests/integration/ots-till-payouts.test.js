@@ -229,6 +229,14 @@ describe("F3 — mistakes and edits", () => {
     expect(num(row.expected_cash)).toBe(1650);
   });
 
+  it("the Expenses list gives the date as YYYY-MM-DD, and saving it back keeps the same day", async () => {
+    const e = await admin().post("/api/expenses").send({ category_id: staffFood, amount: 40, paid_from: "bank", expense_date: "2026-09-30" });
+    const row = (await admin().get("/api/expenses")).body.expenses.find((x) => x.id === e.body.id);
+    expect(row.expense_date).toBe("2026-09-30");
+    await admin().put(`/api/expenses/${e.body.id}`).send({ category_id: staffFood, amount: 40, expense_date: row.expense_date });
+    expect((await one("SELECT to_char(expense_date, 'YYYY-MM-DD') AS d FROM expenses WHERE id = $1", [e.body.id])).d).toBe("2026-09-30");
+  });
+
   it("an ordinary (bank) expense edited on the Expenses page keeps its shift link too", async () => {
     const e = await admin().post("/api/expenses").send({ category_id: staffFood, amount: 90, paid_from: "bank", shift_id: shiftId });
     await admin().put(`/api/expenses/${e.body.id}`).send({ category_id: staffFood, amount: 95 });

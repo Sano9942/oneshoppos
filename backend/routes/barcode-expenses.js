@@ -277,7 +277,11 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
     try {
       const { rows } = await db.query(
-        `SELECT e.*, ec.name as category_name, o.name as outlet_name,
+        // expense_date as plain text: a DATE parsed into a JS Date came back
+        // as the previous day's 19:00Z in Lahore, and saving the edit form
+        // stored that previous day.
+        `SELECT e.*, to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date,
+                ec.name as category_name, o.name as outlet_name,
                 emp.name as employee_name
          FROM expenses e
          LEFT JOIN expense_categories ec ON e.category_id = ec.id

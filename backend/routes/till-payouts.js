@@ -21,7 +21,7 @@ module.exports = function registerTillPayoutRoutes(app, deps) {
   app.get("/api/till-payouts/options", requirePerm("pos_paid_out"), async (req, res) => {
     try {
       const [cats, sups, staff] = await Promise.all([
-        db.query("SELECT id, name FROM expense_categories WHERE name <> $1 ORDER BY name", [payouts.LATE_DISCOUNT_CATEGORY]),
+        db.query("SELECT id, name FROM expense_categories WHERE name <> $1 ORDER BY id", [payouts.LATE_DISCOUNT_CATEGORY]),
         db.query("SELECT id, name FROM suppliers ORDER BY name"),
         db.query("SELECT id, name FROM employees ORDER BY name"),
       ]);
