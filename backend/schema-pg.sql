@@ -6194,3 +6194,25 @@ ALTER TABLE supplier_payments ALTER COLUMN supplier_invoice_id DROP NOT NULL;
 ALTER TABLE company_profile
   ADD COLUMN IF NOT EXISTS online_payment_options JSONB NOT NULL
   DEFAULT '["EasyPaisa","JazzCash","Allied","Meezan","MCB","HBL","Alfalah"]'::jsonb;
+
+-- One Toy Store pilot (F3 / D50, migration v147): cash paid out of the till.
+-- Same statements as services/till-payouts.js TILL_PAYOUTS_DDL.
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS paid_from TEXT NOT NULL DEFAULT 'other'
+  CHECK (paid_from IN ('till','bank','other'));
+CREATE TABLE IF NOT EXISTS till_payouts (
+  id SERIAL PRIMARY KEY,
+  shift_id INTEGER NOT NULL REFERENCES cash_shifts(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  kind TEXT NOT NULL CHECK (kind IN ('shop_cost','supplier','owner','staff_advance','late_discount')),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  note TEXT,
+  expense_id INTEGER REFERENCES expenses(id) ON DELETE CASCADE,
+  supplier_payment_id INTEGER REFERENCES supplier_payments(id),
+  staff_employee_id INTEGER REFERENCES employees(id),
+  sale_id INTEGER REFERENCES sales(id),
+  employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_till_payouts_shift ON till_payouts(shift_id);
+CREATE INDEX IF NOT EXISTS idx_till_payouts_expense ON till_payouts(expense_id);

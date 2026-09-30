@@ -122,6 +122,7 @@ const PERMISSIONS_CATALOG = Object.freeze([
   { id: "void_sales", label: "Void Sales", category: "POS" },
   { id: "pos_void", label: "Manager Override Void", category: "POS" },
   { id: "pos_park", label: "Park & Restore Sales", category: "POS" },
+  { id: "pos_paid_out", label: "Pay Out Cash from the Till", category: "POS" },
 
   // ── Manager Overrides (PIN-authorized floor actions) ──────────────────────
   { id: "override_price", label: "Override Price (manager PIN)", category: "Overrides" },

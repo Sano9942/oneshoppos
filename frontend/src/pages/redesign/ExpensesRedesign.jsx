@@ -24,7 +24,14 @@ const EMPTY_FORM = {
   description: "",
   reference: "",
   expense_date: "",
+  paid_from: "other",
 };
+
+// F3 (D50): where the money came from. Till cash comes off the open shift's
+// drawer at Close Shift; bank / other never touch the drawer.
+const PAID_FROM_LABEL = { till: "Till cash", bank: "Bank", other: "Other" };
+const paidFromLabel = (row) =>
+  row.paid_from === "till" && row.shift_id ? `Till cash (shift #${row.shift_id})` : PAID_FROM_LABEL[row.paid_from] || "Other";
 
 function today() {
   return todayLocalStr();
@@ -133,6 +140,7 @@ export default function ExpensesRedesign() {
       description: row.description || "",
       reference: row.reference || "",
       expense_date: row.expense_date || today(),
+      paid_from: row.paid_from || "other",
     });
     setFormError("");
     setModal(row);
@@ -167,6 +175,10 @@ export default function ExpensesRedesign() {
         reference: form.reference || null,
         expense_date: form.expense_date || today(),
       };
+      // A till expense stays in its shift's drawer; the others can move
+      // between Bank and Other.
+      const editingTill = isEdit && modal.paid_from === "till";
+      if (!editingTill) payload.paid_from = form.paid_from || "other";
 
       if (isEdit) {
         await api.put(`/api/expenses/${modal.id}`, payload);
@@ -235,7 +247,7 @@ export default function ExpensesRedesign() {
       right={
         <div className="flex items-center gap-2">
           <Button onClick={() => {
-            if (activeTab === "expenses") downloadCsv(["date","category","description","outlet","employee","amount","reference"], rows.map(r => [r.expense_date||"", r.category_name||"", r.description||"", r.outlet_name||"", r.employee_name||"", r.amount||0, r.reference||""]), "expenses");
+            if (activeTab === "expenses") downloadCsv(["date","category","description","outlet","employee","paid_from","amount","reference"], rows.map(r => [r.expense_date||"", r.category_name||"", r.description||"", r.outlet_name||"", r.employee_name||"", paidFromLabel(r), r.amount||0, r.reference||""]), "expenses");
             else downloadCsv(["category","transactions","total","percent"], summary.map(s => [s.category_name||"", s.count||0, s.total||0, s.pct||0]), "expenses_summary");
           }}><Download size={13} className="mr-1 inline" />Export CSV</Button>
           <Button onClick={() => setCatPanelOpen(true)}>
@@ -342,6 +354,7 @@ export default function ExpensesRedesign() {
                   <th className="px-3 py-2 text-left">Description</th>
                   <th className="px-3 py-2 text-left">Outlet</th>
                   <th className="px-3 py-2 text-left">Employee</th>
+                  <th className="px-3 py-2 text-left">Paid from</th>
                   <th className="px-3 py-2 text-right">Amount</th>
                   <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
@@ -354,6 +367,7 @@ export default function ExpensesRedesign() {
                     <td className="px-3 py-2 text-(--ui-text)">{row.description || "-"}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">{row.outlet_name || "-"}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">{row.employee_name || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{paidFromLabel(row)}</td>
                     <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                       {money(row.amount)}
                     </td>
@@ -374,7 +388,7 @@ export default function ExpensesRedesign() {
               {rows.length ? (
                 <tfoot>
                   <tr className="border-t border-(--ui-border) bg-(--ui-muted-surface)">
-                    <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-(--ui-text)">
+                    <td colSpan={6} className="px-3 py-2 text-right text-sm font-semibold text-(--ui-text)">
                       Total Expenses
                     </td>
                     <td className="px-3 py-2 text-right text-sm font-semibold text-(--ui-text)">
@@ -482,6 +496,24 @@ export default function ExpensesRedesign() {
                     </option>
                   ))}
                 </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Paid from</label>
+                {modal && modal !== "add" && modal.paid_from === "till" ? (
+                  <p className="text-sm text-(--ui-text)">
+                    {paidFromLabel(modal)}: the drawer amount changes with it while the shift is open
+                  </p>
+                ) : (
+                  <Select
+                    value={form.paid_from}
+                    onChange={(e) => setForm((prev) => ({ ...prev, paid_from: e.target.value }))}
+                    aria-label="Paid from"
+                  >
+                    {modal === "add" && <option value="till">Till cash (comes off the open shift)</option>}
+                    <option value="bank">Bank</option>
+                    <option value="other">Other</option>
+                  </Select>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs text-(--ui-text-muted)">Description</label>

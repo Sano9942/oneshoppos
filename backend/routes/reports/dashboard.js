@@ -1,5 +1,6 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
 const { returnsProfit } = require("../../services/returns-profit");
+const { PAID_OUT_SUBSELECT } = require("../../services/till-payouts");
 
 module.exports = function (app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
@@ -518,9 +519,8 @@ module.exports = function (app, deps) {
       }));
 
       // Cash position: for every open shift, expected_cash = opening_float +
-      // sum(cash payments) - sum(cash_paid_out). We approximate cash_paid_out
-      // via expenses flagged paid from the drawer (no dedicated table today);
-      // the shifts close flow has the authoritative calc and matches this.
+      // cash payments - cash refunds - till paid-outs (F3 / D50, same
+      // PAID_OUT rule as Close Shift in routes/shifts.js).
       const cashShiftClause = buildOutletClause("cs.outlet_id", outletIds, 1);
       const { rows: cashPositionRows } = await db.query(
         `SELECT cs.id AS shift_id,
@@ -542,7 +542,8 @@ module.exports = function (app, deps) {
                     FROM returns r
                    WHERE r.shift_id = cs.id
                      AND LOWER(r.refund_method) = 'cash'
-                ), 0) AS cash_out
+                ), 0) AS cash_out,
+                ${PAID_OUT_SUBSELECT} AS paid_out
            FROM cash_shifts cs
            JOIN outlets o ON o.id = cs.outlet_id
            LEFT JOIN employees e ON e.id = cs.employee_id
@@ -553,7 +554,8 @@ module.exports = function (app, deps) {
       );
       const cashPosition = {
         by_outlet: cashPositionRows.map((r) => {
-          const expected = Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0);
+          const expected = Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0)
+            - Number(r.paid_out || 0);
           return {
             shift_id: r.shift_id,
             outlet_id: r.outlet_id,
@@ -563,6 +565,7 @@ module.exports = function (app, deps) {
             opening_float: Number(r.opening_float || 0),
             cash_in: Number(r.cash_in || 0),
             cash_out: Number(r.cash_out || 0),
+            paid_out: Number(r.paid_out || 0),
             expected_cash: Number(expected.toFixed(2)),
           };
         }),
@@ -570,7 +573,8 @@ module.exports = function (app, deps) {
           cashPositionRows
             .reduce(
               (sum, r) =>
-                sum + Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0),
+                sum + Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0)
+                  - Number(r.paid_out || 0),
               0,
             )
             .toFixed(2),

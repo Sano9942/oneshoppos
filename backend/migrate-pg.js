@@ -10212,6 +10212,20 @@ const MIGRATIONS = [
       await client.query(ONLINE_OPTIONS_DDL);
     },
   },
+  {
+    version: 147,
+    description:
+      "One Toy Store pilot, F3 (D50): cash paid out of the till. expenses gains paid_from ('till' | 'bank' | 'other', default 'other' so old rows never touch the drawer); new till_payouts table (shift, kind shop_cost | supplier | owner | staff_advance | late_discount, amount, note, links to the expense / supplier payment / staff member / bill). Close Shift and the dashboard cash position subtract a shift's paid-outs. DDL shared with schema-pg.sql via services/till-payouts.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('expenses', 'cash_shifts', 'supplier_payments')`
+      );
+      if (rows[0].n < 3) return;
+      const { TILL_PAYOUTS_DDL } = require("./services/till-payouts");
+      await client.query(TILL_PAYOUTS_DDL);
+    },
+  },
 ];
 
 /**

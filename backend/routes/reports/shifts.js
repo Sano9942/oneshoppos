@@ -80,6 +80,12 @@ module.exports = function (app, deps, helpers) {
         SELECT 'Return' AS type, r.timestamp, -r.total_refund AS amount, r.id AS ref_id
         FROM returns r
         WHERE r.shift_id = $2 AND r.refund_method = 'Cash'
+        UNION ALL
+        -- F3 (D50): cash paid out of the till (a voided supplier payment gave it back)
+        SELECT 'Paid out' AS type, p.created_at AS timestamp, -p.amount AS amount, p.id AS ref_id
+        FROM till_payouts p
+        LEFT JOIN supplier_payments sp ON sp.id = p.supplier_payment_id
+        WHERE p.shift_id = $2 AND (p.supplier_payment_id IS NULL OR sp.voided IS NOT TRUE)
         ORDER BY timestamp ASC
       `;
       const { rows } = await db.query(sql, [session_id, session_id]);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor, Banknote } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readTenantSlug } from "../../../auth/authStore";
@@ -8,6 +8,8 @@ import { IS_MULTI_TENANT } from "../../../config";
 import { getQueueByState } from "../../../utils/offlineQueue";
 import POSStuckQueueModal from "./POSStuckQueueModal";
 import POSLockButton from "./POSLockButton";
+import POSPaidOutModal from "./POSPaidOutModal";
+import { Button } from "../../../ui/primitives";
 
 export default function POSHeader() {
   const {
@@ -34,6 +36,8 @@ export default function POSHeader() {
   const { hasPerm } = useAuth();
   const [stuckCount, setStuckCount] = useState(0);
   const [stuckOpen, setStuckOpen] = useState(false);
+  const [paidOutOpen, setPaidOutOpen] = useState(false);
+  const canPayOut = hasPerm?.("pos_paid_out");
   const isAdmin = hasPerm?.("all_access");
 
   const refreshStuck = useCallback(async () => {
@@ -136,6 +140,15 @@ export default function POSHeader() {
             <AlertTriangle size={14} /> <span>Stuck ({stuckCount})</span>
           </button>
         )}
+        {activeShift && canPayOut && (
+          <Button
+            size="sm"
+            onClick={() => setPaidOutOpen(true)}
+            title="Cash paid out of the till (expenses, suppliers, home, advances)"
+          >
+            <Banknote size={14} className="mr-1 inline" /> Paid out
+          </Button>
+        )}
         {activeShift && canOpenShift && (
           <button
             onClick={() => setCloseShiftOpen(true)}
@@ -163,6 +176,9 @@ export default function POSHeader() {
         open={stuckOpen}
         onClose={() => { setStuckOpen(false); refreshStuck(); }}
       />
+      {activeShift && canPayOut && (
+        <POSPaidOutModal open={paidOutOpen} onClose={() => setPaidOutOpen(false)} shift={activeShift} />
+      )}
     </div>
   );
 }

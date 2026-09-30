@@ -129,6 +129,30 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 - **Who can pay out:** the owner login now; later staff with their own till login, with who-did-it recorded (a permission that can be given to a staff role).
 - **Before F3 goes live (owner inputs):** (1) **list of what the shop owes every supplier** → opening balances entered on prod with the owner's OK (Q5.6: "enter all balances now"); (2) **names of the 10 staff + cleaner** → added as employees with no till login (Q5.11).
 
+**Owner's lists, 2026-09-30 ~17:40 (photos; my reading, to confirm before any prod write):**
+
+Supplier balances ("Register payment" as of 30/9/2026) → matched to prod `suppliers`:
+
+| # | Paper | Owed | Prod supplier (id) |
+|---|---|---|---|
+| 1 | Toys and Toys | 3,857,786 ✅ owner | TOYS AND TOYS LAHORE (22) |
+| 2 | Smart Toys | nil | SMART TOYS (20) |
+| 3 | Al Hassan Traders | 324,445 | AL HASSAN TRADERS (4) |
+| 4 | J.B.D | 71,558 | JAHANGIR BOOKS LAHORE (12) ✅ owner |
+| 5 | AtoZ | 133,040 | A TO Z CONSUMERS (1) |
+| 6 | Tooba stuff | 256,335 | TOOBA STUFF TOYS LAHORE (21) |
+| 7 | Rabia books | 38,461 | RABIA BOOKS LAHORE (16) |
+| 8 | Nawaz sb | nil | HAFIZ NAWAZ (10) ✅ owner |
+| 9 | Baby Land | 1,126,110 | BABY LAND LAHORE (9) |
+| 10 | Hafiz Brothers | 387,170 | **new supplier to add** (owner: not Hafiz Nawaz) |
+| 11 | Arif Khan | 1,334,084 | ARIF KHAN KARACHI (7) |
+| 12 | Rehmat Toys | nil | REHMAT TOYS RWP (18) |
+| 13 | Akbar stationers, Rawalpindi | nil | AKBAR & CO STATIONERS (3) |
+
+Total owed on paper: **7,528,989**. Prod suppliers not on the list: Adeel Toys Karachi, Amir Stationer, Aqeel Stuff Toys, Azmat Stationery RWP, Hong Kong, KK Sports, Local Items Shah Alam, One Shop Gulberg, Rehman Stuff Toys, Saad Stationer. (A third column "Cost in computer" is empty.)
+
+Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 · Mubashir Shah 36,500 / 6 · Naeem Shah 42,000 / 6 · Basharat Ali 48,500 / 5 · Tahir Mushtaq 30,500 / 5 · Atiq Ali 33,500 / 5 · Kelash Kumar 34,000 / 6 · Ubaid Awan 32,000 / 6 · Fahad Iqbal 23,000 / 5 · Ramzan 27,500 / 5 · Usman (sweeper) 10,000 / 4. Monthly total 354,000. **Leave rule (owner, confirmed):** each unused allowed day is paid extra at salary ÷ 30; each day taken beyond the allowance is cut at salary ÷ 30. So pay = salary + (allowed − taken) × salary ÷ 30 (negative when over), minus advances / staff purchases being cut that month (F3b).
+
 ### F3b: Staff account (after F3, owner 2026-09-30)
 
 - Per staff member: advances (from Paid out) + **toys taken at cost price**; settled by cash paid back into the till (a "Paid in") or **cut from salary**, sometimes carried to the next month's salary on request. Salaries are paid in cash from the drawer at month end (Q5.4). The owner wants SanoPOS to track all of it.

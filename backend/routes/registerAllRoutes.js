@@ -731,6 +731,7 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
+  require("./till-payouts")(app, deps);
 
   // --- ATTENDANCE ---
   require("./attendance")(app, deps);

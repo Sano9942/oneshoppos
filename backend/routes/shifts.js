@@ -8,6 +8,7 @@ module.exports = function (app, deps) {
   } = require("../schemas/shifts");
   const { getFeatureFlagsMap } = require("../middleware/feature-flags");
   const { verifyManagerPin } = require("../services/manager-pin");
+  const { paidOutForShift } = require("../services/till-payouts");
 
   async function storeShiftDenominations(client, shiftId, stage, denominations = []) {
     const rows = Array.isArray(denominations)
@@ -147,7 +148,10 @@ module.exports = function (app, deps) {
       );
       const cashRefunds = Number(refundRows[0]?.cash_refunds || 0);
       const netCashSales = cashSales - cashRefunds;
-      const expectedCash = parseFloat(shift.opening_float) + netCashSales;
+      // F3 (D50): cash paid out of the till during this shift (shop costs,
+      // suppliers, owner/home, staff advances, discounts after sale).
+      const paidOut = await paidOutForShift(db, shift.id);
+      const expectedCash = parseFloat(shift.opening_float) + netCashSales - paidOut;
       const variance = parseFloat(closing_cash) - expectedCash;
 
       // 2-G.17: if risk controls are on AND abs(variance) exceeds the tenant
@@ -216,6 +220,7 @@ module.exports = function (app, deps) {
         cash_sales: cashSales,
         cash_refunds: cashRefunds,
         net_cash_sales: netCashSales,
+        paid_out: paidOut,
         expected_cash: expectedCash,
         closing_cash,
         variance,

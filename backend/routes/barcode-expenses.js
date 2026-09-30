@@ -293,6 +293,12 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     }
   });
 
+  // F3 (D50): paid_from says where the money came from. 'till' = cash out of
+  // the drawer: it goes through services/till-payouts.js so the open shift's
+  // expected cash drops by it. 'bank' / 'other' never touch the drawer.
+  const tillPayouts = require("../services/till-payouts");
+  const { tenantToday } = require("../utils/tz");
+
   app.post("/api/expenses", async (req, res) => {
     const {
       category_id,
@@ -303,13 +309,45 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
       description,
       reference,
       expense_date,
+      paid_from = "other",
     } = req.body;
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
       return res.status(400).json({ error: "Valid amount required" });
+    if (!tillPayouts.PAID_FROM.includes(paid_from))
+      return res.status(400).json({ error: "paid_from must be till, bank or other" });
     try {
+      if (paid_from === "till") {
+        // The drawer it came out of: the given shift, else the outlet's open one.
+        let shiftId = Number(shift_id) || null;
+        if (!shiftId) {
+          const { rows } = await db.query(
+            `SELECT id FROM cash_shifts WHERE status = 'open' ${outlet_id ? "AND outlet_id = $1" : ""}
+             ORDER BY opened_at DESC`,
+            outlet_id ? [outlet_id] : [],
+          );
+          if (rows.length !== 1) {
+            return res.status(400).json({
+              error: rows.length ? "More than one shift is open: pick the outlet" : "No open shift: till cash needs an open shift",
+            });
+          }
+          shiftId = rows[0].id;
+        }
+        const today = tenantToday(req.company?.timezone || "UTC");
+        const payout = await db.transaction(async (client) => {
+          const p = await tillPayouts.createPayout(client, {
+            shift_id: shiftId, kind: "shop_cost", amount, category_id, note: description,
+          }, { employeeId: employee_id || req.employee?.id || null, today });
+          await client.query(
+            "UPDATE expenses SET reference = $1, expense_date = COALESCE($2::date, expense_date) WHERE id = $3",
+            [reference || null, expense_date || null, p.expense_id],
+          );
+          return p;
+        });
+        return res.json({ id: payout.expense_id, till_payout_id: payout.id });
+      }
       const { rows } = await db.query(
-        `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date, paid_from)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
         [
           category_id || null,
           outlet_id || null,
@@ -320,12 +358,13 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
           reference || null,
           // Default expense day = tenant-local today (UTC date is a day
           // behind for evening entries east of UTC).
-          expense_date || require("../utils/tz").tenantToday(req.company?.timezone),
+          expense_date || tenantToday(req.company?.timezone),
+          paid_from,
         ]
       );
       res.json({ id: rows[0].id });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -333,7 +372,6 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     const {
       category_id,
       outlet_id,
-      shift_id,
       employee_id,
       amount,
       description,
@@ -343,23 +381,47 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
       return res.status(400).json({ error: "Valid amount required" });
     try {
-      await db.query(
-        `UPDATE expenses SET category_id=$1, outlet_id=$2, shift_id=$3, employee_id=$4, amount=$5,
-         description=$6, reference=$7, expense_date=$8 WHERE id=$9`,
-        [
-          category_id || null,
-          outlet_id || null,
-          shift_id || null,
-          employee_id || null,
-          parseFloat(amount),
-          description || null,
-          reference || null,
-          // Default expense day = tenant-local today (UTC date is a day
-          // behind for evening entries east of UTC).
-          expense_date || require("../utils/tz").tenantToday(req.company?.timezone),
-          req.params.id,
-        ]
-      );
+      const { rows: [current] } = await db.query("SELECT id, shift_id, paid_from FROM expenses WHERE id = $1", [req.params.id]);
+      if (!current) return res.status(404).json({ error: "Expense not found" });
+      const payout = await tillPayouts.payoutForExpense(db, current.id);
+      if (payout && payout.shift_status !== "open") {
+        return res.status(409).json({ error: "Paid from the till in a closed shift: it can't be changed" });
+      }
+      // The Expenses page doesn't send shift_id / paid_from: keep them unless
+      // the caller sends them. A till expense keeps both (its drawer moves
+      // with the amount instead).
+      const shiftId = payout || !("shift_id" in req.body) ? current.shift_id : (req.body.shift_id || null);
+      let paidFrom = current.paid_from;
+      if (!payout && req.body.paid_from !== undefined) {
+        if (!["bank", "other"].includes(req.body.paid_from)) {
+          return res.status(400).json({ error: "To make it till cash, delete it and add it again as Till cash" });
+        }
+        paidFrom = req.body.paid_from;
+      }
+      await db.transaction(async (client) => {
+        await client.query(
+          `UPDATE expenses SET category_id=$1, outlet_id=$2, shift_id=$3, employee_id=$4, amount=$5,
+           description=$6, reference=$7, expense_date=$8, paid_from=$9 WHERE id=$10`,
+          [
+            category_id || null,
+            outlet_id || null,
+            shiftId,
+            employee_id || null,
+            parseFloat(amount),
+            description || null,
+            reference || null,
+            // Default expense day = tenant-local today (UTC date is a day
+            // behind for evening entries east of UTC).
+            expense_date || tenantToday(req.company?.timezone),
+            paidFrom,
+            current.id,
+          ]
+        );
+        if (payout) {
+          await client.query("UPDATE till_payouts SET amount = $1, note = $2 WHERE id = $3",
+            [parseFloat(amount), description || null, payout.id]);
+        }
+      });
       res.json({ updated: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -371,6 +433,11 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     requirePerm("manage_inventory"),
     async (req, res) => {
       try {
+        const payout = await tillPayouts.payoutForExpense(db, req.params.id);
+        if (payout && payout.shift_status !== "open") {
+          return res.status(409).json({ error: "Paid from the till in a closed shift: it can't be deleted" });
+        }
+        // A till expense's payout row goes with it (ON DELETE CASCADE).
         await db.query("DELETE FROM expenses WHERE id=$1", [req.params.id]);
         res.json({ deleted: true });
       } catch (err) {
