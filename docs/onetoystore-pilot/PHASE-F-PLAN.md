@@ -138,6 +138,19 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 
 - The header lines run together and header/footer text isn't escaped in the email version. Match the printed slip.
 
+### Reports the owner uses (from Q6, 2026-09-30)
+
+Owner checks regularly: sale by payment type; **hourly sale** (day / month / months); **stock at cost and sale price by supplier, category, brand, sub-category**; **total stock at cost at end of day** (read when closing iPOS). Checked against code + live dashboard 2026-09-30:
+
+- ✅ Sale by payment type: dashboard "Payment Methods", Reports → Payment Summary.
+- 🔴 **D54** hourly sales in UTC (dashboard + Sales Heatmap). Fix with F-list priority after F1 (owner uses it daily).
+- **G1** stock-value **summary table** by supplier / category / brand / sub-category (cost + sale price + units), like iPOS PSP "Supplier / Category / Brand / Sub-Cat Summary". Today: Reports → On Hand gives totals for **one** filter at a time.
+- **G2** **saved end-of-day stock value**: store units / cost / retail at every Close Shift; print on the day slip (F4); list by date. Today: dashboard shows the live figure only.
+- **G3** dashboard: sales contribution **by supplier** (Reports → Merchandising has it; not on the dashboard).
+- **G4** dashboard: **gross margin %** today and month (shows month GM amount only), **month sale and month purchase** totals, **top 50 items (30 days)** (shows top 5).
+- **G5** dashboard: **daily sale vs purchase** (server computes a 7-day series, Query 13, no screen shows it).
+- Seen: "Needs a Category" = 23% of 30-day sales (Rs 15,770): sold items imported without a category. List them for the owner.
+
 ### Smaller, when passing
 
 - A void doesn't take back the customer's loyalty points (day 1 test customer kept 48).
