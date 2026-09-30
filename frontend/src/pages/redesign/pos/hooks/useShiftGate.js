@@ -3,6 +3,7 @@ import { api } from "../../../../api";
 import { useAuth } from "../../../../auth/AuthProvider";
 import { readContext } from "../../../../auth/authStore";
 import { saveLastKnown, readLastKnown, isUnreachable } from "../../../../utils/lastKnown";
+import { blankDenoms } from "../../../../utils/denomCount";
 
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
@@ -16,7 +17,7 @@ export function useShiftGate({ setError, showNotice }) {
   const [gateLoading, setGateLoading] = useState(false);
   const [openingShiftBusy, setOpeningShiftBusy] = useState(false);
   const [openingDenoms, setOpeningDenoms] = useState(
-    OPENING_DENOMS.map((value) => ({ denomination: value, count: 0 })),
+    blankDenoms(OPENING_DENOMS),
   );
   const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 

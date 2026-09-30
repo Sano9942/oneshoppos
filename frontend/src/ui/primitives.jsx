@@ -263,6 +263,16 @@ const MODAL_WIDTH_CLASS = {
   xl: "max-w-2xl",
 };
 
+// The latest value in a ref, so an effect can call it without re-running
+// whenever the parent passes a new function.
+function useLatest(value) {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
 export function Modal({
   open,
   onClose,
@@ -274,16 +284,19 @@ export function Modal({
 }) {
   const cardRef = useRef(null);
   const lastActiveRef = useRef(null);
+  const onCloseRef = useLatest(onClose);
 
   // Escape key + initial focus + restore focus on close. Drop-in replacement
   // for the ~106 inline `fixed inset-0` modal markup sites — those almost
   // never handle escape or restore focus, so this is a real UX upgrade as
-  // well as a consistency one.
+  // well as a consistency one. Runs on `open` only: a parent passing a new
+  // onClose each render (an inline arrow) must not re-run it, or every key
+  // typed in a box moves the cursor out of it (D57).
   useEffect(() => {
     if (!open) return;
     lastActiveRef.current = document.activeElement;
     const onKey = (e) => {
-      if (e.key === "Escape" && onClose) onClose();
+      if (e.key === "Escape" && onCloseRef.current) onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     // Defer focus to next frame so the card is mounted first.
@@ -303,7 +316,7 @@ export function Modal({
         last.focus({ preventScroll: true });
       }
     };
-  }, [open, onClose]);
+  }, [open, onCloseRef]);
 
   if (!open) return null;
 
@@ -361,12 +374,14 @@ const DRAWER_WIDTH_CLASS = {
 export function Drawer({ open, onClose, title, actions = null, size = "md", children }) {
   const panelRef = useRef(null);
   const lastActiveRef = useRef(null);
+  const onCloseRef = useLatest(onClose);
 
+  // Runs on `open` only (see Modal, D57).
   useEffect(() => {
     if (!open) return;
     lastActiveRef.current = document.activeElement;
     const onKey = (e) => {
-      if (e.key === "Escape" && onClose) onClose();
+      if (e.key === "Escape" && onCloseRef.current) onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     const t = window.setTimeout(() => {
@@ -385,7 +400,7 @@ export function Drawer({ open, onClose, title, actions = null, size = "md", chil
         last.focus({ preventScroll: true });
       }
     };
-  }, [open, onClose]);
+  }, [open, onCloseRef]);
 
   if (!open) return null;
 

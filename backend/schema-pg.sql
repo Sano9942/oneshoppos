@@ -6216,3 +6216,19 @@ CREATE TABLE IF NOT EXISTS till_payouts (
 );
 CREATE INDEX IF NOT EXISTS idx_till_payouts_shift ON till_payouts(shift_id);
 CREATE INDEX IF NOT EXISTS idx_till_payouts_expense ON till_payouts(expense_id);
+
+-- One Toy Store pilot (F3c, migration v148): cash paid INTO the till.
+-- Same statements as services/till-payins.js TILL_PAYINS_DDL.
+CREATE TABLE IF NOT EXISTS till_payins (
+  id SERIAL PRIMARY KEY,
+  shift_id INTEGER NOT NULL REFERENCES cash_shifts(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  kind TEXT NOT NULL CHECK (kind IN ('bank','owner','staff_repay')),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  account TEXT,
+  note TEXT,
+  staff_employee_id INTEGER REFERENCES employees(id),
+  employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_till_payins_shift ON till_payins(shift_id);

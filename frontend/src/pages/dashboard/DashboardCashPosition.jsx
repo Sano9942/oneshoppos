@@ -6,7 +6,8 @@ import { SectionCard } from "../../ui/primitives";
  * Live cash-position card (2-G.16 Merchant home).
  *
  * Reads `data.cashPosition` injected by /api/reports/dashboard:
- *   { by_outlet: [{ outlet_name, opening_float, cash_in, cash_out, expected_cash }],
+ *   { by_outlet: [{ outlet_name, opening_float, cash_in, cash_out, paid_out,
+ *                   paid_in, expected_cash }],
  *     total_expected }
  * Renders per-outlet rows + a total so the merchant can see what should be
  * in each drawer right now without opening close-shift.
@@ -45,6 +46,11 @@ export default function DashboardCashPosition({ data }) {
                 <span className="mx-1">/</span>
                 <span className="text-(--ui-danger-fg)">-{fmt(r.cash_out)}</span>
               </div>
+              {(Number(r.paid_out) > 0 || Number(r.paid_in) > 0) && (
+                <div className="text-xs text-(--ui-text-muted)">
+                  Paid out {fmt(r.paid_out)} · Paid in {fmt(r.paid_in)}
+                </div>
+              )}
             </div>
           </div>
         ))}

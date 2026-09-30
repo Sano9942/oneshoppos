@@ -3,6 +3,7 @@ import { Calculator, X } from "lucide-react";
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import { blankDenoms, cleanDenomCount } from "../../../utils/denomCount";
 
 export default function POSCloseShiftModal() {
   const { fmt: money, denominations, symbol } = useCurrency();
@@ -22,7 +23,7 @@ export default function POSCloseShiftModal() {
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState(null);
   const [denoms, setDenoms] = useState(
-    denominations.map((value) => ({ denomination: value, count: 0 })),
+    blankDenoms(denominations),
   );
 
   // 2-G.17: when the backend rejects the close because variance exceeds the
@@ -54,7 +55,7 @@ export default function POSCloseShiftModal() {
     setManagerPin("");
     setNeedsThresholdApproval(false);
     setThresholdAmount(null);
-    setDenoms(denominations.map((value) => ({ denomination: value, count: 0 })));
+    setDenoms(blankDenoms(denominations));
   };
 
   const closeShift = async (e) => {
@@ -147,12 +148,15 @@ export default function POSCloseShiftModal() {
                       <input
                         type="number"
                         min="0"
+                        step="1"
+                        inputMode="numeric"
+                        placeholder="0"
                         value={row.count}
                         onChange={(e) =>
                           setDenoms((prev) =>
                             prev.map((entry, entryIndex) =>
                               entryIndex === index
-                                ? { ...entry, count: Math.max(0, Number(e.target.value || 0)) }
+                                ? { ...entry, count: cleanDenomCount(e.target.value) }
                                 : entry,
                             ),
                           )

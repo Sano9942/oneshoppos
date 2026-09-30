@@ -10226,6 +10226,20 @@ const MIGRATIONS = [
       await client.query(TILL_PAYOUTS_DDL);
     },
   },
+  {
+    version: 148,
+    description:
+      "One Toy Store pilot, F3c: cash paid INTO the till (not a sale). New till_payins table (shift, kind bank | owner | staff_repay, amount, bank account from the Online list, staff member, note, who). Close Shift expected, the dashboard cash position and Cash Audit add it. 30 Sep: Rs 220,000 from Bank Alfalah showed as +220,000 over.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('cash_shifts', 'employees', 'outlets')`
+      );
+      if (rows[0].n < 3) return;
+      const { TILL_PAYINS_DDL } = require("./services/till-payins");
+      await client.query(TILL_PAYINS_DDL);
+    },
+  },
 ];
 
 /**

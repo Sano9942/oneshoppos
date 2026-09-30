@@ -86,6 +86,11 @@ module.exports = function (app, deps, helpers) {
         FROM till_payouts p
         LEFT JOIN supplier_payments sp ON sp.id = p.supplier_payment_id
         WHERE p.shift_id = $2 AND (p.supplier_payment_id IS NULL OR sp.voided IS NOT TRUE)
+        UNION ALL
+        -- F3c: cash put into the till (bank, owner, staff paying back)
+        SELECT 'Paid in' AS type, pi.created_at AS timestamp, pi.amount AS amount, pi.id AS ref_id
+        FROM till_payins pi
+        WHERE pi.shift_id = $2
         ORDER BY timestamp ASC
       `;
       const { rows } = await db.query(sql, [session_id, session_id]);

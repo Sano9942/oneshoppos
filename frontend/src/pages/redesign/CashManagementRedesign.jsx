@@ -19,6 +19,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import POSNoSaleReasonModal from "./pos/POSNoSaleReasonModal";
+import { blankDenoms, cleanDenomCount } from "../../utils/denomCount";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -79,14 +80,14 @@ export default function CashManagementRedesign() {
   const [openModal, setOpenModal] = useState(false);
   const [openForm, setOpenForm] = useState({ employee_id: "" });
   const [openingDenoms, setOpeningDenoms] = useState(
-    denominations.map((d) => ({ denomination: d, count: 0 })),
+    blankDenoms(denominations),
   );
 
   const [closeModal, setCloseModal] = useState(false);
   const [closeNotes, setCloseNotes] = useState("");
   const [varianceReason, setVarianceReason] = useState("");
   const [varianceApprovedBy, setVarianceApprovedBy] = useState("");
-  const [denoms, setDenoms] = useState(denominations.map((d) => ({ denomination: d, count: 0 })));
+  const [denoms, setDenoms] = useState(blankDenoms(denominations));
   const [closeResult, setCloseResult] = useState(null);
   const [denomDetail, setDenomDetail] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -158,11 +159,13 @@ export default function CashManagementRedesign() {
         outlet_id: Number(selectedOutlet),
         employee_id: openForm.employee_id ? Number(openForm.employee_id) : null,
         opening_float: Number(openingCash.toFixed(2)),
-        denominations: openingDenoms.filter((d) => Number(d.count || 0) > 0),
+        denominations: openingDenoms
+          .filter((d) => Number(d.count || 0) > 0)
+          .map((d) => ({ denomination: d.denomination, count: Number(d.count) })),
       });
       setOpenModal(false);
       setOpenForm({ employee_id: "" });
-      setOpeningDenoms(denominations.map((d) => ({ denomination: d, count: 0 })));
+      setOpeningDenoms(blankDenoms(denominations));
       await loadData();
     } catch (e2) {
       setError(e2.message || "Failed to open shift");
@@ -182,7 +185,9 @@ export default function CashManagementRedesign() {
         notes: closeNotes || null,
         variance_reason: varianceReason || null,
         variance_approved_by: varianceApprovedBy || null,
-        denominations: denoms.filter((d) => Number(d.count || 0) > 0),
+        denominations: denoms
+          .filter((d) => Number(d.count || 0) > 0)
+          .map((d) => ({ denomination: d.denomination, count: Number(d.count) })),
       });
       setCloseResult(data);
       await loadData();
@@ -377,11 +382,14 @@ export default function CashManagementRedesign() {
                       <Input
                         type="number"
                         min="0"
+                        step="1"
+                        inputMode="numeric"
+                        placeholder="0"
                         value={d.count}
                         onChange={(e) =>
                           setOpeningDenoms((prev) =>
                             prev.map((row, i) =>
-                              i === idx ? { ...row, count: Math.max(0, Number(e.target.value || 0)) } : row,
+                              i === idx ? { ...row, count: cleanDenomCount(e.target.value) } : row,
                             ),
                           )
                         }
@@ -431,7 +439,7 @@ export default function CashManagementRedesign() {
                   onClick={() => {
                     setCloseModal(false);
                     setCloseResult(null);
-                    setDenoms(denominations.map((d) => ({ denomination: d, count: 0 })));
+                    setDenoms(blankDenoms(denominations));
                     setVarianceReason("");
                     setVarianceApprovedBy("");
                     setCloseNotes("");
@@ -457,11 +465,14 @@ export default function CashManagementRedesign() {
                         <Input
                           type="number"
                           min="0"
+                          step="1"
+                          inputMode="numeric"
+                          placeholder="0"
                           value={d.count}
                           onChange={(e) =>
                             setDenoms((prev) =>
                               prev.map((row, i) =>
-                                i === idx ? { ...row, count: Math.max(0, Number(e.target.value || 0)) } : row,
+                                i === idx ? { ...row, count: cleanDenomCount(e.target.value) } : row,
                               ),
                             )
                           }

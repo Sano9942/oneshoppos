@@ -2,6 +2,7 @@ import React from "react";
 import { Building2, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import { cleanDenomCount } from "../../../utils/denomCount";
 
 function shiftMessage(attendanceCode) {
   if (attendanceCode === "on_break") {
@@ -131,12 +132,15 @@ export default function POSOpeningGateModal() {
                         <input
                           type="number"
                           min="0"
+                          step="1"
+                          inputMode="numeric"
+                          placeholder="0"
                           value={row.count}
                           onChange={(e) =>
                             setOpeningDenoms((prev) =>
                               prev.map((entry, entryIndex) =>
                                 entryIndex === index
-                                  ? { ...entry, count: Math.max(0, Number(e.target.value || 0)) }
+                                  ? { ...entry, count: cleanDenomCount(e.target.value) }
                                   : entry,
                               ),
                             )

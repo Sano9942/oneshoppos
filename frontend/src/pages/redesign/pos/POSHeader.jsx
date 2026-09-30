@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor, Banknote } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor, Banknote, PiggyBank } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readTenantSlug } from "../../../auth/authStore";
@@ -9,6 +9,7 @@ import { getQueueByState } from "../../../utils/offlineQueue";
 import POSStuckQueueModal from "./POSStuckQueueModal";
 import POSLockButton from "./POSLockButton";
 import POSPaidOutModal from "./POSPaidOutModal";
+import POSPaidInModal from "./POSPaidInModal";
 import { Button } from "../../../ui/primitives";
 
 export default function POSHeader() {
@@ -37,6 +38,7 @@ export default function POSHeader() {
   const [stuckCount, setStuckCount] = useState(0);
   const [stuckOpen, setStuckOpen] = useState(false);
   const [paidOutOpen, setPaidOutOpen] = useState(false);
+  const [paidInOpen, setPaidInOpen] = useState(false);
   const canPayOut = hasPerm?.("pos_paid_out");
   const isAdmin = hasPerm?.("all_access");
 
@@ -149,6 +151,15 @@ export default function POSHeader() {
             <Banknote size={14} className="mr-1 inline" /> Paid out
           </Button>
         )}
+        {activeShift && canPayOut && (
+          <Button
+            size="sm"
+            onClick={() => setPaidInOpen(true)}
+            title="Cash put into the till (from the bank, the owner, staff paying back)"
+          >
+            <PiggyBank size={14} className="mr-1 inline" /> Paid in
+          </Button>
+        )}
         {activeShift && canOpenShift && (
           <button
             onClick={() => setCloseShiftOpen(true)}
@@ -178,6 +189,9 @@ export default function POSHeader() {
       />
       {activeShift && canPayOut && (
         <POSPaidOutModal open={paidOutOpen} onClose={() => setPaidOutOpen(false)} shift={activeShift} />
+      )}
+      {activeShift && canPayOut && (
+        <POSPaidInModal open={paidInOpen} onClose={() => setPaidInOpen(false)} shift={activeShift} />
       )}
     </div>
   );
