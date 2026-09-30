@@ -98,7 +98,7 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 - **Build:** a "Discount" amount (and %) on the exchange's balance, needing the same permission as a till discount (`pos_discount`); the new bill shows it as a discount; the payment is only the rest (can be 0).
 - **Also look at:** the exchange stores the returned value in `sales.discount_amount` (line 374), so discount totals in reports include return credit (day 1: 3,450 instead of 2,500). Check which reports read it before changing anything; at least keep the real discount apart.
 - **Test:** exchange 950 back / 990 out / discount 40 → bill total 0 due, no Card line, stock both ways, shift card total unchanged.
-- **Day 1's Rs 40 (INV-00004):** leave as is with a note (Q4).
+- **Day 1's Rs 40 (INV-00004):** leave as is with a note (Q4 answered 2026-09-30: leave it).
 
 ### F2: "Online transfer" payment type (D52) 🔴
 
@@ -154,6 +154,6 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 - ~~**Q1 (R7):** backups~~ ✅ answered 2026-09-29: **no Supabase Pro**; nightly **Download Backup** from the Backup & Restore page (proven, see R7 proof).
 - ~~**Q2 (F2)**~~ ✅ answered 2026-09-29: **one "Online" button**; pressing it shows **ready-made choices to click** (no typing), in this order: **EasyPaisa, JazzCash** (most used), then the shop's bank accounts **Allied, Meezan, MCB, HBL, Alfalah** (for bank transfers). Saved/shown as e.g. "Online – JazzCash". Keep the list editable later (banks change).
 - ~~**Q3 (R1)**~~ ✅ answered 2026-09-29: **7 days is fine**; more if needed.
-- **Q4 (F1):** leave day 1's Rs 40 on INV-00004 as recorded (with a note), or correct it once the fix exists?
+- ~~**Q4 (F1)**~~ ✅ answered 2026-09-30: **leave INV-00004's Rs 40 as recorded**, with a note (never correct it).
 - **Q5 (F3):** the expense categories the register uses (e.g. tea, transport, staff advance…).
 - **Q6:** does iPOS hold anything else the shop relies on (customer credit / udhaar, supplier balances, staff salaries)? If so it must move before R9.
