@@ -157,6 +157,13 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 - Per staff member: advances (from Paid out) + **toys taken at cost price**; settled by cash paid back into the till (a "Paid in") or **cut from salary**, sometimes carried to the next month's salary on request. Salaries are paid in cash from the drawer at month end (Q5.4). The owner wants SanoPOS to track all of it.
 
+### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) 🔴 tomorrow morning
+
+- **Problem:** the owner tops up the drawer from the bank (30 Sep: Rs 220,000 from Bank Alfalah) or other sources; the register adds it to the note count. SanoPOS has no way to record it, so Close Shift shows it as "over" (and trips the Rs 500 variance-PIN rule).
+- **Build:** a **Paid in** button beside Paid out: **From bank** (pick account, same list as the Online button), **From owner / home**, **Staff pays back** (links to F3b). Close Shift expected = float + cash sales − cash refunds − paid-outs **+ paid-ins**; same in the dashboard cash position, Cash Audit and the F4 slip. Not a sale, not profit. Removable while the shift is open.
+- **Test:** float 1,000 + cash sale 500 − paid-out 200 + paid-in 300 → expected 1,600.
+- **30 Sep shift 2:** closed with the +220,000 explained in the variance reason (owner's choice); not re-opened.
+
 ### F4: End-of-day slip (D51) 🟡→ needed daily
 
 - **Problem:** Close Shift shows Expected / Counted / Variance on screen only; the shop photographs the iPOS "Daily Sale Report" slip for the family WhatsApp group.
