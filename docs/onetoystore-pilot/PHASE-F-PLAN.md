@@ -90,7 +90,7 @@ About **41 to prove, about 34 to switch off**. Some "not now" pages have no modu
 
 Each fix follows the same path: write a test that **fails on today's code** → fix → full related tests pass → try it on screen locally → owner OK → deploy (push `main`, Vercel + Railway) → check live → first real use in the shop. Recorded in `PROGRESS.md` under its D number.
 
-**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → **F3b staff account** → F4 → F5 → G1–G5 (report gaps, below) → F6 → F7 → F8.
+**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → **F3b staff account** → F4 → F5 → **F9 receive supplier bill** → G1–G5 (report gaps, below) → F6 → F7 → F8.
 
 Order reason: F1–F4 affect **every night's** reconciliation and the family WhatsApp report; F5 blocks stock work (R4, R5); the rest are clean-up.
 
@@ -168,6 +168,12 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - **Problem:** the product box is a plain list of all 10,044 items (`StockAdjustmentsRedesign.jsx:235`, `TransfersRedesign.jsx:216`, Promotions); scanning or typing a code does nothing.
 - **Build:** the same search box the till uses (name, code, barcode, scanner), and a free-text note on adjustments.
 - **Test:** scan `027084120134` → MATTLE HW DINKEY selected; type `2703` → FLYING DISC BALL.
+
+### F9: Receive a supplier bill without a purchase order (owner, 2026-09-30) 🔴 for R5
+
+- **Problem (checked in code 2026-09-30):** receiving only works through Purchase Orders (`routes/purchase-orders.js` receive → GRN → `supplier_invoices`). Fewer than ordered: OK (rest stays outstanding). **More than ordered: refused** (`OVER_RECEIPT`). **An item not on the order can't be added while receiving.** A later bill correction only via Supplier Return (lowers the balance); no "+/− adjustment". **No place to keep the bill file:** `supplier_invoices` holds numbers only; the Import page's invoice-photo reader (`/api/ai/invoice-extract`) takes images only (no PDF) and stores the photo in R2 unlinked to any supplier or bill. The shop gets goods **with the supplier's bill, no PO**; bills arrive as PDF or handwritten.
+- **Build:** Receive supplier bill: supplier, bill number, date → items by scan / code / name search (same box as F5), quantity + cost, new toys added on the spot → stock up, bill amount onto the supplier's balance. **Attach the PDF / phone photo** to the bill (listed on the supplier's page). **Bill correction:** +/− line with note (e.g. "3 cars not billed, added 1,350") → balance, and stock when items were short/extra.
+- **Order:** right after F5 (owner, 2026-09-30).
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
 
