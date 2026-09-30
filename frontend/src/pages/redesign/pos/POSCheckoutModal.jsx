@@ -840,7 +840,7 @@ export default function POSCheckoutModal() {
             })()}
 
             {paymentMethod === "Online" && (
-              <div className="mt-3 p-3 bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-xl space-y-2">
+              <div className="mt-3 p-3 bg-(--ui-surface) border border-(--ui-border-strong) rounded-xl space-y-2">
                 <label className="block text-[11px] font-bold text-(--ui-text-muted) uppercase tracking-wide">
                   Paid by
                 </label>
