@@ -4,9 +4,15 @@ import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import POSRefundThresholdModal from "./POSRefundThresholdModal";
+import { useAuth } from "../../../auth/AuthProvider";
+import { exchangeSettlement } from "./exchangeMath";
 
 export default function POSReturnExchangeModal() {
   const { fmt: money } = useCurrency();
+  const { hasPerm } = useAuth();
+  // F1 / D48: a discount on the exchange balance needs the same permission as
+  // a till discount (the server checks it too).
+  const canDiscount = !!hasPerm?.("pos_discount");
   const {
     returnModalOpen,
     setReturnModalOpen,
@@ -73,6 +79,8 @@ export default function POSReturnExchangeModal() {
   const [exchangeItems, setExchangeItems] = useState([]);
 
   const [settleMethod, setSettleMethod] = useState("Cash");
+  const [exDiscountInput, setExDiscountInput] = useState("");
+  const [exDiscountType, setExDiscountType] = useState("fixed");
   const [submitting, setSubmitting] = useState(false);
 
   // 2-G.17: refund threshold manager-PIN prompt state. Triggered when
@@ -95,6 +103,8 @@ export default function POSReturnExchangeModal() {
       setExResults([]);
       setExchangeItems([]);
       setSettleMethod("Cash");
+      setExDiscountInput("");
+      setExDiscountType("fixed");
       setLineRestock({});
       setLineReasonId({});
       setSaleSerials([]);
@@ -284,7 +294,14 @@ export default function POSReturnExchangeModal() {
     0,
   );
   const exchangeTotal = exchangeItems.reduce((s, i) => s + i.price * i.qty, 0);
-  const balance = exchangeTotal - refundTotal;
+  const settlement = exchangeSettlement({
+    refundTotal,
+    exchangeTotal,
+    discountInput: canDiscount ? exDiscountInput : "",
+    discountType: exDiscountType,
+    settleMethod,
+  });
+  const { balance, discount: exDiscount, due: exDue } = settlement;
 
   const handleComplete = async () => {
     const selectedItems = returnItems
@@ -347,18 +364,9 @@ export default function POSReturnExchangeModal() {
       // For exchange: POST sale FIRST — if shift is closed this fails before return is posted,
       // preventing the inconsistent state of restocked inventory without a recorded sale.
       if (mode === "exchange" && exchangeItems.length > 0) {
-        // Build payments: Return Credit covers the refund value; customer pays the remainder.
-        // For even exchange (balance === 0), total will be 0 so no payment needed.
-        if (balance < 0) {
-          // Customer is owed money back — Return Credit covers entire exchange total
-          salePayments = [{ method: "Return Credit", amount: exchangeTotal }];
-        } else if (balance > 0) {
-          // Customer pays the difference
-          if (refundTotal > 0) salePayments.push({ method: "Return Credit", amount: refundTotal });
-          salePayments.push({ method: settleMethod, amount: balance });
-        }
-        // balance === 0: even exchange — Return Credit covers exactly exchangeTotal
-        // Total = exchangeTotal - refundTotal = 0, so no payment entry needed at all
+        // Return Credit covers the refund value; the customer pays the rest of
+        // the balance after any discount (exchangeMath.js).
+        salePayments = settlement.payments;
 
         saleData = await api.post("/api/sales", {
             cartItems: exchangeItems.map((i) => ({
@@ -371,9 +379,10 @@ export default function POSReturnExchangeModal() {
             outlet_id: Number(selectedOutletId),
             employee_id: employee?.id || null,
             customer_id: null,
-            discount_amount: refundTotal,
+            discount_amount: settlement.saleDiscountAmount,
             discount_type: "fixed",
-            notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`,
+            notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`
+              + (exDiscount > 0 ? `; discount Rs ${exDiscount}` : ""),
           });
       }
 
@@ -493,7 +502,8 @@ export default function POSReturnExchangeModal() {
           payments: salePayments,
           total: exchangeTotal,
           exchangeCredit: refundTotal,
-          balanceDue: balance,
+          balanceDue: balance > 0 ? exDue : balance,
+          exchangeDiscount: exDiscount,
           refundNote: balance < 0 ? `Refund ${money(Math.abs(balance))} via ${settleMethod}` : null,
           change: 0,
           customer: null,
@@ -827,10 +837,50 @@ export default function POSReturnExchangeModal() {
                 <span>
                   {balance > 0 ? "Customer pays" : balance < 0 ? "Refund to customer" : "Even exchange"}
                 </span>
-                <span className={balance > 0 ? "text-(--ui-success-fg)" : balance < 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text-muted)"}>
-                  {balance === 0 ? money(0) : money(Math.abs(balance))}
+                <span
+                  data-testid="exchange-due"
+                  className={balance > 0 ? "text-(--ui-success-fg)" : balance < 0 ? "text-(--ui-danger-fg)" : "text-(--ui-text-muted)"}
+                >
+                  {balance > 0 ? money(exDue) : balance === 0 ? money(0) : money(Math.abs(balance))}
                 </span>
               </div>
+
+              {mode === "exchange" && balance > 0 && canDiscount && (
+                <div>
+                  <label htmlFor="exchange-discount" className="text-xs text-(--ui-text-muted) mb-1 block">
+                    Discount on balance ({money(balance)})
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      id="exchange-discount"
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      value={exDiscountInput}
+                      onChange={(e) => setExDiscountInput(e.target.value)}
+                      placeholder="0"
+                      className="w-28 px-3 py-1.5 text-sm border border-(--ui-border-strong) rounded-lg focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
+                    />
+                    {[["fixed", "Rs"], ["percent", "%"]].map(([t, label]) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setExDiscountType(t)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
+                          exDiscountType === t
+                            ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
+                            : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {exDiscount > 0 && (
+                      <span className="text-xs text-(--ui-text-muted)">− {money(exDiscount)}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {(mode === "refund" || (mode === "exchange" && balance < 0)) && (
                 <div>
@@ -870,7 +920,7 @@ export default function POSReturnExchangeModal() {
                 </div>
               )}
 
-              {mode === "exchange" && balance > 0 && (
+              {mode === "exchange" && balance > 0 && exDue > 0 && (
                 <div>
                   <p className="text-xs text-(--ui-text-muted) mb-1">Customer pays via</p>
                   <div className="flex gap-2">

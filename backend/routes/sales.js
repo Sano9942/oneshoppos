@@ -1561,7 +1561,16 @@ module.exports = function registerSalesRoutes(app, deps) {
       // Take the change off the cash tenders (last first), keeping any tip the
       // customer included (the POS computes change as paid − total − tip).
       const tipKept = Number(tip_amount) > 0 && tip_method ? Number(tip_amount) : 0;
-      let changeDue = Math.round((totalTendered - Number(totalAmount) - tipKept) * 100) / 100;
+      // An exchange sends its return value twice: in discount_amount (so the
+      // total is only the balance) and as a "Return Credit" tender. That
+      // tender is not money handed over, so it can't create change; counting
+      // it wiped out the Cash line of every cash-paid exchange balance (F1).
+      const returnCreditTendered = (finalPayments || [])
+        .filter((p) => p?.method === "Return Credit")
+        .reduce((s, p) => s + Number(p?.amount || 0), 0);
+      let changeDue = Math.round(
+        (totalTendered - returnCreditTendered - Number(totalAmount) - tipKept) * 100,
+      ) / 100;
       if (changeDue > 0.009) {
         finalPayments = finalPayments.map((p) => ({ ...p }));
         for (let i = finalPayments.length - 1; i >= 0 && changeDue > 0.009; i -= 1) {

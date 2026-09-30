@@ -111,6 +111,8 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     taxBreakdown: Array.isArray(slip.tax_breakdown) ? slip.tax_breakdown : [],
     taxInclusive: !!slip.taxInclusive,
     exchangeCredit: Number(slip.exchangeCredit || 0),
+    // F1 / D48: discount given on an exchange's balance.
+    exchangeDiscount: Number(slip.exchangeDiscount || 0),
     discountAmount,
     discountType: slip.discountType || "fixed",
     savings: slip.exchangeCredit > 0 ? 0 : discountAmount,
@@ -341,6 +343,7 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
 
   if (s.exchangeCredit > 0) {
     b.appendChild(row("Return Credit", `-${num(s.exchangeCredit)}`));
+    if (s.exchangeDiscount > 0) b.appendChild(row("Discount", `-${num(s.exchangeDiscount)}`));
   } else if (s.discountAmount > 0) {
     b.appendChild(row(s.discountType === "percent" ? "Discount (%)" : "Discount", `-${num(s.discountAmount)}`));
   }

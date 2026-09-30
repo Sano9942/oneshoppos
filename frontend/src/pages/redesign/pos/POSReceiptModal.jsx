@@ -128,10 +128,18 @@ export default function POSReceiptModal() {
             )}
             {/* Exchange receipt: show return credit instead of generic discount */}
             {slip.exchangeCredit > 0 ? (
-              <div className="flex justify-between text-(--ui-danger-fg)">
-                <span>Return Credit</span>
-                <span>− {money(slip.exchangeCredit)}</span>
-              </div>
+              <>
+                <div className="flex justify-between text-(--ui-danger-fg)">
+                  <span>Return Credit</span>
+                  <span>− {money(slip.exchangeCredit)}</span>
+                </div>
+                {slip.exchangeDiscount > 0 && (
+                  <div className="flex justify-between text-(--ui-danger-fg)">
+                    <span>Discount</span>
+                    <span>− {money(slip.exchangeDiscount)}</span>
+                  </div>
+                )}
+              </>
             ) : slip.discountAmount > 0 && (
               <div className="flex justify-between text-(--ui-danger-fg)">
                 <span>{slip.discountType === "percent" ? `Discount (${slip.discountInput}%)` : "Discount"}</span>
