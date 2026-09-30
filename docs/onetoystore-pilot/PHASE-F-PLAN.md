@@ -164,6 +164,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - **Test:** float 1,000 + cash sale 500 − paid-out 200 + paid-in 300 → expected 1,600.
 - **30 Sep shift 2:** closed with the +220,000 explained in the variance reason (owner's choice); not re-opened.
 - **Same deploy: D57 cursor jumps out of a box after each key** (owner, 30 Sep ~19:15, on Paid out; "maybe everywhere"). Cause: `ui/primitives.jsx` `Modal` focus effect depends on `[open, onClose]` (since `f437f688`, April); a parent passing a new `onClose` each render (POSPaidOutModal's `close`, any inline arrow) re-runs it on every keystroke → cleanup refocuses the element behind, then the first button in the box gets focus. Hits every primitive-`Modal` form (66 files, back office + Paid out); the sale screen, Return/Exchange and Close Shift use their own boxes (not hit). Fix: keep `onClose` in a ref, run the effect on `open` only; test: type "1000" into a Modal input whose parent re-renders → value 1000, focus stays. Workaround tonight: paste the whole number.
+- **Same deploy: D58** Close Shift denomination boxes keep a leading "0" the cashier can't delete (owner typed "0120"; parsed right, total right). Make empty = blank, not 0.
 - **Offline:** Paid out has no offline queue; "Failed to fetch" = not saved (30 Sep: nothing lost, 9 saved). Consider queueing it like sales (offlineQueue) later.
 
 ### F4: End-of-day slip (D51) 🟡→ needed daily
