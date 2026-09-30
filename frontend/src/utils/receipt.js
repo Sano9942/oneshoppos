@@ -23,8 +23,11 @@ export function formatPaymentMethodLabel(method) {
   };
   const lower = raw.toLowerCase();
   if (knownAliases[lower]) return knownAliases[lower];
-  // Generic fallback: split on _ and Title-Case each word. Already-pretty
-  // strings ("Cash", "Card") pass through unchanged.
+  // Already-pretty names pass through as typed: lower-casing the rest of
+  // the word printed "Online - JazzCash" as "Online - jazzcash" and
+  // "Return Credit" as "Return credit" (F2).
+  if (!raw.includes("_")) return raw;
+  // Machine ids: split on _ and Title-Case each word.
   return raw
     .split("_")
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())

@@ -17,6 +17,7 @@ import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { downloadCsv } from "../../utils/csvExport";
+import { onlineMethodName, useOnlinePaymentOptions } from "../../utils/onlinePayments";
 import { readContext } from "../../auth/authStore";
 
 const fmtDate = fmtUtcDateTime;
@@ -29,6 +30,7 @@ export default function ReturnsRedesign() {
     ? String(_ctx.active_outlet_id)
     : null;
   const [rows, setRows] = useState([]);
+  const onlineOptions = useOnlinePaymentOptions();
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -496,6 +498,9 @@ export default function ReturnsRedesign() {
                   <Select value={form.refund_method} onChange={(e) => setForm((p) => ({ ...p, refund_method: e.target.value }))}>
                     <option value="Cash">Cash</option>
                     <option value="Card">Card</option>
+                    {onlineOptions.map((c) => (
+                      <option key={c} value={onlineMethodName(c)}>{onlineMethodName(c)}</option>
+                    ))}
                     <option value="Wallet">Wallet</option>
                     <option value="Store Credit">Store Credit</option>
                   </Select>

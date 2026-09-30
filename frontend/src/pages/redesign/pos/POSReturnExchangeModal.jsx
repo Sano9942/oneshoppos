@@ -6,6 +6,14 @@ import { useCurrency } from "../../../contexts/CurrencyContext";
 import POSRefundThresholdModal from "./POSRefundThresholdModal";
 import { useAuth } from "../../../auth/AuthProvider";
 import { exchangeSettlement } from "./exchangeMath";
+import { Button } from "../../../ui/primitives";
+import {
+  ONLINE_PREFIX,
+  isOnlineMethod,
+  onlineChoiceOf,
+  onlineMethodName,
+  useOnlinePaymentOptions,
+} from "../../../utils/onlinePayments";
 
 export default function POSReturnExchangeModal() {
   const { fmt: money } = useCurrency();
@@ -79,6 +87,8 @@ export default function POSReturnExchangeModal() {
   const [exchangeItems, setExchangeItems] = useState([]);
 
   const [settleMethod, setSettleMethod] = useState("Cash");
+  // F2 (D52): "Online" alone = button pressed, choice not yet tapped.
+  const onlineOptions = useOnlinePaymentOptions();
   const [exDiscountInput, setExDiscountInput] = useState("");
   const [exDiscountType, setExDiscountType] = useState("fixed");
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +129,10 @@ export default function POSReturnExchangeModal() {
     try {
       const data = await api.get(`/api/sales/${saleId}`);
       setResolvedSale(data.sale);
+      // F2: a bill paid Online is refunded back the same way by default.
+      const onlinePaid = (data.payments || []).find((p) => isOnlineMethod(p.payment_method));
+      const paidWith = onlinePaid?.payment_method || data.sale?.payment_method;
+      if (isOnlineMethod(paidWith) && onlineChoiceOf(paidWith)) setSettleMethod(paidWith);
       // F3 (Apr 28 2026): cap maxQty by sold − already-refunded so the
       // stepper, "of N" badge, and Process Refund button all reflect what's
       // actually still refundable on this sale. Items already fully refunded
@@ -303,7 +317,31 @@ export default function POSReturnExchangeModal() {
   });
   const { balance, discount: exDiscount, due: exDue } = settlement;
 
+  // F2: the Online choices, shown under whichever method row holds Online.
+  const onlineChoices = isOnlineMethod(settleMethod) ? (
+    <div className="mt-2 flex gap-2 flex-wrap">
+      {onlineOptions.map((choice) => {
+        const name = onlineMethodName(choice);
+        return (
+          <Button
+            key={choice}
+            type="button"
+            size="sm"
+            tone={settleMethod === name ? "primary" : "default"}
+            onClick={() => setSettleMethod(name)}
+          >
+            {choice}
+          </Button>
+        );
+      })}
+    </div>
+  ) : null;
+
   const handleComplete = async () => {
+    if (settleMethod === ONLINE_PREFIX) {
+      setError("Tap how the money was sent (EasyPaisa, JazzCash or the bank) under Online.");
+      return;
+    }
     const selectedItems = returnItems
       .filter((i) => Number(returnQtys[i.product_id] || 0) > 0)
       .map((i) => {
@@ -889,6 +927,7 @@ export default function POSReturnExchangeModal() {
                     {[
                       "Cash",
                       "Card",
+                      ONLINE_PREFIX,
                       "Wallet",
                       "Store Credit",
                       // Tier 0.1 wholesale — only valid when the original sale
@@ -901,7 +940,7 @@ export default function POSReturnExchangeModal() {
                         key={m}
                         onClick={() => setSettleMethod(m)}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
-                          settleMethod === m
+                          settleMethod === m || (m === ONLINE_PREFIX && isOnlineMethod(settleMethod))
                             ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
                             : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                         }`}
@@ -910,6 +949,7 @@ export default function POSReturnExchangeModal() {
                       </button>
                     ))}
                   </div>
+                  {onlineChoices}
                   {settleMethod === "credit_reversal" && (
                     <p className="mt-1.5 text-[11px] text-(--ui-text-muted)">
                       Refund will reduce the buyer's outstanding A/R balance
@@ -924,12 +964,12 @@ export default function POSReturnExchangeModal() {
                 <div>
                   <p className="text-xs text-(--ui-text-muted) mb-1">Customer pays via</p>
                   <div className="flex gap-2">
-                    {["Cash", "Card", "Wallet"].map((m) => (
+                    {["Cash", "Card", ONLINE_PREFIX, "Wallet"].map((m) => (
                       <button
                         key={m}
                         onClick={() => setSettleMethod(m)}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
-                          settleMethod === m
+                          settleMethod === m || (m === ONLINE_PREFIX && isOnlineMethod(settleMethod))
                             ? "border-(--ui-primary) bg-(--ui-muted-surface) text-(--ui-text)"
                             : "border-(--ui-border-strong) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                         }`}
@@ -938,6 +978,7 @@ export default function POSReturnExchangeModal() {
                       </button>
                     ))}
                   </div>
+                  {onlineChoices}
                 </div>
               )}
             </div>

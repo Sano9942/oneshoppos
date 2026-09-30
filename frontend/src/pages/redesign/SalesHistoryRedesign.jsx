@@ -19,6 +19,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { buildReceiptHtml } from "../../utils/receipt";
+import { ONLINE_PREFIX, isOnlineMethod, onlineMethodName, useOnlinePaymentOptions } from "../../utils/onlinePayments";
 import { buildPublicReceiptUrl, buildWhatsAppShareUrl } from "../../utils/publicReceipt";
 import POSEmailReceiptModal from "./pos/POSEmailReceiptModal";
 import VoidCompModal from "./pos/restaurant/VoidCompModal";
@@ -82,6 +83,7 @@ export default function SalesHistoryRedesign() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const onlineOptions = useOnlinePaymentOptions();
   const [employeeId, setEmployeeId] = useState("");
   const [employees, setEmployees] = useState([]);
   const [activeTab, setActiveTab] = useState("all");
@@ -180,7 +182,9 @@ export default function SalesHistoryRedesign() {
     let filtered = rows;
     if (activeTab === "completed") filtered = filtered.filter((r) => Number(r.voided || 0) === 0);
     else if (activeTab === "voided") filtered = filtered.filter((r) => Number(r.voided || 0) === 1);
-    if (paymentMethod) filtered = filtered.filter((r) => r.payment_method === paymentMethod);
+    // F2: "Online" = every Online choice; a single choice matches exactly.
+    if (paymentMethod === ONLINE_PREFIX) filtered = filtered.filter((r) => isOnlineMethod(r.payment_method));
+    else if (paymentMethod) filtered = filtered.filter((r) => r.payment_method === paymentMethod);
     if (employeeId) filtered = filtered.filter((r) => String(r.employee_id) === String(employeeId));
     return filtered;
   }, [rows, activeTab, paymentMethod, employeeId]);
@@ -321,6 +325,10 @@ export default function SalesHistoryRedesign() {
                   <option value="">All Methods</option>
                   <option value="Cash">Cash</option>
                   <option value="Card">Card</option>
+                  <option value={ONLINE_PREFIX}>Online (all)</option>
+                  {onlineOptions.map((c) => (
+                    <option key={c} value={onlineMethodName(c)}>{onlineMethodName(c)}</option>
+                  ))}
                   <option value="Wallet">Wallet</option>
                   <option value="Split">Split</option>
                 </Select>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, CheckCircle, Globe, Smartphone, Target, Upload, X } from "lucide-react";
 import { API_BASE as API, IS_MULTI_TENANT } from "../../config";
 import { api } from "../../api";
 import { readTenantSlug } from "../../auth/authStore";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { usePreset } from "../../contexts/PresetContext";
 import { useToast } from "../../contexts/ToastContext";
+import { DEFAULT_ONLINE_OPTIONS, rememberOnlinePaymentOptions } from "../../utils/onlinePayments";
 import {
   Button,
   Input,
@@ -160,6 +161,48 @@ export default function CompanySettingsRedesign() {
       showMsg("error", err.message || "Failed to save barcode scheme.");
     } finally {
       setSchemeSaving(false);
+    }
+  };
+
+  // F2 (D52): the till's Online payment choices (EasyPaisa, JazzCash, banks).
+  const [onlineOptions, setOnlineOptions] = useState(DEFAULT_ONLINE_OPTIONS);
+  const [newOnline, setNewOnline] = useState("");
+  const [onlineSaving, setOnlineSaving] = useState(false);
+  useEffect(() => {
+    api.get("/api/company-profile/online-payment-options")
+      .then((d) => { if (Array.isArray(d?.online_payment_options)) setOnlineOptions(d.online_payment_options); })
+      .catch(() => { /* older server: keep the defaults on screen */ });
+  }, []);
+  const moveOnline = (i, dir) => setOnlineOptions((list) => {
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return list;
+    const next = [...list];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+  const addOnline = () => {
+    const name = newOnline.replace(/\s+/g, " ").trim();
+    if (!name) return;
+    if (onlineOptions.some((o) => o.toLowerCase() === name.toLowerCase())) {
+      showMsg("error", `"${name}" is already in the list.`);
+      return;
+    }
+    setOnlineOptions((list) => [...list, name]);
+    setNewOnline("");
+  };
+  const saveOnline = async () => {
+    setOnlineSaving(true);
+    try {
+      const d = await api.put("/api/company-profile/online-payment-options", {
+        online_payment_options: onlineOptions,
+      });
+      setOnlineOptions(d.online_payment_options);
+      rememberOnlinePaymentOptions(d.online_payment_options);
+      showMsg("success", "Online payment choices saved. The till shows them from its next checkout.");
+    } catch (err) {
+      showMsg("error", err.message || "Failed to save the Online choices.");
+    } finally {
+      setOnlineSaving(false);
     }
   };
 
@@ -660,6 +703,61 @@ export default function CompanySettingsRedesign() {
                 }}
               >
                 Copy
+              </Button>
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* F2 (D52) — the till's Online payment choices */}
+        <SectionCard className="p-5">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-(--ui-text) flex items-center gap-1.5">
+                <Smartphone size={15} /> Online payment choices
+              </h3>
+              <p className="text-xs text-(--ui-text-muted) mt-1">
+                What the till shows after the <span className="font-semibold">Online</span> button,
+                in this order. A payment is saved as e.g. &ldquo;Online - JazzCash&rdquo;: kept out of
+                Cash (the drawer) and out of Card. Removing a choice doesn&rsquo;t change past bills.
+              </p>
+            </div>
+            <ul className="divide-y divide-(--ui-border) border border-(--ui-border) rounded-lg">
+              {onlineOptions.map((o, i) => (
+                <li key={o} className="flex items-center gap-2 px-3 py-2 text-sm text-(--ui-text)">
+                  <span className="grow">{o}</span>
+                  <button type="button" aria-label={`Move ${o} up`} disabled={i === 0}
+                    onClick={() => moveOnline(i, -1)}
+                    className="p-1 rounded text-(--ui-text-muted) hover:bg-(--ui-muted-surface) disabled:opacity-30">
+                    <ArrowUp size={14} />
+                  </button>
+                  <button type="button" aria-label={`Move ${o} down`} disabled={i === onlineOptions.length - 1}
+                    onClick={() => moveOnline(i, 1)}
+                    className="p-1 rounded text-(--ui-text-muted) hover:bg-(--ui-muted-surface) disabled:opacity-30">
+                    <ArrowDown size={14} />
+                  </button>
+                  <button type="button" aria-label={`Remove ${o}`} disabled={onlineOptions.length === 1}
+                    onClick={() => setOnlineOptions((list) => list.filter((x) => x !== o))}
+                    className="p-1 rounded text-(--ui-text-muted) hover:text-(--ui-danger) hover:bg-(--ui-danger-bg) disabled:opacity-30">
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Add a choice, e.g. UBL"
+                value={newOnline}
+                maxLength={30}
+                onChange={(e) => setNewOnline(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOnline(); } }}
+              />
+              <Button type="button" tone="default" onClick={addOnline} disabled={!newOnline.trim()}>
+                Add
+              </Button>
+            </div>
+            <div>
+              <Button type="button" tone="primary" onClick={saveOnline} disabled={onlineSaving}>
+                {onlineSaving ? "Saving…" : "Save Online choices"}
               </Button>
             </div>
           </div>

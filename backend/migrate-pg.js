@@ -10198,6 +10198,20 @@ const MIGRATIONS = [
       await client.query(SUPPLIER_ACCOUNT_DDL);
     },
   },
+  {
+    version: 146,
+    description:
+      "One Toy Store pilot, F2 (D52): the till's Online payment button. company_profile gains online_payment_options (JSONB list, default EasyPaisa, JazzCash, Allied, Meezan, MCB, HBL, Alfalah); the till saves a payment as 'Online - <choice>', kept out of Cash (drawer) and Card. Editable on Company Profile. DDL shared with schema-pg.sql via services/online-payments.js. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'company_profile'`
+      );
+      if (!rows.length) return;
+      const { ONLINE_OPTIONS_DDL } = require("./services/online-payments");
+      await client.query(ONLINE_OPTIONS_DDL);
+    },
+  },
 ];
 
 /**

@@ -16,9 +16,16 @@ import {
   PenLine,
   Gift,
   Receipt,
+  Smartphone,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
+import { Button } from "../../../ui/primitives";
+import {
+  isOnlineMethod,
+  onlineMethodName,
+  useOnlinePaymentOptions,
+} from "../../../utils/onlinePayments";
 
 export default function POSCheckoutModal() {
   const {
@@ -101,6 +108,11 @@ export default function POSCheckoutModal() {
 
   // Phase 2-G Wave 2 (2-G.2) — gift-card tender state, local to the modal.
   const [giftCardCode, setGiftCardCode] = useState("");
+  // F2 (D52): Online = EasyPaisa / JazzCash / bank app. One button, then the
+  // shop's choices (Company Profile); saved as "Online - <choice>".
+  const onlineOptions = useOnlinePaymentOptions();
+  const [onlineChoice, setOnlineChoice] = useState("");
+  const [onlineError, setOnlineError] = useState("");
   const [giftCardBalance, setGiftCardBalance] = useState(null); // { remaining, status } | null
   const [giftCardLookupBusy, setGiftCardLookupBusy] = useState(false);
   const [giftCardError, setGiftCardError] = useState("");
@@ -776,6 +788,7 @@ export default function POSCheckoutModal() {
               const methods = [
                 { id: "Cash", icon: <Banknote size={16} /> },
                 { id: "Card", icon: <CreditCard size={16} /> },
+                { id: "Online", icon: <Smartphone size={16} /> },
                 { id: "Wallet", icon: <Wallet size={16} /> },
                 ...(giftCardsOn
                   ? [{ id: "gift_card", label: "Gift Card", icon: <Gift size={16} /> }]
@@ -785,7 +798,8 @@ export default function POSCheckoutModal() {
                   : []),
               ];
               const colClass =
-                methods.length >= 5 ? "grid-cols-5"
+                methods.length >= 6 ? "grid-cols-3"
+                  : methods.length === 5 ? "grid-cols-5"
                   : methods.length === 4 ? "grid-cols-4"
                   : "grid-cols-3";
               return (
@@ -801,6 +815,8 @@ export default function POSCheckoutModal() {
                         onClick={() => {
                           if (disabled) return;
                           setPaymentMethod(id);
+                          setOnlineChoice("");
+                          setOnlineError("");
                           if (id !== "gift_card") {
                             setGiftCardCode("");
                             setGiftCardBalance(null);
@@ -822,6 +838,35 @@ export default function POSCheckoutModal() {
                 </div>
               );
             })()}
+
+            {paymentMethod === "Online" && (
+              <div className="mt-3 p-3 bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-xl space-y-2">
+                <label className="block text-[11px] font-bold text-(--ui-text-muted) uppercase tracking-wide">
+                  Paid by
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {onlineOptions.map((choice) => (
+                    <Button
+                      key={choice}
+                      type="button"
+                      tone={onlineChoice === choice ? "primary" : "default"}
+                      onClick={() => {
+                        setOnlineChoice(choice);
+                        setOnlineError("");
+                        payAmountRef?.current?.focus();
+                      }}
+                    >
+                      {choice}
+                    </Button>
+                  ))}
+                </div>
+                {onlineError && (
+                  <div className="text-sm px-3 py-2 rounded-lg bg-(--ui-danger-bg) text-(--ui-danger-fg) border border-(--ui-danger-fg)/30">
+                    {onlineError}
+                  </div>
+                )}
+              </div>
+            )}
 
             {paymentMethod === "gift_card" && (
               <div className="mt-3 p-3 bg-(--ui-muted-surface) border border-(--ui-border-strong) rounded-xl space-y-2">
@@ -897,6 +942,18 @@ export default function POSCheckoutModal() {
                 setGiftCardError("");
                 return;
               }
+              if (paymentMethod === "Online") {
+                e.preventDefault();
+                if (!onlineChoice) {
+                  setOnlineError("Tap how the customer paid first");
+                  return;
+                }
+                // A transfer has no change: never book more than is due.
+                const amt = Math.min(Number(paymentAmount), remaining);
+                if (!amt || amt <= 0) return;
+                addPayment(null, { method: onlineMethodName(onlineChoice), amount: amt });
+                return;
+              }
               addPayment(e);
             }}
           >
@@ -964,6 +1021,8 @@ export default function POSCheckoutModal() {
                         <Banknote size={14} className="text-(--ui-text-muted)" />
                       ) : p.method === "Wallet" ? (
                         <Wallet size={14} className="text-(--ui-text-muted)" />
+                      ) : isOnlineMethod(p.method) ? (
+                        <Smartphone size={14} className="text-(--ui-text-muted)" />
                       ) : (
                         <CreditCard size={14} className="text-(--ui-text-muted)" />
                       )}

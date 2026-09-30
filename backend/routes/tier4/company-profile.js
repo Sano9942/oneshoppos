@@ -4,6 +4,7 @@ const { VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 const { invalidateCompanyProfileCache } = require("../../middleware/tenant-auth");
 const { normalizeScheme } = require("../../services/embedded-barcode");
+const { normalizeOnlineOptions, readOnlineOptions } = require("../../services/online-payments");
 
 module.exports = function createCompanyProfileRouter({
   db,
@@ -225,6 +226,34 @@ module.exports = function createCompanyProfileRouter({
       res.json({ ok: true, barcode_scheme: stored });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // One Toy Store F2 (D52) — the till's Online payment choices. Every till
+  // user reads them (no perm beyond being signed in; the list is not
+  // sensitive); only an administrator edits them (Company Profile).
+  router.get("/api/company-profile/online-payment-options", async (req, res) => {
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT online_payment_options FROM company_profile WHERE id = 1"
+      );
+      res.json({ online_payment_options: readOnlineOptions(row?.online_payment_options) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put("/api/company-profile/online-payment-options", requirePerm("all_access"), async (req, res) => {
+    try {
+      const options = normalizeOnlineOptions(req.body?.online_payment_options);
+      await db.query(
+        "UPDATE company_profile SET online_payment_options = $1::jsonb, updated_at = NOW() WHERE id = 1",
+        [JSON.stringify(options)]
+      );
+      invalidateCompanyProfileCache(req.tenantId);
+      res.json({ ok: true, online_payment_options: options });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 

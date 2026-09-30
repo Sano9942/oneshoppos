@@ -6188,3 +6188,9 @@ ALTER TABLE suppliers
   ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS opening_balance_date DATE;
 ALTER TABLE supplier_payments ALTER COLUMN supplier_invoice_id DROP NOT NULL;
+
+-- One Toy Store pilot (F2 / D52, migration v146): the till's Online payment
+-- choices. Same statement as services/online-payments.js ONLINE_OPTIONS_DDL.
+ALTER TABLE company_profile
+  ADD COLUMN IF NOT EXISTS online_payment_options JSONB NOT NULL
+  DEFAULT '["EasyPaisa","JazzCash","Allied","Meezan","MCB","HBL","Alfalah"]'::jsonb;
