@@ -323,20 +323,21 @@ module.exports = function (app, deps) {
       }));
 
       // ─── Query 9: Hourly sales ───
+      // D54: hour/month in the shop's timezone, not the DB session's (UTC on prod).
       const hsOutlet = buildOutletClause("s.outlet_id", outletIds, 3);
       const hourlySales = (await db.query(
-        `SELECT LPAD(EXTRACT(HOUR FROM s.timestamp)::text, 2, '0') || ':00' AS hour,
+        `SELECT LPAD(EXTRACT(HOUR FROM s.timestamp AT TIME ZONE '${tz}')::text, 2, '0') || ':00' AS hour,
           ROUND(SUM(s.total_amount)::numeric, 2) AS total, COUNT(s.id) AS orders
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${hsOutlet.clause}
-         GROUP BY EXTRACT(HOUR FROM s.timestamp) ORDER BY hour ASC`,
+         GROUP BY EXTRACT(HOUR FROM s.timestamp AT TIME ZONE '${tz}') ORDER BY hour ASC`,
         [todayStart, todayEnd, ...hsOutlet.values])).rows;
 
       // ─── Query 10: Monthly trend ───
       const mtOutlet = buildOutletClause("s.outlet_id", outletIds, 2);
       const monthlyTrend = (await db.query(
-        `SELECT TO_CHAR(s.timestamp, 'YYYY-MM') AS month, ROUND(SUM(s.total_amount)::numeric, 2) AS total
+        `SELECT TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month, ROUND(SUM(s.total_amount)::numeric, 2) AS total
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 ${mtOutlet.clause}
-         GROUP BY TO_CHAR(s.timestamp, 'YYYY-MM') ORDER BY month ASC`,
+         GROUP BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') ORDER BY month ASC`,
         [sixMonthsAgoStart, ...mtOutlet.values])).rows;
 
       // ─── Query 11: Inventory (status + value + low stock) ───

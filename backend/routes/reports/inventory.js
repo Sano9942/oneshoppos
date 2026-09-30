@@ -418,7 +418,7 @@ module.exports = function (app, deps, helpers) {
   app.get("/api/reports/inventory-loss", invView, async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       let where = ["sa.quantity_change < 0"];
       const params = [];
       if (date_from) {
@@ -451,7 +451,7 @@ module.exports = function (app, deps, helpers) {
   app.get("/api/reports/wastage", invView, async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       let where = ["sa.reason IN ('Damaged','Expired')"];
       const params = [];
       if (date_from) {
@@ -896,7 +896,7 @@ module.exports = function (app, deps, helpers) {
     invView,
     async (req, res) => {
       try {
-        const tz = req.company?.timezone || "UTC";
+        const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
         const lookbackDays = Math.max(
           7,
           Math.min(365, parseInt(req.query.lookback_days || 30, 10)),
@@ -978,7 +978,7 @@ module.exports = function (app, deps, helpers) {
   app.get("/api/reports/product-movement", invView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       let where = [];
       const params = [];
       if (date_from) {
@@ -1016,7 +1016,7 @@ module.exports = function (app, deps, helpers) {
   app.get("/api/reports/str-report", invView, async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       let where = [];
       const params = [];
       if (date_from) {
@@ -1099,7 +1099,7 @@ module.exports = function (app, deps, helpers) {
       await applyInventoryProductFilters(where, params, req.query);
 
       // received_at is TIMESTAMPTZ — tenant-tz UTC bounds, not bare ::date.
-      const hcTz = req.company?.timezone || "UTC";
+      const hcTz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       if (req.query.date_from) {
         where.push("grn.received_at >= ?");
         params.push(toUtcStart(String(req.query.date_from), hcTz));
@@ -1109,11 +1109,11 @@ module.exports = function (app, deps, helpers) {
         params.push(toUtcEnd(String(req.query.date_to), hcTz));
       }
       if (req.query.time_from) {
-        where.push("grn.received_at::time >= ?::time");
+        where.push(`(grn.received_at AT TIME ZONE '${hcTz}')::time >= ?::time`);
         params.push(req.query.time_from);
       }
       if (req.query.time_to) {
-        where.push("grn.received_at::time <= ?::time");
+        where.push(`(grn.received_at AT TIME ZONE '${hcTz}')::time <= ?::time`);
         params.push(req.query.time_to);
       }
       applyOutletFilter(where, params, req.query.outlet_id, "grn.outlet_id");
@@ -1167,7 +1167,7 @@ module.exports = function (app, deps, helpers) {
       const params = [];
       await applyInventoryProductFilters(where, params, req.query);
 
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       if (req.query.date_from) {
         where.push("s.timestamp >= ?");
         params.push(toUtcStart(req.query.date_from, tz));
@@ -1177,11 +1177,11 @@ module.exports = function (app, deps, helpers) {
         params.push(toUtcEnd(req.query.date_to, tz));
       }
       if (req.query.time_from) {
-        where.push("s.timestamp::time >= ?::time");
+        where.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
         params.push(req.query.time_from);
       }
       if (req.query.time_to) {
-        where.push("s.timestamp::time <= ?::time");
+        where.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
         params.push(req.query.time_to);
       }
       applyOutletFilter(where, params, req.query.outlet_id, "s.outlet_id");
@@ -1394,7 +1394,7 @@ module.exports = function (app, deps, helpers) {
   // --- Shrinkage / Stock Discrepancy Report -----------------------------------
   app.get("/api/reports/shrinkage", invView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const { outlet_id, category_id, search } = req.query;
       // Default to last 30 days if not provided
       const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());

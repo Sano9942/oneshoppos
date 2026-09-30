@@ -120,15 +120,17 @@ module.exports = function (app, deps, helpers) {
       let idx = 1;
       const whereStr = where.join(" AND ").replace(/\?/g, () => `$${idx++}`);
 
+      // D54: weekday/hour in the shop's timezone, not the DB session's (UTC on prod).
+      const safeTz = isValidTz(tz) ? tz : "UTC";
       const sql = `
         SELECT
-            EXTRACT(DOW FROM timestamp)::int as day_of_week,
-            EXTRACT(HOUR FROM timestamp)::int as hour_of_day,
+            EXTRACT(DOW FROM timestamp AT TIME ZONE '${safeTz}')::int as day_of_week,
+            EXTRACT(HOUR FROM timestamp AT TIME ZONE '${safeTz}')::int as hour_of_day,
             SUM(total_amount) as revenue,
             COUNT(id) as order_count
         FROM sales
         WHERE ${whereStr}
-        GROUP BY EXTRACT(DOW FROM timestamp)::int, EXTRACT(HOUR FROM timestamp)::int
+        GROUP BY EXTRACT(DOW FROM timestamp AT TIME ZONE '${safeTz}')::int, EXTRACT(HOUR FROM timestamp AT TIME ZONE '${safeTz}')::int
         ORDER BY day_of_week, hour_of_day
       `;
 

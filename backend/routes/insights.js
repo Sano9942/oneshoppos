@@ -1,3 +1,5 @@
+const { isValidTz } = require("../utils/tz");
+
 module.exports = function mountInsightRoutes(app, deps) {
   const db = deps.db;
   const { requirePerm } = deps;
@@ -57,9 +59,10 @@ module.exports = function mountInsightRoutes(app, deps) {
         detail: Number(lowStock.count) > 0 ? `${lowStock.count} products below reorder level` : "All stock levels healthy",
       });
 
-      // 4. Busiest hour
+      // 4. Busiest hour — D54: in the shop's timezone, not the DB session's (UTC on prod).
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const { rows: busyHours } = await db.query(
-        `SELECT EXTRACT(HOUR FROM timestamp) as hour, COUNT(*) as count FROM sales
+        `SELECT EXTRACT(HOUR FROM timestamp AT TIME ZONE '${tz}') as hour, COUNT(*) as count FROM sales
          WHERE timestamp >= NOW() - INTERVAL '30 days' AND voided = false
          GROUP BY hour ORDER BY count DESC LIMIT 1`
       );

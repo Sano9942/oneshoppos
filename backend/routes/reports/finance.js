@@ -83,12 +83,16 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         params.push(toUtcEnd(date_to, tz));
       }
     }
+    // D54: time of day in the shop's timezone, not the DB session's (UTC on prod).
+    const timeExpr = isLocal
+      ? `${timeColumn}::time`
+      : `(${timeColumn} AT TIME ZONE '${isValidTz(tz) ? tz : "UTC"}')::time`;
     if (time_from && timeColumn) {
-      where.push(`${timeColumn}::time >= ?::time`);
+      where.push(`${timeExpr} >= ?::time`);
       params.push(time_from);
     }
     if (time_to && timeColumn) {
-      where.push(`${timeColumn}::time <= ?::time`);
+      where.push(`${timeExpr} <= ?::time`);
       params.push(time_to);
     }
     if (outletIds.length && outletColumn) {

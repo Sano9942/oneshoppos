@@ -34,6 +34,8 @@ module.exports = function (app, deps, helpers) {
 
   function applySaleTimeFilters(where, params, query, saleAlias = "s", tz = "UTC") {
     const { date_from, date_to, time_from, time_to, outlet_id } = query;
+    // D54: time of day in the shop's timezone, not the DB session's (UTC on prod).
+    const safeTz = isValidTz(tz) ? tz : "UTC";
     if (date_from) {
       where.push(`${saleAlias}.timestamp >= ?`);
       params.push(toUtcStart(date_from, tz));
@@ -43,11 +45,11 @@ module.exports = function (app, deps, helpers) {
       params.push(toUtcEnd(date_to, tz));
     }
     if (time_from) {
-      where.push(`${saleAlias}.timestamp::time >= ?::time`);
+      where.push(`(${saleAlias}.timestamp AT TIME ZONE '${safeTz}')::time >= ?::time`);
       params.push(time_from);
     }
     if (time_to) {
-      where.push(`${saleAlias}.timestamp::time <= ?::time`);
+      where.push(`(${saleAlias}.timestamp AT TIME ZONE '${safeTz}')::time <= ?::time`);
       params.push(time_to);
     }
     if (outlet_id) {
@@ -138,7 +140,7 @@ module.exports = function (app, deps, helpers) {
   // Top Salespeople: revenue per employee
   app.get("/api/reports/top-salespeople", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const { date_from, date_to } = req.query;
       const where = ["s.voided = false", "s.employee_id IS NOT NULL"];
       const params = [];
@@ -280,7 +282,7 @@ module.exports = function (app, deps, helpers) {
   // Sales Detail: flat line-item list with parent sale info
   app.get("/api/reports/sales-detail", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const { search } = req.query;
       const where = ["s.voided = false"];
       const params = [];
@@ -317,7 +319,7 @@ module.exports = function (app, deps, helpers) {
   // Order Wise report
   app.get("/api/reports/order-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const { search = "" } = req.query;
       const conditions = ["1=1"];
       const params = [];
@@ -354,7 +356,7 @@ module.exports = function (app, deps, helpers) {
   // Monthly MOP Matrix: month-wise sales by payment method
   app.get("/api/reports/monthly-mop-matrix", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -362,25 +364,25 @@ module.exports = function (app, deps, helpers) {
 
       const matrixSql = `
         SELECT
-          TO_CHAR(s.timestamp, 'YYYY-MM') AS month_bucket,
+          TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month_bucket,
           COALESCE(sp.payment_method, s.payment_method, 'Unknown') AS payment_method,
           ROUND(COALESCE(SUM(COALESCE(sp.amount, s.total_amount)), 0), 2) AS total_amount,
           COUNT(DISTINCT s.id) AS order_count
         FROM sales s
         LEFT JOIN sale_payments sp ON sp.sale_id = s.id
         WHERE ${whereSql}
-        GROUP BY TO_CHAR(s.timestamp, 'YYYY-MM'), COALESCE(sp.payment_method, s.payment_method, 'Unknown')
-        ORDER BY TO_CHAR(s.timestamp, 'YYYY-MM') DESC, total_amount DESC
+        GROUP BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM'), COALESCE(sp.payment_method, s.payment_method, 'Unknown')
+        ORDER BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') DESC, total_amount DESC
       `;
 
       const totalsSql = `
         SELECT
-          TO_CHAR(s.timestamp, 'YYYY-MM') AS month_bucket,
+          TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month_bucket,
           ROUND(COALESCE(SUM(s.total_amount), 0), 2) AS total_amount,
           COUNT(DISTINCT s.id) AS total_orders
         FROM sales s
         WHERE ${whereSql}
-        GROUP BY TO_CHAR(s.timestamp, 'YYYY-MM')
+        GROUP BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM')
       `;
 
       const [matrixResult, totalsResult] = await Promise.all([
@@ -441,7 +443,7 @@ module.exports = function (app, deps, helpers) {
   // Category Wise: sales grouped by product category
   app.get("/api/reports/category-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -477,7 +479,7 @@ module.exports = function (app, deps, helpers) {
   // Sub-Category Wise: sales grouped by leaf category with parent context
   app.get("/api/reports/subcategory-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -576,7 +578,7 @@ module.exports = function (app, deps, helpers) {
   // Item Wise: sales grouped by product
   app.get("/api/reports/item-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -610,7 +612,7 @@ module.exports = function (app, deps, helpers) {
   // Brand Wise: sales grouped by brand
   app.get("/api/reports/brand-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -668,7 +670,7 @@ module.exports = function (app, deps, helpers) {
   // Product Performance: same as item-wise but sorted by margin %
   app.get("/api/reports/product-performance", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -710,7 +712,7 @@ module.exports = function (app, deps, helpers) {
   // Unified merchandising workspace: one payload for item/category/brand/supplier performance
   app.get("/api/reports/performance-workspace", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const where = ["s.voided = false"];
       const params = [];
       applySaleTimeFilters(where, params, req.query, "s", tz);
@@ -835,7 +837,7 @@ module.exports = function (app, deps, helpers) {
 
   app.get("/api/reports/performance-comparison", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const ranges = parseComparisonRanges(req.query);
       const dimensions = {
         items: {
@@ -860,11 +862,11 @@ module.exports = function (app, deps, helpers) {
         const where = ["s.voided = false"];
         const params = [];
         if (req.query.time_from) {
-          where.push("s.timestamp::time >= ?::time");
+          where.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
           params.push(req.query.time_from);
         }
         if (req.query.time_to) {
-          where.push("s.timestamp::time <= ?::time");
+          where.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
           params.push(req.query.time_to);
         }
         applyOutletFilter(where, params, req.query.outlet_id);
@@ -936,13 +938,13 @@ module.exports = function (app, deps, helpers) {
         return `
         WITH monthly_ranked AS (
           SELECT
-            TO_CHAR(s.timestamp, 'YYYY-MM') AS month_bucket,
+            TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month_bucket,
             ${dimension.idExpr} AS entity_id,
             ${dimension.labelExpr} AS entity_label,
             ROUND(COALESCE(SUM(si.quantity), 0), 2) AS units_sold,
             ROUND(COALESCE(SUM(si.quantity * si.price_at_sale), 0), 2) AS revenue,
             ROW_NUMBER() OVER (
-              PARTITION BY TO_CHAR(s.timestamp, 'YYYY-MM')
+              PARTITION BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM')
               ORDER BY SUM(si.quantity * si.price_at_sale) DESC, SUM(si.quantity) DESC
             ) AS bucket_rank
           FROM sale_items si
@@ -954,7 +956,7 @@ module.exports = function (app, deps, helpers) {
           WHERE (${innerSharedWhere})
             AND s.timestamp >= $${rangeStart}
             AND s.timestamp < $${rangeStart + 1}
-          GROUP BY TO_CHAR(s.timestamp, 'YYYY-MM'), entity_id, entity_label
+          GROUP BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM'), entity_id, entity_label
         )
         SELECT month_bucket, entity_id, entity_label, units_sold, revenue
         FROM monthly_ranked
@@ -1129,7 +1131,7 @@ module.exports = function (app, deps, helpers) {
   // Refunds and Voids: operational exception summary plus detailed lists
   app.get("/api/reports/refunds-voids", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const saleWhere = ["s.voided = true"];
       const refundWhere = ["1=1"];
       const saleParams = [];
@@ -1156,14 +1158,14 @@ module.exports = function (app, deps, helpers) {
         refundParams.push(toUtcEnd(date_to, tz));
       }
       if (time_from) {
-        saleWhere.push("s.timestamp::time >= ?::time");
-        refundWhere.push("r.timestamp::time >= ?::time");
+        saleWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
+        refundWhere.push(`(r.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
         saleParams.push(time_from);
         refundParams.push(time_from);
       }
       if (time_to) {
-        saleWhere.push("s.timestamp::time <= ?::time");
-        refundWhere.push("r.timestamp::time <= ?::time");
+        saleWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
+        refundWhere.push(`(r.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
         saleParams.push(time_to);
         refundParams.push(time_to);
       }
@@ -1260,7 +1262,7 @@ module.exports = function (app, deps, helpers) {
   // Cashier Wise: sales, voids, refunds, and discounts by employee
   app.get("/api/reports/cashier-wise", salesView, async (req, res) => {
     try {
-      const tz = req.company?.timezone || "UTC";
+      const tz = isValidTz(req.company?.timezone) ? req.company.timezone : "UTC";
       const salesWhere = ["s.voided = false", "s.employee_id IS NOT NULL"];
       const voidWhere = ["s.voided = true", "s.employee_id IS NOT NULL"];
       const refundWhere = ["r.employee_id IS NOT NULL"];
@@ -1293,17 +1295,17 @@ module.exports = function (app, deps, helpers) {
         refundParams.push(toUtcEnd(date_to, tz));
       }
       if (time_from) {
-        salesWhere.push("s.timestamp::time >= ?::time");
-        voidWhere.push("s.timestamp::time >= ?::time");
-        refundWhere.push("r.timestamp::time >= ?::time");
+        salesWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
+        voidWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
+        refundWhere.push(`(r.timestamp AT TIME ZONE '${tz}')::time >= ?::time`);
         salesParams.push(time_from);
         voidParams.push(time_from);
         refundParams.push(time_from);
       }
       if (time_to) {
-        salesWhere.push("s.timestamp::time <= ?::time");
-        voidWhere.push("s.timestamp::time <= ?::time");
-        refundWhere.push("r.timestamp::time <= ?::time");
+        salesWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
+        voidWhere.push(`(s.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
+        refundWhere.push(`(r.timestamp AT TIME ZONE '${tz}')::time <= ?::time`);
         salesParams.push(time_to);
         voidParams.push(time_to);
         refundParams.push(time_to);
