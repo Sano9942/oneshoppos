@@ -90,7 +90,7 @@ About **41 to prove, about 34 to switch off**. Some "not now" pages have no modu
 
 Each fix follows the same path: write a test that **fails on today's code** → fix → full related tests pass → try it on screen locally → owner OK → deploy (push `main`, Vercel + Railway) → check live → first real use in the shop. Recorded in `PROGRESS.md` under its D number.
 
-**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → F4 → F5 → G1–G5 (report gaps, below) → F6 → F7 → F8.
+**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → **F3b staff account** → F4 → F5 → G1–G5 (report gaps, below) → F6 → F7 → F8.
 
 Order reason: F1–F4 affect **every night's** reconciliation and the family WhatsApp report; F5 blocks stock work (R4, R5); the rest are clean-up.
 
@@ -115,6 +115,23 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 - **Build:** a **Paid out** button on the till (amount, category, note), saved as an expense linked to the open shift and marked "paid from till cash". Close Shift's expected cash = float + cash sales − cash refunds − **till paid-outs** (`routes/shifts.js:126-150`). The Expenses page gets a "Paid from: Till cash / Bank / Other" field. `expenses` already has `shift_id`; needs one new column for where it was paid from (migration).
 - **Setup:** expense categories for the shop (the owner lists them; prod has none).
 - **Test:** float 1,000 + cash sale 500 − paid-out 200 → expected 1,300; a bank-paid expense doesn't change it.
+- **Design agreed with the owner 2026-09-30 (Q5, 10 register pages read; answers Q5.1–Q5.12 below).** Everything written in the register's EXP column leaves the drawer, but it is five different kinds. **Every kind comes off Close Shift's expected cash; only "Shop cost" and "Discount after sale" lower profit.**
+
+  | Kind on the Paid out button | Pick | Counts in profit? | Also does |
+  |---|---|---|---|
+  | **Shop cost** | Staff food · Tea / coffee · Water bottles · Staff flat (gas, water, bills) · Cleaning · Staff medicine · Petrol / car · Courier / sending goods · Repairs · Tax & government · Charity · Other (note) | yes (expense) | — |
+  | **Pay supplier** | the supplier | no (stock was the cost) | lowers what the shop owes that supplier (Supplier Payables) |
+  | **Owner / home** | note (DHA home, school fees, credit card, loan to brother…) | **no** (owner's drawing, own total per month) | — |
+  | **Staff advance** | the staff member | no (a loan) | saved per person; the full staff account comes right after F3 |
+  | **Discount after sale** | bill number | yes (as a discount on that day) | linked to the bill, no stock moves |
+
+- **Current code found (grep 2026-09-30):** Close Shift (`routes/shifts.js:125-150`, by outlet + time window) and the dashboard cash position (`routes/reports/dashboard.js:520-575`, by `shift_id`; its comment claims paid-outs are subtracted, the code doesn't) both ignore expenses. Cash Audit / Shift Summary (`routes/reports/shifts.js:70-85`) list only cash sales + cash returns. Expenses page edit **wipes `shift_id`** (`ExpensesRedesign.jsx:161` never sends it; `barcode-expenses.js:347` writes NULL) — fix in F3. Dashboard today profit (`dashboard.js:191`), finance report, accounting P&L subtract **every** expense row (so owner/home must not be an expense row, or must be excluded). `supplier_payments` has `payment_method` (default 'Cash') but no shift link. `expenses` POST/PUT need `manage_inventory` via PERMISSION_RULES. HR payroll has only a single `deductions` number: no advances ledger, no staff purchases.
+- **Who can pay out:** the owner login now; later staff with their own till login, with who-did-it recorded (a permission that can be given to a staff role).
+- **Before F3 goes live (owner inputs):** (1) **list of what the shop owes every supplier** → opening balances entered on prod with the owner's OK (Q5.6: "enter all balances now"); (2) **names of the 10 staff + cleaner** → added as employees with no till login (Q5.11).
+
+### F3b: Staff account (after F3, owner 2026-09-30)
+
+- Per staff member: advances (from Paid out) + **toys taken at cost price**; settled by cash paid back into the till (a "Paid in") or **cut from salary**, sometimes carried to the next month's salary on request. Salaries are paid in cash from the drawer at month end (Q5.4). The owner wants SanoPOS to track all of it.
 
 ### F4: End-of-day slip (D51) 🟡→ needed daily
 
@@ -171,6 +188,18 @@ Owner checks regularly: sale by payment type; **hourly sale** (day / month / mon
 - ~~**Q3 (R1)**~~ ✅ answered 2026-09-29: **7 days is fine**; more if needed.
 - ~~**Q4 (F1)**~~ ✅ answered 2026-09-30: **leave INV-00004's Rs 40 as recorded**, with a note (never correct it).
 - **Q5 (F3):** ▶ partly answered 2026-09-30 from the register page for 29 Sep (Urdu, total 10,470 checks): staff food (10) 3,000; gas cylinder refill for the staff flat 1,000; medicine / Ishtiaq 170; home expenses DHA 5,000; coffee 1,000; Aslam food 300. **Draft categories:** Staff food · Staff flat (gas refill etc.) · Tea / coffee · Staff medicine / advance · **Owner / home (owner's drawing, kept out of profit)** · Shop supplies · Transport / delivery · Other (with note). Owner will send 4–5 more days of register pages to finish the list.
+  - ✅ **Answered 2026-09-30 ~17:00** after reading 10 more register pages (zip `WhatsApp Unknown 2026-09-30 at 4.46.41 PM`). One question at a time:
+    - **Q5.1** Home / family money (DHA home, school fees 87,500 / 87,000, Bank Alfalah credit card 54,000 / 111,000, "Hassan sahib"): **kept separate from shop cost** (owner's drawing, not in profit).
+    - **Q5.2** Cash paid to suppliers (Rehmat Sports 59,000, Arif Khan 50,000, AtoZ Slime 10,000 ×2, Peshawar C.C 6,100, JBD Books 9,000, Rabie Books 500): **goes against the supplier's balance.**
+    - **Q5.3** Staff advances (5,000; 13,000): almost always cut from salary; sometimes, at the staff member's request, from the month after.
+    - **Q5.4** Salaries paid in cash from the drawer at month end; advances tracked in the register today; **owner wants SanoPOS to track everything**, including toys staff take at cost (paid in cash, or cut at salary time).
+    - **Q5.5** Staff account = new work: **F3 first, staff account (F3b) right after.**
+    - **Q5.6** Supplier opening balances: **enter all now** (owner to send the list).
+    - **Q5.7** "Danish MCB 50,000" = money sent to the owner's brother's family, to be paid back into the owner's **personal** account → Owner / home.
+    - **Q5.8 / Q5.10** "Cash customer 500" = a discount agreed after the bill was charged in full, handed back in cash from the till (nothing done in iPOS) → Paid out **"Discount after sale"** with the bill number.
+    - **Q5.9** Shop cost list accepted as proposed (table under F3).
+    - **Q5.11** Add all 11 staff as employees (no login).
+    - **Q5.12** Paid out: the owner now, and staff with their own login later.
   - Shop facts given with it: open **11:00–21:00 daily**; **10 staff + 1 cleaner**; the owner rents a **flat near Packages Mall** for staff (most are from outside Lahore) and pays its gas refills. (SanoPOS has 1 employee today.)
 - ~~**Q6**~~ ✅ answered 2026-09-30: **iPOS holds no customer credit, supplier balances or salaries** (its dashboard shows Cash in Hand, Bank, Supplier Payable, Customer Receivable, Expense all 0.00). Nothing to move before R9 except the final export. What the owner uses in iPOS is **reports + dashboard** (12 screenshots in `C:/Users/HP/OneDrive/Pictures/whatsapp`, 27 Feb 2026 + today): Daily Sale Report (by MOP), Periodic Sale, Itemwise Sale, Category Wise, **Supplier Wise Sale**, Brand Wise, Total/Itemwise Purchases, Present Stock Position / List of Item File, dashboard (today's sale, avg bill, month sale/purchase, gross margin %, top 50 items 30 days, sales contribution **by supplier**, daily sale vs purchase, voids, discounts, MOP split).
   - SanoPOS tabs with matching names (**names only, none checked against iPOS numbers yet**): Payment Summary / Session Z-Report / Shift Summary; Item Wise; Category / Sub-Category Wise; Brand Wise; Total / Itemwise Purchases; On Hand / Inventory Dump / Sales & Stock; Refunds & Voids; Dashboard / Overview / Product Performance. **Open: sales by supplier** (SanoPOS "Supplier Wise" sits under Procurement, may be purchases only): check; add to the fix list if missing. Each report the owner uses gets checked against iPOS for the same day during the dual-run.
