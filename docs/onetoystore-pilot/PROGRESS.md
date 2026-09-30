@@ -6,7 +6,10 @@
 
 **Branch:** `onetoystore-pilot`
 
-## ▶ Where we are / next (updated 2026-09-29)
+## ▶ Where we are / next (updated 2026-09-30 ~14:10)
+
+**▶ NOW (2026-09-30, day 2 of dual-run):** shift 2 open (12:57, float 48,810); bills so far INV-2026-00036 Rs 290 Cash, INV-2026-00037 Rs 4,130 Card = **JazzCash** (register). **Q1–Q6 all answered** (Q5 still wants 4–5 more register pages for the category list). New today: Railway 6-min outage 12:35–12:41 + flaky 2 min after; **D53** stuck "Loading session" (boot has no timeout); **D54** hourly sales in UTC (5 h off, seen live on the dashboard); report gaps **G1–G5** (PHASE-F-PLAN "Reports the owner uses"). **Agreed fix order:** F1 → D54 → F2 → F3 → F4 → F5 → G1–G5 → F6 → F7 → F8. **Next:** (a) start F1 locally, test first; (b) page keep/switch-off list with the owner when quiet; (c) tonight: day 2 reconciliation (iPOS slip, bank settlement, register expenses, JazzCash 4,130 on INV-00037), Close Shift, Download Backup → Google Drive, record here.
+
 
 **2026-09-29 (end of session, ~16:00): LIVE DUAL-RUN STARTED.** Real iPOS import done + checked on prod (10,044 items, totals exact). Counter PC set up (Chrome, scanner, thermal printer via Chrome print box, kiosk clock-in, shift 1 opened 13:51 float Rs 32,870). Every sale is rung in **both** iPOS and SanoPOS. By 15:53: **11 real bills, Rs 58,860 = Cash 13,920 + Card 44,940**, one exchange. New iPOS-style receipt (D45) + scannable barcode (D49) **deployed** (main `a62b155d`); prod receipt template set. Details under "Go-live on prod" → "Counter PC (step 8)".
 
