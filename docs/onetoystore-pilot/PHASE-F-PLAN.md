@@ -90,6 +90,8 @@ About **41 to prove, about 34 to switch off**. Some "not now" pages have no modu
 
 Each fix follows the same path: write a test that **fails on today's code** → fix → full related tests pass → try it on screen locally → owner OK → deploy (push `main`, Vercel + Railway) → check live → first real use in the shop. Recorded in `PROGRESS.md` under its D number.
 
+**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → F4 → F5 → G1–G5 (report gaps, below) → F6 → F7 → F8.
+
 Order reason: F1–F4 affect **every night's** reconciliation and the family WhatsApp report; F5 blocks stock work (R4, R5); the rest are clean-up.
 
 ### F1: Discount on a return / exchange (D48) 🔴
@@ -143,7 +145,7 @@ Order reason: F1–F4 affect **every night's** reconciliation and the family Wha
 Owner checks regularly: sale by payment type; **hourly sale** (day / month / months); **stock at cost and sale price by supplier, category, brand, sub-category**; **total stock at cost at end of day** (read when closing iPOS). Checked against code + live dashboard 2026-09-30:
 
 - ✅ Sale by payment type: dashboard "Payment Methods", Reports → Payment Summary.
-- 🔴 **D54** hourly sales in UTC (dashboard + Sales Heatmap). Fix with F-list priority after F1 (owner uses it daily).
+- 🔴 **D54** hourly sales in UTC (dashboard + Sales Heatmap). **Owner agreed 2026-09-30: fix right after F1** (uses it daily).
 - **G1** stock-value **summary table** by supplier / category / brand / sub-category (cost + sale price + units), like iPOS PSP "Supplier / Category / Brand / Sub-Cat Summary". Today: Reports → On Hand gives totals for **one** filter at a time.
 - **G2** **saved end-of-day stock value**: store units / cost / retail at every Close Shift; print on the day slip (F4); list by date. Today: dashboard shows the live figure only.
 - **G3** dashboard: sales contribution **by supplier** (Reports → Merchandising has it; not on the dashboard).
