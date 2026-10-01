@@ -79,6 +79,38 @@
         "VITE_API_BASE": "http://localhost:5002"
       },
       "port": 5175
+    },
+    {
+      "name": "backend-5003",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "index.js"
+      ],
+      "cwd": "backend",
+      "env": {
+        "PORT": "5003",
+        "CORS_ORIGIN": "http://localhost:5176"
+      },
+      "port": 5003,
+      "autoPort": false
+    },
+    {
+      "name": "frontend-5176",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_BASE": "http://localhost:5003"
+      },
+      "port": 5176,
+      "autoPort": false
     }
   ]
 }
