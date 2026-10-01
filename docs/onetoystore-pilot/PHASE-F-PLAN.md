@@ -22,6 +22,17 @@ Day 1 (2026-09-29) result: 34 bills, cash 25,990 exact, card +40 (D48), card vs 
 
 A cash sale after counting: add those notes to the count (or recount) before pressing Close Shift. SanoPOS's expected cash includes every sale up to the moment you close.
 
+## Deploying while the shop is open (added 2026-10-01, after the F3b part 1 deploy)
+
+**What happened (2026-10-01 14:08–14:15):** after the deploy (Railway `1239ca6e`, SUCCESS in about a minute), Railway's network edge was slow for about 5 minutes: `/api/health` took **1 to 26 s** end to end while the server itself answered in 1–3 ms (the logs show the requests *arriving* late). The new code was not the cause; it adds nothing that runs in the background. The screen hung on **"Loading session…"** twice (D53: page start has no time limit, so one hung request leaves the till on that screen). It settled by itself; 12 of 12 checks were under 1 s at 14:15. The same happened after the 30 Sep deploy (flaky about 2 min) and with the 30 Sep 12:35 outage.
+
+**What to do from now on:**
+1. **When to deploy:** prefer before opening (before ~12:30) or after Close Shift. If a fix can't wait, deploy in a quiet moment, check SQL first (no bill being rung, last bill time), and **tell the counter first**: "the till may freeze for up to 5 minutes; nothing is lost."
+2. **Before saying "live":** run 10–12 health checks in a row; only call it done when all are under ~2 s. Then load the live screen.
+3. **At the counter, if the till freezes or shows "Loading session…":** wait a minute, then refresh once (Ctrl+Shift+R). **Before ringing a bill again, look in Sales History** to see if it already went through: never ring the same bill twice. Paid out / Paid in have no offline queue yet: if one fails, write it in the register and enter it after.
+4. **Fix in code (D53, with F4):** put a time limit on the page-start requests (`AuthProvider.jsx` boot) so a hung request falls back to the saved session instead of hanging forever; then a slow network can't freeze the till.
+5. If it lasts **more than 10 minutes**: check `railway status` / Railway's status page; the counter keeps selling in iPOS and SanoPOS bills are entered after (as during the 30 Sep outage).
+
 ## Rules for "ready to drop iPOS"
 
 All must be true. Claude checks each one and records it; the owner decides.
