@@ -156,6 +156,14 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 ### F3b: Staff account (after F3, owner 2026-09-30)
 
 - Per staff member: advances (from Paid out) + **toys taken at cost price**; settled by cash paid back into the till (a "Paid in") or **cut from salary**, sometimes carried to the next month's salary on request. Salaries are paid in cash from the drawer at month end (Q5.4). The owner wants SanoPOS to track all of it.
+- **Deadline (owner, 2026-10-01):** September salaries are paid from the drawer **within 4–5 days** (by ~5–6 Oct), so F3b goes **before F4**.
+- **Current code found (grep + read-only prod SQL, 2026-10-01):**
+  - Paid out kinds (`services/till-payouts.js:19-25`) are Shop cost / Pay supplier / Owner-home / Staff advance / Discount after sale: **no Salary kind**, and none of the 12 shop-cost categories is salary. Paying salaries today would have no right slot.
+  - Paid in already has **Staff pays back** (`till_payins.staff_employee_id`); Paid out Staff advance saves `till_payouts.staff_employee_id`. Prod: 1 advance, **Tahir Mushtaq 15,000** (payout 11, shift 2), 0 pay-backs.
+  - `employees` has `salary_type`, `monthly_salary`, `monthly_leave_allowance`. Prod: the 11 staff have the right salaries (total 354,000), but **every allowance is 2** (column default), not the owner's 4/5/6.
+  - The existing HR payroll (`routes/tier4/hr.js:206-370`, `POST /api/hr/payroll/periods/:id/generate`, needs `advanced_hr`) **does not fit this shop**: it cuts a day's pay for every day without a kiosk clock-in, only cuts excess leave (never pays unused days extra), ignores advances and staff purchases, and pays nothing from the till. **Prod proof:** someone ran it on 2026-09-30 22:41 (period 1 "sep", 28–30 Sep, finalized): **all 11 staff net pay 0** ("Absent: 30d"). Nothing was paid; the rows are harmless but wrong.
+  - Leave: `leave_requests` exists (0 rows on prod); staff don't clock in (owner: kiosk too soon), so attendance can't count leave.
+  - Staff toys at cost: no way today (a sale is at price; On Account needs a customer).
 
 ### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) ✅ DEPLOYED 2026-09-30 ~23:25 with D57 + D58 (`4432ece8`, v148)
 
