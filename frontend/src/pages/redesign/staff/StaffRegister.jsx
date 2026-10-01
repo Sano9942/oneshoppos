@@ -12,9 +12,9 @@ import {
 
 const REASONS = ["From paper register", "Forgot to clock in", "Sick", "Correction"];
 const CELL_TONE = {
-  P: "text-(--ui-text)",
-  A: "bg-(--ui-danger-bg) text-(--ui-danger-fg)",
-  S: "bg-(--ui-warning-bg) text-(--ui-warning-fg)",
+  P: "!text-(--ui-text)",
+  A: "!bg-(--ui-danger-bg) !text-(--ui-danger-fg)",
+  S: "!bg-(--ui-warning-bg) !text-(--ui-warning-fg)",
 };
 
 export default function StaffRegister() {
@@ -126,18 +126,24 @@ export default function StaffRegister() {
             <thead>
               <tr className="border-b border-(--ui-border) text-(--ui-text-muted)">
                 <th className="sticky left-0 bg-(--ui-surface) px-3 py-2 text-left">Name</th>
-                {days.map((d) => <th key={d} className="w-8 px-0 py-2 text-center text-xs">{d}</th>)}
+                {days.map((d) => <th key={d} className="w-6 px-0 py-2 text-center text-[11px]">{d}</th>)}
                 <th className="px-2 py-2 text-center text-xs">A</th>
                 <th className="px-2 py-2 text-center text-xs">S</th>
                 <th className="px-2 py-2 text-center text-xs">Allowed</th>
                 <th className="px-2 py-2 text-center text-xs">±</th>
-                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {data.staff.map((s) => (
                 <tr key={s.id} className="border-b border-(--ui-border)">
-                  <td className="sticky left-0 whitespace-nowrap bg-(--ui-surface) px-3 py-1 font-semibold text-(--ui-text)">{s.name}</td>
+                  <td className="sticky left-0 z-10 whitespace-nowrap bg-(--ui-surface) px-3 py-1">
+                    <div className="font-semibold text-(--ui-text)">{s.name}</div>
+                    <div className="text-xs">
+                      <Button size="sm" tone="link" onClick={() => fillEmpty(s)} disabled={busy}>Empty → P</Button>
+                      <span className="mx-1 text-(--ui-text-muted)">·</span>
+                      <Button size="sm" tone="link" onClick={() => showHistory(s)}>History</Button>
+                    </div>
+                  </td>
                   {days.map((d) => {
                     const c = s.marks[d];
                     const title = c
@@ -153,7 +159,7 @@ export default function StaffRegister() {
                           aria-label={`${s.name} ${title}`}
                           disabled={busy}
                           onClick={() => markOne(s, d)}
-                          className={`!h-7 !w-7 !rounded-md text-xs ${c ? CELL_TONE[c.mark] : ""} ${c?.source === "clock" ? "underline" : ""}`}
+                          className={`!h-6 !w-6 !rounded-sm border border-(--ui-border) text-[11px] ${c ? CELL_TONE[c.mark] : ""} ${c?.source === "clock" ? "underline" : ""}`}
                         >
                           {c?.mark || ""}
                         </Button>
@@ -166,17 +172,12 @@ export default function StaffRegister() {
                   <td className="px-2 text-center">
                     <Badge tone={s.diff < 0 ? "danger" : s.diff > 0 ? "success" : "default"}>{s.diff === 0 ? "ok" : signed(s.diff)}</Badge>
                   </td>
-                  <td className="whitespace-nowrap px-2">
-                    <Button size="sm" tone="link" onClick={() => fillEmpty(s)} disabled={busy}>Empty → P</Button>
-                    <span className="mx-1 text-(--ui-text-muted)">·</span>
-                    <Button size="sm" tone="link" onClick={() => showHistory(s)}>History</Button>
-                  </td>
                 </tr>
               ))}
               <tr className="text-(--ui-text-muted)">
                 <td className="sticky left-0 bg-(--ui-surface) px-3 py-2 text-xs">Present</td>
                 {days.map((d) => <td key={d} className="text-center text-xs">{data.present_by_day[d] || ""}</td>)}
-                <td colSpan={5} />
+                <td colSpan={4} />
               </tr>
             </tbody>
           </table>
