@@ -166,6 +166,26 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
   - Staff toys at cost: no way today (a sale is at price; On Account needs a customer).
 - **Owner answers (2026-10-01), one at a time:**
   - **Q3b.1 Leave taken:** the shop keeps a **paper attendance register**, marked for the whole month. → On the Salaries page the owner **types each person's days off from the register** (no kiosk, no leave requests).
+  - **Register for September 2026 (3 photos, 2026-10-01), my reading:** 11 rows, P = present, circled A = absent, bottom row = staff present that day (counts the 10 sales staff, not Usman). Remarks column = **allowed − A days**, and matches every allowance on the owner's list:
+
+    | # | Register name | Prod employee | A days | Allowed | Remark |
+    |---|---|---|---|---|---|
+    | 1 | Syed Ishtiaq | Ishtiaq Shah (2) | 1–6 = 6 | 6 | ok (0) |
+    | 2 | Mubashir Shah | (3) | 0 | 6 | +6 |
+    | 3 | Naeem Shah | (4) | 0 | 6 | +6 |
+    | 4 | Basharat Chohan | Basharat Ali (5) | 1–7 = 7 (+ Urdu marks 28, 29) | 5 | −2 |
+    | 5 | Attiq ur Rehman | Atiq Ali (7) | 0 (correction 25–26) | 5 | +5 |
+    | 6 | Tahir Mushtaq | (6) | 0 | 5 | +5 |
+    | 7 | Kelash Kumar | (8) | 0 | 6 | +6 |
+    | 8 | Fahad Ali | Fahad Iqbal (10) | 1–4 = 4 | 5 | +1 |
+    | 9 | Ubaid Awan | (9) | 0 (Urdu marks 15, 16) | 6 | +6 |
+    | 10 | Ramzan Ali | Ramzan (11) | 0 (Urdu marks 19, 21) | 5 | +5 |
+    | 11 | Usman Safaiwala | Usman (12) | 26 = 1 | 4 | +3 |
+
+    Days with an Urdu mark are **not** counted as leave in the remarks (to confirm with the owner). At salary ÷ 30: e.g. Mubashir 36,500 + 6 × 1,216.67 = 43,800; Basharat 48,500 − 2 × 1,616.67 = 45,266.67 (rounding to ask).
+  - **Q3b.2 Digital register (owner asked):** yes, build an on-screen **attendance register**: month grid, one row per staff member, a box per day; click to mark P / A (and the other marks); per-day "present" count at the bottom and per-person **A days / allowed / ±** at the right, which feeds the Salaries page. Replaces typing days off.
+  - **Q3b.3 Advances:** Tahir's 15,000 (30 Sep) is **not** the only one; the owner gave advances all month and will send the list (~1 hour).
+  - **Q3b.4 Toys at cost:** sometimes the staff member **pays cash** at the time; other times it's **written in the daily register and cut from salary** at month end. → both ways needed.
 
 ### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) ✅ DEPLOYED 2026-09-30 ~23:25 with D57 + D58 (`4432ece8`, v148)
 
