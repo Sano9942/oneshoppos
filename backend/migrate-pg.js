@@ -10254,6 +10254,20 @@ const MIGRATIONS = [
       await client.query(STAFF_PAY_DDL);
     },
   },
+  {
+    version: 150,
+    description:
+      "One Toy Store pilot, F3b part 2: staff toys at the till. sales.staff_employee_id = the salaried staff member a bill was sold to at cost (normal price + a 'staff' discount); paid Cash / Online / 'Cut from salary' (onto the staff account). DDL shared with schema-pg.sql via services/staff-pay.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('sales', 'employees')`
+      );
+      if (rows[0].n < 2) return;
+      const { STAFF_PURCHASE_DDL } = require("./services/staff-pay");
+      await client.query(STAFF_PURCHASE_DDL);
+    },
+  },
 ];
 
 /**

@@ -98,6 +98,8 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     returnedFrom: slip.returnedFrom || null,
     employee: slip.employee || null,
     customer: slip.customer || null,
+    // One Toy Store F3b part 2: a staff toy at cost.
+    staffName: slip.staffName || null,
 
     // Items
     isExchange,
@@ -257,6 +259,7 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
     b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`));
   }
   if (s.returnedFrom) b.appendChild(txt("div", `Exchange for: ${s.returnedFrom}`));
+  if (s.staffName) b.appendChild(txt("div", `Staff purchase: ${s.staffName}`));
   if (s.customer)
     b.appendChild(txt("div", `${labels.customer || "Customer"}: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`));
 
@@ -348,7 +351,7 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
     b.appendChild(row("Return Credit", `-${num(s.exchangeCredit)}`));
     if (s.exchangeDiscount > 0) b.appendChild(row("Discount", `-${num(s.exchangeDiscount)}`));
   } else if (s.discountAmount > 0) {
-    b.appendChild(row(s.discountType === "percent" ? "Discount (%)" : "Discount", `-${num(s.discountAmount)}`));
+    b.appendChild(row(s.discountType === "staff" ? "Staff discount" : s.discountType === "percent" ? "Discount (%)" : "Discount", `-${num(s.discountAmount)}`));
   }
 
   const grand = row(s.isExchange ? "BALANCE DUE" : "GRAND TOTAL", fmt(s.totalValue));

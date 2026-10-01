@@ -10,6 +10,10 @@ const { tenantToday } = require("../utils/tz");
 module.exports = function registerStaffPayRoutes(app, deps) {
   const { db, requirePerm } = deps;
   const OWNER = requirePerm("manage_employees");
+  // Staff toys at the till (part 2): whoever may give a discount at the till
+  // may ring a staff purchase. The staff discount is worked out here and again
+  // by POST /api/sales; the till never decides the cost.
+  const TILL = requirePerm("pos_discount");
 
   const actorId = async (req) => {
     const id = Number(req.employee?.id || req.headers["x-employee-id"] || 0) || null;
@@ -88,6 +92,22 @@ module.exports = function registerStaffPayRoutes(app, deps) {
     try {
       const s = await db.transaction((client) => pay.undoSalary(client, Number(req.params.id)));
       res.json({ removed: s.id });
+    } catch (err) {
+      sendErr(res, err);
+    }
+  });
+
+  app.get("/api/staff-pay/staff-list", TILL, async (req, res) => {
+    try {
+      res.json({ staff: await pay.tillStaff(db) });
+    } catch (err) {
+      sendErr(res, err);
+    }
+  });
+
+  app.post("/api/staff-pay/staff-quote", TILL, async (req, res) => {
+    try {
+      res.json(await pay.staffQuote(db, req.body || {}));
     } catch (err) {
       sendErr(res, err);
     }

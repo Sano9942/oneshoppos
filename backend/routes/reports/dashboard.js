@@ -110,12 +110,17 @@ module.exports = function (app, deps) {
           (SELECT COUNT(id) FROM sales s WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS sale_count,
           (SELECT COUNT(*) FROM sales s WHERE s.voided = true AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS void_count,
           (SELECT ROUND(COALESCE(SUM(total_amount), 0)::numeric, 2) FROM sales s WHERE s.voided = true AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS void_value,
-          (SELECT COUNT(*) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS discount_count,
-          (SELECT ROUND(COALESCE(SUM(discount_amount), 0)::numeric, 2) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS discount_value`,
+          (SELECT COUNT(*) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND COALESCE(s.discount_type, '') <> 'staff' AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS discount_count,
+          (SELECT ROUND(COALESCE(SUM(discount_amount), 0)::numeric, 2) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND COALESCE(s.discount_type, '') <> 'staff' AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS discount_value,
+          (SELECT COUNT(*) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND s.discount_type = 'staff' AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS staff_discount_count,
+          (SELECT ROUND(COALESCE(SUM(discount_amount), 0)::numeric, 2) FROM sales s WHERE s.voided = false AND COALESCE(s.discount_amount, 0) > 0 AND s.discount_type = 'staff' AND s.timestamp >= $1 AND s.timestamp < $2 ${scOutlet.clause}) AS staff_discount_value`,
         [todayStart, todayEnd, ...scOutlet.values])).rows[0];
       const saleCount = Number(todayScalars.sale_count || 0);
       const voidsToday = { count: Number(todayScalars.void_count || 0), value: Number(todayScalars.void_value || 0) };
       const discountsToday = { count: Number(todayScalars.discount_count || 0), value: Number(todayScalars.discount_value || 0) };
+      // One Toy Store F3b part 2: staff toys at cost are kept apart from the
+      // discounts given to customers (they still come off profit below).
+      const staffDiscountsToday = { count: Number(todayScalars.staff_discount_count || 0), value: Number(todayScalars.staff_discount_value || 0) };
 
       // ─── Query 3: Revenue metrics + month gross margin (combined CTE) ───
       const rmOutlet = buildOutletClause("s.outlet_id", outletIds, 3);
@@ -733,6 +738,7 @@ module.exports = function (app, deps) {
               ? Number(((voidsToday.count / saleCount) * 100).toFixed(1))
               : 0,
           },
+          staffDiscountsToday,
           discountsToday: {
             count: discountsToday.count,
             value: discountsToday.value,

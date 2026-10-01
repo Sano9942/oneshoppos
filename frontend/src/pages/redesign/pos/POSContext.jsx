@@ -24,6 +24,7 @@ import { useOfflineCatalogue } from "./hooks/useOfflineCatalogue";
 import { scanProduct, serverReachable, isUnreachableError } from "./offlineLookup";
 import { saveLastKnown, readLastKnown, isUnreachable } from "../../../utils/lastKnown";
 import { useCheckout } from "./hooks/useCheckout";
+import { useStaffPurchase } from "./hooks/useStaffPurchase";
 import { variantCartLine } from "./variantCartLine";
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -286,6 +287,16 @@ export const POSProvider = ({ children }) => {
     taxMode,
   });
 
+  // One Toy Store F3b part 2 — Staff button: the bill is sold to a staff
+  // member at cost. While on, the server's quote sets the discount and the
+  // total (the manual discount, customer and promotions don't apply).
+  const staffBuy = useStaffPurchase({ cart: cartHook.cart });
+  const staffOn = !!staffBuy.staff;
+  const effectiveTotal = staffOn
+    ? (staffBuy.quote ? staffBuy.quote.total : cartHook.grossTotal)
+    : cartHook.total;
+  const effectiveDiscount = staffOn ? (staffBuy.quote?.staff_discount || 0) : cartHook.discountValue;
+
   // ── 2-G.15 Day 3 — cart resume checkpoint ───────────────────────────────
   // On mount (or employee change), if a recent checkpoint exists for this
   // employee AND the cart is currently empty, offer to restore it. Key is
@@ -528,7 +539,7 @@ export const POSProvider = ({ children }) => {
     cart: cartHook.cart,
     grossTotal: cartHook.grossTotal,
     taxTotal: cartHook.taxTotal,
-    total: cartHook.total,
+    total: effectiveTotal,
     activeShift: shift.activeShift,
   });
 
@@ -539,7 +550,7 @@ export const POSProvider = ({ children }) => {
   const loyalty = useLoyaltyWallet({
     customers,
     checkoutCustomerId,
-    total: cartHook.total,
+    total: effectiveTotal,
     loyaltyConfig,
     enabled: loyaltyEnabled,
   });
@@ -601,13 +612,13 @@ export const POSProvider = ({ children }) => {
     activeShift: shift.activeShift,
     attendanceCode: shift.attendanceCode,
     cart: cartHook.cart, setCart: cartHook.setCart,
-    total: cartHook.total,
+    total: effectiveTotal,
     grossTotal: cartHook.grossTotal,
     taxTotal: cartHook.taxTotal,
     taxInclusive: cartHook.taxInclusive,
     discountType: cartHook.discountType,
     discountInput: cartHook.discountInput, setDiscountInput: cartHook.setDiscountInput,
-    discountValue: cartHook.discountValue,
+    discountValue: effectiveDiscount,
     orderNote: cartHook.orderNote, setOrderNote: cartHook.setOrderNote,
     promoDiscount: cartHook.promoDiscount,
     customers, setCustomers,
@@ -673,7 +684,21 @@ export const POSProvider = ({ children }) => {
     },
     // V04 salon — drives the walk-in performed-by guard in completeSale.
     industryType: industry_type,
+    staffPurchase: staffBuy.staff,
+    staffQuote: staffBuy.quote,
+    staffQuoteError: staffBuy.quoteError,
+    clearStaffPurchase: staffBuy.clearStaff,
   });
+
+  // Staff button: picking a person drops the manual discount and customer
+  // (a staff bill has neither); the server's quote sets the price.
+  const { setStaff: setStaffBuyer } = staffBuy;
+  const { setDiscountInput: setCartDiscountInput } = cartHook;
+  const startStaffPurchase = useCallback((person) => {
+    setCartDiscountInput("");
+    setSelectedCustomerId("");
+    setStaffBuyer(person ? { id: person.id, name: person.name } : null);
+  }, [setCartDiscountInput, setSelectedCustomerId, setStaffBuyer]);
 
   // ── Reload parked on outlet change ──────────────────────────────────────
   useEffect(() => {
@@ -1176,11 +1201,21 @@ export const POSProvider = ({ children }) => {
     setQty: cartHook.setQty,
     removeFromCart: cartHook.removeFromCart,
     grossTotal: cartHook.grossTotal,
-    discountValue: cartHook.discountValue,
+    discountValue: effectiveDiscount,
     taxTotal: cartHook.taxTotal,
-    total: cartHook.total,
+    total: effectiveTotal,
     totalPaid: checkout.totalPaid,
     remaining: checkout.remaining,
+    // One Toy Store F3b part 2 — staff toy at cost.
+    staffPurchase: staffBuy.staff,
+    staffQuote: staffBuy.quote,
+    staffQuoteError: staffBuy.quoteError,
+    staffQuotePending: staffBuy.quotePending,
+    staffList: staffBuy.staffList,
+    staffListError: staffBuy.listError,
+    loadStaffList: staffBuy.loadStaff,
+    startStaffPurchase,
+    clearStaffPurchase: staffBuy.clearStaff,
     change: checkout.change,
     selectedCustomer,
     filteredCustomers,

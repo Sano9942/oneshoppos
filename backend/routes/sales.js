@@ -223,16 +223,18 @@ module.exports = function registerSalesRoutes(app, deps) {
              s.invoice_number, s.outlet_id, s.fbr_status,
              o.name as outlet_name, e.name as employee_name,
              c.name as customer_name, c.email as customer_email,
+             st.name as staff_name,
              COUNT(si.id) as item_count
       FROM sales s
       LEFT JOIN outlets o ON s.outlet_id = o.id
       LEFT JOIN employees e ON s.employee_id = e.id
       LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN employees st ON st.id = s.staff_employee_id
       LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${where}
       GROUP BY s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
                s.discount_amount, s.discount_type, s.invoice_number, s.outlet_id, s.fbr_status,
-               o.name, e.name, c.name, c.email
+               o.name, e.name, c.name, c.email, st.name
       ORDER BY s.timestamp DESC
       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
 
@@ -668,6 +670,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       // remainder rides here at the ORDER-time unit price. Rows are created
       // inside the sale transaction. Requires customer_id.
       backorder_items = null,
+      // One Toy Store F3b part 2 — the till's Staff button: the salaried staff
+      // member this bill is sold to at cost. The server sets the discount.
+      staff_purchase_employee_id = null,
     } = req.body;
 
     // Resolve field_visit_uuid → field_visits.id when only the uuid is given.
@@ -1429,13 +1434,48 @@ module.exports = function registerSalesRoutes(app, deps) {
         : Number(rawRedeemRate);
     const redemptionValue = pointsRedeemedInt * (loyaltyRedeemRate / 100);
 
+    // One Toy Store F3b part 2 — staff toys at cost (PHASE-F-PLAN Q3b.12–15).
+    // Normal price stays on the lines; a 'staff' discount brings the bill down
+    // to Σ cost × qty, worked out here from the database (the till's discount
+    // fields are ignored). Paid Cash / Online - … / "Cut from salary" only, no
+    // customer, no points. "Cut from salary" is refused on any other bill: it
+    // isn't money, it goes onto the staff account (services/staff-pay.js).
+    const staffPay = require("../services/staff-pay");
+    let staffPurchase = null;
+    {
+      const tenders = Array.isArray(payments) && payments.length
+        ? payments.map((p) => p?.method)
+        : [paymentMethod || "Cash"];
+      if (staff_purchase_employee_id) {
+        if (customer_id) {
+          return res.status(400).json({ error: "A staff purchase has no customer", code: "STAFF_PURCHASE_INVALID" });
+        }
+        if (pointsRedeemedInt > 0 || chargeToFolio || chargeToTreatmentFolio) {
+          return res.status(400).json({ error: "A staff purchase is paid Cash, Online or Cut from salary", code: "STAFF_PURCHASE_INVALID" });
+        }
+        if (!tenders.every((m) => staffPay.staffPaymentAllowed(m))) {
+          return res.status(400).json({ error: "A staff purchase is paid Cash, Online or Cut from salary", code: "STAFF_PURCHASE_INVALID" });
+        }
+        try {
+          const st = await staffPay.staffMember(db, staff_purchase_employee_id);
+          const costs = await staffPay.staffCosts(db, cartItems);
+          staffPurchase = { employeeId: st.id, discount: costs.staff_discount };
+        } catch (err) {
+          return res.status(err.statusCode || 500).json({ error: err.message, code: "STAFF_PURCHASE_INVALID" });
+        }
+      } else if (tenders.includes(staffPay.CUT_FROM_SALARY)) {
+        return res.status(400).json({ error: "Cut from salary is only for a staff purchase", code: "STAFF_PURCHASE_INVALID" });
+      }
+    }
+
     // 1. Calculate Expected Total (subtotal minus manual discount)
     const subtotal = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
       0,
     );
-    const discountValue =
-      discount_type === "percent"
+    const discountValue = staffPurchase
+      ? staffPurchase.discount
+      : discount_type === "percent"
         ? (subtotal * parseFloat(discount_amount || 0)) / 100
         : parseFloat(discount_amount || 0);
 
@@ -1991,7 +2031,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             authenticatedEmployeeId,
             customer_id || null,
             discountValue,
-            discount_type,
+            staffPurchase ? "staff" : discount_type,
             points_earned,
             pointsRedeemedInt,
             notes || null,
@@ -2009,6 +2049,9 @@ module.exports = function registerSalesRoutes(app, deps) {
           ]
         );
         const newSaleId = saleRow.id;
+        if (staffPurchase) {
+          await client.query("UPDATE sales SET staff_employee_id = $1 WHERE id = $2", [staffPurchase.employeeId, newSaleId]);
+        }
 
         // Tier 1.3 wholesale schemes — persist applied promotions as audit
         // rows. Best-effort: schema may not have the table yet on tenants

@@ -230,6 +230,7 @@ export default function SalesHistoryRedesign() {
         amount: p.amount,
       })),
       customer: s.customer_name ? { name: s.customer_name } : null,
+      staffName: selected?.staff_name || null,
     };
     buildReceiptHtml(slip, template, currencySymbol);
   };
@@ -329,6 +330,7 @@ export default function SalesHistoryRedesign() {
                   {onlineOptions.map((c) => (
                     <option key={c} value={onlineMethodName(c)}>{onlineMethodName(c)}</option>
                   ))}
+                  <option value="Cut from salary">Cut from salary (staff)</option>
                   <option value="Wallet">Wallet</option>
                   <option value="Split">Split</option>
                 </Select>
@@ -380,7 +382,10 @@ export default function SalesHistoryRedesign() {
                       className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-(--ui-muted-surface)" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
-                      <td className="px-3 py-2 font-medium text-(--ui-text)">{billNo(r)}</td>
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">
+                        {billNo(r)}
+                        {r.staff_name && <span className="ml-2"><Badge tone="warning">Staff · {r.staff_name}</Badge></span>}
+                      </td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{formatDate(r.timestamp)}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "-"}</td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>

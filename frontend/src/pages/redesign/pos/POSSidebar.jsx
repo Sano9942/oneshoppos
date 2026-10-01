@@ -1,7 +1,10 @@
-import React from "react";
-import { Award, Search, User, ShoppingCart, Tag, FileText } from "lucide-react";
+import React, { useState } from "react";
+import { Award, Search, User, ShoppingCart, Tag, FileText, BadgeCheck, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import { useBrowserOnline } from "./hooks/useBrowserOnline";
+import POSStaffPurchaseModal from "./POSStaffPurchaseModal";
+import { Button } from "../../../ui/primitives";
 
 export default function POSSidebar({ mobile }) {
   const { symbol: currencySymbol } = useCurrency();
@@ -31,12 +34,47 @@ export default function POSSidebar({ mobile }) {
     promoDiscount,
     presetLabels,
     loyaltyEnabled,
+    staffPurchase,
+    staffQuote,
+    staffQuoteError,
+    staffQuotePending,
+    loadStaffList,
+    clearStaffPurchase,
   } = usePOS();
+  const [showStaff, setShowStaff] = useState(false);
+  const online = useBrowserOnline();
+  const openStaff = () => {
+    loadStaffList();
+    setShowStaff(true);
+  };
 
   const customerLabel = presetLabels?.customer || "Customer";
 
   return (
     <div className={`${mobile ? "w-full" : "w-80 shrink-0"} bg-(--ui-surface) text-(--ui-text) flex flex-col p-4 border-l border-(--ui-border) z-10`}>
+      {/* One Toy Store F3b part 2 — a staff bill has no customer. */}
+      {staffPurchase ? (
+        <div className="mb-4 rounded-2xl border-2 border-(--ui-primary) bg-(--ui-muted-surface) p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-(--ui-text-muted)">
+                <BadgeCheck size={14} /> Staff purchase (at cost)
+              </div>
+              <div className="mt-1 text-lg font-black text-(--ui-text)">{staffPurchase.name}</div>
+            </div>
+            <button
+              type="button"
+              onClick={clearStaffPurchase}
+              aria-label="Not a staff purchase"
+              className="rounded-full p-1 text-(--ui-text-muted) hover:bg-(--ui-surface)"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-(--ui-text-muted)">Pay with Cash, Online or Cut from salary.</p>
+          {staffQuoteError && <p className="mt-2 text-xs font-bold text-(--ui-danger)">{staffQuoteError}</p>}
+        </div>
+      ) : (<>
       {/* Customer search */}
       <div className="relative mb-4">
         <Search
@@ -147,11 +185,14 @@ export default function POSSidebar({ mobile }) {
         )}
       </div>
 
-      {/* Discount / Note buttons */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      </>)}
+
+      {/* Discount / Note / Staff buttons */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
         <button
           onClick={() => setShowDiscountModal(true)}
-          className="flex items-center justify-center gap-1.5 border border-(--ui-border-strong) hover:bg-(--ui-muted-surface) rounded-full py-2.5 text-xs font-bold transition"
+          disabled={!!staffPurchase}
+          className="flex items-center justify-center gap-1.5 border border-(--ui-border-strong) hover:bg-(--ui-muted-surface) rounded-full py-2.5 text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Tag size={12} className="text-(--ui-text-muted)" />
           {discountInput
@@ -168,7 +209,18 @@ export default function POSSidebar({ mobile }) {
           />
           {orderNote ? "Edit Note" : "Add Note"}
         </button>
+        <Button
+          tone={staffPurchase ? "primary" : "default"}
+          onClick={openStaff}
+          disabled={!online}
+          title={online ? "Staff takes toys at cost" : "Staff purchase needs the internet (cost price)"}
+          className="!h-auto py-2.5 text-xs font-bold"
+        >
+          <BadgeCheck size={12} />
+          Staff
+        </Button>
       </div>
+      <POSStaffPurchaseModal open={showStaff} onClose={() => setShowStaff(false)} />
 
       {/* Totals */}
       <div className="space-y-3 text-sm font-medium text-(--ui-text-muted) border-t border-(--ui-border) pt-4 mb-4 flex-1">
@@ -176,7 +228,12 @@ export default function POSSidebar({ mobile }) {
           <span>Subtotal</span>
           <span className="text-(--ui-text)">{money(grossTotal)}</span>
         </div>
-        {discountValue > 0 && (
+        {staffPurchase ? (
+          <div className="flex justify-between text-(--ui-warning-fg)">
+            <span>Staff discount (to cost)</span>
+            <span>{staffQuote ? `- ${money(discountValue)}` : staffQuotePending ? "…" : "—"}</span>
+          </div>
+        ) : discountValue > 0 && (
           <div className="flex justify-between text-(--ui-warning-fg)">
             <span>
               Discount {discountType === "percent" ? `(${discountInput}%)` : ""}
@@ -184,7 +241,7 @@ export default function POSSidebar({ mobile }) {
             <span>- {money(discountValue)}</span>
           </div>
         )}
-        {promoDiscount > 0 && (
+        {!staffPurchase && promoDiscount > 0 && (
           <div className="flex justify-between text-(--ui-success-fg)">
             <span className="flex items-center gap-1">
               Promo{appliedPromotions.length > 1 ? ` (${appliedPromotions.length})` : appliedPromotions[0]?.name ? ` — ${appliedPromotions[0].name}` : ""}

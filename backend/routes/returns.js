@@ -213,6 +213,16 @@ module.exports = function registerReturnsRoutes(app, deps) {
     if (!items || items.length === 0) {
       return res.status(400).json({ error: "Return must have items" });
     }
+    // One Toy Store F3b part 2: "Cut from salary" puts the refund back on the
+    // staff account (services/staff-pay.js), so it only fits a staff purchase.
+    if (refund_method === "Cut from salary") {
+      const { rows: [orig] } = original_sale_id
+        ? await db.query("SELECT staff_employee_id FROM sales WHERE id = $1", [original_sale_id])
+        : { rows: [] };
+      if (!orig?.staff_employee_id) {
+        return res.status(400).json({ error: "Cut from salary refunds only a staff purchase" });
+      }
+    }
     if (!outlet_id) {
       return res
         .status(400)

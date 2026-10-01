@@ -133,6 +133,10 @@ export default function POSReturnExchangeModal() {
       const onlinePaid = (data.payments || []).find((p) => isOnlineMethod(p.payment_method));
       const paidWith = onlinePaid?.payment_method || data.sale?.payment_method;
       if (isOnlineMethod(paidWith) && onlineChoiceOf(paidWith)) setSettleMethod(paidWith);
+      // F3b part 2: a staff toy was paid at cost, so it comes back at cost;
+      // one cut from salary goes back onto the staff account by default.
+      const staffBill = !!data.sale?.staff_employee_id;
+      if (staffBill && paidWith === "Cut from salary") setSettleMethod("Cut from salary");
       // F3 (Apr 28 2026): cap maxQty by sold − already-refunded so the
       // stepper, "of N" badge, and Process Refund button all reflect what's
       // actually still refundable on this sale. Items already fully refunded
@@ -143,7 +147,7 @@ export default function POSReturnExchangeModal() {
           product_id: i.product_id,
           variant_id: i.variant_id || null,
           name: i.product_name || "Item",
-          price: Number(i.price_at_sale || 0),
+          price: Number((staffBill ? i.cost_price_at_sale : i.price_at_sale) || 0),
           maxQty: Math.max(
             0,
             Number(i.quantity || 1) - Number(i.refunded_qty || 0),
@@ -935,6 +939,8 @@ export default function POSReturnExchangeModal() {
                       // set by v88). Reduces the linked A/R invoice's
                       // balance_due instead of paying the buyer back.
                       ...(resolvedSale?.customer_invoice_id ? ["credit_reversal"] : []),
+                      // F3b part 2 — back onto the staff account (staff bills only).
+                      ...(resolvedSale?.staff_employee_id ? ["Cut from salary"] : []),
                     ].map((m) => (
                       <button
                         key={m}

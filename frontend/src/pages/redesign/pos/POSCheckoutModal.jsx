@@ -17,6 +17,7 @@ import {
   Gift,
   Receipt,
   Smartphone,
+  BadgeCheck,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -26,6 +27,7 @@ import {
   onlineMethodName,
   useOnlinePaymentOptions,
 } from "../../../utils/onlinePayments";
+import { CUT_FROM_SALARY } from "./hooks/useStaffPurchase";
 
 export default function POSCheckoutModal() {
   const {
@@ -96,6 +98,7 @@ export default function POSCheckoutModal() {
     signatureSvg,
     posFlags,
     activeAppointmentId,
+    staffPurchase,
   } = usePOS();
   const { labels = {}, hasMode, industry_type } = usePreset();
   const isSalonWalkIn = industry_type === "salon" && !activeAppointmentId;
@@ -397,8 +400,15 @@ export default function POSCheckoutModal() {
             </div>
           )}
 
+          {/* One Toy Store F3b part 2 — staff bill: no customer, no points. */}
+          {staffPurchase && (
+            <div className="flex items-center gap-2 rounded-2xl border-2 border-(--ui-primary) bg-(--ui-muted-surface) px-4 py-3 text-sm font-bold text-(--ui-text)">
+              <BadgeCheck size={16} /> Staff purchase at cost · {staffPurchase.name}
+            </div>
+          )}
+
           {/* Customer at checkout — quick search + create */}
-          <div>
+          {!staffPurchase && <div>
             <label className="block text-xs font-bold text-(--ui-text-muted) uppercase tracking-wide mb-2">
               {customerLabel} (optional)
             </label>
@@ -562,11 +572,11 @@ export default function POSCheckoutModal() {
                 </div>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Loyalty & Wallet panel — shown only when a customer is selected
               AND the tenant has the Loyalty module on (phase2g_loyalty). */}
-          {loyaltyEnabled && checkoutCustomerId && (
+          {!staffPurchase && loyaltyEnabled && checkoutCustomerId && (
             <div className="rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) px-4 py-3 space-y-3">
               {/* Balance summary */}
               <div className="flex items-center justify-between">
@@ -785,7 +795,12 @@ export default function POSCheckoutModal() {
               Payment Method
             </label>
             {(() => {
-              const methods = [
+              // F3b part 2: a staff bill is paid Cash, Online or Cut from salary.
+              const methods = staffPurchase ? [
+                { id: "Cash", icon: <Banknote size={16} /> },
+                { id: "Online", icon: <Smartphone size={16} /> },
+                { id: CUT_FROM_SALARY, icon: <BadgeCheck size={16} /> },
+              ] : [
                 { id: "Cash", icon: <Banknote size={16} /> },
                 { id: "Card", icon: <CreditCard size={16} /> },
                 { id: "Online", icon: <Smartphone size={16} /> },
@@ -942,6 +957,14 @@ export default function POSCheckoutModal() {
                 setGiftCardError("");
                 return;
               }
+              if (paymentMethod === CUT_FROM_SALARY) {
+                // Onto the staff account: no money, so never more than is due.
+                e.preventDefault();
+                const amt = Math.min(Number(paymentAmount), remaining);
+                if (!amt || amt <= 0) return;
+                addPayment(null, { method: CUT_FROM_SALARY, amount: amt });
+                return;
+              }
               if (paymentMethod === "Online") {
                 e.preventDefault();
                 if (!onlineChoice) {
@@ -1023,6 +1046,8 @@ export default function POSCheckoutModal() {
                         <Wallet size={14} className="text-(--ui-text-muted)" />
                       ) : isOnlineMethod(p.method) ? (
                         <Smartphone size={14} className="text-(--ui-text-muted)" />
+                      ) : p.method === CUT_FROM_SALARY ? (
+                        <BadgeCheck size={14} className="text-(--ui-text-muted)" />
                       ) : (
                         <CreditCard size={14} className="text-(--ui-text-muted)" />
                       )}

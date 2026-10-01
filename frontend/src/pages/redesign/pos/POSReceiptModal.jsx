@@ -69,6 +69,11 @@ export default function POSReceiptModal() {
                 Staff: {slip.employee.name}
               </p>
             )}
+            {slip.staffName && (
+              <p className="text-xs font-semibold text-(--ui-text)">
+                Staff purchase: {slip.staffName}
+              </p>
+            )}
             {slip.customer && (
               <p className="text-xs text-(--ui-success-fg) font-semibold">
                 {presetLabels?.customer || "Customer"}: {slip.customer.name}
@@ -142,7 +147,7 @@ export default function POSReceiptModal() {
               </>
             ) : slip.discountAmount > 0 && (
               <div className="flex justify-between text-(--ui-danger-fg)">
-                <span>{slip.discountType === "percent" ? `Discount (${slip.discountInput}%)` : "Discount"}</span>
+                <span>{slip.discountType === "staff" ? "Staff discount" : slip.discountType === "percent" ? `Discount (${slip.discountInput}%)` : "Discount"}</span>
                 <span>− {money(slip.discountAmount)}</span>
               </div>
             )}

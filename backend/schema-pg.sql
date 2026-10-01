@@ -6290,3 +6290,8 @@ CREATE TABLE IF NOT EXISTS staff_salaries (
   paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (employee_id, month)
 );
+
+-- One Toy Store pilot F3b part 2 (v150): staff toys at the till. The salaried
+-- staff member a bill was sold to at cost (see services/staff-pay.js).
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS staff_employee_id INTEGER REFERENCES employees(id);
+CREATE INDEX IF NOT EXISTS idx_sales_staff_employee ON sales(staff_employee_id) WHERE staff_employee_id IS NOT NULL;

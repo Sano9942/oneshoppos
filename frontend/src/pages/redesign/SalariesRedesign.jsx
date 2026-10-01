@@ -15,6 +15,8 @@ const KIND_LABEL = {
   staff_advance: "Advance from the till",
   staff_repay: "Paid back into the till",
   salary_cut: "Cut from salary",
+  staff_purchase: "Toy at cost, cut from salary",
+  staff_return: "Toy returned",
 };
 
 export default function SalariesRedesign() {
@@ -92,6 +94,9 @@ export default function SalariesRedesign() {
           ? `Salaries are paid from the open till shift #${shift.id}.`
           : "No till shift is open: open the shift on the POS to pay salaries."}
         {" "}Mark attendance on People → Attendance → Register.
+        {data?.staff_discounts?.bills > 0 && (
+          <> Staff toys at cost in {monthLabel(month)}: {data.staff_discounts.bills} bills, staff discount {rs(data.staff_discounts.value)}.</>
+        )}
       </p>
       {data && (
         <SectionCard className="overflow-x-auto p-0">
@@ -322,6 +327,32 @@ function AccountDrawer({ staff, onClose }) {
             </table>
           ) : (
             <p className="text-(--ui-text-muted)">Nothing on the account.</p>
+          )}
+          {acc.purchases?.length > 0 && (
+            <div>
+              <p className="mb-1 font-bold">Toys at cost (every staff purchase)</p>
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-(--ui-text-muted)">
+                    <th className="py-1">Date</th><th>Bill</th><th>Item</th><th className="text-right">Qty</th>
+                    <th className="text-right">Price</th><th className="text-right">Staff disc.</th><th>Paid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acc.purchases.map((p, i) => (
+                    <tr key={`${p.sale_id}-${i}`} className="border-t border-(--ui-border)">
+                      <td className="py-1">{p.day}</td>
+                      <td>{p.invoice_number || `#${p.sale_id}`}</td>
+                      <td>{p.name}</td>
+                      <td className="text-right">{p.quantity}</td>
+                      <td className="text-right">{rs(p.price)}</td>
+                      <td className="text-right">{rs(p.staff_discount)}</td>
+                      <td>{p.paid}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           <form className="space-y-2 border-t border-(--ui-border) pt-3" onSubmit={add}>
             <p className="font-bold">Add from the paper register</p>

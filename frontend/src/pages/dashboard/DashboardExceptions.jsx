@@ -28,6 +28,9 @@ export function DashboardExceptions({ data, onNavigate }) {
   const r = data?.refundsToday;
   const v = data?.voidsToday;
   const d = data?.discountsToday;
+  // One Toy Store F3b part 2: staff toys at cost are not an exception; shown
+  // on their own line, never added to the customer discounts above.
+  const sd = data?.staffDiscountsToday;
   const refundWarn = data?.targets?.refund_threshold_pct ?? 5;
   const voidWarn = data?.targets?.void_threshold_pct ?? 3;
 
@@ -50,6 +53,11 @@ export function DashboardExceptions({ data, onNavigate }) {
         <ExceptionRow label="Voids"     item={v} fmt={fmt} warnPct={voidWarn}  dangerPct={voidWarn * 2}   onClick={goExceptions} />
         <ExceptionRow label="Refunds"   item={r} fmt={fmt} warnPct={refundWarn} dangerPct={refundWarn * 2} onClick={goExceptions} />
       </div>
+      {sd?.count > 0 && (
+        <p className="mt-2 text-xs text-(--ui-text-muted)">
+          Staff toys at cost: {sd.count} bills, staff discount {fmt(sd.value)}
+        </p>
+      )}
     </SectionCard>
   );
 }

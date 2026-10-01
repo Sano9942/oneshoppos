@@ -16,6 +16,11 @@
  *    'salary' (Close Shift expected goes down) and the full earned pay (gross)
  *    is a "Salaries" expense paid from the till (profit sees it once; the cut
  *    part only settles the account). Undo only while that shift is open.
+ *  - Staff toys (part 2, Q3b.12–Q3b.15): rung at the till at normal price
+ *    with a 'staff' discount down to cost (the server works the cost out),
+ *    paid Cash / Online / "Cut from salary". A "Cut from salary" bill goes
+ *    onto the account; a void, or a return refunded "Cut from salary", takes
+ *    it back off. sales.staff_employee_id marks the bill (v150).
  */
 const { openShiftOrFail } = require("./till-payouts");
 
@@ -27,6 +32,9 @@ const ENTRY_KINDS = [
 ];
 const ENTRY_KEYS = ENTRY_KINDS.map((k) => k.key);
 const SALARIES_CATEGORY = "Salaries";
+// The till's payment name for a staff toy taken against the salary. Not cash,
+// card or online: it never touches the drawer (shifts.js counts only 'Cash').
+const CUT_FROM_SALARY = "Cut from salary";
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
 const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -88,6 +96,12 @@ CREATE TABLE IF NOT EXISTS staff_salaries (
 );
 `;
 
+// v150: the staff member a bill was sold to at cost (staff purchase).
+const STAFF_PURCHASE_DDL = `
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS staff_employee_id INTEGER REFERENCES employees(id);
+CREATE INDEX IF NOT EXISTS idx_sales_staff_employee ON sales(staff_employee_id) WHERE staff_employee_id IS NOT NULL;
+`;
+
 const fail = (status, msg) => Object.assign(new Error(msg), { statusCode: status });
 
 function parseMonth(month) {
@@ -117,6 +131,69 @@ async function staffList(db) {
       ORDER BY id`,
   );
   return rows;
+}
+
+/** Salaried staff for the till's Staff button (name only). */
+async function tillStaff(db) {
+  return (await staffList(db)).map((s) => ({ id: s.id, name: s.name }));
+}
+
+async function staffMember(db, id) {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) throw fail(400, "Pick the staff member");
+  const { rows: [st] } = await db.query(
+    `SELECT id, name FROM employees
+      WHERE id = $1 AND deleted_at IS NULL AND COALESCE(monthly_salary, 0) > 0`, [n]);
+  if (!st) throw fail(400, "Only staff with a monthly salary can buy at cost");
+  return st;
+}
+
+/**
+ * Cost per cart line for a staff purchase, from the database (never the
+ * till). A line whose product has no cost price is refused: it would sell at 0.
+ * items: [{ id, variant_id?, quantity, price }].
+ */
+async function staffCosts(db, items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) throw fail(400, "The cart is empty");
+  const ids = [...new Set(list.map((i) => Number(i.original_product_id || i.id)).filter((n) => n > 0))];
+  const vids = [...new Set(list.map((i) => Number(i.variant_id)).filter((n) => n > 0))];
+  const prods = new Map((await db.query(
+    "SELECT id, name, cost_price::float AS cost FROM products WHERE id = ANY($1::int[])", [ids])).rows
+    .map((r) => [Number(r.id), r]));
+  const vars = new Map(vids.length ? (await db.query(
+    "SELECT id, cost_price::float AS cost FROM product_variants WHERE id = ANY($1::int[])", [vids])).rows
+    .map((r) => [Number(r.id), r]) : []);
+  let subtotal = 0;
+  let total = 0;
+  const lines = list.map((i) => {
+    const pid = Number(i.original_product_id || i.id);
+    const p = prods.get(pid);
+    if (!p) throw fail(400, "Item not found");
+    const v = i.variant_id ? vars.get(Number(i.variant_id)) : null;
+    const cost = round2(Number(v && v.cost > 0 ? v.cost : p.cost) || 0);
+    if (!(cost > 0)) throw fail(400, `${p.name}: no cost price, can't sell it at cost`);
+    const qty = Number(i.quantity) || 0;
+    const price = Number(i.price) || 0;
+    if (qty <= 0) throw fail(400, "Quantity must be above 0");
+    subtotal += price * qty;
+    total += cost * qty;
+    return { id: pid, variant_id: i.variant_id || null, name: p.name, quantity: qty, price, cost };
+  });
+  subtotal = round2(subtotal);
+  total = round2(total);
+  return { lines, subtotal, total, staff_discount: round2(Math.max(0, subtotal - total)) };
+}
+
+async function staffQuote(db, body) {
+  const st = await staffMember(db, body.employee_id);
+  return { staff: st, ...(await staffCosts(db, body.items)) };
+}
+
+/** A staff purchase may be paid Cash, Online - …, or Cut from salary. */
+function staffPaymentAllowed(method) {
+  const m = String(method || "");
+  return m === "Cash" || m === CUT_FROM_SALARY || m.startsWith("Online - ");
 }
 
 /** The month grid. tz = the shop's timezone (clock-ins are bucketed in it). */
@@ -242,18 +319,27 @@ async function setAllowance(db, id, value) {
 // salary cuts.
 const ACCOUNT_SQL = `
   SELECT 'entry' AS source, e.id, e.kind, e.amount::float AS amount, e.entry_date::text AS date,
-         e.note, e.created_at AS at, NULL::int AS shift_id
+         e.note, e.created_at AS at, NULL::int AS shift_id, NULL::int AS sale_id
     FROM staff_account_entries e WHERE e.employee_id = $1
   UNION ALL
-  SELECT 'till_payout', p.id, 'staff_advance', p.amount::float, NULL, p.note, p.created_at, p.shift_id
+  SELECT 'till_payout', p.id, 'staff_advance', p.amount::float, NULL, p.note, p.created_at, p.shift_id, NULL
     FROM till_payouts p WHERE p.kind = 'staff_advance' AND p.staff_employee_id = $1
   UNION ALL
-  SELECT 'till_payin', i.id, 'staff_repay', -i.amount::float, NULL, i.note, i.created_at, i.shift_id
+  SELECT 'till_payin', i.id, 'staff_repay', -i.amount::float, NULL, i.note, i.created_at, i.shift_id, NULL
     FROM till_payins i WHERE i.kind = 'staff_repay' AND i.staff_employee_id = $1
   UNION ALL
   SELECT 'salary', s.id, 'salary_cut', -s.cut_amount::float, NULL, 'Cut from ' || s.month || ' salary',
-         s.paid_at, s.shift_id
+         s.paid_at, s.shift_id, NULL
     FROM staff_salaries s WHERE s.employee_id = $1 AND s.cut_amount > 0
+  UNION ALL
+  SELECT 'sale', sp.id, 'staff_purchase', sp.amount::float, NULL, sa.invoice_number, sa.timestamp, sa.shift_id, sa.id
+    FROM sales sa JOIN sale_payments sp ON sp.sale_id = sa.id
+   WHERE sa.staff_employee_id = $1 AND COALESCE(sa.voided, false) = false
+     AND sp.payment_method = '${CUT_FROM_SALARY}'
+  UNION ALL
+  SELECT 'return', r.id, 'staff_return', -r.total_refund::float, NULL, sa.invoice_number, r.timestamp, r.shift_id, sa.id
+    FROM returns r JOIN sales sa ON sa.id = r.original_sale_id
+   WHERE sa.staff_employee_id = $1 AND r.refund_method = '${CUT_FROM_SALARY}'
 `;
 
 async function accountBalance(db, employeeId) {
@@ -275,7 +361,19 @@ async function account(db, employeeId, tz) {
     running = round2(running + Number(r.amount));
     return { ...r, amount: Number(r.amount), balance: running };
   });
-  return { employee: emp, entries, balance: running };
+  const { rows: purchases } = await db.query(
+    `SELECT sa.id AS sale_id, sa.invoice_number, to_char(sa.timestamp AT TIME ZONE $2, 'YYYY-MM-DD') AS day,
+            si.product_id, COALESCE(p.name, si.product_id::text) AS name, si.quantity::float AS quantity,
+            si.price_at_sale::float AS price,
+            ROUND(((si.price_at_sale - COALESCE(si.cost_price_at_sale, 0)) * si.quantity)::numeric, 2)::float AS staff_discount,
+            sa.payment_method AS paid
+       FROM sales sa JOIN sale_items si ON si.sale_id = sa.id
+       LEFT JOIN products p ON p.id = si.product_id
+      WHERE sa.staff_employee_id = $1 AND COALESCE(sa.voided, false) = false
+      ORDER BY sa.timestamp, sa.id, si.id`,
+    [employeeId, tz],
+  );
+  return { employee: emp, entries, balance: running, purchases };
 }
 
 async function addEntry(db, employeeId, body, { createdBy }) {
@@ -332,7 +430,17 @@ async function salaries(db, monthStr, tz) {
       paid: paid.find((p) => p.employee_id === s.id) || null,
     });
   }
-  return { month: reg.month, days: reg.days, staff };
+  // Staff toys at cost this month: the discount given, kept apart from
+  // customer discounts (Q3b.14). Shop days, in the shop's timezone.
+  const { first, last } = parseMonth(reg.month);
+  const { rows: [sd] } = await db.query(
+    `SELECT COUNT(*)::int AS bills, COALESCE(SUM(discount_amount), 0)::float AS value
+       FROM sales
+      WHERE discount_type = 'staff' AND COALESCE(voided, false) = false
+        AND (timestamp AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date`,
+    [first, last, tz],
+  );
+  return { month: reg.month, days: reg.days, staff, staff_discounts: { bills: sd.bills, value: round2(sd.value) } };
 }
 
 async function salariesCategoryId(db) {
@@ -402,7 +510,8 @@ async function undoSalary(db, salaryId) {
 }
 
 module.exports = {
-  MARKS, ENTRY_KINDS, ENTRY_KEYS, SALARIES_CATEGORY, STAFF_PAY_DDL,
+  MARKS, ENTRY_KINDS, ENTRY_KEYS, SALARIES_CATEGORY, STAFF_PAY_DDL, CUT_FROM_SALARY, STAFF_PURCHASE_DDL,
+  tillStaff, staffMember, staffCosts, staffQuote, staffPaymentAllowed,
   parseMonth, register, setMark, setMarks, markHistory, setAllowance,
   account, accountBalance, addEntry, removeEntry, salaries, paySalary, undoSalary,
 };

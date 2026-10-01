@@ -69,6 +69,11 @@ export function useCheckout({
   // walk-in (no linked appointment) every line must carry an explicit
   // performer, never silently inherit the cashier.
   industryType,
+  // One Toy Store F3b part 2 — staff toy at cost (see useStaffPurchase).
+  staffPurchase = null,
+  staffQuote = null,
+  staffQuoteError = "",
+  clearStaffPurchase,
 }) {
   const { employee } = useAuth();
 
@@ -124,6 +129,10 @@ export function useCheckout({
 
   const openCheckout = useCallback(() => {
     if (!cart.length) return;
+    if (staffPurchase && !staffQuote) {
+      setError?.(staffQuoteError || "Getting the staff price, try again in a moment.");
+      return;
+    }
     if (!selectedOutletId) {
       setError?.("Select a branch before using POS.");
       return;
@@ -159,7 +168,7 @@ export function useCheckout({
     setPayWithWalletOn(false);
     setChargeToRoomFolioId("");
     setCheckoutOpen(true);
-  }, [cart.length, selectedOutletId, activeShift, attendanceCode, total, selectedCustomerId, customers, setError, setRedeemPointsOn, setPayWithWalletOn, setChargeToRoomFolioId, setCheckoutCustomerId, setCheckoutOpen]);
+  }, [cart.length, selectedOutletId, activeShift, attendanceCode, total, selectedCustomerId, customers, setError, setRedeemPointsOn, setPayWithWalletOn, setChargeToRoomFolioId, setCheckoutCustomerId, setCheckoutOpen, staffPurchase, staffQuote, staffQuoteError]);
 
   const handleQuickCreateCustomer = useCallback(async () => {
     if (!newCustName.trim()) {
@@ -231,7 +240,8 @@ export function useCheckout({
     employee,
     discountAmount: discountValue,
     discountInput: opts.discountInput ?? Number(discountInput || 0),
-    discountType: opts.discountType ?? discountType,
+    discountType: opts.discountType ?? (staffPurchase ? "staff" : discountType),
+    staffName: staffPurchase?.name || null,
     // P8 (3.14): keep taxAmount as a single-line fallback (older render
     // paths still read it); also pass tax_breakdown for the new per-rate
     // rendering. Exclusive sales include tax on top so the legacy
@@ -248,7 +258,7 @@ export function useCheckout({
     // for cash/card sales. POSReceiptModal renders an "On-Account" line
     // with invoice_number + due_date when present.
     arInvoice: data?.arInvoice || null,
-  }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote, buildTaxBreakdown]);
+  }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote, buildTaxBreakdown, staffPurchase]);
 
   const clearAfterSale = useCallback(() => {
     setCart([]);
@@ -268,7 +278,8 @@ export function useCheckout({
     closeCheck?.();
     // F06 — the appointment link is consumed by the completed sale.
     clearActiveAppointment?.();
-  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck, setSignatureSvg, setShowGuestMode, clearActiveAppointment]);
+    clearStaffPurchase?.();
+  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck, setSignatureSvg, setShowGuestMode, clearActiveAppointment, clearStaffPurchase]);
 
   const completeSale = useCallback(async () => {
     if (!selectedOutletId || !cart.length) return;
@@ -319,12 +330,14 @@ export function useCheckout({
       payments,
       outlet_id: Number(selectedOutletId),
       employee_id: employee?.id || null,
-      customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
-      discount_amount: Number(discountInput || 0) + promoDiscount,
-      discount_type: promoDiscount > 0 && !Number(discountInput || 0) ? "fixed" : discountType,
+      customer_id: !staffPurchase && checkoutCustomerId ? Number(checkoutCustomerId) : null,
+      // A staff purchase: the server sets the 'staff' discount down to cost.
+      discount_amount: staffPurchase ? 0 : Number(discountInput || 0) + promoDiscount,
+      discount_type: staffPurchase ? "fixed" : promoDiscount > 0 && !Number(discountInput || 0) ? "fixed" : discountType,
+      staff_purchase_employee_id: staffPurchase?.id || null,
       notes: notesForSale,
-      points_earned: checkoutCustomerId ? pointsEarned : 0,
-      points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
+      points_earned: !staffPurchase && checkoutCustomerId ? pointsEarned : 0,
+      points_redeemed: !staffPurchase && checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
       // The till this bill is rung into. Only read by the server when the sale
       // is replayed from the offline queue: it lands in this till, even if it
@@ -369,6 +382,11 @@ export function useCheckout({
     managerPinRef.current = null;
 
     const queueSaleOffline = async () => {
+      if (staffPurchase) {
+        // The staff price comes from the server: don't queue it blind.
+        setError?.("No internet: a staff purchase can't be saved now. Try again when back online.");
+        return;
+      }
       try {
         const count = await enqueueSale(salePayload);
         const custObj = checkoutCustomerId
@@ -516,7 +534,7 @@ export function useCheckout({
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
     buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
     draftOrderId, orderContext, tableSessionId, seatCount, signatureSvg,
-    onInsufficientStock, activeAppointmentId,
+    onInsufficientStock, activeAppointmentId, staffPurchase,
   ]);
 
   const retryPendingSale = useCallback(async () => {
