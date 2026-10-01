@@ -12,7 +12,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { api } from "../../api";
-import { Calculator, Download, RefreshCw, Unlock } from "lucide-react";
+import { Calculator, Download, Printer, RefreshCw, Unlock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime, todayLocalStr } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -20,6 +20,7 @@ import { useToast } from "../../contexts/ToastContext";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import POSNoSaleReasonModal from "./pos/POSNoSaleReasonModal";
 import { blankDenoms, cleanDenomCount } from "../../utils/denomCount";
+import { printDayReport } from "../../utils/dayReportSlip";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -327,6 +328,7 @@ export default function CashManagementRedesign() {
                 <th className="px-3 py-2 text-right">Actual</th>
                 <th className="px-3 py-2 text-right">Variance</th>
                 <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Day report</th>
               </tr>
             </thead>
             <tbody>
@@ -350,6 +352,15 @@ export default function CashManagementRedesign() {
                   </td>
                   <td className="px-3 py-2">
                     <Badge tone={r.status === "open" ? "success" : "default"}>{r.status}</Badge>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Button
+                      size="sm"
+                      title={r.status === "open" ? "Check copy: the shift is still open" : "Print this day's report again"}
+                      onClick={() => printDayReport(r.id).catch((e) => toast.error(e.message || "Could not load the day report"))}
+                    >
+                      <Printer size={14} className="mr-1 inline" /> Print
+                    </Button>
                   </td>
                 </tr>
               ))}

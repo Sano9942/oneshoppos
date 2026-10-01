@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor, Banknote, PiggyBank } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle, Monitor, Banknote, PiggyBank, Printer } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readTenantSlug } from "../../../auth/authStore";
@@ -11,6 +11,7 @@ import POSLockButton from "./POSLockButton";
 import POSPaidOutModal from "./POSPaidOutModal";
 import POSPaidInModal from "./POSPaidInModal";
 import { Button } from "../../../ui/primitives";
+import { printDayReport } from "../../../utils/dayReportSlip";
 
 export default function POSHeader() {
   const {
@@ -33,6 +34,7 @@ export default function POSHeader() {
     setShowShortcutsOverlay,
     offlineQueueCount,
     offlineSyncing,
+    setError,
   } = usePOS();
   const { hasPerm } = useAuth();
   const [stuckCount, setStuckCount] = useState(0);
@@ -158,6 +160,15 @@ export default function POSHeader() {
             title="Cash put into the till (from the bank, the owner, staff paying back)"
           >
             <PiggyBank size={14} className="mr-1 inline" /> Paid in
+          </Button>
+        )}
+        {activeShift && canOpenShift && (
+          <Button
+            size="sm"
+            onClick={() => printDayReport(activeShift.id).catch((err) => setError?.(err.message || "Could not load the day report"))}
+            title="Print the day report now (check copy) to count the drawer against"
+          >
+            <Printer size={14} className="mr-1 inline" /> Day report
           </Button>
         )}
         {activeShift && canOpenShift && (

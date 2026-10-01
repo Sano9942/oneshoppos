@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { Calculator, X } from "lucide-react";
+import { Calculator, Printer, X } from "lucide-react";
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { blankDenoms, cleanDenomCount } from "../../../utils/denomCount";
+import { printDayReport } from "../../../utils/dayReportSlip";
+import { Button } from "../../../ui/primitives";
 
 export default function POSCloseShiftModal() {
   const { fmt: money, denominations, symbol } = useCurrency();
@@ -22,6 +24,10 @@ export default function POSCloseShiftModal() {
   const [approvedBy, setApprovedBy] = useState("");
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState(null);
+  // The shift that was closed: after the close the till reloads and has no
+  // open shift, which used to unmount the result at once (F4).
+  const [closedShift, setClosedShift] = useState(null);
+  const [printing, setPrinting] = useState(false);
   const [denoms, setDenoms] = useState(
     blankDenoms(denominations),
   );
@@ -43,7 +49,8 @@ export default function POSCloseShiftModal() {
     [denoms],
   );
 
-  if (!closeShiftOpen || !canOpenShift || !activeShift) return null;
+  const shown = result ? closedShift : activeShift;
+  if (!closeShiftOpen || !canOpenShift || !shown) return null;
 
   const reset = () => {
     setCloseShiftOpen(false);
@@ -52,6 +59,7 @@ export default function POSCloseShiftModal() {
     setApprovedBy("");
     setNotes("");
     setResult(null);
+    setClosedShift(null);
     setManagerPin("");
     setNeedsThresholdApproval(false);
     setThresholdAmount(null);
@@ -78,6 +86,7 @@ export default function POSCloseShiftModal() {
               count: Number(row.count || 0),
             })),
         });
+      setClosedShift(activeShift);
       setResult(data);
       showNotice("Shift closed successfully.");
       await refreshGateStatus(activeShift.outlet_id);
@@ -106,7 +115,7 @@ export default function POSCloseShiftModal() {
               Close Shift
             </p>
             <h2 className="mt-1 text-2xl font-black text-(--ui-text)">
-              Shift #{activeShift.id}
+              Shift #{shown.id}
             </h2>
           </div>
           <button
@@ -124,13 +133,31 @@ export default function POSCloseShiftModal() {
               <p className="font-bold text-(--ui-text)">Expected: {money(result.expected_cash)}</p>
               <p className="font-bold text-(--ui-text)">Counted: {money(result.closing_cash)}</p>
               <p className="font-black text-(--ui-text)">Variance: {money(result.variance)}</p>
-              <button
-                type="button"
-                onClick={reset}
-                className="mt-2 rounded-xl bg-(--ui-primary) px-4 py-2 text-sm font-bold text-white hover:bg-(--ui-primary-strong)"
-              >
-                Done
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={printing}
+                  onClick={async () => {
+                    setPrinting(true);
+                    try {
+                      await printDayReport(shown.id);
+                    } catch (err) {
+                      setError(err.message || "Could not load the day report");
+                    } finally {
+                      setPrinting(false);
+                    }
+                  }}
+                >
+                  <Printer size={14} className="mr-1 inline" /> {printing ? "Loading..." : "Print day report"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="rounded-xl bg-(--ui-primary) px-4 py-2 text-sm font-bold text-white hover:bg-(--ui-primary-strong)"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           ) : (
             <form className="space-y-4" onSubmit={closeShift}>

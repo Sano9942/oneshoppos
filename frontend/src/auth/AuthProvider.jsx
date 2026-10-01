@@ -25,6 +25,20 @@ const EMPTY_PERMISSIONS = [];
 // several API requests fail with TOKEN_EXPIRED at the same time.
 let _refreshPromise = null;
 
+// D53 (One Toy Store, 30 Sep / 1 Oct): after a deploy Railway's edge answered
+// late for minutes and one hung page-start request left the till on
+// "Loading session..." for good. Each page-start request now gets this long;
+// a time-out counts as "no connection", so the saved session is kept.
+export const BOOT_TIMEOUT_MS = 8000;
+
+function withBootTimeout(promise) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new TypeError("Page start timed out")), BOOT_TIMEOUT_MS);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -273,10 +287,10 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const freshPerms = await refreshPermissions(
+        const freshPerms = await withBootTimeout(refreshPermissions(
           existing.employee.role_id,
           existing.employee.id,
-        );
+        ));
 
         // P8 (3.14) — also surface company.tax_mode so POS toggle defaults
         // and visibility match the tenant's stance. Best-effort: a missing
@@ -288,9 +302,9 @@ export function AuthProvider({ children }) {
             meHeaders.Authorization = `Bearer ${existing.token}`;
           }
           const nf = window._nativeFetch || window.fetch;
-          const meRes = await nf(`${API}/api/auth/me`, { headers: meHeaders });
+          const meRes = await withBootTimeout(nf(`${API}/api/auth/me`, { headers: meHeaders }));
           if (meRes.ok) {
-            const meData = await meRes.json();
+            const meData = await withBootTimeout(meRes.json());
             if (meData.company) companyFromMe = meData.company;
           }
         } catch { /* non-critical */ }
@@ -312,11 +326,11 @@ export function AuthProvider({ children }) {
         if (IS_MULTI_TENANT && refreshed?.token) {
           try {
             const nf = window._nativeFetch || window.fetch;
-            const billingRes = await nf(`${API}/api/billing/status`, {
+            const billingRes = await withBootTimeout(nf(`${API}/api/billing/status`, {
               headers: { Authorization: `Bearer ${refreshed.token}` },
-            });
+            }));
             if (billingRes.ok) {
-              const billingData = await billingRes.json();
+              const billingData = await withBootTimeout(billingRes.json());
               if (isMounted) {
                 setSubscriptionStatus(billingData.payment_status || "active");
                 setSubscriptionDaysLeft(billingData.trial_days_left ?? billingData.grace_days_left ?? null);
@@ -331,7 +345,8 @@ export function AuthProvider({ children }) {
         // No connection (the counter reloaded with the internet down): keep
         // the saved session and its permissions. Signing back in needs the
         // server, so clearing here locked the till for the whole outage
-        // (One Toy Store blocker 3b). A real refusal still signs out.
+        // (One Toy Store blocker 3b). A real refusal still signs out. A
+        // request past BOOT_TIMEOUT_MS rejects as a TypeError too (D53).
         if (err instanceof TypeError) {
           if (isMounted) setSession(existing);
         } else {

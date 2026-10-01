@@ -182,10 +182,10 @@ function makeFmt(symbol = "$") {
 // Printable width per roll (paper width minus the printer's unprintable edges),
 // keyed by the template's character width. Sizing the slip in mm stops Chrome
 // shrinking it to fit, which made the old 341px slip print small and faint.
-const PRINT_MM = { 48: 72, 42: 64, 32: 48, 30: 46 };
+export const PRINT_MM = { 48: 72, 42: 64, 32: 48, 30: 46 };
 const FRAME_ID = "sanopos-receipt-frame";
 
-const RECEIPT_CSS = (printMm) => [
+export const RECEIPT_CSS = (printMm) => [
   "@page{margin:0}",
   "*{box-sizing:border-box}",
   "html,body{margin:0;padding:0;background:#fff}",

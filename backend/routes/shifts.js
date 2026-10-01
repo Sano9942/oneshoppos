@@ -1,5 +1,5 @@
 module.exports = function (app, deps) {
-  const { db, createNotification, requirePerm } = deps;
+  const { db, createNotification, requirePerm, requireAnyPerm } = deps;
   const { validate } = require("../middleware/validate");
   const {
     OpenShiftSchema,
@@ -8,8 +8,7 @@ module.exports = function (app, deps) {
   } = require("../schemas/shifts");
   const { getFeatureFlagsMap } = require("../middleware/feature-flags");
   const { verifyManagerPin } = require("../services/manager-pin");
-  const { paidOutForShift } = require("../services/till-payouts");
-  const { paidInForShift } = require("../services/till-payins");
+  const { drawerTotals, buildDayReport } = require("../services/day-report");
 
   async function storeShiftDenominations(client, shiftId, stage, denominations = []) {
     const rows = Array.isArray(denominations)
@@ -124,39 +123,10 @@ module.exports = function (app, deps) {
       // whole seconds left out any sale rung up in the same second as the close.
       const { rows: [{ now: closedAt }] } = await db.query("SELECT NOW() AS now");
 
-      // Sum all cash payments for this outlet during this shift period
-      const { rows: cashRows } = await db.query(
-        `SELECT COALESCE(SUM(sp.amount), 0) as cash_sales
-         FROM sale_payments sp
-         JOIN sales s ON sp.sale_id = s.id
-         WHERE s.outlet_id = $1
-           AND s.voided = false
-           AND sp.payment_method = 'Cash'
-           AND s.timestamp >= $2
-           AND s.timestamp <= $3`,
-        [shift.outlet_id, shift.opened_at, closedAt]
-      );
-      const cashSales = Number(cashRows[0]?.cash_sales || 0);
-
-      const { rows: refundRows } = await db.query(
-        // D56: only the money handed back, not the part of an exchange's
-        // return spent on the new items.
-        `SELECT COALESCE(SUM(total_refund - COALESCE(credit_applied, 0)), 0) as cash_refunds
-         FROM returns
-         WHERE outlet_id = $1
-           AND refund_method = 'Cash'
-           AND timestamp >= $2
-           AND timestamp <= $3`,
-        [shift.outlet_id, shift.opened_at, closedAt]
-      );
-      const cashRefunds = Number(refundRows[0]?.cash_refunds || 0);
-      const netCashSales = cashSales - cashRefunds;
-      // F3 (D50): cash paid out of the till during this shift (shop costs,
-      // suppliers, owner/home, staff advances, discounts after sale).
-      const paidOut = await paidOutForShift(db, shift.id);
-      // F3c: cash put into the till (from the bank, the owner, staff paying back).
-      const paidIn = await paidInForShift(db, shift.id);
-      const expectedCash = parseFloat(shift.opening_float) + netCashSales - paidOut + paidIn;
+      // Cash sales − cash given back (D56) − paid-outs (F3) + paid-ins (F3c);
+      // shared with the day report slip (F4) so both always agree.
+      const drawer = await drawerTotals(db, shift, closedAt);
+      const { cashSales, cashRefunds, netCashSales, paidOut, paidIn, expectedCash } = drawer;
       const variance = parseFloat(closing_cash) - expectedCash;
 
       // 2-G.17: if risk controls are on AND abs(variance) exceeds the tenant
@@ -234,6 +204,18 @@ module.exports = function (app, deps) {
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // F4 (D51): the day report slip for one shift — a check copy while open,
+  // the final slip once closed, reprintable for any past shift.
+  app.get("/api/shifts/:id/day-report", requireAnyPerm(["manage_orders", "view_sales_reports"]), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid shift id" });
+    try {
+      res.json(await buildDayReport(db, id));
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
