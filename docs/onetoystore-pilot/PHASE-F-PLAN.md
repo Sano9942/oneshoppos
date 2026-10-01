@@ -258,6 +258,13 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - **Build:** after Close Shift, **Print day report** on the thermal printer in the iPOS layout: per payment type (Cash / Card / Online) sub total, discount, net; bill count; returns; grand total; till paid-outs; float, expected, counted, difference. Also reprintable for any past shift. Uses the same mm-sized slip printing as the receipt (D45).
 - **Test:** the slip's numbers equal the SQL for that shift; day 1 as the worked example (sub total 124,470, discount 2,540 in iPOS terms).
 
+### F4b: Home staff (owner, 2026-10-01 night) 🟡 before the ~5–6 Oct salaries
+
+- **Problem:** Aslam (home driver, sometimes helps in the shop) takes advances and sometimes toys, and his salary is paid from the drawer. It's a **home** cost, not a shop cost, but today anyone with a salary counts as shop staff and the Salaries page always books the salary as a shop expense ("Salaries"). On 1 Oct his 30,000 went in as Shop cost (dashboard net profit −5,479); re-filed to Owner / home with owner OK.
+- **Build:** a "Home staff" tick on the employee. Home staff: advances (Paid out → Staff advance) and Staff-button toys at cost go on their account as now; **salary on the Salaries page is booked as Owner / home** (till payout, no shop expense row, not in shop profit); not on the shop attendance register / present count, not in shop salary totals.
+- **Until built:** Aslam's advances / salary = Paid out → Owner / home, note "Aslam …"; toys as in iPOS + register note, put on his account once built.
+- **Owner / home money in general** (e.g. 20,000 "DHA home staff salary" for the maids, DHA home expenses every 1–3 days): Paid out → **Owner / home** is already right (comes off the drawer, never in shop profit). Keep the note starting "DHA …" so it can be totalled. Possible extra with this build: a few owner/home labels (DHA home, maids, …) and a monthly "taken for home" total. Ask the owner.
+
 ### F5: Find an item by code or barcode in Adjustments / Transfers / Promotions (D44) 🔴
 
 - **Problem:** the product box is a plain list of all 10,044 items (`StockAdjustmentsRedesign.jsx:235`, `TransfersRedesign.jsx:216`, Promotions); scanning or typing a code does nothing.
