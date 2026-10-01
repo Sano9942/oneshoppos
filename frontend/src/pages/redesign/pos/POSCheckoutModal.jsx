@@ -28,6 +28,7 @@ import {
   useOnlinePaymentOptions,
 } from "../../../utils/onlinePayments";
 import { CUT_FROM_SALARY } from "./hooks/useStaffPurchase";
+import { NOTE_BUTTONS, addNote, startAmount } from "./tenderAmount";
 
 export default function POSCheckoutModal() {
   const {
@@ -830,6 +831,8 @@ export default function POSCheckoutModal() {
                         onClick={() => {
                           if (disabled) return;
                           setPaymentMethod(id);
+                          // Cash: empty; Card / Online / others: exact amount due.
+                          setPaymentAmount(startAmount(id, remaining));
                           setOnlineChoice("");
                           setOnlineError("");
                           if (id !== "gift_card") {
@@ -1010,20 +1013,20 @@ export default function POSCheckoutModal() {
               >
                 Exact
               </button>
-              {[50, 100, 500, 1000].map((amt) => (
+              {/* Each note adds to the box: 5000 then 500 = 5,500. */}
+              {NOTE_BUTTONS.map((amt) => (
                 <button
                   key={amt}
                   type="button"
-                  onClick={() =>
-                    setPaymentAmount(
-                      (Math.ceil(remaining / amt) * amt).toFixed(2),
-                    )
-                  }
+                  onClick={() => setPaymentAmount(addNote(paymentAmount, amt))}
                   className="px-2.5 py-1 bg-(--ui-muted-surface) hover:bg-(--ui-muted-surface) text-(--ui-text-muted) border border-(--ui-border-strong) rounded-lg text-xs font-bold transition"
                 >
-                  +{amt}
+                  {amt}
                 </button>
               ))}
+              <Button type="button" size="sm" onClick={() => setPaymentAmount("")}>
+                Clear
+              </Button>
             </div>
           </form>
 

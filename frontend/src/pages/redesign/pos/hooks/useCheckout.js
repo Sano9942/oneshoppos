@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { api } from "../../../../api";
 import { useAuth } from "../../../../auth/AuthProvider";
+import { startAmount } from "../tenderAmount";
 
 export function useCheckout({
   // shift gate
@@ -153,7 +154,8 @@ export function useCheckout({
     setPaymentMethod("Cash");
     setTipAmount("");
     setServerId("");
-    setPaymentAmount(total.toFixed(2));
+    // Cash starts empty: the cashier enters what the customer handed over.
+    setPaymentAmount(startAmount("Cash", total));
     setCheckoutCustomerId(selectedCustomerId);
     setCheckoutCustSearch(
       selectedCustomerId
@@ -204,9 +206,7 @@ export function useCheckout({
     if (!amount || amount <= 0) return;
     const entry = { method: paymentMethod, amount, ...(extras || {}) };
     setPayments((prev) => [...prev, entry]);
-    setPaymentAmount(
-      remaining - amount > 0 ? (remaining - amount).toFixed(2) : "",
-    );
+    setPaymentAmount(startAmount(paymentMethod, remaining - amount));
   }, [paymentAmount, paymentMethod, remaining]);
 
   // P8 (3.14): per-rate tax breakdown derived from cart effectiveTaxRate.
