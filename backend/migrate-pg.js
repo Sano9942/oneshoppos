@@ -10240,6 +10240,20 @@ const MIGRATIONS = [
       await client.query(TILL_PAYINS_DDL);
     },
   },
+  {
+    version: 149,
+    description:
+      "One Toy Store pilot, F3b: staff register + staff account + salaries. till_payouts.kind gains 'salary'; new staff_attendance_marks (P / A / S per staff per day, owner-set with a reason) + staff_attendance_mark_log (every change, who/when/why); staff_account_entries (advances / toys from the paper register, corrections); staff_salaries (one per staff per month: allowance, A / S days, leave adjust at salary/30, gross rounded to 10, amount cut from the account, net paid from the till). DDL shared with schema-pg.sql via services/staff-pay.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('till_payouts', 'employees', 'expenses', 'cash_shifts')`
+      );
+      if (rows[0].n < 4) return;
+      const { STAFF_PAY_DDL } = require("./services/staff-pay");
+      await client.query(STAFF_PAY_DDL);
+    },
+  },
 ];
 
 /**

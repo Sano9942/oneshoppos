@@ -108,6 +108,7 @@ export default function POSPaidOutModal({ open, onClose, shift, onSaved }) {
   };
 
   const describe = (p) =>
+    (p.kind === "salary" ? `Salary · ${p.staff_name || ""}` : null) ||
     (p.invoice_number ? `Discount after sale · bill ${p.invoice_number}` : null) ||
     p.category_name || p.supplier_name ||
     (p.staff_name ? `Advance · ${p.staff_name}` : null) ||
@@ -193,7 +194,7 @@ export default function POSPaidOutModal({ open, onClose, shift, onSaved }) {
                 </span>
                 <span className="flex items-center gap-3">
                   <span className="font-semibold text-(--ui-text)">{money(p.amount)}</span>
-                  {!p.voided && (
+                  {!p.voided && p.kind !== "salary" && (
                     <Button type="button" size="sm" onClick={() => remove(p)}>
                       Remove
                     </Button>

@@ -301,6 +301,10 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   // the drawer: it goes through services/till-payouts.js so the open shift's
   // expected cash drops by it. 'bank' / 'other' never touch the drawer.
   const tillPayouts = require("../services/till-payouts");
+  // F3b: a salary's expense row is owned by staff_salaries (gross ≠ the cash
+  // paid out), so the Expenses page must not edit or delete it.
+  const isSalaryExpense = async (expenseId) =>
+    (await db.query("SELECT 1 FROM staff_salaries WHERE expense_id = $1", [Number(expenseId) || 0])).rows.length > 0;
   const { tenantToday } = require("../utils/tz");
 
   app.post("/api/expenses", async (req, res) => {
@@ -387,6 +391,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     try {
       const { rows: [current] } = await db.query("SELECT id, shift_id, paid_from FROM expenses WHERE id = $1", [req.params.id]);
       if (!current) return res.status(404).json({ error: "Expense not found" });
+      if (await isSalaryExpense(current.id)) {
+        return res.status(409).json({ error: "A salary is changed on the Salaries page" });
+      }
       const payout = await tillPayouts.payoutForExpense(db, current.id);
       if (payout && payout.shift_status !== "open") {
         return res.status(409).json({ error: "Paid from the till in a closed shift: it can't be changed" });
@@ -437,6 +444,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     requirePerm("manage_inventory"),
     async (req, res) => {
       try {
+        if (await isSalaryExpense(req.params.id)) {
+          return res.status(409).json({ error: "A salary is undone on the Salaries page" });
+        }
         const payout = await tillPayouts.payoutForExpense(db, req.params.id);
         if (payout && payout.shift_status !== "open") {
           return res.status(409).json({ error: "Paid from the till in a closed shift: it can't be deleted" });

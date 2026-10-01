@@ -10,6 +10,7 @@ import RouteLoading from "./RouteLoading";
 const AdministratorRoute = lazy(() => import("../pages/AdministratorRoute"));
 const ApprovalsRedesign = lazy(() => import("../pages/redesign/ApprovalsRedesign"));
 const AttendanceRedesign = lazy(() => import("../pages/redesign/AttendanceRedesign"));
+const SalariesRedesign = lazy(() => import("../pages/redesign/SalariesRedesign"));
 const AttributeSetsRoute = lazy(() => import("../pages/AttributeSetsRoute"));
 const BackupRestoreRoute = lazy(() => import("../pages/BackupRestoreRoute"));
 const BarcodeTemplatesRedesign = lazy(() => import("../pages/redesign/BarcodeTemplatesRedesign"));
@@ -201,6 +202,7 @@ export const appRoutes = [
     <Route path="/integrations/woocommerce" element={perm("manage_inventory", <WooCommerceIntegrationRedesign />)} />
     <Route path="/notifications" element={<NotificationsRedesign />} />
     <Route path="/attendance" element={perm("view_hr_reports", <AttendanceRedesign />)} />
+    <Route path="/salaries" element={perm("manage_employees", <SalariesRedesign />)} />
     <Route path="/hr" element={perm("all_access", <HRManagementRoute />)} />
     <Route path="/scheduling" element={perm("all_access", <SchedulingRoute />)} />
     <Route path="/company-settings" element={perm("all_access", <CompanySettingsRoute />)} />

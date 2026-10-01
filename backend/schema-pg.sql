@@ -6232,3 +6232,61 @@ CREATE TABLE IF NOT EXISTS till_payins (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_till_payins_shift ON till_payins(shift_id);
+
+-- One Toy Store pilot F3b (v149): staff register, staff account, salaries.
+-- Same statements as services/staff-pay.js STAFF_PAY_DDL.
+ALTER TABLE till_payouts DROP CONSTRAINT IF EXISTS till_payouts_kind_check;
+ALTER TABLE till_payouts ADD CONSTRAINT till_payouts_kind_check
+  CHECK (kind IN ('shop_cost','supplier','owner','staff_advance','late_discount','salary'));
+CREATE TABLE IF NOT EXISTS staff_attendance_marks (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  day DATE NOT NULL,
+  mark TEXT NOT NULL CHECK (mark IN ('P','A','S')),
+  reason TEXT NOT NULL,
+  set_by INTEGER REFERENCES employees(id),
+  set_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (employee_id, day)
+);
+CREATE TABLE IF NOT EXISTS staff_attendance_mark_log (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  day DATE NOT NULL,
+  old_mark TEXT,
+  new_mark TEXT,
+  reason TEXT NOT NULL,
+  set_by INTEGER REFERENCES employees(id),
+  set_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_mark_log_emp_day ON staff_attendance_mark_log(employee_id, day);
+CREATE TABLE IF NOT EXISTS staff_account_entries (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  kind TEXT NOT NULL CHECK (kind IN ('earlier_advance','earlier_purchase','adjust')),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount <> 0),
+  entry_date DATE NOT NULL,
+  note TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_account_entries_emp ON staff_account_entries(employee_id);
+CREATE TABLE IF NOT EXISTS staff_salaries (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  month TEXT NOT NULL CHECK (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  monthly_salary NUMERIC(12,2) NOT NULL,
+  leave_allowance INTEGER NOT NULL,
+  a_days INTEGER NOT NULL,
+  s_days INTEGER NOT NULL,
+  leave_adjust NUMERIC(12,2) NOT NULL,
+  gross NUMERIC(12,2) NOT NULL,
+  cut_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (cut_amount >= 0),
+  net_pay NUMERIC(12,2) NOT NULL CHECK (net_pay >= 0),
+  shift_id INTEGER REFERENCES cash_shifts(id),
+  payout_id INTEGER REFERENCES till_payouts(id) ON DELETE SET NULL,
+  expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL,
+  note TEXT,
+  paid_by INTEGER REFERENCES employees(id),
+  paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (employee_id, month)
+);

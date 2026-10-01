@@ -250,6 +250,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Employees", path: "/employees", icon: Users, requiredPerm: "all_access" },
       { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "view_hr_reports" },
+      { name: "Salaries", path: "/salaries", icon: Banknote, requiredPerm: "manage_employees" },
       { name: "Scheduling", path: "/scheduling", icon: Calendar, requiredPerm: "all_access", requiredFlag: "phase2_scheduling" },
       { name: "Commissions", path: "/commissions", icon: Percent, requiredPerm: "all_access", requiredFlag: "phase2_commissions", requiredMode: "commissions" },
       { name: "HR", path: "/hr", icon: User, requiredPerm: "all_access", requiredFlag: "advanced_hr" },

@@ -733,6 +733,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./barcode-expenses")(app, deps);
   require("./till-payouts")(app, deps);
   require("./till-payins")(app, deps);
+  require("./staff-pay")(app, deps);
 
   // --- ATTENDANCE ---
   require("./attendance")(app, deps);

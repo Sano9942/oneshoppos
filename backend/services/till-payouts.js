@@ -120,8 +120,9 @@ async function createPayout(db, body, { employeeId, employeeName, today }) {
   };
 
   if (kind === "shop_cost") {
-    const { rows: [cat] } = await db.query("SELECT id FROM expense_categories WHERE id = $1", [Number(body.category_id) || 0]);
+    const { rows: [cat] } = await db.query("SELECT id, name FROM expense_categories WHERE id = $1", [Number(body.category_id) || 0]);
     if (!cat) throw fail(400, "Pick what the shop cost was for");
+    if (cat.name === "Salaries") throw fail(400, "Salaries are paid on the Salaries page");
     row.expense_id = await addExpense(cat.id, null);
   } else if (kind === "supplier") {
     const { rows: [sup] } = await db.query("SELECT id FROM suppliers WHERE id = $1", [Number(body.supplier_id) || 0]);
@@ -163,6 +164,7 @@ async function createPayout(db, body, { employeeId, employeeName, today }) {
 async function removePayout(db, payoutId) {
   const { rows: [p] } = await db.query("SELECT * FROM till_payouts WHERE id = $1", [payoutId]);
   if (!p) throw fail(404, "Paid-out not found");
+  if (p.kind === "salary") throw fail(409, "A salary is undone on the Salaries page");
   await openShiftOrFail(db, p.shift_id);
   await db.query("DELETE FROM till_payouts WHERE id = $1", [p.id]);
   if (p.expense_id) await db.query("DELETE FROM expenses WHERE id = $1", [p.expense_id]);
