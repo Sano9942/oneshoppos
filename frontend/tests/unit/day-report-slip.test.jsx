@@ -70,6 +70,12 @@ describe("day report slip", () => {
     expect(t).toContain("5,000 x 2");
   });
 
+  it("an exchange that gave no money back says so (INV-00082)", () => {
+    const t = slipText({ ...SHIFT3, returns: [{ method: "Return Credit", count: 1, exchanges: 1, paid_back: 0 }] });
+    expect(t).toContain("Exchange (1)no money back");
+    expect(t).not.toContain("paid back 590");
+  });
+
   it("an open shift prints as a check copy with no counted figure", () => {
     const t = slipText({ ...SHIFT3, is_check_copy: true, shift: { ...SHIFT3.shift, status: "open", closed_at: null },
       printed_until: "2026-10-01T16:07:23Z",

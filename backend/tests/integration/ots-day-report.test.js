@@ -154,6 +154,20 @@ describe("F4 — day report slip, the iPOS layout", () => {
     expect(num(r.total)).toBe(6350);
   });
 
+  it("a pre-D56 exchange return (method 'Return Credit', credit_applied 0) is an exchange with no money back", async () => {
+    const id = await openTill(500);
+    const sold = await sell(590, [{ method: "Cash", amount: 590 }]);
+    const ret = await admin().post("/api/returns").send({
+      original_sale_id: sold, outlet_id: 1, employee_id: ADMIN_ID, customer_id: null,
+      total_refund: 590, refund_method: "Return Credit",
+      items: [{ product_id: ITEM, quantity: 1, refund_price: 590 }],
+    });
+    expect(ret.status).toBe(200);
+    await db.query("UPDATE returns SET credit_applied = 0 WHERE id = (SELECT MAX(id) FROM returns)");
+    const r = await report(id);
+    expect(r.returns).toEqual([{ method: "Return Credit", count: 1, exchanges: 1, paid_back: 0 }]);
+  });
+
   it("an unknown shift is a 404", async () => {
     const res = await admin().get("/api/shifts/999999/day-report");
     expect(res.status).toBe(404);

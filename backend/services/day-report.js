@@ -131,10 +131,13 @@ async function buildDayReport(db, shiftId) {
   const discount = round2(modeRows.reduce((s, m) => s + m.discount, 0));
   const total = round2(modeRows.reduce((s, m) => s + m.bill_total, 0));
 
-  // Returns: money handed back, by how it went back (D56).
+  // Returns: money handed back, by how it went back (D56). A 'Return Credit'
+  // return is an exchange that gave no money back (pre-D56 rows carry the
+  // whole value with no credit_applied, e.g. INV-00082's 590).
   const { rows: returnRows } = await db.query(
     `SELECT refund_method AS method, COUNT(*)::int AS count,
-            COALESCE(SUM(total_refund - COALESCE(credit_applied, 0)), 0) AS paid_back,
+            COALESCE(SUM(CASE WHEN refund_method = $4 THEN 0
+                              ELSE total_refund - COALESCE(credit_applied, 0) END), 0) AS paid_back,
             COUNT(*) FILTER (WHERE COALESCE(credit_applied, 0) > 0 OR refund_method = $4)::int AS exchanges
        FROM returns
       WHERE outlet_id = $1 AND timestamp >= $2 AND timestamp <= $3

@@ -108,7 +108,8 @@ export function buildDayReportHtml(r, opts = {}) {
     hr();
     add(el("div", "Returns / exchanges", "label"));
     for (const x of r.returns) {
-      row(`${x.method} (${x.count})`, x.paid_back ? `paid back ${amt(x.paid_back)}` : "no money back", "item");
+      const what = x.method === "Return Credit" ? "Exchange" : x.method;
+      row(`${what} (${x.count})`, x.paid_back ? `paid back ${amt(x.paid_back)}` : "no money back", "item");
     }
   }
 
