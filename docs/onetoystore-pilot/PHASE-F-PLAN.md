@@ -196,6 +196,21 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
   - **Q3b.10 Clock-in station:** counter PC has **no webcam** → use the **spare phone** for now; build so a **webcam on any PC works the same** (same browser camera code), as the fallback if the phone doesn't work well.
   - **Q3b.11 Rounding:** salary to pay is rounded to the **nearest Rs 10** (Basharat 45,266.67 → 45,270).
   - **Q3b.12 Staff purchase at the till (owner OK):** scan → **Staff** button → pick the person → price becomes **cost**, bill marked "Staff purchase" (not a discount, not a normal sale) → **Cash now** (into the drawer) or **Cut from salary** (onto their account, no money) → stock goes down either way. **Cashier may see the cost price for now**; revisit later.
+  - **Q3b.13 Staff toys in iPOS today:** pays now (cash, JazzCash, any) → an **ordinary iPOS bill**, stock down; pays at month end → iPOS **"stock credit"** (quantity down, **no bill**) + amount written in the register, cut from salary. → SanoPOS staff purchase payment choices = **Cash / Online / Cut from salary**. For the nightly R1 compare: "Cut from salary" bills have **no iPOS bill**, so they're left out of the comparison and listed separately.
+  - **Where F3b meets the sidebar (owner asked 2026-10-01; money/stock/drawer touch-points done in this build, view-only pages later):**
+
+    | Page | Change |
+    |---|---|
+    | Sell → POS | **Staff** button (staff purchase at cost); Paid out gets **Salary**; Paid in "Staff pays back" feeds the staff account |
+    | Sell → Kiosk | photo at clock-in; staff PIN works **only** here |
+    | People → Attendance | register view (month grid, P / A / S, owner corrections with reason + history) as a tab |
+    | People → Employees | leave allowance (fix the 2s) + staff account balance |
+    | People → HR | its payroll (all net 0 on prod) replaced by the new **Salaries** page for this shop; HR stays "switch off" |
+    | Finance → Cash Management, Dashboard cash in drawer, Close Shift, Cash Audit | salary paid-outs + staff cash purchases counted (same code path as paid-out / paid-in) |
+    | Finance → Expenses, profit (Dashboard / Reports) | salaries = shop cost; advances not (loan); staff purchases = sale at cost, 0 margin |
+    | Sell → Sales History, Insights → Reports (payment summary, item-wise) | staff purchases labelled; "Cut from salary" its own method, never cash/card |
+
+    Not touched: hidden/switched-off groups, Catalog, Procurement, Customers.
   - **Retail practice on sick days (told to owner, not legal advice):** big retailers keep sick leave **separate** from casual/annual leave, often ask for a doctor's note after 2–3 days in a row, and cap it per year (beyond the cap = unpaid). Pakistan's shops law (West Pakistan / Punjab Shops and Establishments Ordinance 1969) gives roughly 10 days casual leave on full pay, 16 days sick leave on **half** pay a year, and 14 days annual leave after a year's service; the owner's current rule (sick days not cut) is more generous. Confirm with an accountant before writing a policy.
   - **Q3b.4 Toys at cost:** sometimes the staff member **pays cash** at the time; other times it's **written in the daily register and cut from salary** at month end. → both ways needed.
 
