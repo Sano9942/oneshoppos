@@ -7,6 +7,7 @@ import { api } from "../../../api";
 import { Badge, Button, Input, Modal, SectionCard } from "../../../ui/primitives";
 import { useToast } from "../../../contexts/ToastContext";
 import {
+  orderStaff,
   MARK_LABEL, dayOf, emptyDays, monthLabel, monthOf, nextMonth, pastDays, prevMonth, signed,
 } from "./staffPay";
 
@@ -134,10 +135,13 @@ export default function StaffRegister() {
               </tr>
             </thead>
             <tbody>
-              {data.staff.map((s) => (
+              {orderStaff(data.staff).map((s) => (
                 <tr key={s.id} className="border-b border-(--ui-border)">
                   <td className="sticky left-0 z-10 whitespace-nowrap bg-(--ui-surface) px-3 py-1">
-                    <div className="font-semibold text-(--ui-text)">{s.name}</div>
+                    <div className="font-semibold text-(--ui-text)">
+                      {s.name}
+                      {s.home_staff && <Badge tone="warning" className="ml-1" title="Works for the home: not counted as present in the shop">Home staff</Badge>}
+                    </div>
                     <div className="text-xs">
                       <Button size="sm" tone="link" onClick={() => fillEmpty(s)} disabled={busy}>Empty → P</Button>
                       <span className="mx-1 text-(--ui-text-muted)">·</span>

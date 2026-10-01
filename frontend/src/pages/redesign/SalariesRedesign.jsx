@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
 import { Badge, Button, Drawer, Input, Modal, PageShell, SectionCard, Select } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
-import { monthLabel, monthOf, nextMonth, pastDays, prevMonth, rs, signed } from "./staff/staffPay";
+import { monthLabel, monthOf, nextMonth, orderStaff, pastDays, prevMonth, rs, signed, splitTotals } from "./staff/staffPay";
 
 const KIND_LABEL = {
   earlier_advance: "Advance (paper register)",
@@ -71,10 +71,8 @@ export default function SalariesRedesign() {
   };
 
   const past = data ? pastDays(month, data.days) : 0;
-  const totals = (data?.staff || []).reduce(
-    (t, s) => ({ gross: t.gross + s.gross, paid: t.paid + (s.paid?.net_pay || 0) }),
-    { gross: 0, paid: 0 },
-  );
+  const totals = splitTotals(data?.staff);
+  const hasHome = (data?.staff || []).some((s) => s.home_staff);
 
   return (
     <PageShell
@@ -117,10 +115,11 @@ export default function SalariesRedesign() {
               </tr>
             </thead>
             <tbody>
-              {data.staff.map((s) => (
+              {orderStaff(data.staff).map((s) => (
                 <tr key={s.id} className="border-b border-(--ui-border)">
                   <td className="px-3 py-2 font-semibold text-(--ui-text)">
                     {s.name}
+                    {s.home_staff && <Badge tone="warning" className="ml-1" title="Salary booked as Owner / home, not a shop cost">Home staff</Badge>}
                     {s.marked_days < past && (
                       <div className="text-xs font-normal text-(--ui-warning-fg)">{past - s.marked_days} days not marked</div>
                     )}
@@ -166,12 +165,21 @@ export default function SalariesRedesign() {
                 </tr>
               ))}
               <tr className="font-bold">
-                <td className="px-3 py-2" colSpan={7}>Total</td>
-                <td className="px-3 py-2 text-right">{rs(totals.gross)}</td>
+                <td className="px-3 py-2" colSpan={7}>{hasHome ? "Total shop staff" : "Total"}</td>
+                <td className="px-3 py-2 text-right">{rs(totals.shop.gross)}</td>
                 <td />
-                <td className="px-3 py-2">{rs(totals.paid)} paid</td>
+                <td className="px-3 py-2">{rs(totals.shop.paid)} paid</td>
                 <td />
               </tr>
+              {hasHome && (
+                <tr className="font-bold text-(--ui-text-muted)">
+                  <td className="px-3 py-2" colSpan={7}>Home staff total (Owner / home, not a shop cost)</td>
+                  <td className="px-3 py-2 text-right">{rs(totals.home.gross)}</td>
+                  <td />
+                  <td className="px-3 py-2">{rs(totals.home.paid)} paid</td>
+                  <td />
+                </tr>
+              )}
             </tbody>
           </table>
         </SectionCard>
@@ -227,6 +235,11 @@ function PayModal({ staff, month, shift, onClose, onPaid }) {
           <span className="font-bold">Salary to pay (rounded to 10)</span><span className="text-right font-bold">{rs(staff.gross)}</span>
           <span>Owes the shop now</span><span className="text-right">{rs(staff.balance)}</span>
         </div>
+        {staff.home_staff && (
+          <p className="rounded-(--ui-radius-md) bg-(--ui-warning-bg) px-3 py-2 text-(--ui-warning-fg)">
+            Home staff: the cash is booked as Paid out → Owner / home, not as a shop cost.
+          </p>
+        )}
         <label className="block">
           <span className="mb-1 block text-(--ui-text-muted)">Cut from this salary (the rest stays on the account for next month)</span>
           <Input type="number" min="0" step="1" value={cut} onChange={(e) => setCut(e.target.value)} aria-label="Amount to cut" />

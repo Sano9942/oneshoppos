@@ -17,7 +17,7 @@ import { downloadCsv } from "../../utils/csvExport";
 import { usePreset } from "../../contexts/PresetContext";
 import { buildOutletRolesMap, overridesFromAssignments } from "./employeeOutletRoles";
 
-const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", email: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
+const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", email: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "", home_staff: false };
 const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
 
 export default function EmployeesRedesign() {
@@ -94,7 +94,7 @@ export default function EmployeesRedesign() {
 
   const openEdit = async (emp) => {
     setEditing(emp);
-    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", email: emp.email || "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "" });
+    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", email: emp.email || "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "", home_staff: emp.home_staff === true });
     setAttConfig(EMPTY_ATT);
     setAssignedOutletIds([]);
     setPrimaryOutletId(null);
@@ -131,6 +131,7 @@ export default function EmployeesRedesign() {
         monthly_salary: Number(form.monthly_salary || 0),
         hourly_rate: Number(form.hourly_rate || 0),
         daily_rate: Number(form.daily_rate || 0),
+        home_staff: form.home_staff === true,
       };
       if (form.pin_code) body.pin_code = form.pin_code;
       if (form.email !== undefined) body.email = form.email;
@@ -418,6 +419,18 @@ export default function EmployeesRedesign() {
                     />
                   </div>
                 )}
+                <label className="flex items-start gap-2 text-sm text-(--ui-text) cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={form.home_staff === true}
+                    onChange={(e) => setForm((p) => ({ ...p, home_staff: e.target.checked }))}
+                  />
+                  <span>
+                    Home staff
+                    <span className="block text-xs text-(--ui-text-muted)">Works for the home (driver, maid): salary paid from the till is booked as Owner / home, not a shop cost. Not counted as present in the shop.</span>
+                  </span>
+                </label>
                 {form.salary_type === "hourly" && (
                   <div>
                     <label className="block text-xs text-(--ui-text-muted) mb-1">Hourly Rate</label>

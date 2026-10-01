@@ -10283,6 +10283,21 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 152,
+    description:
+      "One Toy Store pilot F4b: employees.home_staff = works for the owner's home (driver, maids), paid from the drawer. The Salaries page books a home staff salary as a till paid-out of kind 'owner' (Owner / home) with no shop 'Salaries' expense, so it never reaches shop profit; the register lists them in their own section, out of the shop's present count. Advances and staff toys go on their account as for shop staff. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'employees'`
+      );
+      if (rows[0].n < 1) return;
+      await client.query(
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_staff BOOLEAN NOT NULL DEFAULT false"
+      );
+    },
+  },
 ];
 
 /**

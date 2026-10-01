@@ -125,7 +125,8 @@ const round10 = (n) => Math.round(n / 10) * 10;
 async function staffList(db) {
   const { rows } = await db.query(
     `SELECT id, name, monthly_salary::float AS monthly_salary,
-            COALESCE(monthly_leave_allowance, 0)::int AS allowance
+            COALESCE(monthly_leave_allowance, 0)::int AS allowance,
+            COALESCE(home_staff, false) AS home_staff
        FROM employees
       WHERE deleted_at IS NULL AND COALESCE(monthly_salary, 0) > 0
       ORDER BY id`,
@@ -235,7 +236,8 @@ async function register(db, monthStr, tz) {
     for (const [d, c] of Object.entries(cells)) {
       if (c.mark === "P") {
         p += 1;
-        presentByDay[d] = (presentByDay[d] || 0) + 1;
+        // F4b: home staff are not counted as present in the shop.
+        if (!s.home_staff) presentByDay[d] = (presentByDay[d] || 0) + 1;
       } else if (c.mark === "A") a += 1;
       else if (c.mark === "S") sick += 1;
     }
@@ -472,18 +474,27 @@ async function paySalary(db, body, { employeeId, today, tz }) {
     "SELECT id FROM staff_salaries WHERE employee_id = $1 AND month = $2 FOR UPDATE", [s.id, reg.month]);
   if (dup) throw fail(409, "This month's salary is already paid");
 
-  const { rows: [exp] } = await db.query(
-    `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date, paid_from)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'till') RETURNING id`,
-    [await salariesCategoryId(db), shift.outlet_id, shift.id, employeeId || null, pay.gross,
-      `${s.name}: ${reg.month} salary${cutAmt ? ` (cut ${cutAmt})` : ""}`, `Salary ${reg.month}`, today],
-  );
+  // F4b: a home staff salary is the owner's home cost: Owner / home paid-out,
+  // no shop "Salaries" expense, so it never reaches shop profit.
+  let exp = null;
+  if (!s.home_staff) {
+    ({ rows: [exp] } = await db.query(
+      `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date, paid_from)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'till') RETURNING id`,
+      [await salariesCategoryId(db), shift.outlet_id, shift.id, employeeId || null, pay.gross,
+        `${s.name}: ${reg.month} salary${cutAmt ? ` (cut ${cutAmt})` : ""}`, `Salary ${reg.month}`, today],
+    ));
+  }
   let payoutId = null;
   if (net > 0) {
+    const kind = s.home_staff ? "owner" : "salary";
+    const text = s.home_staff
+      ? `${s.name}: ${reg.month} salary (home staff)${note ? `: ${note}` : ""}`
+      : `${reg.month} salary${note ? `: ${note}` : ""}`;
     const { rows: [p] } = await db.query(
       `INSERT INTO till_payouts (shift_id, outlet_id, kind, amount, note, expense_id, staff_employee_id, employee_id)
-       VALUES ($1, $2, 'salary', $3, $4, NULL, $5, $6) RETURNING id`,
-      [shift.id, shift.outlet_id, net, `${reg.month} salary${note ? `: ${note}` : ""}`, s.id, employeeId || null],
+       VALUES ($1, $2, $3, $4, $5, NULL, $6, $7) RETURNING id`,
+      [shift.id, shift.outlet_id, kind, net, text, s.id, employeeId || null],
     );
     payoutId = p.id;
   }
@@ -492,7 +503,7 @@ async function paySalary(db, body, { employeeId, today, tz }) {
                                  gross, cut_amount, net_pay, shift_id, payout_id, expense_id, note, paid_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
     [s.id, reg.month, s.monthly_salary, s.allowance, s.a_days, s.s_days, pay.leave_adjust,
-      pay.gross, cutAmt, net, shift.id, payoutId, exp.id, note, employeeId || null],
+      pay.gross, cutAmt, net, shift.id, payoutId, exp ? exp.id : null, note, employeeId || null],
   );
   return row;
 }

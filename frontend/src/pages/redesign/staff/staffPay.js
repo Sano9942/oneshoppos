@@ -21,6 +21,22 @@ export function monthLabel(month) {
   return new Date(y, m - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
 }
 
+/** F4b: shop staff first, home staff (owner's home: driver, maids) last. */
+export function orderStaff(list) {
+  return [...(list || []).filter((s) => !s.home_staff), ...(list || []).filter((s) => s.home_staff)];
+}
+
+/** F4b: salary totals kept apart: a home staff salary is Owner / home money, not a shop cost. */
+export function splitTotals(list) {
+  const t = { shop: { gross: 0, paid: 0 }, home: { gross: 0, paid: 0 } };
+  for (const s of list || []) {
+    const side = s.home_staff ? t.home : t.shop;
+    side.gross += s.paid ? s.paid.gross : s.gross;
+    side.paid += s.paid?.net_pay || 0;
+  }
+  return t;
+}
+
 /** "YYYY-MM-DD" for day d of month. */
 export function dayOf(month, d) {
   return `${month}-${String(d).padStart(2, "0")}`;

@@ -119,7 +119,10 @@ CREATE TABLE IF NOT EXISTS employees (
   -- cashiers, managers, admins on a laptop) vs 'field_rep' (mobile order
   -- bookers / DSRs). Field reps auto-redirect to /field/today on login.
   employee_type TEXT NOT NULL DEFAULT 'in_store'
-    CHECK (employee_type IN ('in_store','field_rep'))
+    CHECK (employee_type IN ('in_store','field_rep')),
+  -- v152 (One Toy Store F4b): works for the owner's home (driver, maids).
+  -- Salary booked as Owner / home, not a shop cost; own register section.
+  home_staff BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique ON employees (email) WHERE email IS NOT NULL;

@@ -49,7 +49,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     try {
       const { rows } = await db.query(
         `SELECT e.id, e.name, e.pin_code, e.email, e.password_hash IS NOT NULL as has_password,
-                e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day,
+                e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day, e.home_staff,
                 e.employee_type,
                 r.name as role, e.role_id
          FROM employees e LEFT JOIN roles r ON e.role_id = r.id
@@ -89,13 +89,13 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
   // Add a new employee
   app.post("/api/employees", requirePerm("all_access"), requirePlanLimit("employees"), validate(CreateEmployeeSchema), async (req, res) => {
-    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password } = req.body;
+    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password, home_staff } = req.body;
     try {
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
       const password_hash = password ? await bcrypt.hash(String(password), 10) : null;
       const { rows } = await db.query(
-        "INSERT INTO employees (name, role_id, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate, email, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-        [name, role_id || 3, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0), email || null, password_hash],
+        "INSERT INTO employees (name, role_id, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate, email, password_hash, home_staff) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+        [name, role_id || 3, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0), email || null, password_hash, home_staff === true],
       );
       const newId = rows[0].id;
       // Auto-assign new employee to all active outlets
@@ -118,7 +118,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   // Update an employee
   app.put("/api/employees/:id", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
-    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email } = req.body;
+    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, home_staff } = req.body;
     const perms = req.employeePerms || [];
     const isAdmin = perms.includes("all_access");
 
@@ -151,6 +151,12 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       if (email !== undefined) {
         query += `, email = $${paramIdx++}`;
         params.push(email === "" ? null : email);
+      }
+
+      // F4b: works for the owner's home (salary booked as Owner / home).
+      if (typeof home_staff === "boolean") {
+        query += `, home_staff = $${paramIdx++}`;
+        params.push(home_staff);
       }
 
       query += ` WHERE id = $${paramIdx++}`;
