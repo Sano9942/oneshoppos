@@ -164,6 +164,8 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
   - The existing HR payroll (`routes/tier4/hr.js:206-370`, `POST /api/hr/payroll/periods/:id/generate`, needs `advanced_hr`) **does not fit this shop**: it cuts a day's pay for every day without a kiosk clock-in, only cuts excess leave (never pays unused days extra), ignores advances and staff purchases, and pays nothing from the till. **Prod proof:** someone ran it on 2026-09-30 22:41 (period 1 "sep", 28–30 Sep, finalized): **all 11 staff net pay 0** ("Absent: 30d"). Nothing was paid; the rows are harmless but wrong.
   - Leave: `leave_requests` exists (0 rows on prod); staff don't clock in (owner: kiosk too soon), so attendance can't count leave.
   - Staff toys at cost: no way today (a sale is at price; On Account needs a customer).
+- **Owner answers (2026-10-01), one at a time:**
+  - **Q3b.1 Leave taken:** the shop keeps a **paper attendance register**, marked for the whole month. → On the Salaries page the owner **types each person's days off from the register** (no kiosk, no leave requests).
 
 ### F3c: Cash paid into the till ("Paid in") (owner, 2026-09-30) ✅ DEPLOYED 2026-09-30 ~23:25 with D57 + D58 (`4432ece8`, v148)
 
