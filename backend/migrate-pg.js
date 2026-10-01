@@ -10268,6 +10268,21 @@ const MIGRATIONS = [
       await client.query(STAFF_PURCHASE_DDL);
     },
   },
+  {
+    version: 151,
+    description:
+      "One Toy Store pilot D56: returns.credit_applied = on an exchange, the part of the return value spent on the new items (no money moves). The new bill is saved at its real price, paid by 'Return Credit'; the return keeps its full value with the real method of the money handed back, and the drawer subtracts only total_refund - credit_applied of a Cash refund. Old rows default 0. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'returns'`
+      );
+      if (rows[0].n < 1) return;
+      await client.query(
+        "ALTER TABLE returns ADD COLUMN IF NOT EXISTS credit_applied NUMERIC(12,2) NOT NULL DEFAULT 0"
+      );
+    },
+  },
 ];
 
 /**

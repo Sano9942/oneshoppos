@@ -139,7 +139,9 @@ module.exports = function (app, deps) {
       const cashSales = Number(cashRows[0]?.cash_sales || 0);
 
       const { rows: refundRows } = await db.query(
-        `SELECT COALESCE(SUM(total_refund), 0) as cash_refunds
+        // D56: only the money handed back, not the part of an exchange's
+        // return spent on the new items.
+        `SELECT COALESCE(SUM(total_refund - COALESCE(credit_applied, 0)), 0) as cash_refunds
          FROM returns
          WHERE outlet_id = $1
            AND refund_method = 'Cash'

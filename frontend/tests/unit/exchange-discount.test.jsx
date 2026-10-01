@@ -25,21 +25,21 @@ import POSReturnExchangeModal from "../../src/pages/redesign/pos/POSReturnExchan
 import { exchangeSettlement } from "../../src/pages/redesign/pos/exchangeMath";
 
 describe("exchangeSettlement (pure)", () => {
-  it("no discount: customer pays the whole balance, return credit rides as before", () => {
+  it("no discount: customer pays the whole balance, the bill keeps its full price (D56)", () => {
     const s = exchangeSettlement({ refundTotal: 950, exchangeTotal: 990, discountInput: "", discountType: "fixed", settleMethod: "Card" });
-    expect(s).toMatchObject({ balance: 40, discount: 0, due: 40, saleDiscountAmount: 950 });
+    expect(s).toMatchObject({ balance: 40, discount: 0, due: 40, saleDiscountAmount: 0 });
     expect(s.payments).toEqual([{ method: "Return Credit", amount: 950 }, { method: "Card", amount: 40 }]);
   });
 
   it("day 1's case: Rs 40 waived → nothing to pay, no Card line", () => {
     const s = exchangeSettlement({ refundTotal: 950, exchangeTotal: 990, discountInput: "40", discountType: "fixed", settleMethod: "Card" });
-    expect(s).toMatchObject({ balance: 40, discount: 40, due: 0, saleDiscountAmount: 990 });
+    expect(s).toMatchObject({ balance: 40, discount: 40, due: 0, saleDiscountAmount: 40 });
     expect(s.payments).toEqual([{ method: "Return Credit", amount: 950 }]);
   });
 
   it("part waived: pays the rest", () => {
     const s = exchangeSettlement({ refundTotal: 950, exchangeTotal: 1100, discountInput: "50", discountType: "fixed", settleMethod: "Cash" });
-    expect(s).toMatchObject({ balance: 150, discount: 50, due: 100, saleDiscountAmount: 1000 });
+    expect(s).toMatchObject({ balance: 150, discount: 50, due: 100, saleDiscountAmount: 50 });
     expect(s.payments).toEqual([{ method: "Return Credit", amount: 950 }, { method: "Cash", amount: 100 }]);
   });
 
@@ -56,7 +56,7 @@ describe("exchangeSettlement (pure)", () => {
 
   it("even exchange and customer-owed exchange ignore any discount (nothing to waive)", () => {
     expect(exchangeSettlement({ refundTotal: 950, exchangeTotal: 950, discountInput: "40", discountType: "fixed", settleMethod: "Cash" }))
-      .toMatchObject({ balance: 0, discount: 0, due: 0, saleDiscountAmount: 950, payments: [] });
+      .toMatchObject({ balance: 0, discount: 0, due: 0, saleDiscountAmount: 0, payments: [{ method: "Return Credit", amount: 950 }] });
     const owed = exchangeSettlement({ refundTotal: 950, exchangeTotal: 600, discountInput: "40", discountType: "fixed", settleMethod: "Cash" });
     expect(owed).toMatchObject({ balance: -350, discount: 0, due: 0 });
     expect(owed.payments).toEqual([{ method: "Return Credit", amount: 600 }]);
@@ -112,7 +112,7 @@ describe("Return / Exchange screen", () => {
     await waitFor(() => expect(apiMock.post).toHaveBeenCalledWith("/api/returns", expect.anything()));
     const [, saleBody] = apiMock.post.mock.calls.find(([u]) => u === "/api/sales");
     expect(saleBody.payments).toEqual([{ method: "Return Credit", amount: 950 }]);
-    expect(saleBody.discount_amount).toBe(990);
+    expect(saleBody.discount_amount).toBe(40); // D56: only the real discount
     expect(saleBody.notes).toMatch(/Exchange for INV-2026-00002/);
     expect(saleBody.notes).toMatch(/discount Rs 40/i);
     const printed = pos.printSlip.mock.calls[0][0];

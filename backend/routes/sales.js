@@ -679,6 +679,10 @@ module.exports = function registerSalesRoutes(app, deps) {
       // One Toy Store F3b part 2 — the till's Staff button: the salaried staff
       // member this bill is sold to at cost. The server sets the discount.
       staff_purchase_employee_id = null,
+      // One Toy Store D56 — an exchange bill saved at its real price: its
+      // "Return Credit" tender is part of paying the total (not also taken
+      // off it as a discount, as older tills still send).
+      exchange_full_price = false,
     } = req.body;
 
     // Resolve field_visit_uuid → field_visits.id when only the uuid is given.
@@ -1611,7 +1615,8 @@ module.exports = function registerSalesRoutes(app, deps) {
       // total is only the balance) and as a "Return Credit" tender. That
       // tender is not money handed over, so it can't create change; counting
       // it wiped out the Cash line of every cash-paid exchange balance (F1).
-      const returnCreditTendered = (finalPayments || [])
+      // D56: a full-price exchange bill counts its Return Credit as tender.
+      const returnCreditTendered = exchange_full_price === true ? 0 : (finalPayments || [])
         .filter((p) => p?.method === "Return Credit")
         .reduce((s, p) => s + Number(p?.amount || 0), 0);
       let changeDue = Math.round(

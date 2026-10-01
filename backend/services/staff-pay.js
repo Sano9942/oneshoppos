@@ -337,7 +337,7 @@ const ACCOUNT_SQL = `
    WHERE sa.staff_employee_id = $1 AND COALESCE(sa.voided, false) = false
      AND sp.payment_method = '${CUT_FROM_SALARY}'
   UNION ALL
-  SELECT 'return', r.id, 'staff_return', -r.total_refund::float, NULL, sa.invoice_number, r.timestamp, r.shift_id, sa.id
+  SELECT 'return', r.id, 'staff_return', -(r.total_refund - COALESCE(r.credit_applied, 0))::float, NULL, sa.invoice_number, r.timestamp, r.shift_id, sa.id
     FROM returns r JOIN sales sa ON sa.id = r.original_sale_id
    WHERE sa.staff_employee_id = $1 AND r.refund_method = '${CUT_FROM_SALARY}'
 `;

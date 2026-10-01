@@ -544,7 +544,8 @@ module.exports = function (app, deps) {
                      AND COALESCE(s.voided, false) = false
                 ), 0) AS cash_in,
                 COALESCE((
-                  SELECT SUM(r.total_refund)
+                  -- D56: money handed back only (not exchange credit)
+                  SELECT SUM(r.total_refund - COALESCE(r.credit_applied, 0))
                     FROM returns r
                    WHERE r.shift_id = cs.id
                      AND LOWER(r.refund_method) = 'cash'

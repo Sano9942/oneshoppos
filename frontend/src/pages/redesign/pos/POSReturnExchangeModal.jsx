@@ -406,8 +406,9 @@ export default function POSReturnExchangeModal() {
       // For exchange: POST sale FIRST — if shift is closed this fails before return is posted,
       // preventing the inconsistent state of restocked inventory without a recorded sale.
       if (mode === "exchange" && exchangeItems.length > 0) {
-        // Return Credit covers the refund value; the customer pays the rest of
-        // the balance after any discount (exchangeMath.js).
+        // D56: the new bill at its real price, paid by Return Credit up to the
+        // return value; the customer pays the rest after any discount
+        // (exchangeMath.js).
         salePayments = settlement.payments;
 
         saleData = await api.post("/api/sales", {
@@ -423,6 +424,7 @@ export default function POSReturnExchangeModal() {
             customer_id: null,
             discount_amount: settlement.saleDiscountAmount,
             discount_type: "fixed",
+            exchange_full_price: true,
             notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`
               + (exDiscount > 0 ? `; discount Rs ${exDiscount}` : ""),
           });
@@ -441,7 +443,10 @@ export default function POSReturnExchangeModal() {
           employee_id: employee?.id || null,
           customer_id: null,
           total_refund: refundTotal,
-          refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
+          // D56: an exchange's return says how much was spent on the new
+          // items and the real method of any money handed back.
+          refund_method: mode === "exchange" ? settlement.returnMethod : settleMethod,
+          credit_applied: mode === "exchange" ? settlement.creditApplied : 0,
           reason: reason || null,
           items: selectedItems,
           // Phase 2 fields
@@ -547,6 +552,11 @@ export default function POSReturnExchangeModal() {
           balanceDue: balance > 0 ? exDue : balance,
           exchangeDiscount: exDiscount,
           refundNote: balance < 0 ? `Refund ${money(Math.abs(balance))} via ${settleMethod}` : null,
+          exchangeSettle: balance < 0
+            ? { direction: "back", method: settleMethod, amount: settlement.moneyBack }
+            : exDue > 0
+              ? { direction: "pay", method: settleMethod, amount: exDue }
+              : null,
           change: 0,
           customer: null,
           outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)) || null,

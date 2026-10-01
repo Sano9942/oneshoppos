@@ -162,6 +162,10 @@ module.exports = function registerReturnsRoutes(app, deps) {
       customer_id,
       total_refund,
       refund_method,
+      // D56: on an exchange, the part of total_refund spent on the new items
+      // (paid by "Return Credit" on the exchange bill). Only the rest is money
+      // handed back by refund_method. 0 for a plain refund.
+      credit_applied,
       reason,
       items,
       // Phase 2 optional fields
@@ -213,6 +217,12 @@ module.exports = function registerReturnsRoutes(app, deps) {
     if (!items || items.length === 0) {
       return res.status(400).json({ error: "Return must have items" });
     }
+    const creditApplied = Math.round(Number(credit_applied || 0) * 100) / 100;
+    if (!Number.isFinite(creditApplied) || creditApplied < 0 || creditApplied > Number(total_refund) + 0.005) {
+      return res.status(400).json({ error: "credit_applied must be between 0 and total_refund" });
+    }
+    // The money actually handed back (D56).
+    const moneyBack = Math.round((Number(total_refund) - creditApplied) * 100) / 100;
     // One Toy Store F3b part 2: "Cut from salary" puts the refund back on the
     // staff account (services/staff-pay.js), so it only fits a staff purchase.
     if (refund_method === "Cut from salary") {
@@ -499,8 +509,8 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
         const { rows } = await client.query(
           `INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id,
-           policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id, idempotency_key)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
+           policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id, idempotency_key, credit_applied)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
           [
             original_sale_id || null,
             web_order_id || null,
@@ -517,6 +527,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             approved_by_employee_id || null,
             resolvedApprovalEventId,
             idempotency_key || null,
+            creditApplied,
           ],
         );
         const retId = rows[0].id;
@@ -671,7 +682,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
           if (!inv) {
             throw Object.assign(new Error("Linked customer invoice not found"), { statusCode: 400 });
           }
-          const refund = Number(total_refund);
+          const refund = moneyBack; // D56: not the part spent on an exchange
           const newBalance = Math.max(0, Number(inv.balance_due) - refund);
           // Refund reduces what the customer owes. Mirror it as a negative
           // amount_paid delta so total_amount = amount_paid + balance_due stays
@@ -710,7 +721,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
               { statusCode: 400 },
             );
           }
-          const refund = Number(total_refund);
+          const refund = moneyBack; // D56: not the part spent on an exchange
           if (refund > 0) {
             await client.query(
               "UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2",
@@ -743,7 +754,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             if (cardPayment?.gateway_ref) {
               const result = await paymentGateway.refund({
                 transaction_id: cardPayment.gateway_ref,
-                amount: total_refund,
+                amount: moneyBack,
                 reason: reason || "customer_return",
               });
               await db.query(

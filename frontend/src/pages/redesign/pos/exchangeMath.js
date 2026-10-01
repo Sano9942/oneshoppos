@@ -1,9 +1,13 @@
-// Money for an exchange (F1 / D48). Pure, so the screen and the tests share it.
+// Money for an exchange (F1 / D48, D56). Pure, so the screen and the tests share it.
 //
-// The exchange sale keeps its existing shape: the return value rides in
-// discount_amount AND as a "Return Credit" payment. A discount on the balance
-// (only when the customer owes money) is added to discount_amount and taken
-// off what the customer pays, never below 0.
+// D56 (2026-10-01, INV-00082): the new bill is saved at its REAL price, paid
+// by a "Return Credit" tender up to the return value, plus money for any
+// extra (sent with exchange_full_price so the server knows the credit is part
+// of the tender). The return keeps its full value and says how much of it was
+// spent on the new items (creditApplied) and the real method of the rest
+// (returnMethod): money handed back comes off the drawer only when it's Cash.
+// A discount on the balance (only when the customer owes money) is the only
+// discount saved, never below 0.
 const round2 = (n) => Math.round(n * 100) / 100;
 
 export function exchangeSettlement({ refundTotal, exchangeTotal, discountInput, discountType, settleMethod }) {
@@ -18,16 +22,21 @@ export function exchangeSettlement({ refundTotal, exchangeTotal, discountInput, 
     discount = round2(Math.min(balance, asked));
   }
   const due = balance > 0 ? round2(balance - discount) : 0;
+  const creditApplied = round2(Math.min(refund, total));
+  const moneyBack = balance < 0 ? round2(-balance) : 0;
 
   const payments = [];
-  if (balance < 0) {
-    // Customer is owed money: return credit covers the whole exchange total.
-    payments.push({ method: "Return Credit", amount: total });
-  } else if (balance > 0) {
-    if (refund > 0) payments.push({ method: "Return Credit", amount: refund });
-    if (due > 0) payments.push({ method: settleMethod, amount: due });
-  }
-  // balance === 0: return credit covers it exactly, sale total is 0, no payment.
+  if (creditApplied > 0) payments.push({ method: "Return Credit", amount: creditApplied });
+  if (due > 0) payments.push({ method: settleMethod, amount: due });
 
-  return { balance, discount, due, payments, saleDiscountAmount: round2(refund + discount) };
+  return {
+    balance,
+    discount,
+    due,
+    payments,
+    saleDiscountAmount: discount,
+    creditApplied,
+    moneyBack,
+    returnMethod: moneyBack > 0 ? settleMethod : "Return Credit",
+  };
 }

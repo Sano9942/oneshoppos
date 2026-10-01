@@ -745,6 +745,10 @@ CREATE TABLE IF NOT EXISTS returns (
   customer_id INTEGER REFERENCES customers(id),
   total_refund NUMERIC(12,2) NOT NULL,
   refund_method TEXT NOT NULL,
+  -- D56 (v151): on an exchange, the part of total_refund spent on the new
+  -- items (no money moves); only total_refund - credit_applied is paid back
+  -- by refund_method.
+  credit_applied NUMERIC(12,2) NOT NULL DEFAULT 0,
   reason TEXT,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   shift_id INTEGER REFERENCES cash_shifts(id),

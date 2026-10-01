@@ -34,6 +34,44 @@ export function formatPaymentMethodLabel(method) {
     .join(" ");
 }
 
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+const lineTotal = (list) => round2((list || []).reduce(
+  (s, i) => s + Number(i.price || 0) * Number(i.quantity || 0), 0,
+));
+
+/**
+ * D56: an exchange slip reads Returned / New items / (Discount) / Difference,
+ * then "Paid back to customer: <method>" or "Customer pays: <method>".
+ * Null for a slip with nothing returned. Shared by the printed slip and the
+ * on-screen receipt.
+ */
+export function exchangeSummary(slip) {
+  if (!slip?.returnedItems?.length) return null;
+  const returned = lineTotal(slip.returnedItems);
+  const newItems = lineTotal(slip.cart);
+  const discount = round2(slip.exchangeDiscount);
+  const difference = round2(newItems - discount - returned);
+  // Older slips (before exchangeSettle) fall back to the refund note or the
+  // money tender.
+  const viaNote = String(slip.refundNote || "").match(/ via (.+)$/);
+  const tender = (slip.payments || []).find((p) => p.method !== "Return Credit");
+  let settle = null;
+  if (difference < 0) {
+    settle = {
+      label: "Paid back to customer",
+      method: slip.exchangeSettle?.method || (viaNote ? viaNote[1] : "") || "Cash",
+      amount: round2(-difference),
+    };
+  } else if (difference > 0) {
+    settle = {
+      label: "Customer pays",
+      method: slip.exchangeSettle?.method || tender?.method || "",
+      amount: difference,
+    };
+  }
+  return { returned, newItems, discount, difference, settle };
+}
+
 function splitLines(text) {
   return String(text || "")
     .split(/\r?\n/)
@@ -103,6 +141,8 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
 
     // Items
     isExchange,
+    // D56: Returned / New items / Difference / Paid back (exchange only).
+    exchange: exchangeSummary(slip),
     returnedItems: slip.returnedItems || [],
     cartItems: slip.cart || [],
     itemCount: (slip.cart || []).reduce((n, i) => n + Number(i.quantity || 0), 0),
@@ -333,7 +373,12 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
 
   // ── Totals ──
   b.appendChild(txt("div", `Items: ${s.itemCount}`));
-  b.appendChild(row("Sub Total", num(s.subtotal)));
+  if (s.exchange) {
+    b.appendChild(row("Returned", num(-s.exchange.returned)));
+    b.appendChild(row("New items", num(s.exchange.newItems)));
+  } else {
+    b.appendChild(row("Sub Total", num(s.subtotal)));
+  }
 
   // P8 (3.14): per-rate tax breakdown when available; legacy single line
   // otherwise. Inclusive shows "GST 17% 14.53"; exclusive shows "+17.00".
@@ -347,27 +392,40 @@ export async function buildReceiptHtml(slip, template, currencySymbol = "$", lab
     b.appendChild(row(s.taxInclusive ? "GST (incl.)" : "GST", `${prefix}${num(s.taxAmount)}`));
   }
 
-  if (s.exchangeCredit > 0) {
+  if (s.exchange) {
+    // D56: no "Return Credit" / "Balance due" / "Refund to Customer" lines.
+    if (s.exchange.discount > 0) b.appendChild(row("Discount", `-${num(s.exchange.discount)}`));
+    b.appendChild(row("Difference", num(s.exchange.difference), "bold"));
+    if (s.exchange.settle) {
+      b.appendChild(row(
+        `${s.exchange.settle.label}: ${formatPaymentMethodLabel(s.exchange.settle.method)}`,
+        num(s.exchange.settle.amount),
+        "bold",
+      ));
+    }
+  } else if (s.exchangeCredit > 0) {
     b.appendChild(row("Return Credit", `-${num(s.exchangeCredit)}`));
     if (s.exchangeDiscount > 0) b.appendChild(row("Discount", `-${num(s.exchangeDiscount)}`));
   } else if (s.discountAmount > 0) {
     b.appendChild(row(s.discountType === "staff" ? "Staff discount" : s.discountType === "percent" ? "Discount (%)" : "Discount", `-${num(s.discountAmount)}`));
   }
 
-  const grand = row(s.isExchange ? "BALANCE DUE" : "GRAND TOTAL", fmt(s.totalValue));
-  grand.classList.add("grand");
-  b.appendChild(grand);
+  if (!s.exchange) {
+    const grand = row("GRAND TOTAL", fmt(s.totalValue));
+    grand.classList.add("grand");
+    b.appendChild(grand);
 
-  // 2-G.9 hold slip: show deposit + remaining balance instead of payments.
-  if (slip.isHoldSlip) {
-    b.appendChild(row("Deposit Paid", num(slip.depositPaid)));
-    b.appendChild(row("Balance Due", num(slip.balanceDue), "bold"));
-  } else {
-    s.payments.forEach((p) => b.appendChild(row(formatPaymentMethodLabel(p.method), num(p.amount))));
+    // 2-G.9 hold slip: show deposit + remaining balance instead of payments.
+    if (slip.isHoldSlip) {
+      b.appendChild(row("Deposit Paid", num(slip.depositPaid)));
+      b.appendChild(row("Balance Due", num(slip.balanceDue), "bold"));
+    } else {
+      s.payments.forEach((p) => b.appendChild(row(formatPaymentMethodLabel(p.method), num(p.amount))));
+    }
+
+    if (s.refundToCustomer != null)
+      b.appendChild(row("Refund to Customer", num(s.refundToCustomer), "bold"));
   }
-
-  if (s.refundToCustomer != null)
-    b.appendChild(row("Refund to Customer", num(s.refundToCustomer), "bold"));
 
   if (s.change > 0) b.appendChild(row("Change", num(s.change), "bold"));
 

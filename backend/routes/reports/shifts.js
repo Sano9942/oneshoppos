@@ -77,7 +77,8 @@ module.exports = function (app, deps, helpers) {
         FROM sales s
         WHERE s.shift_id = $1 AND s.voided = false AND s.payment_method = 'Cash'
         UNION ALL
-        SELECT 'Return' AS type, r.timestamp, -r.total_refund AS amount, r.id AS ref_id
+        -- D56: money handed back only (not the part spent on an exchange)
+        SELECT 'Return' AS type, r.timestamp, -(r.total_refund - COALESCE(r.credit_applied, 0)) AS amount, r.id AS ref_id
         FROM returns r
         WHERE r.shift_id = $2 AND r.refund_method = 'Cash'
         UNION ALL

@@ -119,20 +119,52 @@ export default function POSReceiptModal() {
 
           <div className="border-t border-dashed border-(--ui-border-strong)" />
           <div className="space-y-1 text-xs">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>
-                {money(slip.cart.reduce((s, i) => s + i.price * i.quantity, 0))}
-              </span>
-            </div>
+            {sections?.exchange ? (
+              <>
+                {/* D56: Returned / New items / Difference / Paid back */}
+                <div className="flex justify-between">
+                  <span>Returned</span>
+                  <span>− {money(sections.exchange.returned)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>New items</span>
+                  <span>{money(sections.exchange.newItems)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>
+                  {money(slip.cart.reduce((s, i) => s + i.price * i.quantity, 0))}
+                </span>
+              </div>
+            )}
             {slip.taxAmount > 0 && (
               <div className="flex justify-between text-(--ui-text-muted)">
                 <span>GST (incl.)</span>
                 <span>{money(slip.taxAmount)}</span>
               </div>
             )}
-            {/* Exchange receipt: show return credit instead of generic discount */}
-            {slip.exchangeCredit > 0 ? (
+            {sections?.exchange ? (
+              <>
+                {sections.exchange.discount > 0 && (
+                  <div className="flex justify-between text-(--ui-danger-fg)">
+                    <span>Discount</span>
+                    <span>− {money(sections.exchange.discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-sm pt-1 border-t border-(--ui-border-strong)">
+                  <span>Difference</span>
+                  <span>{sections.exchange.difference < 0 ? "− " : ""}{money(Math.abs(sections.exchange.difference))}</span>
+                </div>
+                {sections.exchange.settle && (
+                  <div className="flex justify-between font-bold">
+                    <span>{sections.exchange.settle.label}: {formatPaymentMethodLabel(sections.exchange.settle.method)}</span>
+                    <span>{money(sections.exchange.settle.amount)}</span>
+                  </div>
+                )}
+              </>
+            ) : slip.exchangeCredit > 0 ? (
               <>
                 <div className="flex justify-between text-(--ui-danger-fg)">
                   <span>Return Credit</span>
@@ -151,23 +183,27 @@ export default function POSReceiptModal() {
                 <span>− {money(slip.discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-black text-sm pt-1 border-t border-(--ui-border-strong)">
-              <span>{slip.returnedItems?.length > 0 ? "Balance Due" : "Total"}</span>
-              <span>{money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total)}</span>
-            </div>
-            {slip.payments
-              .filter((p) => p.method !== "Return Credit")
-              .map((p, i) => (
-                <div key={i} className="flex justify-between text-(--ui-text-muted)">
-                  <span>{formatPaymentMethodLabel(p.method)}</span>
-                  <span>{money(p.amount)}</span>
+            {!sections?.exchange && (
+              <>
+                <div className="flex justify-between font-black text-sm pt-1 border-t border-(--ui-border-strong)">
+                  <span>{slip.returnedItems?.length > 0 ? "Balance Due" : "Total"}</span>
+                  <span>{money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total)}</span>
                 </div>
-              ))}
-            {slip.refundNote && (
-              <div className="flex justify-between text-(--ui-danger-fg) font-medium">
-                <span>Refund to Customer</span>
-                <span>{money(Math.abs(slip.balanceDue || 0))}</span>
-              </div>
+                {slip.payments
+                  .filter((p) => p.method !== "Return Credit")
+                  .map((p, i) => (
+                    <div key={i} className="flex justify-between text-(--ui-text-muted)">
+                      <span>{formatPaymentMethodLabel(p.method)}</span>
+                      <span>{money(p.amount)}</span>
+                    </div>
+                  ))}
+                {slip.refundNote && (
+                  <div className="flex justify-between text-(--ui-danger-fg) font-medium">
+                    <span>Refund to Customer</span>
+                    <span>{money(Math.abs(slip.balanceDue || 0))}</span>
+                  </div>
+                )}
+              </>
             )}
             {slip.change > 0 && (
               <div className="flex justify-between font-bold text-(--ui-success-fg)">
