@@ -39,19 +39,21 @@ describe("Batch 3 — Complex routes (Postgres)", () => {
 
   describe("auth", () => {
     it("POST /api/auth/login succeeds with valid credentials", async () => {
+      // F3b part 3a (2026-10-01): sign-in needs a password; a PIN alone never signs in.
+      await db.query("UPDATE employees SET password_hash = $1 WHERE id = 1", [await require("bcryptjs").hash("hassan-pass-1", 4)]);
       const res = await request(app)
         .post("/api/auth/login")
-        .send({ username: "Hassan", pin: "2580" });
+        .send({ username: "Hassan", password: "hassan-pass-1" });
       expect(res.status).toBe(200);
       expect(res.body.employee).toBeDefined();
       expect(res.body.employee.name).toBe("Hassan");
       expect(res.body.permissions).toContain("all_access");
     });
 
-    it("POST /api/auth/login fails with wrong PIN", async () => {
+    it("POST /api/auth/login fails with a wrong password", async () => {
       const res = await request(app)
         .post("/api/auth/login")
-        .send({ username: "Hassan", pin: "9999" });
+        .send({ username: "Hassan", password: "9999" });
       expect(res.status).toBe(401);
     });
 

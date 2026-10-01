@@ -67,7 +67,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
     try {
       const { rows: employees } = await db.query(
-        "SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, r.name as role FROM employees e LEFT JOIN roles r ON e.role_id = r.id",
+        "SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, r.name as role FROM employees e LEFT JOIN roles r ON e.role_id = r.id WHERE e.deleted_at IS NULL",
       );
 
       for (const emp of employees) {

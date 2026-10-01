@@ -13,6 +13,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
   const { validate } = require("../middleware/validate");
   const { CreateSaleSchema, VoidSaleSchema } = require("../schemas/sales");
+  const SALE_PERMS = ["view_sales_reports", "pos_discount", "pos_park", "manage_orders", "execute_field_sales"];
 
   // --- HELPERS (inlined because these functions live in other route modules) ---
 
@@ -614,7 +615,12 @@ module.exports = function registerSalesRoutes(app, deps) {
    *         description: "DISCOUNT_NOT_PERMITTED — manual discount without the pos_discount permission (promo-engine/loyalty/auto-pricing discounts are exempt)"
    */
   // Process a Sale (Cart Checkout)
-  app.post("/api/sales", validate(CreateSaleSchema), async (req, res) => {
+  // F3b part 3a (One Toy Store, 2026-10-01): ringing a sale needs a selling
+  // permission, so a 0-permission staff login can't. Every default role that
+  // sells holds one: Cashier (view_sales_reports / pos_*), Manager
+  // (manage_orders), Field Rep order capture (execute_field_sales); admins
+  // pass via all_access.
+  app.post("/api/sales", requireAnyPerm(SALE_PERMS), validate(CreateSaleSchema), async (req, res) => {
     const {
       cartItems,
       paymentMethod,

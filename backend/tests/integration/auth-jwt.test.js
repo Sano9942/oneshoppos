@@ -17,8 +17,12 @@ const TEST_REFRESH_SECRET = "test-refresh-secret-that-is-at-least-64-characters-
 
 let app, db, cleanup;
 
+// F3b part 3a (2026-10-01): sign-in needs a password; a PIN alone never signs
+// in (it is for the kiosk). The seed users only have PINs, so give the ones
+// these tests sign in as a password.
 beforeAll(async () => {
   ({ app, db, cleanup } = await createTestApp({ registerAll: true }));
+  await db.query("UPDATE employees SET password_hash = $1 WHERE id = 1", [await bcrypt.hash("hassan-pass-1", 4)]);
 });
 
 // NOTE for future ports: the seed inserts employees with explicit ids (1, 2, 3),
@@ -32,21 +36,21 @@ afterAll(async () => {
   if (cleanup) await cleanup();
 });
 
-describe("bcrypt PIN verification", () => {
-  it("login succeeds with correct PIN after bcrypt migration", async () => {
+describe("bcrypt password verification", () => {
+  it("login succeeds with the correct password", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Hassan", pin: "2580" });
+      .send({ username: "Hassan", password: "hassan-pass-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.employee).toBeDefined();
     expect(res.body.employee.name).toBe("Hassan");
   });
 
-  it("login fails with wrong PIN", async () => {
+  it("login fails with a wrong password", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Hassan", pin: "9999" });
+      .send({ username: "Hassan", password: "9999" });
 
     expect(res.status).toBe(401);
   });
@@ -54,7 +58,15 @@ describe("bcrypt PIN verification", () => {
   it("login fails with non-existent username", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "NonExistent", pin: "2580" });
+      .send({ username: "NonExistent", password: "hassan-pass-1" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("login with the PIN alone is refused", async () => {
+    const res = await makeRequest(app)
+      .post("/api/auth/login")
+      .send({ username: "Hassan", pin: "2580" });
 
     expect(res.status).toBe(401);
   });
@@ -62,7 +74,7 @@ describe("bcrypt PIN verification", () => {
   it("login returns permissions", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Hassan", pin: "2580" });
+      .send({ username: "Hassan", password: "hassan-pass-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.permissions).toContain("all_access");

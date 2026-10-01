@@ -3,6 +3,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   const bcrypt = require("bcryptjs");
   const { getPreset } = require("../config/industry-config");
   const { validate } = require("../middleware/validate");
+  const { checkLoginCredentials } = require("../services/login-credentials");
   const { LoginSchema, MtLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
 
   /**
@@ -55,7 +56,7 @@ module.exports = function registerAuthRoutes(app, deps) {
    *               $ref: '#/components/schemas/Error'
    */
   app.post("/api/auth/login", authLimiter, validate(LoginSchema), async (req, res) => {
-    const { username, password, pin } = req.body;
+    const { username, password } = req.body;
 
     try {
       const { rows: [employee] } = await db.query(
@@ -72,25 +73,10 @@ module.exports = function registerAuthRoutes(app, deps) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Dual auth: password takes priority, PIN as fallback for legacy accounts
-      let credValid = false;
-      if (password && employee.password_hash) {
-        credValid = await bcrypt.compare(String(password), employee.password_hash);
-      } else if (!employee.password_hash) {
-        const pinInput = pin || password;
-        if (pinInput) {
-          if (employee.pin_hash) {
-            credValid = await bcrypt.compare(String(pinInput).trim(), employee.pin_hash);
-          } else if (employee.pin_code) {
-            credValid = String(pinInput).trim() === String(employee.pin_code).trim();
-          }
-        }
-      } else if (pin) {
-        return res.status(401).json({ error: "Please use your password to log in" });
-      }
-
-      if (!credValid) {
-        return res.status(401).json({ error: "Invalid credentials" });
+      // Password only (F3b part 3a): a PIN never signs in; it is for the kiosk.
+      const cred = await checkLoginCredentials(employee, { password });
+      if (!cred.ok) {
+        return res.status(401).json({ error: cred.error });
       }
 
       const { rows: permRows } = await db.query(
@@ -389,7 +375,7 @@ module.exports = function registerAuthRoutes(app, deps) {
      */
     // POST /api/auth/mt-login — standard login with tenant slug + username + password/PIN
     app.post("/api/auth/mt-login", authLimiter, validate(MtLoginSchema), async (req, res) => {
-      const { tenant_slug, username, password, pin } = req.body;
+      const { tenant_slug, username, password } = req.body;
       const JWT_SECRET = process.env.JWT_SECRET;
       const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
       if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
@@ -420,28 +406,10 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        // 3. Dual auth: password takes priority, PIN as fallback for legacy accounts
-        let credValid = false;
-        if (password && employee.password_hash) {
-          // Employee has a password set — verify it
-          credValid = await bcrypt.compare(String(password), employee.password_hash);
-        } else if (!employee.password_hash) {
-          // No password set yet — fall back to PIN verification
-          // The "password" field may contain a PIN during transition period
-          const pinInput = pin || password;
-          if (pinInput) {
-            if (employee.pin_hash) {
-              credValid = await bcrypt.compare(String(pinInput).trim(), employee.pin_hash);
-            } else if (employee.pin_code) {
-              credValid = String(pinInput).trim() === String(employee.pin_code).trim();
-            }
-          }
-        } else if (pin) {
-          // password_hash exists but only PIN sent — reject
-          return res.status(401).json({ error: "Please use your password to log in" });
-        }
-        if (!credValid) {
-          return res.status(401).json({ error: "Invalid credentials" });
+        // 3. Password only (F3b part 3a): a PIN never signs in; it is for the kiosk.
+        const cred = await checkLoginCredentials(employee, { password });
+        if (!cred.ok) {
+          return res.status(401).json({ error: cred.error });
         }
 
         // 4. Load permissions

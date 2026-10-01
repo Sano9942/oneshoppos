@@ -19,10 +19,16 @@
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
-let app, cleanup;
+let app, db, cleanup;
 
+// F3b part 3a (2026-10-01): sign-in needs a password; a PIN alone never signs
+// in (it is for the kiosk). The seed users only have PINs, so give the ones
+// these tests sign in as a password.
 beforeAll(async () => {
-  ({ app, cleanup } = await createTestApp({ registerAll: true }));
+  ({ app, db, cleanup } = await createTestApp({ registerAll: true }));
+  const bcrypt = require("bcryptjs");
+  await db.query("UPDATE employees SET password_hash = $1 WHERE id = 1", [await bcrypt.hash("hassan-pass-1", 4)]);
+  await db.query("UPDATE employees SET password_hash = $1 WHERE id = 2", [await bcrypt.hash("manager-pass-1", 4)]);
 });
 
 afterAll(async () => {
@@ -33,7 +39,7 @@ describe("POST /api/auth/login", () => {
   it("valid login returns employee + permissions", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Hassan", pin: "2580" });
+      .send({ username: "Hassan", password: "hassan-pass-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.employee).toBeDefined();
@@ -42,10 +48,10 @@ describe("POST /api/auth/login", () => {
     expect(res.body.permissions).toContain("all_access");
   });
 
-  it("wrong PIN returns 401", async () => {
+  it("wrong password returns 401", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Hassan", pin: "9999" });
+      .send({ username: "Hassan", password: "9999" });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/invalid/i);
@@ -77,7 +83,7 @@ describe("POST /api/auth/login", () => {
   it("login is case-insensitive for username", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "hassan", pin: "2580" });
+      .send({ username: "hassan", password: "hassan-pass-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.employee.id).toBe(ADMIN_ID);
@@ -86,7 +92,7 @@ describe("POST /api/auth/login", () => {
   it("manager login returns manager permissions", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Manager User", pin: "2222" });
+      .send({ username: "Manager User", password: "manager-pass-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.permissions).toContain("manage_inventory");

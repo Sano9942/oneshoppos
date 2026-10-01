@@ -36,6 +36,13 @@ export default function POSSessionExpiredModal() {
         setPin("");
         return;
       }
+      // F3b part 3a: only the signed-in person's PIN finishes their sale
+      // (the lock screen already checks this; this box took anyone's PIN).
+      if (employee?.id && data.employee.id !== employee.id) {
+        setError("PIN does not match the logged-in user");
+        setPin("");
+        return;
+      }
       setPin("");
       await retryPendingSale();
     } catch {
