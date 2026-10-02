@@ -15,11 +15,12 @@ export default function POSLockButton() {
     <Button
       tone="plain"
       size="sm"
+      className="whitespace-nowrap shrink-0"
       onClick={handleLock}
       disabled={!online}
       title={online ? "Lock the register" : "Lock needs the internet"}
     >
-      <Lock size={14} /> <span className="hidden sm:inline">Lock</span>
+      <Lock size={14} /> <span className="hidden 2xl:inline">Lock</span>
     </Button>
   );
 }

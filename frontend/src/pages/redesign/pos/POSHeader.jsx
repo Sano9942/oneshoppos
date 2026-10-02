@@ -60,15 +60,17 @@ export default function POSHeader() {
   }, [refreshStuck, offlineQueueCount, offlineSyncing]);
 
   return (
-    <div className="bg-(--ui-surface) border-b border-(--ui-border) px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between shrink-0 z-20">
-      <div className="flex items-center gap-2">
+    <div className="bg-(--ui-surface) border-b border-(--ui-border) px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between gap-3 shrink-0 z-20">
+      <div className="flex items-center gap-2 shrink-0">
         <Store size={18} className="text-(--ui-text)" />
         <span className="text-sm md:text-base font-bold text-(--ui-text)">
           POS
         </span>
       </div>
-      <div className="flex items-center gap-2 md:gap-5 text-sm overflow-x-auto">
-        <span className="font-medium text-(--ui-text-muted) hidden sm:block">
+      {/* D61 (One Toy Store pilot): one row, no name ever wraps; the rarely
+          used buttons show only their icon (name as tooltip) below 1536 px. */}
+      <div className="flex items-center gap-2 lg:gap-3 xl:gap-4 text-sm overflow-x-auto">
+        <span className="whitespace-nowrap shrink-0 font-medium text-(--ui-text-muted) hidden 2xl:block">
           {employee?.name || "Employee"}
         </span>
         {outlets.length > 0 && canSwitchOutlet && (
@@ -76,7 +78,7 @@ export default function POSHeader() {
             value={selectedOutletId}
             onChange={(e) => setSelectedOutletId(e.target.value)}
             aria-label="Select branch"
-            className="text-sm font-bold text-(--ui-text) bg-transparent focus:outline-none cursor-pointer border-none"
+            className="whitespace-nowrap shrink-0 text-sm font-bold text-(--ui-text) bg-transparent focus:outline-none cursor-pointer border-none"
           >
             <option value="">Select Branch</option>
             {outlets.map((o) => (
@@ -87,38 +89,39 @@ export default function POSHeader() {
           </select>
         )}
         {outlets.length > 0 && !canSwitchOutlet && (
-          <span className="text-sm font-bold text-(--ui-text)">
+          <span className="whitespace-nowrap shrink-0 text-sm font-bold text-(--ui-text)">
             {outlets.find((o) => String(o.id) === String(selectedOutletId))?.name || "Assigned Branch"}
           </span>
         )}
         <Link
           to="/dashboard"
-          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
+          title="Dashboard"
+          className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
         >
-          <ArrowLeft size={14} /> <span className="hidden sm:inline">Dashboard</span>
+          <ArrowLeft size={14} /> <span className="hidden 2xl:inline">Dashboard</span>
         </Link>
         {slip && (
           <button
             onClick={() => setSlipOpen(true)}
-            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
           >
-            <FileText size={14} /> <span className="hidden sm:inline">Last Receipt</span>
+            <FileText size={14} /> <span>Last Receipt</span>
           </button>
         )}
         {selectedOutletId && (
           <button
             onClick={() => { loadRecentSales(); setRecentSalesOpen(true); }}
-            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition text-sm"
           >
-            <History size={14} /> <span className="hidden sm:inline">Recent Sales</span>
+            <History size={14} /> <span>Recent Sales</span>
           </button>
         )}
         {selectedOutletId && (
           <button
             onClick={() => { setReturnSourceSale(null); setReturnModalOpen(true); }}
-            className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-danger) font-medium transition text-sm"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-danger) font-medium transition text-sm"
           >
-            <RotateCcw size={14} /> <span className="hidden sm:inline">Return</span>
+            <RotateCcw size={14} /> <span>Return</span>
           </button>
         )}
         <button
@@ -131,14 +134,14 @@ export default function POSHeader() {
           }}
           disabled={!activeShift?.id}
           title={activeShift?.id ? "Open customer-facing display in a new window" : "Open a shift to enable the customer-facing display"}
-          className="flex items-center gap-1 font-medium transition text-sm disabled:cursor-not-allowed disabled:text-(--ui-border-strong) text-(--ui-text-muted) hover:text-(--ui-text)"
+          className="whitespace-nowrap shrink-0 flex items-center gap-1 font-medium transition text-sm disabled:cursor-not-allowed disabled:text-(--ui-border-strong) text-(--ui-text-muted) hover:text-(--ui-text)"
         >
-          <Monitor size={14} /> <span className="hidden sm:inline">Customer Display</span>
+          <Monitor size={14} /> <span className="hidden 2xl:inline">Customer Display</span>
         </button>
         {isAdmin && stuckCount > 0 && (
           <button
             onClick={() => setStuckOpen(true)}
-            className="flex items-center gap-1 text-(--ui-warning-fg) hover:text-(--ui-warning-fg) font-bold transition text-sm bg-(--ui-warning-bg) px-2 py-1 rounded-lg"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-warning-fg) hover:text-(--ui-warning-fg) font-bold transition text-sm bg-(--ui-warning-bg) px-2 py-1 rounded-lg"
             title="Stuck offline sales"
           >
             <AlertTriangle size={14} /> <span>Stuck ({stuckCount})</span>
@@ -147,6 +150,7 @@ export default function POSHeader() {
         {activeShift && canPayOut && (
           <Button
             size="sm"
+            className="whitespace-nowrap shrink-0"
             onClick={() => setPaidOutOpen(true)}
             title="Cash paid out of the till (expenses, suppliers, home, advances)"
           >
@@ -156,6 +160,7 @@ export default function POSHeader() {
         {activeShift && canPayOut && (
           <Button
             size="sm"
+            className="whitespace-nowrap shrink-0"
             onClick={() => setPaidInOpen(true)}
             title="Cash put into the till (from the bank, the owner, staff paying back)"
           >
@@ -165,6 +170,7 @@ export default function POSHeader() {
         {activeShift && canOpenShift && (
           <Button
             size="sm"
+            className="whitespace-nowrap shrink-0"
             onClick={() => printDayReport(activeShift.id).catch((err) => setError?.(err.message || "Could not load the day report"))}
             title="Print the day report now (check copy) to count the drawer against"
           >
@@ -174,24 +180,25 @@ export default function POSHeader() {
         {activeShift && canOpenShift && (
           <button
             onClick={() => setCloseShiftOpen(true)}
-            className="flex items-center gap-1 text-(--ui-danger) hover:text-(--ui-danger) font-medium transition"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-danger) hover:text-(--ui-danger) font-medium transition"
           >
-            <Lock size={14} /> <span className="hidden sm:inline">Close Shift</span>
+            <Lock size={14} /> <span>Close Shift</span>
           </button>
         )}
         <button
           onClick={() => setShowShortcutsOverlay(true)}
-          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
+          className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
           title="Keyboard shortcuts (F1)"
         >
-          <HelpCircle size={14} /> <span className="hidden sm:inline">Help</span>
+          <HelpCircle size={14} /> <span className="hidden 2xl:inline">Help</span>
         </button>
         <POSLockButton />
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
+          title="Logout"
+          className="whitespace-nowrap shrink-0 flex items-center gap-1 text-(--ui-text-muted) hover:text-(--ui-text) font-medium transition"
         >
-          <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
+          <LogOut size={14} /> <span className="hidden 2xl:inline">Logout</span>
         </button>
       </div>
       <POSStuckQueueModal
