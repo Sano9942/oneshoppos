@@ -348,6 +348,7 @@ Owner checks regularly: sale by payment type; **hourly sale** (day / month / mon
 ## After iPOS is dropped (not Phase F)
 
 - **Shopify live store** stock sync (Phase C proved it on the test store; the live store needs a Dev Dashboard app with Custom distribution, webhooks to `api.sanopos.com`, and the Mappings tab).
+- ✅ **Owner chose (2026-10-02 eve) Shopify scope C: stock + prices + new toys.** Today SanoPOS only moves stock for linked toys and brings online orders in; it **never sends prices** and **never creates products** (checked `shopify/client.js`, `routes/shopify/*`). To build **after F9**: a price change in SanoPOS updates the website; a new toy saved from a supplier bill is created on Shopify **as a draft** (owner adds photos, publishes). Live store: 0 toys linked yet.
 - **Card settlement tracking:** each day's settlement minus the bank's fee (~2%, per bank) into a running "money in bank" figure (idea).
 - Supplier opening balances from the registers (D13 screens are ready).
 
