@@ -15,6 +15,7 @@
  *                           piece). Text match, so 07556 and 7556 differ.
  *   supplier_bills          the bill: draft → saved (stock + money) → undone.
  *                           A draft changes nothing.
+ *   supplier_bill_line_toys which toy(s) a line's pieces went to (assorted)
  *   supplier_bill_lines     the bill's own S.No, page / file, billed vs received
  *                           qty, line discount, split, cost after discounts,
  *                           sale price. A minus quantity = goods sent back.
@@ -132,6 +133,20 @@ CREATE TABLE IF NOT EXISTS supplier_bill_lines (
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_bill_lines_bill ON supplier_bill_lines(bill_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_supplier_bill_lines_product ON supplier_bill_lines(product_id);
+
+-- Which toy(s) a line's pieces went to: several for an assorted line.
+-- qty in pieces (minus = sent back); extra_qty = pieces kept beyond the bill.
+CREATE TABLE IF NOT EXISTS supplier_bill_line_toys (
+  id SERIAL PRIMARY KEY,
+  line_id INTEGER NOT NULL REFERENCES supplier_bill_lines(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  qty NUMERIC(12,3) NOT NULL,
+  extra_qty NUMERIC(12,3) NOT NULL DEFAULT 0,
+  unit_cost NUMERIC(12,4) NOT NULL DEFAULT 0,
+  previous_cost NUMERIC(12,4)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_bill_line_toys_line ON supplier_bill_line_toys(line_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_bill_line_toys_product ON supplier_bill_line_toys(product_id);
 
 CREATE TABLE IF NOT EXISTS supplier_account_entries (
   id SERIAL PRIMARY KEY,

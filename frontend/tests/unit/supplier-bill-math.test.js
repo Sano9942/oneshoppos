@@ -82,4 +82,11 @@ describe("billSummary", () => {
     expect(s).toMatchObject({ ready: 1, pick: 1, lines_total: 2920, difference: 0, total_matches: true });
     expect(billSummary(lines, 3000)).toMatchObject({ difference: 80, total_matches: false });
   });
+
+  it("the written total is after line discounts and the bill discount", () => {
+    const l = lineFromRead(read({ amount: 1920 }), { matches: [], chosen: [] });
+    l.discount_pct = 5;
+    expect(billSummary([l], 1824)).toMatchObject({ lines_total: 1824, bill_total: 1824, total_matches: true });
+    expect(billSummary([l], 1800, 24)).toMatchObject({ bill_total: 1800, total_matches: true });
+  });
 });

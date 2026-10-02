@@ -3,28 +3,44 @@
 //     read and checked (qty × rate = amount, lines vs the printed total);
 // (c1) each line matched to our toy(s) and checked on screen: pieces received,
 //     split packs, cost per piece, our price, the total written on the bill.
-// Save (stock in, bill onto the supplier's account) is step (c2).
+// (c2) Save: stock in at the branch, cost = this bill's, the bill onto the
+//     supplier's account (Not received / sent back / extra pieces handled),
+//     the files kept, Paid now (cash from the till, cheque, bank transfer).
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 import { Badge, Button, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
 import CheckLines from "./supplierBill/CheckLines";
-import { billSummary, lineFromRead } from "./supplierBill/billMath";
+import { billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
 
 export default function ReceiveSupplierBillRedesign() {
   const { fmt } = useCurrency();
+  const { success } = useToast();
   const [suppliers, setSuppliers] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+  const [outletId, setOutletId] = useState("");
+  const [paidNow, setPaidNow] = useState({ method: "", amount: "", reference: "" });
+  const [saved, setSaved] = useState(null);
+  const [fileKey, setFileKey] = useState(0);
   const [supplierId, setSupplierId] = useState("");
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [lines, setLines] = useState([]);
-  const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "" });
+  const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
 
   useEffect(() => {
     api.get("/api/suppliers")
       .then((d) => setSuppliers((d.suppliers || d || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))))
+      .catch(() => {});
+    api.get("/api/outlets")
+      .then((d) => {
+        const list = (d.outlets || []).filter((o) => !o.is_van);
+        setOutlets(list);
+        if (list.length) setOutletId((cur) => cur || String(list[0].id));
+      })
       .catch(() => {});
   }, []);
 
@@ -51,6 +67,7 @@ export default function ReceiveSupplierBillRedesign() {
     if (!files.length) return;
     setBusy("Reading…");
     setError("");
+    setSaved(null);
     setResult(null);
     setLines([]);
     try {
@@ -68,7 +85,9 @@ export default function ReceiveSupplierBillRedesign() {
         written_total: printed != null ? String(printed) : "",
         differs: false,
         differs_note: "",
+        account_amount: printed != null ? String(printed) : "",
       });
+      setPaidNow({ method: "", amount: "", reference: "" });
       setBusy("");
       await match(supplierId, data);
     } catch (e) {
@@ -84,14 +103,43 @@ export default function ReceiveSupplierBillRedesign() {
 
   const billDiscount = Number(result?.printed?.discount) || 0;
   const discountRatio = result?.lines_total ? billDiscount / result.lines_total : 0;
-  const summary = useMemo(() => billSummary(lines, header.written_total), [lines, header.written_total]);
+  // Before the lines are matched (no supplier yet), total the lines as read.
+  const summary = useMemo(
+    () => billSummary(lines.length ? lines : (result?.lines || []).map((l) => lineFromRead(l)), header.written_total, billDiscount),
+    [lines, result, header.written_total, billDiscount],
+  );
   const totalOk = summary.total_matches || (header.differs && header.differs_note.trim());
   const allReady = lines.length > 0 && summary.ready === lines.length;
+  const canSave = allReady && totalOk && outletId && supplierId && !busy && !summary.new_toys;
+
+  const save = async () => {
+    setBusy("Saving…");
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("payload", JSON.stringify(savePayload({ supplierId, outletId, header, result, lines, paidNow })));
+      for (const f of files) fd.append("files", f);
+      const res = await api.upload("/api/supplier-bills", fd);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save the bill");
+      const pieces = lines.reduce((a, l) => a + l.toys.reduce((b, t) => b + (Number(t.qty) || 0), 0), 0);
+      setSaved({ ...data.bill, pieces, supplier: suppliers.find((x) => String(x.id) === String(supplierId))?.name });
+      success(`Bill ${data.bill.bill_number || ""} saved`);
+      setResult(null);
+      setLines([]);
+      setFiles([]);
+      setFileKey((k) => k + 1);
+    } catch (e) {
+      setError(e.body?.error || e.message || "Could not save the bill");
+    } finally {
+      setBusy("");
+    }
+  };
 
   return (
     <PageShell
       title="Receive supplier bill"
-      subtitle="Upload the supplier's bill, check every line, then save (save comes in the next step)."
+      subtitle="Upload the supplier's bill, check every line, then save."
     >
       <SectionCard className="mb-4 p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
@@ -105,6 +153,7 @@ export default function ReceiveSupplierBillRedesign() {
           <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
             Bill file(s)
             <Input
+              key={fileKey}
               className="mt-1"
               type="file"
               multiple
@@ -119,6 +168,14 @@ export default function ReceiveSupplierBillRedesign() {
         </div>
         {error ? <p className="mt-3 text-sm text-(--ui-danger-fg)">{error}</p> : null}
       </SectionCard>
+
+      {saved ? (
+        <SectionCard className="mb-4 p-4 text-sm">
+          <b>Saved:</b> {saved.supplier} bill {saved.bill_number || `#${saved.id}`} · {saved.pieces} pieces into stock ·
+          {" "}bill {fmt(Number(saved.lines_total) || 0)} on the supplier&apos;s account
+          {saved.paid_now_method ? ` · paid now ${fmt(Number(saved.paid_now_amount) || 0)}` : ""}.
+        </SectionCard>
+      ) : null}
 
       {result ? (
         <SectionCard className="mb-4 p-4">
@@ -172,9 +229,9 @@ export default function ReceiveSupplierBillRedesign() {
               <Input className="mt-1" type="number" value={header.written_total} onChange={(e) => setHeader((h) => ({ ...h, written_total: e.target.value }))} />
             </label>
             <div className="rounded-(--ui-radius-sm) border border-(--ui-border) px-3 py-2">
-              <div className="text-xs uppercase text-(--ui-text-muted)">Lines add up to</div>
+              <div className="text-xs uppercase text-(--ui-text-muted)">Lines add up to{billDiscount ? " (less discount)" : ""}</div>
               <div className={`text-lg font-bold tabular-nums ${summary.total_matches ? "text-(--ui-success-fg)" : summary.total_matches === false ? "text-(--ui-danger-fg)" : ""}`}>
-                {fmt(summary.lines_total)}
+                {fmt(summary.bill_total)}
               </div>
               {summary.difference ? <div className="text-xs text-(--ui-danger-fg)">Difference {fmt(summary.difference)}</div> : null}
             </div>
@@ -191,8 +248,21 @@ export default function ReceiveSupplierBillRedesign() {
                 Supplier&apos;s total is different
               </label>
               {header.differs ? (
-                <Input className="max-w-md" placeholder="Why? (e.g. they added it up wrong)" aria-label="Why the total is different"
-                  value={header.differs_note} onChange={(e) => setHeader((h) => ({ ...h, differs_note: e.target.value }))} />
+                <>
+                  <Input className="max-w-md" placeholder="Why? (e.g. they added it up wrong)" aria-label="Why the total is different"
+                    value={header.differs_note} onChange={(e) => setHeader((h) => ({ ...h, differs_note: e.target.value }))} />
+                  <span>On the supplier&apos;s account:</span>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" name="account_amount" checked={String(header.account_amount) === String(header.written_total)}
+                      onChange={() => setHeader((h) => ({ ...h, account_amount: h.written_total }))} />
+                    the bill&apos;s {fmt(Number(header.written_total) || 0)}
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" name="account_amount" checked={String(header.account_amount) === String(summary.bill_total)}
+                      onChange={() => setHeader((h) => ({ ...h, account_amount: String(summary.bill_total) }))} />
+                    the lines&apos; {fmt(summary.bill_total)}
+                  </label>
+                </>
               ) : null}
             </div>
           ) : null}
@@ -206,17 +276,54 @@ export default function ReceiveSupplierBillRedesign() {
       {lines.length ? (
         <>
           <CheckLines lines={lines} onChange={setLines} billDiscountRatio={discountRatio} multiFile={result?.files.length > 1} />
-          <SectionCard className="mt-4 flex flex-wrap items-center gap-3 p-4">
+          <SectionCard className="mt-4 p-4">
+            <div className="mb-3 grid gap-3 md:grid-cols-4">
+              <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                Goods went to
+                <Select className="mt-1 w-full" value={outletId} onChange={(e) => setOutletId(e.target.value)} aria-label="Branch">
+                  {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </Select>
+              </label>
+              <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                Paid now
+                <Select className="mt-1 w-full" value={paidNow.method} aria-label="Paid now"
+                  onChange={(e) => setPaidNow((p) => ({ ...p, method: e.target.value, amount: p.amount || String(summary.bill_total) }))}>
+                  <option value="">Not paid (on credit)</option>
+                  <option value="till_cash">Cash from the till</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                </Select>
+              </label>
+              {paidNow.method ? (
+                <>
+                  <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                    Amount paid
+                    <Input className="mt-1" type="number" value={paidNow.amount} onChange={(e) => setPaidNow((p) => ({ ...p, amount: e.target.value }))} />
+                  </label>
+                  {paidNow.method !== "till_cash" ? (
+                    <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                      {paidNow.method === "cheque" ? "Cheque no. and bank" : "Reference"}
+                      <Input className="mt-1" value={paidNow.reference} onChange={(e) => setPaidNow((p) => ({ ...p, reference: e.target.value }))} />
+                    </label>
+                  ) : (
+                    <p className="self-end pb-2 text-xs text-(--ui-text-muted)">Goes on the open shift as Paid out → Pay supplier.</p>
+                  )}
+                </>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">
               {summary.ready} of {lines.length} lines ready
               {summary.new_toys ? ` · ${summary.new_toys} new toys` : ""}
               {summary.returns ? ` · ${summary.returns} sent back` : ""}
               {!totalOk ? " · the total doesn't match yet" : ""}
+              {summary.new_toys ? " · new toys get their code and price in the next step" : ""}
             </span>
             <div className="flex-1" />
-            <Button tone="primary" disabled title="Save comes in the next step">
-              Save bill {allReady && totalOk ? "(next step)" : ""}
+            <Button tone="primary" disabled={!canSave} onClick={save}>
+              {busy === "Saving…" ? "Saving…" : "Save bill"}
             </Button>
+            </div>
           </SectionCard>
         </>
       ) : null}
