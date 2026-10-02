@@ -1,0 +1,4 @@
+# Real supplier bills are kept here locally only, never in git.
+*
+!.gitignore
+!README.md
