@@ -8,7 +8,9 @@ const NON_BRAND_BANDS = [[500, 185], [1000, 175], [1500, 165], [2000, 155], [300
 const BRAND_BANDS = [[500, 130], [1000, 120], [2000, 110], [3000, 100], [5000, 95], [Infinity, 85]];
 
 // Whole words only: "SLIDER PUZZLE" is not a slide.
-const BIG_ITEMS = /\b(tori ?cars?|tricycles?|bicycles?|cycles?|strollers?|strolle|prams?|slides?|walkers?|trampolines?|riding horses?|swings?|study tables?|high ?chairs?|bouncers?|scooters?|scooty|scooties|jumpolines?)\b/i;
+const BIG_ITEMS = /\b(tori ?cars?|tricycles?|bicycles?|cycles?|strollers?|strolle|prams?|slides?|walkers?|trampolines?|riding horses?|swings?|study tables?|high ?chairs?|bouncers?|scooters?|scooty|scooties|jumpolines?|r\/o|ride ?ons?)\b/i;
+// "R/O" / "ride on" = a ride-on (owner 2026-10-03: like tori cars); NOT the
+// word "bike" alone: R/C motor bikes, metal bikes, pull-back bikes are small toys.
 const SCOOTY = /\b(scooters?|scooty|scooties)\b/i;
 const BBTT_ITEMS = /\b(skate ?boards?|skate ?shoes?|skates|air animals?|jumping (air )?balls?|net ?balls?)\b/i;
 

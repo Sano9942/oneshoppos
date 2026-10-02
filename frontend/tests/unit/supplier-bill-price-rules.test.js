@@ -52,6 +52,16 @@ describe("Baby Land big items and the T&T scooty", () => {
     expect(p({ supplierName: "BABY LAND LAHORE", name: "T-0651 TRI CYCLE COOL MUSIC LIGHT", cost: 4950 })).toMatchObject({ key: "big", price: 8910 });
     expect(p({ supplierName: "BABY LAND LAHORE", name: "STROLLE SMART FOLD KIDILO KHAKI", cost: 18500 })).toMatchObject({ key: "big", pct: 65, price: 30530 });
   });
+  it("ride-ons count as big items (owner 2026-10-03); small bikes don't", () => {
+    // Baby Land 47496 S.No 4: MB-002MG MOTOR BIKE R/O, 13,500 → 65 %
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "MOTOR BIKE R/O 1B 1M LED LIGHT", cost: 13500 })).toMatchObject({ key: "big", pct: 65, price: 22280 });
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "KIDS RIDE ON JEEP" }).key).toBe("big");
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "KIDS RIDEON CAR" }).key).toBe("big");
+    // Baby Land 25 July S.No 271 / 97: remote-control and metal bikes are normal toys
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "R/C MOTER BIKE" }).key).toBe("nonbrand");
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "METAL BIKE SMAW" }).key).toBe("nonbrand");
+    expect(p({ supplierName: "BABY LAND LAHORE", name: "CARRY COTT HANDLE +PAD" }).key).toBe("nonbrand");
+  });
   it("a brand big item at Baby Land still uses the big-item rule (it comes first)", () => {
     expect(p({ supplierName: "BABY LAND LAHORE", name: "CHICCO STROLLER", isBrand: true, brandName: "Chicco" }).key).toBe("big");
   });
