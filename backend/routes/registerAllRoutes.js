@@ -599,6 +599,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
+  // --- One Toy Store F9: receive a supplier bill without a PO ---
+  require("./supplier-bills")(app, deps);
+
   // --- V02 WHOLESALE: BACKORDER FULFILLMENT LOOP ---
   require("./backorders")(app, deps);
 

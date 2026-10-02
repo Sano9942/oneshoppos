@@ -24,6 +24,7 @@ const LABELS = {
   transfers: "Transfers",
   "returned-stock": "Supplier Returns",
   "supplier-payables": "Supplier Payables",
+  "supplier-bills": "Supplier bills",
   "reorder-alerts": "Reorder Alerts",
   "inventory-intelligence": "Inventory Intelligence",
   suppliers: "Suppliers",
