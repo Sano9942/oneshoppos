@@ -39,13 +39,13 @@ All must be true. Claude checks each one and records it; the owner decides.
 
 | # | Rule | How it's checked |
 |---|---|---|
-| R1 | **7 trading days in a row** where SanoPOS cash, card, online and total equal iPOS, or the difference is written down and explained (e.g. a known defect) | Nightly check, a table per day in `PROGRESS.md` |
+| R1 | **30 trading days in a row** (owner 2026-10-02: was 7; extended so supplier bills, stock counts and rarer cases are seen for real) where SanoPOS cash, card, online and total equal iPOS, or the difference is written down and explained (e.g. a known defect) | Nightly check, a table per day in `PROGRESS.md` |
 | R2 | The 🔴 fixes are **deployed and used for real in the shop**: F1 exchange discount, F2 online transfer, F3 till paid-out, F4 day slip, F5 item search by code | Each fix: test, deploy, then a real use seen in the database |
 | R3 | **After R1, the drawer balances** in SanoPOS on its own: the close-shift difference is within Rs 100 with till expenses entered in SanoPOS (not the register) | `cash_shifts.variance` for the last 3 days |
 | R4 | **Stock is right:** after a week, the owner counts 20 random items on the shelf and they match SanoPOS (differences explained). No unexplained negative stock | Stock count page, or SQL on 20 SKUs |
 | R5 | **Stock arriving is received in SanoPOS** at least once for real (supplier bill / receive goods, new items, price changes, labels) | Real receiving seen in History + labels list |
 | R6 | **The counter works with the internet unplugged** (Phase E leftover): 2 bills offline, plug back in, both arrive with the right time and shift | Owner in the shop, Claude on SQL |
-| R7 | **A copy of the shop's data exists every day that we can restore from.** Prod is on Supabase **Free: no backups**. **Q1 answered 2026-09-29: no Supabase Pro; use Backup & Restore → Download Backup nightly.** ✅ Proven once 2026-09-29 (below). Still needed for the rule: the nightly habit kept for the 7 days, files stored off the shop PC | Backup log (`tenant_onetoystore.backup_log`) shows one row per night; one more test restore before iPOS is dropped |
+| R7 | **A copy of the shop's data exists every day that we can restore from.** Prod is on Supabase **Free: no backups**. **Q1 answered 2026-09-29: no Supabase Pro; use Backup & Restore → Download Backup nightly.** ✅ Proven once 2026-09-29 (below). Still needed for the rule: the nightly habit kept for the 30 days, files stored off the shop PC | Backup log (`tenant_onetoystore.backup_log`) shows one row per night; one more test restore before iPOS is dropped |
 | R8 | **The owner (or staff) runs a whole day without Claude**: open, sell, return/exchange, paid-out, close, day slip to WhatsApp | One day, reviewed next morning |
 | R9 | **A last full iPOS export** (stock + the dual-run days' sales) saved before iPOS is switched off | File kept in `D:\newprojects\` + owner's copy |
 
@@ -101,7 +101,7 @@ About **41 to prove, about 34 to switch off**. Some "not now" pages have no modu
 
 Each fix follows the same path: write a test that **fails on today's code** → fix → full related tests pass → try it on screen locally → owner OK → deploy (push `main`, Vercel + Railway) → check live → first real use in the shop. Recorded in `PROGRESS.md` under its D number.
 
-**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → **F3b staff account** → F4 → F5 → **F9 receive supplier bill** → G1–G5 (report gaps, below) → F6 → F7 → F8.
+**Agreed order (owner, 2026-09-30):** F1 → **D54 hourly times** → F2 → F3 → **F3b staff account** → F4 → F5 → **F9 receive supplier bill** (added 2026-10-02: **D60 till search order**, **D61 till top bar**, **D62 instant top-box add**, owner asked; small, next deploy) → G1–G5 (report gaps, below) → F6 → F7 → F8.
 
 Order reason: F1–F4 affect **every night's** reconciliation and the family WhatsApp report; F5 blocks stock work (R4, R5); the rest are clean-up.
 
@@ -317,7 +317,7 @@ Owner checks regularly: sale by payment type; **hourly sale** (day / month / mon
 
 - ~~**Q1 (R7):** backups~~ ✅ answered 2026-09-29: **no Supabase Pro**; nightly **Download Backup** from the Backup & Restore page (proven, see R7 proof).
 - ~~**Q2 (F2)**~~ ✅ answered 2026-09-29: **one "Online" button**; pressing it shows **ready-made choices to click** (no typing), in this order: **EasyPaisa, JazzCash** (most used), then the shop's bank accounts **Allied, Meezan, MCB, HBL, Alfalah** (for bank transfers). Saved/shown as e.g. "Online – JazzCash". Keep the list editable later (banks change).
-- ~~**Q3 (R1)**~~ ✅ answered 2026-09-29: **7 days is fine**; more if needed.
+- ~~**Q3 (R1)**~~ ✅ answered 2026-09-29: **7 days is fine**; more if needed. **Changed 2026-10-02 by the owner: 30 days** (no supplier entries yet; more edge cases need to happen for real).
 - ~~**Q4 (F1)**~~ ✅ answered 2026-09-30: **leave INV-00004's Rs 40 as recorded**, with a note (never correct it).
 - **Q5 (F3):** ▶ partly answered 2026-09-30 from the register page for 29 Sep (Urdu, total 10,470 checks): staff food (10) 3,000; gas cylinder refill for the staff flat 1,000; medicine / Ishtiaq 170; home expenses DHA 5,000; coffee 1,000; Aslam food 300. **Draft categories:** Staff food · Staff flat (gas refill etc.) · Tea / coffee · Staff medicine / advance · **Owner / home (owner's drawing, kept out of profit)** · Shop supplies · Transport / delivery · Other (with note). Owner will send 4–5 more days of register pages to finish the list.
   - ✅ **Answered 2026-09-30 ~17:00** after reading 10 more register pages (zip `WhatsApp Unknown 2026-09-30 at 4.46.41 PM`). One question at a time:
