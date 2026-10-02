@@ -7,6 +7,7 @@ import { useAuth } from "../../../auth/AuthProvider";
 import { api } from "../../../api";
 import { variantCartLine } from "./variantCartLine";
 import { scanProduct, listVariants } from "./offlineLookup";
+import { getCatalogueIndex, lookupCode } from "../../../utils/offlineCatalogue";
 
 // V01 P2 — age-restricted attest prompt. Cashier confirms the customer meets
 // the minimum age before an age_restricted product is rung up. Lightweight
@@ -35,6 +36,16 @@ function shouldReclaimFocus() {
   return !isTypingTarget(document.activeElement) && !overlayOpen();
 }
 
+// D62: an item from the till's catalogue copy that can go straight into the
+// cart — anything needing a choice or a check first waits for the server.
+function instantFromCopy(code) {
+  const hit = lookupCode(getCatalogueIndex(), code);
+  const p = hit?.product;
+  if (!p || hit.variant) return null;
+  if (p.has_variants || p.serial_required || p.age_restricted || p.is_gift_card_sku || p.is_bundle) return null;
+  return p;
+}
+
 export default function POSOmniInput() {
   const {
     handleSearchChange,
@@ -50,6 +61,8 @@ export default function POSOmniInput() {
     setPendingSerialProductId,
     setPendingSerialContext,
     showNotice,
+    confirmCopyLine,
+    undoCopyLine,
   } = usePOS();
   const { company } = useAuth();
   const barcodeScheme = company?.barcode_scheme || null;
@@ -95,6 +108,47 @@ export default function POSOmniInput() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Put a server-found item in the cart (age check, scale line, variant,
+  // serial number, or a plain add).
+  const addScanned = useCallback(async (data) => {
+    const product = data.product;
+    // V01 P2 — age-restricted attest gate (tobacco/alcohol). Cashier must
+    // confirm before the item is added.
+    if (product.age_restricted && !confirmAgeRestricted(product)) {
+      return;
+    }
+    // V01 — a decoded scale line (price/weight-embedded) goes to the
+    // dedicated builder: FINAL price + price_locked, or decoded weight at
+    // shelf unit-price; both lock tare.
+    if (product.embedded) {
+      addDecodedLine(product, product.embedded);
+      return;
+    }
+    // The code was one variant's own barcode — add exactly that variant.
+    if (data.variant) {
+      addToCart(variantCartLine(product, data.variant, data.variant.sku));
+      return;
+    }
+    const variants = await listVariants(product.id);
+    if (variants.length > 0) {
+      setPendingVariantProductId(product.id);
+      return;
+    }
+    if (product.serial_required) {
+      // 2-G.6: seed the pending-serial context so the modal knows the
+      // product, variant (none when scanned directly), and quantity (1
+      // per scan — duplicate scans re-open the modal).
+      setPendingSerialContext({
+        product_id: product.id,
+        variant_id: null,
+        quantity: 1,
+      });
+      setPendingSerialProductId(product.id);
+      return;
+    }
+    addToCart(product);
+  }, [addToCart, addDecodedLine, setPendingVariantProductId, setPendingSerialProductId, setPendingSerialContext]);
+
   const dispatch = useCallback(async (rawValue) => {
     const parsed = classifyOmniInput(rawValue);
     if (parsed.kind === "noop") return;
@@ -111,6 +165,28 @@ export default function POSOmniInput() {
               : `Scale item — ${preview.weight} kg`,
           );
         }
+        // D62 (One Toy Store pilot): a plain item found in the till's catalogue
+        // copy goes in at once; the server's answer then confirms it (price,
+        // stock note) or replaces it. Scale labels and anything needing a
+        // choice wait for the server, as before.
+        const copyItem = preview.ok ? null : instantFromCopy(parsed.value);
+        if (copyItem) {
+          addToCart(copyItem);
+          scanProduct(parsed.value).then((data) => {
+            if (data.offline) return; // no server: the copy line stands, as offline
+            if (data.found && data.product?.id === copyItem.id && !data.variant && !data.product.embedded) {
+              confirmCopyLine?.(copyItem, data.product);
+              return;
+            }
+            undoCopyLine?.(copyItem);
+            if (!data.found) {
+              showNotice?.(`${data.error || `No product for ${parsed.value}`}: taken out of the cart`);
+              return;
+            }
+            addScanned(data);
+          }).catch(() => { /* keep the copy line */ });
+          return;
+        }
         // Server first; the counter's offline catalogue copy when the server
         // can't be reached (One Toy Store blocker 3a).
         const data = await scanProduct(parsed.value);
@@ -121,42 +197,7 @@ export default function POSOmniInput() {
           showNotice?.(data.error || `No product for ${parsed.value}`);
           return;
         }
-        const product = data.product;
-        // V01 P2 — age-restricted attest gate (tobacco/alcohol). Cashier must
-        // confirm before the item is added.
-        if (product.age_restricted && !confirmAgeRestricted(product)) {
-          return;
-        }
-        // V01 — a decoded scale line (price/weight-embedded) goes to the
-        // dedicated builder: FINAL price + price_locked, or decoded weight at
-        // shelf unit-price; both lock tare.
-        if (product.embedded) {
-          addDecodedLine(product, product.embedded);
-          return;
-        }
-        // The code was one variant's own barcode — add exactly that variant.
-        if (data.variant) {
-          addToCart(variantCartLine(product, data.variant, data.variant.sku));
-          return;
-        }
-        const variants = await listVariants(product.id);
-        if (variants.length > 0) {
-          setPendingVariantProductId(product.id);
-          return;
-        }
-        if (product.serial_required) {
-          // 2-G.6: seed the pending-serial context so the modal knows the
-          // product, variant (none when scanned directly), and quantity (1
-          // per scan — duplicate scans re-open the modal).
-          setPendingSerialContext({
-            product_id: product.id,
-            variant_id: null,
-            quantity: 1,
-          });
-          setPendingSerialProductId(product.id);
-          return;
-        }
-        addToCart(product);
+        await addScanned(data);
       } else if (parsed.kind === "customer") {
         let customers = [];
         try {
@@ -186,15 +227,14 @@ export default function POSOmniInput() {
     }
   }, [
     addToCart,
-    addDecodedLine,
+    addScanned,
     barcodeScheme,
     handleSearchChange,
+    confirmCopyLine,
+    undoCopyLine,
     setSelectedCustomerId,
     setCustomerSearch,
     setShowCustomerDD,
-    setPendingVariantProductId,
-    setPendingSerialProductId,
-    setPendingSerialContext,
     showNotice,
   ]);
 

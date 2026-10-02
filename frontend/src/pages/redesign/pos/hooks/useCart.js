@@ -373,6 +373,58 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
   const removeFromCart = useCallback((id) =>
     setCart((prev) => prev.filter((x) => x.id !== id)), []);
 
+  // D62 (One Toy Store pilot): a scanned code found in the till's catalogue copy
+  // goes into the cart at once (no stock figure, `stock_unknown`); when the
+  // server answers for the same item, its line takes the server's shelf price
+  // (unless the cashier already changed it) and real stock, with the usual
+  // notes. The server refuses a bill priced below the current price.
+  // The answer comes ~0.5 s after the scan: read the cart as it is then.
+  const cartNow = useRef(cart);
+  useEffect(() => { cartNow.current = cart; }, [cart]);
+  const isCopyLine = (x, product) => x.id === product.id && !x.variant_id && x.stock_unknown;
+  const confirmCopyLine = useCallback((copyProduct, serverProduct) => {
+    const copyPrice = Number(copyProduct.price);
+    const serverPrice = Number(serverProduct.price);
+    const isBundle = Boolean(serverProduct.is_bundle);
+    const stock = Number(serverProduct.local_stock ?? serverProduct.stock ?? 0);
+    const lines = cartNow.current.filter((x) => isCopyLine(x, copyProduct));
+    if (!lines.length) return;
+    const repriced = serverPrice !== copyPrice && lines.some((x) => Number(x.originalPrice) === copyPrice);
+    setCart((prev) => prev.map((x) => {
+      if (!isCopyLine(x, copyProduct)) return x;
+      const keepPrice = Number(x.originalPrice) !== copyPrice;
+      const base = keepPrice ? x.originalPrice : serverPrice;
+      const plMatch = keepPrice ? null : resolvePriceListPrice(x.id, x.variant_id, x.quantity);
+      return {
+        ...x,
+        ...serverProduct,
+        quantity: x.quantity,
+        seat_number: x.seat_number,
+        course_name: x.course_name,
+        stock_unknown: false,
+        availableStock: isBundle ? 99999 : stock,
+        originalPrice: base,
+        price: keepPrice ? x.price : (plMatch ? Number(plMatch.price) : serverPrice),
+      };
+    }));
+    if (repriced) showNotice?.(`Price of ${serverProduct.name} is Rs ${serverPrice} (the till's copy said Rs ${copyPrice}): line updated.`);
+    const qty = lines.reduce((n, x) => n + Number(x.quantity || 0), 0);
+    if (!isBundle && stock <= 0) showNotice?.("Note: Item is out of stock — selling on override.");
+    else if (!isBundle && qty > stock) showNotice?.(`Note: Selling past available stock (${stock} in stock).`);
+  }, [resolvePriceListPrice, showNotice]);
+
+  // D62: the server knows the code as another item, or not at all — take the
+  // copy's item back out (one of it; the line when it was the last one).
+  const undoCopyLine = useCallback((copyProduct) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((x) => isCopyLine(x, copyProduct));
+      if (idx < 0) return prev;
+      const line = prev[idx];
+      if (line.quantity > 1) return prev.map((x, i) => (i === idx ? { ...x, quantity: x.quantity - 1 } : x));
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
+
   const grossTotal = useMemo(() => calcGrossTotal(cart), [cart]);
   const discountValue = useMemo(
     () => calcDiscountValue(grossTotal, discountType, discountInput),
@@ -404,6 +456,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     showNoteModal, setShowNoteModal,
     // Cart operations
     addToCart, addDecodedLine, updateQty, setQty, removeFromCart,
+    confirmCopyLine, undoCopyLine,
     // Computed
     grossTotal, discountValue, taxTotal, total,
     // Price lists

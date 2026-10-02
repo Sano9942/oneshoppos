@@ -26,6 +26,7 @@ import { saveLastKnown, readLastKnown, isUnreachable } from "../../../utils/last
 import { useCheckout } from "./hooks/useCheckout";
 import { useStaffPurchase } from "./hooks/useStaffPurchase";
 import { variantCartLine } from "./variantCartLine";
+import { needsModifierLookup } from "./modifierLookup";
 
 /* ──────────────────────────────────────────────────────────────────────────────
  * WAVE-C SNAPSHOT — usePOS() value object keys (pre-split, for diff verification)
@@ -488,9 +489,10 @@ export const POSProvider = ({ children }) => {
   const addToCartWithModifiers = useCallback(async (product) => {
     if (!product || !product.id) return;
     const overlay = buildSeatCourseOverlay();
-    // Skip tree lookup for bundles, weighted, or non-restaurant tenants — and
-    // for items from the offline catalogue copy (no server to ask).
-    if (product.is_bundle || product.stock_unknown) {
+    // Skip tree lookup for bundles, shops without the restaurant feature (D62:
+    // that was a refused server trip on every add) and items from the offline
+    // catalogue copy (no server to ask).
+    if (!needsModifierLookup(product, posFlags)) {
       cartHook.addToCart(product, overlay);
       return;
     }
@@ -506,7 +508,7 @@ export const POSProvider = ({ children }) => {
       // 404 / feature-flag off / network — fall back to plain add so POS never breaks.
       cartHook.addToCart(product, overlay);
     }
-  }, [cartHook, buildSeatCourseOverlay]);
+  }, [cartHook, buildSeatCourseOverlay, posFlags]);
 
   const confirmModifiers = useCallback((modifiers, priceDelta) => {
     const state = modifierModalState;
@@ -1192,6 +1194,8 @@ export const POSProvider = ({ children }) => {
     handleSearchChange: cartHook.handleSearchChange,
     addToCart: addToCartWithModifiers,
     addDecodedLine: cartHook.addDecodedLine,
+    confirmCopyLine: cartHook.confirmCopyLine,
+    undoCopyLine: cartHook.undoCopyLine,
     modifierModalState,
     confirmModifiers,
     cancelModifiers,
