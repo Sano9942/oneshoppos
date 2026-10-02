@@ -19,8 +19,25 @@ function confirmAgeRestricted(product) {
   );
 }
 
+// Somewhere the cashier is typing: leave the cursor there.
+function isTypingTarget(el) {
+  const tag = el?.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || Boolean(el?.isContentEditable);
+}
+
+// A pop-up is showing: the till's own modals are `fixed inset-0` overlays, the
+// ui/primitives Modal / Drawer are role="dialog".
+function overlayOpen() {
+  return Boolean(document.querySelector('[role="dialog"], [aria-modal="true"], .fixed.inset-0'));
+}
+
+function shouldReclaimFocus() {
+  return !isTypingTarget(document.activeElement) && !overlayOpen();
+}
+
 export default function POSOmniInput() {
   const {
+    handleSearchChange,
     setSearch,
     setResults,
     setShowResults,
@@ -39,16 +56,30 @@ export default function POSOmniInput() {
 
   const inputRef = useRef(null);
 
+  // D63 (One Toy Store pilot): keep the cursor in this box so the cashier can
+  // scan or type without the mouse. Taken back after any click that leaves it
+  // on something you can't type in, on the first key typed while it's lost,
+  // and by a 1 s backup check; never from another box being typed in, and
+  // never while a pop-up (payment, return, discount…) is open.
   useEffect(() => {
+    const reclaim = () => {
+      if (shouldReclaimFocus()) inputRef.current?.focus();
+    };
     inputRef.current?.focus();
-    const id = setInterval(() => {
-      const active = document.activeElement;
-      const tag = active?.tagName?.toLowerCase();
-      if (tag !== "input" && tag !== "textarea" && tag !== "select") {
-        inputRef.current?.focus();
-      }
-    }, 10_000);
-    return () => clearInterval(id);
+    const id = setInterval(reclaim, 1000);
+    const onClick = () => setTimeout(reclaim, 0);
+    const onKey = (e) => {
+      if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key === "/") return; // the "/" shortcut below handles its own key
+      reclaim();
+    };
+    document.addEventListener("click", onClick);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("click", onClick);
+      window.removeEventListener("keydown", onKey, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -146,8 +177,9 @@ export default function POSOmniInput() {
           if (el) el.focus();
         }
       } else if (parsed.kind === "text") {
-        setSearch(parsed.value);
-        setShowResults(true);
+        // D63: run the same search as the F2 box (fills it and opens the
+        // list); setting the text alone showed no results.
+        handleSearchChange({ target: { value: parsed.value } });
       }
     } catch (err) {
       showNotice?.(err?.message || "Search failed");
@@ -156,8 +188,7 @@ export default function POSOmniInput() {
     addToCart,
     addDecodedLine,
     barcodeScheme,
-    setSearch,
-    setShowResults,
+    handleSearchChange,
     setSelectedCustomerId,
     setCustomerSearch,
     setShowCustomerDD,
@@ -189,6 +220,7 @@ export default function POSOmniInput() {
       />
       <input
         ref={inputRef}
+        data-pos-omni-input
         type="text"
         autoComplete="off"
         spellCheck={false}

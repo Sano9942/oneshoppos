@@ -3,6 +3,14 @@ import { searchProducts } from "../offlineLookup";
 import { api } from "../../../../api";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "../cartMath.js";
 
+// D63 (One Toy Store pilot): after an item goes in the cart the cursor goes to
+// the top scan bar (POSOmniInput), ready for the next scan; to the F2 search
+// box only when the scan bar is switched off.
+function focusEntryBox(searchRef) {
+  const omni = typeof document !== "undefined" ? document.querySelector("[data-pos-omni-input]") : null;
+  (omni || searchRef.current)?.focus();
+}
+
 export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice, posDeviceId, taxMode }) {
   // ── Product search ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -281,7 +289,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     setPriceSearch("");
     setResults([]);
     setShowResults(false);
-    searchRef.current?.focus();
+    focusEntryBox(searchRef);
   }, [resolvePriceListPrice, showNotice]);
 
   // V01 grocery — add a line decoded from a scale price/weight-embedded barcode.
@@ -323,7 +331,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     setPriceSearch("");
     setResults([]);
     setShowResults(false);
-    searchRef.current?.focus();
+    focusEntryBox(searchRef);
   }, []);
 
   const updateQty = useCallback((id, delta) => {
