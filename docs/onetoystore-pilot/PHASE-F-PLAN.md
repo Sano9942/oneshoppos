@@ -312,6 +312,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - ✅ **Bill's own line number on the check screen (owner ask):** each line keeps the supplier's S.No / SR / # (and the page / photo it came from), same order as the paper, so the owner can tick the paper against the screen.
 - **Damaged / wrong toy:** nothing new (owner): sent back = supplier's return bill (minus lines); kept = received as normal; missing = "Not received".
 - **New toys and Shopify:** SanoPOS only syncs **stock** for toys already linked to Shopify (`shopify_product_map`); it **never creates products in Shopify**. Prod: the live shop has **0 toys linked** (Shopify not connected at OTS yet). → Not part of F9; when Shopify is connected, new toys from bills need a "link / create on Shopify" step.
+- ✅ **Category + Brand/Non-brand required for every new toy, suggested by SanoPOS** from the most similar existing toy (same supplier, similar name) and the brand list (owner OK).
   - Prod: only **811 of 10,044 items have a brand** (22 brands); suppliers "Zaki" and "Amir Birthday" are not in the supplier list. Today's prices are about cost × 2.2–2.75 (median per supplier).
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
