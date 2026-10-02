@@ -58,8 +58,10 @@ export default function POSSearchArea() {
       {/* V01 grocery — PLU rapid-entry pad for loose produce (preset-gated). */}
       {pos_search_config?.show_plu && <POSPluPad />}
 
-      {/* Specific field search row — conditionally shown per preset */}
-      {(() => {
+      {/* Specific field search row — conditionally shown per preset. D60 (One
+          Toy Store pilot): hidden while the top scan box is on (it takes the
+          codes, the search below finds the rest); back as a fallback if not. */}
+      {!posFlags?.phase2g_omni_input && (() => {
         const fields = [
           pos_search_config?.show_barcode !== false && { field: "barcode", val: barcodeSearch, placeholder: "Search by Barcode" },
           pos_search_config?.show_sku !== false && { field: "sku", val: skuSearch, placeholder: "Search by SKU" },

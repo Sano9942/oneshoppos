@@ -357,9 +357,23 @@ module.exports = function registerProductRoutes(app, deps) {
         params = [searchQuery];
       } else {
         whereClause =
-          "p.name ILIKE $1 OR p.barcode ILIKE $2 OR p.sku ILIKE $3 OR CAST(p.price AS TEXT) ILIKE $4 OR p.description_html ILIKE $5";
-        params = [searchQuery, searchQuery, searchQuery, searchQuery, searchQuery];
+          "p.name ILIKE $1 OR p.barcode ILIKE $1 OR p.sku ILIKE $1 OR p.plu_code ILIKE $1 OR CAST(p.price AS TEXT) ILIKE $1 OR p.description_html ILIKE $1";
+        params = [searchQuery];
       }
+
+      // D60 (One Toy Store pilot): exact SKU / barcode / PLU first, then a code
+      // starting with the text, then a name containing it, then the rest (price,
+      // description); A to Z inside each group, so the 50 cap never hides the
+      // exact item. utils/offlineCatalogue.js:searchIndex keeps the same order.
+      params.push(String(query).toLowerCase(), `${query}%`);
+      const exactParam = `$${params.length - 1}`;
+      const prefixParam = `$${params.length}`;
+      const rankClause = `CASE
+            WHEN LOWER(p.sku) = ${exactParam} OR LOWER(p.barcode) = ${exactParam} OR LOWER(p.plu_code) = ${exactParam} THEN 0
+            WHEN p.sku ILIKE ${prefixParam} OR p.barcode ILIKE ${prefixParam} OR p.plu_code ILIKE ${prefixParam} THEN 1
+            WHEN p.name ILIKE $1 THEN 2
+            ELSE 3
+          END`;
 
       // Build outlet join condition with safe parameterized value
       let outletJoinCondition = "";
@@ -376,7 +390,7 @@ module.exports = function registerProductRoutes(app, deps) {
           LEFT JOIN outlet_stock os ON p.id = os.product_id ${outletJoinCondition}
           WHERE p.deleted_at IS NULL AND (${whereClause})
           GROUP BY p.id, t.rate, t.name
-          ORDER BY p.name ASC
+          ORDER BY ${rankClause}, p.name ASC
           LIMIT 50
       `;
 

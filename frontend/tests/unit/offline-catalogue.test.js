@@ -89,6 +89,32 @@ describe("searchIndex — the offline search box", () => {
     });
     expect(searchIndex(many, "toy")).toHaveLength(50);
   });
+
+  // D60: same order as GET /api/products/search — exact code, code starts
+  // with, name contains, then the rest; the cap never hides the exact item.
+  it("puts the exact code first, then codes starting with it, then names, then prices", () => {
+    const shop = buildIndex({
+      products: [
+        { id: 1, name: "ZZZ POP TUBES-POP-02", sku: "2516", price: "250" },
+        { id: 2, name: "YYY Ball", sku: "25160", price: "300" },
+        { id: 3, name: "XXX Kite", sku: "K-1", barcode: "2516777", price: "400" },
+        { id: 4, name: "MMM Car 2516", sku: "C-9", price: "500" },
+        { id: 5, name: "BBB Doll", sku: "D-1", price: "2516" },
+        { id: 6, name: "WWW Melon", sku: "M-1", plu_code: "4011", price: "120" },
+        ...Array.from({ length: 60 }, (_, i) => ({ id: 100 + i, name: `AA filler 2516 ${String(i).padStart(2, "0")}`, sku: `F-${i}`, price: "10" })),
+      ],
+      variants: [],
+    });
+    const names = searchIndex(shop, "2516").map((p) => p.name);
+    expect(names).toHaveLength(50);
+    expect(names.slice(0, 4)).toEqual(["ZZZ POP TUBES-POP-02", "XXX Kite", "YYY Ball", "AA filler 2516 00"]);
+    expect(names[49]).toBe("AA filler 2516 46");
+
+    const few = buildIndex({ products: shop.products.filter((p) => p.id < 100), variants: [] });
+    expect(searchIndex(few, "2516").map((p) => p.id)).toEqual([1, 3, 2, 4, 5]);
+    expect(searchIndex(few, "4011").map((p) => p.id)).toEqual([6]);
+    expect(searchIndex(few, "k-1").map((p) => p.id)[0]).toBe(3);
+  });
 });
 
 describe("variantsFor — the offline variant picker", () => {

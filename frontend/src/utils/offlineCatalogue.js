@@ -73,24 +73,31 @@ export function lookupCode(index, code) {
 
 /**
  * The offline search box, matching GET /api/products/search: case-insensitive
- * part match on name, barcode, SKU or price (or the one field asked for),
- * sorted by name, at most 50.
+ * part match on name, barcode, SKU, PLU or price (or the one field asked for),
+ * at most 50. D60 order: exact code, code starting with the text, name
+ * containing it, then the rest; by name inside each group.
  */
 export function searchIndex(index, query, field = "all") {
   const q = String(query || "").trim().toLowerCase();
   if (!index || !q) return [];
-  const has = (v) => v != null && String(v).toLowerCase().includes(q);
-  const out = [];
+  const low = (v) => (v == null ? "" : String(v).toLowerCase());
+  const has = (v) => v != null && low(v).includes(q);
+  const groups = [[], [], [], []];
   for (const p of index.products) {
     const hit =
       field === "barcode" ? has(p.barcode)
         : field === "sku" ? has(p.sku)
           : field === "price" ? has(p.price)
-            : has(p.name) || has(p.barcode) || has(p.sku) || has(p.price);
-    if (hit) out.push(p);
-    if (out.length >= SEARCH_LIMIT) break;
+            : has(p.name) || has(p.barcode) || has(p.sku) || has(p.plu_code) || has(p.price);
+    if (!hit) continue;
+    const codes = [p.sku, p.barcode, p.plu_code].map(low);
+    const rank = codes.includes(q) ? 0
+      : codes.some((c) => c && c.startsWith(q)) ? 1
+        : has(p.name) ? 2
+          : 3;
+    groups[rank].push(p);
   }
-  return out;
+  return groups.flat().slice(0, SEARCH_LIMIT);
 }
 
 export function variantsFor(index, productId) {
