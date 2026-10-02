@@ -306,6 +306,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - ✅ **Mistake after saving (owner OK):** **same day → Undo the whole bill** (stock back, balance back) only while none of its pieces is sold, then upload again; **after that → edit the saved bill**, every stock / money change going in as a correction line (History shows the mistake and the fix).
 - ✅ **Drafts (owner):** a bill can be saved as a draft and finished later; a draft changes nothing (no stock, no supplier money) until the final Save; drafts listed as "Draft" with who started them.
 - ✅ **Same bill twice (owner B):** same supplier + bill number → warn and show the earlier bill, allow continuing (a supplier reuses "Bill No 01" on different dates); the **very same file** again → refused (file fingerprint).
+- ✅ **Several files per bill (owner):** one bill holds several photos and/or PDFs, read together as one bill, all kept and shown on it.
   - Prod: only **811 of 10,044 items have a brand** (22 brands); suppliers "Zaki" and "Amir Birthday" are not in the supplier list. Today's prices are about cost × 2.2–2.75 (median per supplier).
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
