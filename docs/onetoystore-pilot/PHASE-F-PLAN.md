@@ -308,6 +308,8 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - ✅ **Same bill twice (owner B):** same supplier + bill number → warn and show the earlier bill, allow continuing (a supplier reuses "Bill No 01" on different dates); the **very same file** again → refused (file fingerprint).
 - ✅ **Several files per bill (owner):** one bill holds several photos and/or PDFs, read together as one bill, all kept and shown on it.
 - ✅ **Supplier picked first on the check screen; the layout is recognised after the first time** (owner OK). Unnamed layouts: **INV-226xx ("HASSAAN SB (ONE SHOP)") = TOYS AND TOYS LAHORE** (their logo top-left of page 1 is a picture, not text, so recognition uses the column headings); **"Bill No 01 / M100" = HAFIZ NAWAZ**.
+- ✅ **No old bills to enter (owner):** every bill up to the iPOS export is already in the imported stock and supplier opening balances; no new bill has arrived since. So no backlog / "money only" mode needed; bill date = the date printed on the bill, stock goes in on the day it is saved.
+- ✅ **Bill's own line number on the check screen (owner ask):** each line keeps the supplier's S.No / SR / # (and the page / photo it came from), same order as the paper, so the owner can tick the paper against the screen.
   - Prod: only **811 of 10,044 items have a brand** (22 brands); suppliers "Zaki" and "Amir Birthday" are not in the supplier list. Today's prices are about cost × 2.2–2.75 (median per supplier).
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
