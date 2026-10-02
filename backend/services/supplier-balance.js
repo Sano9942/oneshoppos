@@ -3,6 +3,7 @@
 // D37, D38; owner decision 2026-09-28):
 //
 //   opening balance + bills − payments (not voided; per bill or on account) − returns
+//   + account entries (F9: Not received −, Discount −, Correction ±; not voided)
 //
 // A payment "on account" is a supplier_payments row with no supplier_invoice_id:
 // the owner pays credit suppliers lump sums whenever money is available, and a
@@ -25,8 +26,9 @@ const SUPPLIER_TOTALS_SQL = `
          COALESCE(inv.total, 0)::float AS total_invoiced,
          COALESCE(pay.total, 0)::float AS total_paid,
          COALESCE(ret.total, 0)::float AS total_returned,
+         COALESCE(ent.total, 0)::float AS total_entries,
          ROUND(COALESCE(s.opening_balance, 0) + COALESCE(inv.total, 0)
-               - COALESCE(pay.total, 0) - COALESCE(ret.total, 0), 2)::float AS balance
+               - COALESCE(pay.total, 0) - COALESCE(ret.total, 0) + COALESCE(ent.total, 0), 2)::float AS balance
     FROM suppliers s
     LEFT JOIN (SELECT supplier_id, COUNT(*) AS n, SUM(amount) AS total
                  FROM supplier_invoices GROUP BY supplier_id) inv ON inv.supplier_id = s.id
@@ -34,6 +36,8 @@ const SUPPLIER_TOTALS_SQL = `
                  FROM supplier_payments WHERE voided IS NOT TRUE GROUP BY supplier_id) pay ON pay.supplier_id = s.id
     LEFT JOIN (SELECT supplier_id, SUM(total_value) AS total
                  FROM supplier_returns GROUP BY supplier_id) ret ON ret.supplier_id = s.id
+    LEFT JOIN (SELECT supplier_id, SUM(amount) AS total
+                 FROM supplier_account_entries WHERE voided IS NOT TRUE GROUP BY supplier_id) ent ON ent.supplier_id = s.id
 `;
 
 module.exports = { SUPPLIER_ACCOUNT_DDL, SUPPLIER_TOTALS_SQL };

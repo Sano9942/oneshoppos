@@ -10298,6 +10298,22 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 154,
+    description:
+      "One Toy Store pilot F9 (a): receive a supplier bill without a PO. New product_barcodes (extra barcodes per toy, one toy one stock), supplier_item_codes (supplier's own code per supplier per toy; one code may point to several toys; split into N), supplier_bills + supplier_bill_lines + supplier_bill_files (draft / saved / undone; bill's own S.No; billed vs received qty; minus lines = goods sent back; the same file refused while its bill is live), supplier_account_entries (Not received −, Discount −, Correction ±), supplier_waiting_items (extra pieces kept, billed later); goods_received_notes gains supplier_id + supplier_bill_id. DDL shared with schema-pg.sql via services/supplier-bills.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema()
+           AND table_name IN ('products', 'suppliers', 'goods_received_notes', 'supplier_invoices',
+                              'supplier_returns', 'supplier_payments', 'till_payouts', 'outlets', 'employees')`
+      );
+      if (rows[0].n < 9) return;
+      const { SUPPLIER_BILLS_DDL } = require("./services/supplier-bills");
+      await client.query(SUPPLIER_BILLS_DDL);
+    },
+  },
 ];
 
 /**

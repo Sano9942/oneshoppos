@@ -134,7 +134,11 @@ module.exports = function registerGRNRoutes(app, deps) {
         const { rows: [prod] } = await db.query(
           `SELECT id, name, serial_required, default_warranty_months
              FROM products
-            WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)`,
+            WHERE deleted_at IS NULL
+              AND (barcode = $1 OR sku = $1
+                   OR id = (SELECT pb.product_id FROM product_barcodes pb WHERE pb.barcode = $1))
+            ORDER BY (barcode = $1 OR sku = $1) DESC
+            LIMIT 1`,
           [trimmed]
         );
         if (prod) {
@@ -596,8 +600,19 @@ module.exports = function registerGRNRoutes(app, deps) {
               FROM supplier_invoices si WHERE si.supplier_id = $1
             UNION ALL
             SELECT 1, g.id, g.received_at, 'grn', g.grn_number, 0, 0, g.notes
-              FROM goods_received_notes g JOIN purchase_orders po ON po.id = g.po_id
-             WHERE po.supplier_id = $1
+              FROM goods_received_notes g LEFT JOIN purchase_orders po ON po.id = g.po_id
+             WHERE COALESCE(g.supplier_id, po.supplier_id) = $1
+            UNION ALL
+            -- F9: Not received (−), supplier Discount (−), Correction (±);
+            -- amount is the change in what we owe.
+            SELECT 1, e.id, e.created_at, e.kind,
+                   CASE e.kind WHEN 'not_received' THEN 'Not received'
+                               WHEN 'discount' THEN 'Discount' ELSE 'Correction' END,
+                   GREATEST(e.amount, 0), GREATEST(-e.amount, 0),
+                   CONCAT_WS(' · ', 'bill ' || NULLIF(sb.bill_number, ''), e.note)
+              FROM supplier_account_entries e
+              LEFT JOIN supplier_bills sb ON sb.id = e.supplier_bill_id
+             WHERE e.supplier_id = $1 AND e.voided IS NOT TRUE
             UNION ALL
             SELECT 1, sp.id, sp.paid_at, 'payment',
                    COALESCE(sp.reference, si2.invoice_number, 'PAY-' || sp.id),

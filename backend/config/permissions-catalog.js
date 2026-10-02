@@ -91,6 +91,9 @@ const PERMISSIONS_CATALOG = Object.freeze([
   // ── Orders & Purchasing ───────────────────────────────────────────────────
   { id: "manage_orders", label: "Manage Orders & Purchasing", category: "Orders" },
   { id: "manage_returns", label: "Manage Returns", category: "Orders" },
+  // One Toy Store F9: receive a supplier's bill without a PO (stock in, bill
+  // onto the supplier's account). No default role: owner only for now.
+  { id: "receive_supplier_bills", label: "Receive supplier bills", category: "Orders" },
 
   // ── Customers ─────────────────────────────────────────────────────────────
   { id: "manage_customers", label: "Manage Customers", category: "Customers" },

@@ -583,7 +583,34 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       );
       const { rows: supplierOnAccount } = await db.query(onAccountQ.text, onAccountQ.values);
 
-      const supplierAp = [...supplierOpenings, ...supplierInvoices, ...supplierReturns, ...supplierOnAccount];
+      // F9: Not received (−), supplier Discount (−), Correction (±) on the
+      // supplier account, as in the supplier ledger.
+      const entryWhere = ["e.voided IS NOT TRUE"];
+      const entryParams = [];
+      applyRangeFilters(entryWhere, entryParams, req.query, {
+        dateColumn: "e.created_at",
+        supplierColumn: "e.supplier_id",
+        searchSql: "(s.name ILIKE ? OR COALESCE(e.note, '') ILIKE ?)",
+        searchParams: [1, 1],
+      }, tz);
+      const entryQ = pgify(
+        `
+          SELECT e.id,
+                 CASE e.kind WHEN 'not_received' THEN 'Not received'
+                             WHEN 'discount' THEN 'Discount' ELSE 'Correction' END AS invoice_number,
+                 e.created_at AS invoice_date, NULL::date AS due_date,
+                 ROUND(e.amount, 2) AS amount, 0 AS paid_amount, ROUND(e.amount, 2) AS outstanding,
+                 'account_' || e.kind AS status, s.name AS supplier_name, 'Unassigned' AS outlet_name, 0 AS days_open
+            FROM supplier_account_entries e
+            JOIN suppliers s ON s.id = e.supplier_id
+           WHERE ${entryWhere.join(" AND ")}
+           ORDER BY e.id DESC
+        `,
+        entryParams,
+      );
+      const { rows: supplierEntries } = await db.query(entryQ.text, entryQ.values);
+
+      const supplierAp = [...supplierOpenings, ...supplierInvoices, ...supplierReturns, ...supplierOnAccount, ...supplierEntries];
 
       const customerArQ = pgify(
         `

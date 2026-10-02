@@ -171,3 +171,28 @@ describe("refreshCatalogue / loadCatalogue — keeping the copy", () => {
     expect(getCatalogueIndex()).toBeNull();
   });
 });
+
+describe("extra barcodes (One Toy Store F9: one toy, several barcodes, one stock)", () => {
+  const WITH_EXTRA = {
+    products: [
+      { id: 1, name: "Racing Car", barcode: "6901", sku: "31001", plu_code: null, price: "900.00", extra_barcodes: ["6902", "6903"] },
+      { id: 2, name: "Ball", barcode: null, sku: "6902777", plu_code: null, price: "300.00" },
+    ],
+    variants: [],
+  };
+  const index = buildIndex(WITH_EXTRA);
+
+  it("the offline scan finds the toy by any of its extra barcodes", () => {
+    expect(lookupCode(index, "6903").product.id).toBe(1);
+  });
+
+  it("the toy's own codes still win over another toy's extra barcode", () => {
+    expect(lookupCode(index, "6901").product.id).toBe(1);
+    expect(lookupCode(index, "6902777").product.id).toBe(2);
+  });
+
+  it("the offline search puts the toy first for its extra barcode, and finds it by part of one", () => {
+    expect(searchIndex(index, "6902").map((p) => p.id)).toEqual([1, 2]);
+    expect(searchIndex(index, "6903", "barcode").map((p) => p.id)).toEqual([1]);
+  });
+});

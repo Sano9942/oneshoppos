@@ -346,8 +346,11 @@ module.exports = function registerProductRoutes(app, deps) {
       let whereClause;
       let params;
 
+      // F9: a toy's extra barcodes (product_barcodes) count as its barcode.
+      const extraLike = (param) =>
+        `EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id = p.id AND pb.barcode ILIKE ${param})`;
       if (field === "barcode") {
-        whereClause = "p.barcode ILIKE $1";
+        whereClause = `p.barcode ILIKE $1 OR ${extraLike("$1")}`;
         params = [searchQuery];
       } else if (field === "sku") {
         whereClause = "p.sku ILIKE $1";
@@ -357,7 +360,7 @@ module.exports = function registerProductRoutes(app, deps) {
         params = [searchQuery];
       } else {
         whereClause =
-          "p.name ILIKE $1 OR p.barcode ILIKE $1 OR p.sku ILIKE $1 OR p.plu_code ILIKE $1 OR CAST(p.price AS TEXT) ILIKE $1 OR p.description_html ILIKE $1";
+          `p.name ILIKE $1 OR p.barcode ILIKE $1 OR ${extraLike("$1")} OR p.sku ILIKE $1 OR p.plu_code ILIKE $1 OR CAST(p.price AS TEXT) ILIKE $1 OR p.description_html ILIKE $1`;
         params = [searchQuery];
       }
 
@@ -369,8 +372,10 @@ module.exports = function registerProductRoutes(app, deps) {
       const exactParam = `$${params.length - 1}`;
       const prefixParam = `$${params.length}`;
       const rankClause = `CASE
-            WHEN LOWER(p.sku) = ${exactParam} OR LOWER(p.barcode) = ${exactParam} OR LOWER(p.plu_code) = ${exactParam} THEN 0
-            WHEN p.sku ILIKE ${prefixParam} OR p.barcode ILIKE ${prefixParam} OR p.plu_code ILIKE ${prefixParam} THEN 1
+            WHEN LOWER(p.sku) = ${exactParam} OR LOWER(p.barcode) = ${exactParam} OR LOWER(p.plu_code) = ${exactParam}
+              OR EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id = p.id AND LOWER(pb.barcode) = ${exactParam}) THEN 0
+            WHEN p.sku ILIKE ${prefixParam} OR p.barcode ILIKE ${prefixParam} OR p.plu_code ILIKE ${prefixParam}
+              OR ${extraLike(prefixParam)} THEN 1
             WHEN p.name ILIKE $1 THEN 2
             ELSE 3
           END`;
@@ -430,9 +435,12 @@ module.exports = function registerProductRoutes(app, deps) {
         `SELECT p.id, p.name, p.barcode, p.sku, p.plu_code, p.price, p.gst, p.tax_id,
                 t.rate AS tax_rate, t.name AS tax_name, p.category_id, p.brand_id,
                 p.unit, p.product_type, p.status, p.has_variants, p.is_bundle, p.bom_type,
-                p.serial_required, p.age_restricted, p.is_gift_card_sku
+                p.serial_required, p.age_restricted, p.is_gift_card_sku,
+                COALESCE(xb.codes, '{}') AS extra_barcodes
            FROM products p
            LEFT JOIN taxes t ON t.id = p.tax_id
+           LEFT JOIN (SELECT product_id, array_agg(barcode ORDER BY id) AS codes
+                        FROM product_barcodes GROUP BY product_id) xb ON xb.product_id = p.id
           WHERE p.deleted_at IS NULL
           ORDER BY p.id`
       );
@@ -527,6 +535,17 @@ module.exports = function registerProductRoutes(app, deps) {
       `;
 
       let { rows: [row] } = await db.query(productSql(whereClause, params.length), params);
+
+      // F9: one of the toy's extra barcodes (same toy, same stock). After the
+      // toy's own barcode / SKU / PLU, so those always win.
+      if (!row && (!decoded.ok || lookupField === "barcode")) {
+        const idParams = [lookupValue];
+        if (outlet_id) idParams.push(Number(outlet_id));
+        ({ rows: [row] } = await db.query(
+          productSql("p.id = (SELECT pb.product_id FROM product_barcodes pb WHERE pb.barcode = $1)", 2),
+          idParams,
+        ));
+      }
 
       // A variant's own barcode/SKU (e.g. one car in a Hot Wheels assortment,
       // each with its own label). Resolve to the parent product and hand back

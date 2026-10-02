@@ -539,6 +539,15 @@ module.exports = function registerInventoryRoutes(app, deps) {
         [barcode]
       );
       if (!product) {
+        // F9: one of the toy's extra barcodes (same toy, same stock).
+        ({ rows: [product] } = await db.query(
+          `SELECT p.id, p.name, pb.barcode, p.sku, NULL::int AS variant_id
+             FROM product_barcodes pb JOIN products p ON p.id = pb.product_id AND p.deleted_at IS NULL
+            WHERE pb.barcode = $1`,
+          [barcode]
+        ));
+      }
+      if (!product) {
         ({ rows: [product] } = await db.query(
           `SELECT p.id, p.name, pv.barcode, pv.sku, pv.id AS variant_id
              FROM product_variants pv JOIN products p ON p.id = pv.product_id AND p.deleted_at IS NULL

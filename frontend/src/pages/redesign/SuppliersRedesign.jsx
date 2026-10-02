@@ -24,6 +24,9 @@ const TYPE_LABELS = {
   grn: "GRN Receipt",
   payment: "Payment",
   return: "Return",
+  not_received: "Not received",
+  discount: "Discount",
+  correction: "Correction",
 };
 const TYPE_TONES = {
   opening: "default",
@@ -32,6 +35,9 @@ const TYPE_TONES = {
   grn: "default",
   payment: "success",
   return: "warning",
+  not_received: "warning",
+  discount: "success",
+  correction: "default",
 };
 
 function SupplierLedger({ supplier, fmt, onBack }) {

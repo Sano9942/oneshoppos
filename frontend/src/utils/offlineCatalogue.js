@@ -44,6 +44,13 @@ export function buildIndex({ products = [], variants = [] } = {}) {
       if (code && !productCodes.has(code)) productCodes.set(code, p);
     }
   }
+  // F9: a toy's extra barcodes scan the same toy; after every toy's own codes,
+  // as the server does (GET /api/products/scan/:code).
+  for (const p of list) {
+    for (const code of p.extra_barcodes || []) {
+      if (code && !productCodes.has(code)) productCodes.set(code, p);
+    }
+  }
   for (const v of variants) {
     const parent = productsById.get(v.product_id);
     if (!parent) continue;
@@ -84,13 +91,15 @@ export function searchIndex(index, query, field = "all") {
   const has = (v) => v != null && low(v).includes(q);
   const groups = [[], [], [], []];
   for (const p of index.products) {
+    const extra = p.extra_barcodes || [];
+    const hasBarcode = has(p.barcode) || extra.some(has);
     const hit =
-      field === "barcode" ? has(p.barcode)
+      field === "barcode" ? hasBarcode
         : field === "sku" ? has(p.sku)
           : field === "price" ? has(p.price)
-            : has(p.name) || has(p.barcode) || has(p.sku) || has(p.plu_code) || has(p.price);
+            : has(p.name) || hasBarcode || has(p.sku) || has(p.plu_code) || has(p.price);
     if (!hit) continue;
-    const codes = [p.sku, p.barcode, p.plu_code].map(low);
+    const codes = [p.sku, p.barcode, p.plu_code, ...extra].map(low);
     const rank = codes.includes(q) ? 0
       : codes.some((c) => c && c.startsWith(q)) ? 1
         : has(p.name) ? 2

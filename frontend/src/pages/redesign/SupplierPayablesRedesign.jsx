@@ -27,6 +27,9 @@ const LEDGER_TYPES = {
   grn: { label: "Goods received", tone: "default" },
   payment: { label: "Payment", tone: "success" },
   return: { label: "Return", tone: "success" },
+  not_received: { label: "Not received", tone: "success" },
+  discount: { label: "Discount", tone: "success" },
+  correction: { label: "Correction", tone: "warning" },
 };
 
 const STATUS_TONE = {
