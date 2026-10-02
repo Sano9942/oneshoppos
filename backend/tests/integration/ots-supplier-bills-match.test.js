@@ -97,6 +97,17 @@ describe("POST /api/supplier-bills/match", () => {
     expect(res.body.lines[0].matches[0]).toMatchObject({ name: `MUSIC LUGGAGE W-MIC ${S}`, price: 1000, cost_price: 400, split_into: 6 });
   });
 
+  it("step (d): a line that may be a new toy gets the most similar toy's category and brand as a suggestion", async () => {
+    const cat = (await one("INSERT INTO categories (name) VALUES ($1) RETURNING id", [`Dinos ${S}`])).id;
+    const brand = (await one("INSERT INTO brands (name) VALUES ($1) RETURNING id", [`DinoCo ${S}`])).id;
+    await db.query("UPDATE products SET category_id = $1, brand_id = $2 WHERE id = $3", [cat, brand, dino]);
+    const res = await match(tt, [{ key: "d", supplier_code: "ZZ-2", description: "DINOSAUR WALKING TOY BIG" }]);
+    const [l] = res.body.lines;
+    expect(l.chosen).toEqual([]);
+    expect(l.like).toMatchObject({ category_id: cat, brand_id: brand, brand_name: `DinoCo ${S}` });
+    expect(l.matches[0]).toMatchObject({ category_id: cat, brand_name: `DinoCo ${S}` });
+  });
+
   it("needs the 'Receive supplier bills' permission", async () => {
     const res = await makeRequest(app, CASHIER_ID).post("/api/supplier-bills/match").send({ supplier_id: tt, lines: [] });
     expect(res.status).toBe(403);

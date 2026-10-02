@@ -1,25 +1,31 @@
 // One Toy Store F9 (c1): the check screen's lines. Each bill line in the
 // bill's own order (S.No, page) with: pieces received (vs billed), which toy(s)
 // they are, cost per piece after discounts / split, our selling price.
+// (d) a new toy: name, category, Brand / Non-brand, its own code or the next
+// from 31000, maker's barcode, price from the shop's rules; an existing toy
+// whose cost changes gets the rule's price as a suggestion ("Use").
 import { useMemo, useState } from "react";
-import { Badge, Button, FilterPill, Input } from "../../../ui/primitives";
+import { Badge, Button, FilterPill, Input, Select } from "../../../ui/primitives";
 import ItemSearchBox from "../../../ui/ItemSearchBox";
-import { lineStatus, unitCost } from "./billMath";
+import { lineStatus, newToyPrice, suggestedPrice, unitCost } from "./billMath";
+import { RULES } from "./priceRules";
 
 const STATUS = {
   ready: { tone: "success", label: "Ready" },
   confirm: { tone: "warning", label: "Confirm toy" },
   pick: { tone: "danger", label: "Which toy?" },
   split: { tone: "warning", label: "Share pieces" },
+  newtoy: { tone: "warning", label: "Fill in new toy" },
 };
 const HOW = { supplier_code: "their code", barcode: "barcode", name_code: "code in name", similar: "similar name", picked: "picked" };
 
-export default function CheckLines({ lines, onChange, billDiscountRatio = 0, multiFile = false }) {
+export default function CheckLines({ lines, onChange, billDiscountRatio = 0, multiFile = false, supplierName = "", categories = [], brands = [] }) {
+  const ctx = { supplierName, billDiscountRatio };
   // A filter picks its rows when pressed; they stay while being edited (a row
   // that becomes ready doesn't jump away under the cursor).
   const [show, setShow] = useState({ k: "all", keys: null });
   const counts = useMemo(() => {
-    const c = { all: lines.length, ready: 0, confirm: 0, pick: 0, split: 0 };
+    const c = { all: lines.length, ready: 0, confirm: 0, pick: 0, split: 0, newtoy: 0 };
     for (const l of lines) c[lineStatus(l)] += 1;
     return c;
   }, [lines]);
@@ -36,10 +42,13 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2">
-        {[["all", "All"], ["pick", "Which toy?"], ["confirm", "Confirm toy"], ["split", "Share pieces"], ["ready", "Ready"]].map(([k, label]) => (
+        {[["all", "All"], ["pick", "Which toy?"], ["confirm", "Confirm toy"], ["split", "Share pieces"], ["newtoy", "Fill in new toy"], ["ready", "Ready"]].map(([k, label]) => (
           <FilterPill key={k} label={label} value={String(counts[k])} active={show.k === k} onClick={() => pickFilter(k)} />
         ))}
       </div>
+      <datalist id="f9-brand-list">
+        {brands.map((b) => <option key={b} value={b} />)}
+      </datalist>
       <div className="overflow-x-auto rounded-(--ui-radius-md) border border-(--ui-border)">
         <table className="w-full text-sm">
           <thead className="bg-(--ui-muted-surface) text-left text-xs uppercase text-(--ui-text-muted)">
@@ -100,7 +109,7 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
                     {l.split_into > 1 ? <div className="mt-1 text-xs text-(--ui-text-muted)">{pieces(l)} pcs</div> : null}
                   </td>
                   <td className="min-w-72 px-2 py-2">
-                    <ToyCell line={l} pieces={pieces(l)} set={(fn) => set(l.key, fn)} />
+                    <ToyCell line={l} pieces={pieces(l)} set={(fn) => set(l.key, fn)} categories={categories} />
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">
                     {cost.toLocaleString()}
@@ -108,13 +117,12 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
                       <div className="text-xs text-(--ui-text-muted)">was {Number(l.toys[0].cost_price).toLocaleString()}</div>
                     ) : null}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
-                    {l.toys.map((t) => (
-                      <div key={t.product_id} className={Number(t.price) <= cost ? "text-(--ui-danger-fg)" : ""}>
-                        {Number(t.price || 0).toLocaleString()}
-                      </div>
+                  <td className="min-w-40 px-2 py-2 text-right tabular-nums">
+                    {l.is_new ? (
+                      <NewToyPrice line={l} cost={cost} ctx={ctx} set={(fn) => set(l.key, fn)} />
+                    ) : l.toys.map((t) => (
+                      <ToyPrice key={t.product_id} line={l} toy={t} cost={cost} ctx={ctx} set={(fn) => set(l.key, fn)} />
                     ))}
-                    {l.is_new ? <span className="text-xs text-(--ui-text-muted)">set in next step</span> : null}
                   </td>
                   <td className="px-2 py-2"><Badge tone={STATUS[st].tone}>{STATUS[st].label}</Badge></td>
                 </tr>
@@ -127,11 +135,78 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
   );
 }
 
-function ToyCell({ line, pieces, set }) {
+// A new toy's price: the rule's (shown greyed) until the shop types one; the
+// rule can be switched. Red when not above cost; a note when below the rule.
+function NewToyPrice({ line, cost, ctx, set }) {
+  const r = newToyPrice(line, ctx);
+  const nt = (patch) => set((x) => ({ ...x, new_toy: { ...x.new_toy, ...patch } }));
+  return (
+    <div className="space-y-1">
+      <Input
+        type="number"
+        className={`ml-auto w-24! text-right ${r.price <= cost ? "text-(--ui-danger-fg)" : ""}`}
+        aria-label={`Selling price, line ${line.line_no}`}
+        placeholder={String(r.rule_price)}
+        value={line.new_toy.price}
+        onChange={(e) => nt({ price: e.target.value })}
+      />
+      <div className="text-xs text-(--ui-text-muted)">
+        {r.typed ? `rule ${r.rule_price.toLocaleString()}` : `+${r.pct} % on cost`}
+        {r.typed && r.price < r.rule_price ? <span className="text-(--ui-warning-fg)"> · below the rule</span> : null}
+      </div>
+      <Select
+        className="w-full text-xs"
+        aria-label={`Price rule, line ${line.line_no}`}
+        value={line.new_toy.rule}
+        onChange={(e) => nt({ rule: e.target.value })}
+      >
+        <option value="">Rule: {RULES.find((x) => x.key === r.key).label}</option>
+        {RULES.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+      </Select>
+    </div>
+  );
+}
+
+// An existing toy's price; when this bill changes its cost, the rule's price
+// is offered ("Use"), never applied by itself (owner).
+function ToyPrice({ line, toy, cost, ctx, set }) {
+  const sug = suggestedPrice(line, toy, ctx);
+  const setNew = (v) => set((x) => ({ ...x, toys: x.toys.map((y) => (y.product_id === toy.product_id ? { ...y, new_price: v } : y)) }));
+  if (toy.new_price !== undefined) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-end gap-1">
+          <Input
+            type="number"
+            className={`w-24! text-right ${Number(toy.new_price) <= cost ? "text-(--ui-danger-fg)" : ""}`}
+            aria-label={`New price of ${toy.name}`}
+            value={toy.new_price}
+            onChange={(e) => setNew(e.target.value)}
+          />
+          <Button size="sm" tone="plain" aria-label={`Keep the old price of ${toy.name}`} onClick={() => setNew(undefined)}>✕</Button>
+        </div>
+        <div className="text-xs text-(--ui-text-muted)">was {Number(toy.price || 0).toLocaleString()}</div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className={Number(toy.price) <= cost ? "text-(--ui-danger-fg)" : ""}>{Number(toy.price || 0).toLocaleString()}</div>
+      {sug ? (
+        <div className="flex items-center justify-end gap-1 text-xs text-(--ui-text-muted)">
+          rule {sug.price.toLocaleString()}
+          <Button size="sm" tone="link" aria-label={`Use ${sug.price} for ${toy.name}`} onClick={() => setNew(sug.price)}>Use</Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ToyCell({ line, pieces, set, categories }) {
   const [finding, setFinding] = useState(false);
   const addToy = (p, how = "picked") => set((x) => {
     if (x.toys.some((t) => t.product_id === (p.product_id ?? p.id))) return x;
-    const toy = { product_id: p.product_id ?? p.id, name: p.name, sku: p.sku, barcode: p.barcode, price: Number(p.price) || 0, cost_price: Number(p.cost_price) || 0, how, qty: 0 };
+    const toy = { product_id: p.product_id ?? p.id, name: p.name, sku: p.sku, barcode: p.barcode, price: Number(p.price) || 0, cost_price: Number(p.cost_price) || 0, brand_id: p.brand_id ?? null, brand_name: p.brand_name ?? null, how, qty: 0 };
     const toys = [...x.toys, toy];
     if (toys.length === 1) toys[0].qty = pieces;
     return { ...x, is_new: false, toys, suggestions: x.suggestions.filter((s) => s.product_id !== toy.product_id) };
@@ -143,13 +218,38 @@ function ToyCell({ line, pieces, set }) {
   });
 
   if (line.is_new) {
+    const t = line.new_toy;
+    const nt = (patch) => set((x) => ({ ...x, new_toy: { ...x.new_toy, ...patch } }));
+    const n = line.line_no;
     return (
-      <div>
-        <div className="mb-1 flex items-center gap-2">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
           <Badge>New toy</Badge>
           <Button size="sm" tone="link" onClick={() => set((x) => ({ ...x, is_new: false }))}>undo</Button>
         </div>
-        <Input aria-label={`New toy name, line ${line.line_no}`} value={line.new_name} onChange={(e) => set((x) => ({ ...x, new_name: e.target.value }))} />
+        <Input aria-label={`New toy name, line ${n}`} value={t.name} onChange={(e) => nt({ name: e.target.value })} />
+        <Select className="w-full" aria-label={`Category, line ${n}`} value={t.category_id} onChange={(e) => nt({ category_id: e.target.value })}>
+          <option value="">Category…</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.path_label || c.name}</option>)}
+        </Select>
+        <div className="flex items-center gap-1">
+          <Button size="sm" tone={t.is_brand === true ? "primary" : "default"} aria-pressed={t.is_brand === true} onClick={() => nt({ is_brand: true })}>
+            Brand
+          </Button>
+          <Button size="sm" tone={t.is_brand === false ? "primary" : "default"} aria-pressed={t.is_brand === false} onClick={() => nt({ is_brand: false })}>
+            Non-brand
+          </Button>
+          {t.is_brand ? (
+            <Input className="min-w-0 flex-1" list="f9-brand-list" placeholder="Which brand?" aria-label={`Brand, line ${n}`}
+              value={t.brand_name} onChange={(e) => nt({ brand_name: e.target.value })} />
+          ) : null}
+        </div>
+        <div className="flex gap-1">
+          <Input className="w-28! shrink-0 font-mono" inputMode="numeric" maxLength={5} placeholder="Code: next" aria-label={`Shop code, line ${n}`}
+            value={t.code} onChange={(e) => nt({ code: e.target.value.replace(/\D/g, "") })} />
+          <Input className="min-w-0 flex-1 font-mono" placeholder="Scan maker's barcode" aria-label={`Maker's barcode, line ${n}`}
+            value={t.barcode} onChange={(e) => nt({ barcode: e.target.value.trim() })} />
+        </div>
       </div>
     );
   }

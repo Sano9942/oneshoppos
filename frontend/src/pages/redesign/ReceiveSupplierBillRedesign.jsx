@@ -6,19 +6,56 @@
 // (c2) Save: stock in at the branch, cost = this bill's, the bill onto the
 //     supplier's account (Not received / sent back / extra pieces handled),
 //     the files kept, Paid now (cash from the till, cheque, bank transfer).
+// (d) new toys (code from 31000, category, Brand / Non-brand, price rules) and
+//     after saving the list of toys that need a new price tag.
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { Badge, Button, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
 import CheckLines from "./supplierBill/CheckLines";
 import { billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
+import { brandChoices } from "./supplierBill/priceRules";
+
+// The labels list on its own page, for the 5-digit price-tag machine.
+function printLabels(saved) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  const d = w.document;
+  const el = (tag, text, style) => {
+    const e = d.createElement(tag);
+    if (text != null) e.textContent = String(text);
+    if (style) e.setAttribute("style", style);
+    return e;
+  };
+  d.title = "Price tags";
+  d.body.setAttribute("style", "font:14px sans-serif");
+  d.body.appendChild(el("h3", `Price tags: ${saved.supplier} bill ${saved.bill_number || saved.id}`));
+  const table = el("table", null, "border-collapse:collapse");
+  const cell = "border-bottom:1px solid #ccc;padding:4px 8px;text-align:left";
+  const head = el("tr");
+  for (const h of ["Code", "Toy", "Price", ""]) head.appendChild(el("th", h, cell));
+  table.appendChild(head);
+  for (const l of saved.labels) {
+    const tr = el("tr");
+    tr.appendChild(el("td", l.sku, `${cell};font-family:monospace;font-size:16px`));
+    tr.appendChild(el("td", l.name, cell));
+    tr.appendChild(el("td", Number(l.price).toLocaleString(), `${cell};text-align:right;font-weight:bold`));
+    tr.appendChild(el("td", l.is_new ? "new toy" : `was ${Number(l.old_price).toLocaleString()}`, cell));
+    table.appendChild(tr);
+  }
+  d.body.appendChild(table);
+  w.print();
+}
 
 export default function ReceiveSupplierBillRedesign() {
   const { fmt } = useCurrency();
   const { success } = useToast();
   const [suppliers, setSuppliers] = useState([]);
   const [outlets, setOutlets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [outletId, setOutletId] = useState("");
   const [paidNow, setPaidNow] = useState({ method: "", amount: "", reference: "" });
   const [saved, setSaved] = useState(null);
@@ -42,6 +79,12 @@ export default function ReceiveSupplierBillRedesign() {
         if (list.length) setOutletId((cur) => cur || String(list[0].id));
       })
       .catch(() => {});
+    // A new toy goes in a bottom-level category (same rule as Add Product).
+    api.get("/api/categories")
+      .then((d) => setCategories((d.categories || []).filter((c) => c.is_leaf)
+        .sort((a, b) => String(a.path_label || a.name).localeCompare(String(b.path_label || b.name)))))
+      .catch(() => {});
+    api.get("/api/brands").then((d) => setBrands(brandChoices(d.brands || []))).catch(() => setBrands(brandChoices([])));
   }, []);
 
   const match = async (sid, readResult) => {
@@ -110,20 +153,25 @@ export default function ReceiveSupplierBillRedesign() {
   );
   const totalOk = summary.total_matches || (header.differs && header.differs_note.trim());
   const allReady = lines.length > 0 && summary.ready === lines.length;
-  const canSave = allReady && totalOk && outletId && supplierId && !busy && !summary.new_toys;
+  const canSave = allReady && totalOk && outletId && supplierId && !busy;
+  const supplierName = suppliers.find((x) => String(x.id) === String(supplierId))?.name || "";
 
   const save = async () => {
     setBusy("Saving…");
     setError("");
     try {
       const fd = new FormData();
-      fd.append("payload", JSON.stringify(savePayload({ supplierId, outletId, header, result, lines, paidNow })));
+      fd.append("payload", JSON.stringify(savePayload({
+        supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio: discountRatio,
+      })));
       for (const f of files) fd.append("files", f);
       const res = await api.upload("/api/supplier-bills", fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the bill");
-      const pieces = lines.reduce((a, l) => a + l.toys.reduce((b, t) => b + (Number(t.qty) || 0), 0), 0);
-      setSaved({ ...data.bill, pieces, supplier: suppliers.find((x) => String(x.id) === String(supplierId))?.name });
+      const pieces = lines.reduce((a, l) => a + (l.is_new
+        ? (Number(l.received) || 0) * Math.max(1, Number(l.split_into) || 1)
+        : l.toys.reduce((b, t) => b + (Number(t.qty) || 0), 0)), 0);
+      setSaved({ ...data.bill, pieces, supplier: supplierName, labels: data.labels || [] });
       success(`Bill ${data.bill.bill_number || ""} saved`);
       setResult(null);
       setLines([]);
@@ -174,6 +222,35 @@ export default function ReceiveSupplierBillRedesign() {
           <b>Saved:</b> {saved.supplier} bill {saved.bill_number || `#${saved.id}`} · {saved.pieces} pieces into stock ·
           {" "}bill {fmt(Number(saved.lines_total) || 0)} on the supplier&apos;s account
           {saved.paid_now_method ? ` · paid now ${fmt(Number(saved.paid_now_amount) || 0)}` : ""}.
+          {saved.labels.length ? (
+            <div className="mt-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <b>Price tags needed ({saved.labels.length}):</b>
+                <span className="text-(--ui-text-muted)">
+                  {[[saved.labels.filter((l) => l.is_new).length, "new toy"], [saved.labels.filter((l) => !l.is_new).length, "new price"]]
+                    .filter(([n]) => n).map(([n, w]) => `${n} ${w}${n === 1 ? "" : "s"}`).join(" · ")}
+                </span>
+                <div className="flex-1" />
+                <Button size="sm" onClick={() => printLabels(saved)}>Print this list</Button>
+                <Link className="text-sm underline" to="/barcode-templates">Labels to reprint</Link>
+              </div>
+              <table className="w-full text-sm" data-testid="f9-labels">
+                <thead className="text-left text-xs uppercase text-(--ui-text-muted)">
+                  <tr><th className="py-1 pr-3">Code</th><th className="py-1 pr-3">Toy</th><th className="py-1 pr-3 text-right">Price</th><th className="py-1" /></tr>
+                </thead>
+                <tbody>
+                  {saved.labels.map((l) => (
+                    <tr key={l.product_id} className="border-t border-(--ui-border)">
+                      <td className="py-1 pr-3 font-mono">{l.sku}</td>
+                      <td className="py-1 pr-3">{l.name}</td>
+                      <td className="py-1 pr-3 text-right font-bold tabular-nums">{Number(l.price).toLocaleString()}</td>
+                      <td className="py-1 text-(--ui-text-muted)">{l.is_new ? "new toy" : `was ${Number(l.old_price).toLocaleString()}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </SectionCard>
       ) : null}
 
@@ -275,7 +352,15 @@ export default function ReceiveSupplierBillRedesign() {
 
       {lines.length ? (
         <>
-          <CheckLines lines={lines} onChange={setLines} billDiscountRatio={discountRatio} multiFile={result?.files.length > 1} />
+          <CheckLines
+            lines={lines}
+            onChange={setLines}
+            billDiscountRatio={discountRatio}
+            multiFile={result?.files.length > 1}
+            supplierName={supplierName}
+            categories={categories}
+            brands={brands}
+          />
           <SectionCard className="mt-4 p-4">
             <div className="mb-3 grid gap-3 md:grid-cols-4">
               <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
@@ -317,7 +402,8 @@ export default function ReceiveSupplierBillRedesign() {
               {summary.new_toys ? ` · ${summary.new_toys} new toys` : ""}
               {summary.returns ? ` · ${summary.returns} sent back` : ""}
               {!totalOk ? " · the total doesn't match yet" : ""}
-              {summary.new_toys ? " · new toys get their code and price in the next step" : ""}
+              {summary.newtoy ? ` · ${summary.newtoy} new toys to fill in (category, Brand / Non-brand)` : ""}
+              {summary.new_toys ? " · new toys get the next shop codes from 31000 on Save" : ""}
             </span>
             <div className="flex-1" />
             <Button tone="primary" disabled={!canSave} onClick={save}>

@@ -168,7 +168,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       enqueueInventorySyncEvents(result.stockChanges.map((c) => ({
         ...c, reason: "supplier_bill", reference_type: "supplier_bill", reference_id: result.bill.id,
       })));
-      res.status(201).json({ bill: result.bill });
+      res.status(201).json({ bill: result.bill, labels: result.labels });
     } catch (err) {
       if (err.code === "23505" && /supplier_bill_files/.test(err.constraint || err.message)) {
         return res.status(409).json({ error: "That file is already on another bill" });

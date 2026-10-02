@@ -4,6 +4,8 @@
 // lines by value); a pack split into N pieces → qty × N, cost ÷ N; freight is
 // never toy cost. A minus line is goods sent back to the supplier.
 
+import { priceRule } from "./priceRules";
+
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 
 /** Cost of ONE piece after the line discount, the bill discount share and the split. */
@@ -37,14 +39,29 @@ export function lineFromRead(read, match = { matches: [], chosen: [] }) {
     toys: chosen.map((m) => ({ ...m, qty: chosen.length === 1 ? pieces : 0 })),
     suggestions: (match.matches || []).filter((m) => !(match.chosen || []).includes(m.product_id)),
     is_new: false,
-    new_name: read.description || "",
+    // Step (d): a new toy's details; category and brand suggested from the
+    // most similar toy of this supplier (owner: both required).
+    new_toy: {
+      name: read.description || "",
+      category_id: match.like?.category_id ?? "",
+      is_brand: match.like ? !!match.like.brand_id : null,
+      brand_name: match.like?.brand_name || "",
+      price: "",
+      rule: "",
+      code: "",
+      barcode: "",
+    },
     is_return: received < 0,
   };
 }
 
-/** ready | pick (no toy) | confirm (a suggestion to say yes to) | split (share the pieces out) */
+/** ready | pick (no toy) | confirm (a suggestion to say yes to) | split (share the pieces out) | newtoy (fill in the new toy) */
 export function lineStatus(line) {
-  if (line.is_new) return String(line.new_name || "").trim() ? "ready" : "pick";
+  if (line.is_new) {
+    const t = line.new_toy || {};
+    const brandOk = t.is_brand === false || (t.is_brand === true && String(t.brand_name || "").trim());
+    return String(t.name || "").trim() && t.category_id && brandOk ? "ready" : "newtoy";
+  }
   if (!line.toys.length) return line.suggestions.length ? "confirm" : "pick";
   const pieces = (Number(line.received) || 0) * Math.max(1, Number(line.split_into) || 1);
   const shared = line.toys.reduce((s, t) => s + (Number(t.qty) || 0), 0);
@@ -57,7 +74,7 @@ export function lineStatus(line) {
  * the same rule as the save (backend services/supplier-bill-save.js).
  */
 export function billSummary(lines, writtenTotal, billDiscount = 0) {
-  const s = { ready: 0, pick: 0, confirm: 0, split: 0, new_toys: 0, returns: 0 };
+  const s = { ready: 0, pick: 0, confirm: 0, split: 0, newtoy: 0, new_toys: 0, returns: 0 };
   for (const l of lines) {
     s[lineStatus(l)] += 1;
     if (l.is_new) s.new_toys += 1;
@@ -76,8 +93,34 @@ export function billSummary(lines, writtenTotal, billDiscount = 0) {
   };
 }
 
+/**
+ * A new toy's selling price: the shop's typed price, else the price rule
+ * (priceRules.js) on its cost per piece. ctx: { supplierName, billDiscountRatio }.
+ */
+export function newToyPrice(line, ctx = {}) {
+  const t = line.new_toy || {};
+  const rule = priceRule({
+    cost: unitCost(line, ctx.billDiscountRatio), supplierName: ctx.supplierName, name: t.name,
+    isBrand: !!t.is_brand, brandName: t.brand_name, rule: t.rule || undefined,
+  });
+  const typed = Number(t.price);
+  return typed > 0 ? { ...rule, price: typed, typed: true, rule_price: rule.price } : { ...rule, typed: false, rule_price: rule.price };
+}
+
+/**
+ * An existing toy whose cost changes on this bill: the rule's price, shown as
+ * a suggestion (owner: show, don't change, unless the shop says). null when
+ * the cost is the same or the rule gives today's price.
+ */
+export function suggestedPrice(line, toy, ctx = {}) {
+  const cost = unitCost(line, ctx.billDiscountRatio);
+  if (!(cost > 0) || round2(cost) === round2(Number(toy.cost_price) || 0)) return null;
+  const r = priceRule({ cost, supplierName: ctx.supplierName, name: toy.name, isBrand: !!toy.brand_id, brandName: toy.brand_name });
+  return r.price === Number(toy.price) ? null : r;
+}
+
 /** What the save endpoint takes (POST /api/supplier-bills, field "payload"). */
-export function savePayload({ supplierId, outletId, header, result, lines, paidNow }) {
+export function savePayload({ supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio = 0 }) {
   return {
     supplier_id: Number(supplierId),
     outlet_id: Number(outletId),
@@ -104,8 +147,20 @@ export function savePayload({ supplierId, outletId, header, result, lines, paidN
       amount: l.amount,
       split_into: Number(l.split_into) || 1,
       is_new: !!l.is_new,
-      new_name: l.new_name,
-      toys: l.toys.map((t) => ({ product_id: t.product_id, qty: Number(t.qty) || 0 })),
+      new_toy: l.is_new ? {
+        name: String(l.new_toy.name || "").trim(),
+        category_id: Number(l.new_toy.category_id) || null,
+        is_brand: l.new_toy.is_brand,
+        brand_name: l.new_toy.is_brand ? String(l.new_toy.brand_name || "").trim() : null,
+        price: newToyPrice(l, { supplierName, billDiscountRatio }).price,
+        code: String(l.new_toy.code || "").trim(),
+        barcode: String(l.new_toy.barcode || "").trim(),
+      } : undefined,
+      toys: l.is_new ? [] : l.toys.map((t) => ({
+        product_id: t.product_id,
+        qty: Number(t.qty) || 0,
+        ...(Number(t.new_price) > 0 ? { new_price: Number(t.new_price) } : {}),
+      })),
     })),
   };
 }

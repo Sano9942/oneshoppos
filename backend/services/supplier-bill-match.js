@@ -15,7 +15,8 @@
  */
 
 const TOY_COLS = `p.id AS product_id, p.name, p.sku, p.barcode, p.price::float AS price,
-                  p.cost_price::float AS cost_price, p.supplier_id`;
+                  p.cost_price::float AS cost_price, p.supplier_id, p.category_id, p.brand_id,
+                  (SELECT b.name FROM brands b WHERE b.id = p.brand_id) AS brand_name`;
 // LIKE pattern text with ! as the escape character (a code may hold % or _).
 const likeEscape = (s) => String(s).replace(/[!%_]/g, (c) => `!${c}`);
 
@@ -108,6 +109,31 @@ async function matchBillLines(db, supplierId, lines) {
       }
     } catch {
       // pg_trgm not installed: no similar-name suggestions
+    }
+  }
+
+  // 5. Step (d): for a line that may be a new toy, the most similar toy of this
+  // supplier (looser than 4.): its category and brand are the new toy's
+  // suggestion (owner: "suggested from the most similar existing toy").
+  const maybeNew = lines.map((l, i) => ({ l, i })).filter(({ i, l }) => !out[i].chosen.length && String(l.description || "").trim().length >= 3);
+  if (maybeNew.length && supplierId) {
+    try {
+      const { rows } = await db.query(
+        `SELECT d.idx, p.name, p.category_id, p.brand_id, (SELECT b.name FROM brands b WHERE b.id = p.brand_id) AS brand_name
+           FROM unnest($1::int[], $2::text[]) AS d(idx, descr)
+           CROSS JOIN LATERAL (
+             SELECT p.* FROM products p
+              WHERE p.deleted_at IS NULL AND p.supplier_id = $3 AND p.category_id IS NOT NULL
+                AND public.similarity(p.name, d.descr) > 0.2
+              ORDER BY public.similarity(p.name, d.descr) DESC
+              LIMIT 1) p`,
+        [maybeNew.map(({ i }) => i), maybeNew.map(({ l }) => String(l.description)), supplierId]);
+      for (const r of rows) {
+        const { idx, ...like } = r;
+        out[idx].like = like;
+      }
+    } catch {
+      // pg_trgm not installed: no suggestion, the shop chooses
     }
   }
 

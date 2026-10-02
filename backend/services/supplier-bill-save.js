@@ -21,6 +21,7 @@
 const stockLedger = require("./stock-ledger");
 const productHistory = require("./product-history");
 const payouts = require("./till-payouts");
+const { createNewToys } = require("./supplier-bill-new-toys");
 
 const fail = (status, msg, extra = {}) => Object.assign(new Error(msg), { statusCode: status, ...extra });
 const r2 = (n) => Math.round(Number(n) * 100) / 100;
@@ -43,7 +44,7 @@ function planBill(p) {
     const split = Math.max(1, Math.round(num(l.split_into) || 1));
     const pct = num(l.discount_pct);
     if (pct < 0 || pct > 100) throw fail(400, `${label}: discount must be 0 to 100 %`);
-    if (l.is_new) throw fail(400, `${label}: new toys get their code and price in the next step`);
+    if (l.is_new) throw fail(400, `${label}: the new toy wasn't created`); // saveSupplierBill creates them first
     const toys = (Array.isArray(l.toys) ? l.toys : []).map((t) => ({ product_id: Number(t.product_id), qty: num(t.qty) }));
     if (!toys.length || toys.some((t) => !t.product_id)) throw fail(400, `${label}: which toy is it?`);
     const pieces = received * split;
@@ -106,12 +107,14 @@ async function addDays(client, dateStr, days) {
  * Save inside the caller's transaction. ctx: { employeeId, employeeName, today }.
  * files: [{ file_name, content_type, size_bytes, sha256, storage_key, page_count }] already stored.
  */
-async function saveSupplierBill(client, p, files, ctx) {
-  const plan = planBill(p);
-  if (!plan.planned.length) throw fail(400, "The bill has no lines");
-
-  const { rows: [sup] } = await client.query("SELECT id, name, payment_terms, credit_days FROM suppliers WHERE id = $1", [Number(p.supplier_id) || 0]);
+async function saveSupplierBill(client, payload, files, ctx) {
+  if (!Array.isArray(payload.lines) || !payload.lines.length) throw fail(400, "The bill has no lines");
+  const { rows: [sup] } = await client.query("SELECT id, name, payment_terms, credit_days FROM suppliers WHERE id = $1", [Number(payload.supplier_id) || 0]);
   if (!sup) throw fail(400, "Choose the supplier");
+  // Step (d): new toys first (code, category, brand, price), then the bill as usual.
+  const fresh = await createNewToys(client, payload.lines, sup.id);
+  const p = { ...payload, lines: fresh.lines };
+  const plan = planBill(p);
   const { rows: [outlet] } = await client.query("SELECT id FROM outlets WHERE id = $1", [Number(p.outlet_id) || 0]);
   if (!outlet) throw fail(400, "Choose the branch the goods went to");
   const productIds = [...new Set(plan.planned.flatMap((x) => x.toys.map((t) => t.product_id)))];
@@ -190,11 +193,12 @@ async function saveSupplierBill(client, p, files, ctx) {
       `INSERT INTO supplier_bill_lines (bill_id, sort_order, line_no, page, file_id, supplier_code, description, product_id,
                                         billed_qty, received_qty, rate, discount_pct, discount_amount, amount, split_into,
                                         unit_cost, sale_price, is_new_product, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,false,$18) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [bill.id, i + 1, x.src.line_no ?? String(i + 1), x.src.page ?? null, fileIds[Number(x.src.file_index) || 0] ?? null,
         x.src.supplier_code || null, x.src.description || null, firstToy?.product_id ?? null,
         x.billed, x.received, num(x.src.rate), x.pct, r2(num(x.src.amount) * x.pct / 100), num(x.src.amount), x.split,
-        x.unitCost, firstToy ? Number(prod.get(firstToy.product_id).price) : null, x.src.note || null]);
+        x.unitCost, firstToy ? (newPriceOf(x, firstToy.product_id) ?? Number(prod.get(firstToy.product_id).price)) : null,
+        !!x.src.was_new, x.src.note || null]);
     for (const t of x.toys) {
       const before = Number(prod.get(t.product_id).cost_price);
       await client.query(
@@ -225,6 +229,20 @@ async function saveSupplierBill(client, p, files, ctx) {
            DO UPDATE SET split_into = EXCLUDED.split_into, last_cost = EXCLUDED.last_cost, confirmed = true, updated_at = NOW()`,
           [sup.id, t.product_id, code, x.split, x.unitCost, ctx.employeeId || null]);
       }
+    }
+  }
+  // Step (d): a new selling price only where the check screen says so (the
+  // label_reprints trigger lists it for a new tag).
+  const labels = [...fresh.created];
+  const priced = new Set();
+  for (const x of plan.planned) {
+    for (const t of x.toys) {
+      const np = newPriceOf(x, t.product_id);
+      const old = Number(prod.get(t.product_id).price);
+      if (np == null || priced.has(t.product_id) || x.src.was_new || np === old) continue;
+      priced.add(t.product_id);
+      const { rows: [u] } = await client.query("UPDATE products SET price = $1 WHERE id = $2 RETURNING sku, name", [np, t.product_id]);
+      labels.push({ product_id: t.product_id, sku: u.sku, name: u.name, price: np, old_price: old, is_new: false });
     }
   }
   await productHistory.tagChanges(client, {
@@ -291,7 +309,15 @@ async function saveSupplierBill(client, p, files, ctx) {
     [grn.id, inv.id, returnId, paymentId, payoutId, pn ? pn.method : null, pn ? r2(num(pn.amount)) : null,
       pn ? String(pn.reference || "").trim() || null : null, bill.id]);
   for (const x of sentBack) for (const t of x.toys) stockChanges.push({ product_id: t.product_id, outlet_id: outlet.id, delta: t.qty });
-  return { bill: saved, stockChanges, plan };
+  return { bill: saved, stockChanges, plan, labels };
+}
+
+/** The new selling price the check screen gave a toy on this line, if any. */
+function newPriceOf(x, productId) {
+  const t = (x.src.toys || []).find((y) => Number(y.product_id) === productId);
+  const v = t && t.new_price !== "" && t.new_price != null ? r2(num(t.new_price)) : null;
+  if (v != null && !(v > 0)) throw fail(400, `${x.label}: the new price must be more than 0`);
+  return v;
 }
 
 module.exports = { planBill, saveSupplierBill };
