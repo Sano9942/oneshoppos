@@ -282,6 +282,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - ✅ **Decided (owner): several barcodes per toy = ONE toy, one stock count, any of its barcodes scans it** (needs an extra-barcodes list per toy: till scan, search, offline copy, bill matching). Separate items per colour only for the few toys where the owner wants it (ordinary separate products).
 - ✅ **Owner: always sold by the piece, never by box/carton.** Supplier bills already show the piece count ordered (cartons are opened and counted). **Packs that are split:** one billed item can hold 3 / 6 / 10 pieces (e.g. a rattle pack of 6): they open it, divide the selling price per piece **to the nearest figure**, give it a code or reuse a code, and sell pieces. → check screen: "split into N pieces" on a line (qty × N, cost ÷ N, sale price ÷ N rounded), remembered per supplier code. **Rounding: nearest 10** (owner; e.g. 1,000 ÷ 6 = 166.67 → 170).
 - ✅ **Cost = the latest bill's price (replace, not average)** (owner). Checked: every cost change is already written to the item's History by a database trigger (`price_changes`, v143, `services/product-history.js`); the bill must tag its changes so History shows the supplier and bill number.
+- ✅ **Cost = actual cost after discounts** (owner, same as iPOS): a line discount lowers that line's cost; a whole-bill discount is spread over the lines in proportion to their value (A2Z: 12 × 160 less 5 % → 152 a piece). Freight / carriage: question open.
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
 
