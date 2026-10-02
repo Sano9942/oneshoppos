@@ -15,6 +15,7 @@
 const crypto = require("crypto");
 const path = require("path");
 const { readBillPdf } = require("../services/bill-readers");
+const { matchBillLines } = require("../services/supplier-bill-match");
 const { LAYOUTS } = require("../services/bill-readers/layouts");
 const { verifyImageMagicBytes } = require("../middleware/upload-validation");
 const { asyncStore } = require("../tenant-db-proxy-pg");
@@ -57,6 +58,19 @@ async function supplierForLayout(db, layoutKey) {
 
 module.exports = function mountSupplierBillRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
+
+  // Step (c1): which of our toys is each bill line (services/supplier-bill-match.js).
+  app.post("/api/supplier-bills/match", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const supplierId = Number(req.body?.supplier_id);
+      const lines = Array.isArray(req.body?.lines) ? req.body.lines.slice(0, 2000) : null;
+      if (!supplierId) return res.status(400).json({ error: "Choose the supplier first" });
+      if (!lines) return res.status(400).json({ error: "lines must be a list" });
+      res.json({ lines: await matchBillLines(db, supplierId, lines) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 15 * 1024 * 1024, files: 10 },

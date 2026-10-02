@@ -1,26 +1,26 @@
 // One Toy Store F9: receive a supplier bill without a purchase order.
-// Step (b): pick the supplier, upload the bill's PDF(s) / photo(s), see every
-// line read from it with its check (qty × rate = amount) and the total check.
-// Nothing is saved yet: the check screen (match toys, prices, save) is step (c).
+// (b) pick the supplier, upload the bill's PDF(s) / photo(s), every line is
+//     read and checked (qty × rate = amount, lines vs the printed total);
+// (c1) each line matched to our toy(s) and checked on screen: pieces received,
+//     split packs, cost per piece, our price, the total written on the bill.
+// Save (stock in, bill onto the supplier's account) is step (c2).
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { Badge, Button, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
-
-const CHECK = {
-  ok: { tone: "success", label: "✓" },
-  mismatch: { tone: "danger", label: "qty × rate ≠ amount" },
-  missing: { tone: "warning", label: "number missing" },
-};
+import CheckLines from "./supplierBill/CheckLines";
+import { billSummary, lineFromRead } from "./supplierBill/billMath";
 
 export default function ReceiveSupplierBillRedesign() {
   const { fmt } = useCurrency();
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState("");
   const [files, setFiles] = useState([]);
-  const [reading, setReading] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "" });
 
   useEffect(() => {
     api.get("/api/suppliers")
@@ -28,11 +28,31 @@ export default function ReceiveSupplierBillRedesign() {
       .catch(() => {});
   }, []);
 
+  const match = async (sid, readResult) => {
+    if (!sid || !readResult?.lines?.length) {
+      setLines([]);
+      return;
+    }
+    setBusy("Matching toys…");
+    try {
+      const d = await api.post("/api/supplier-bills/match", {
+        supplier_id: Number(sid),
+        lines: readResult.lines.map((l, i) => ({ key: String(i), supplier_code: l.supplier_code, barcode: l.barcode, description: l.description })),
+      });
+      setLines(readResult.lines.map((l, i) => lineFromRead(l, d.lines[i])));
+    } catch (e) {
+      setError(e.body?.error || e.message || "Could not match the toys");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const read = async () => {
     if (!files.length) return;
-    setReading(true);
+    setBusy("Reading…");
     setError("");
     setResult(null);
+    setLines([]);
     try {
       const fd = new FormData();
       for (const f of files) fd.append("files", f);
@@ -41,34 +61,43 @@ export default function ReceiveSupplierBillRedesign() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not read the bill");
       setResult(data);
+      const printed = data.printed?.total ?? data.printed?.subtotal;
+      setHeader({
+        bill_number: data.bill_number || "",
+        bill_date: data.bill_date || "",
+        written_total: printed != null ? String(printed) : "",
+        differs: false,
+        differs_note: "",
+      });
+      setBusy("");
+      await match(supplierId, data);
     } catch (e) {
       setError(e.body?.error || e.message || "Could not read the bill");
-    } finally {
-      setReading(false);
+      setBusy("");
     }
   };
 
-  const supplierName = (id) => suppliers.find((s) => String(s.id) === String(id))?.name;
-  const counts = useMemo(() => {
-    const lines = result?.lines || [];
-    return {
-      ok: lines.filter((l) => l.check === "ok").length,
-      bad: lines.filter((l) => l.check !== "ok").length,
-      pieces: lines.reduce((s, l) => s + (Number(l.qty) || 0), 0),
-    };
-  }, [result]);
-  const printedForLines = result ? (result.printed?.subtotal ?? result.printed?.total) : null;
+  const chooseSupplier = (sid) => {
+    setSupplierId(sid);
+    if (result) match(sid, result);
+  };
+
+  const billDiscount = Number(result?.printed?.discount) || 0;
+  const discountRatio = result?.lines_total ? billDiscount / result.lines_total : 0;
+  const summary = useMemo(() => billSummary(lines, header.written_total), [lines, header.written_total]);
+  const totalOk = summary.total_matches || (header.differs && header.differs_note.trim());
+  const allReady = lines.length > 0 && summary.ready === lines.length;
 
   return (
     <PageShell
       title="Receive supplier bill"
-      subtitle="Upload the supplier's bill (PDF or photo). Reading only for now: nothing is saved."
+      subtitle="Upload the supplier's bill, check every line, then save (save comes in the next step)."
     >
       <SectionCard className="mb-4 p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
             Supplier
-            <Select className="mt-1 w-full" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} aria-label="Supplier">
+            <Select className="mt-1 w-full" value={supplierId} onChange={(e) => chooseSupplier(e.target.value)} aria-label="Supplier">
               <option value="">Choose the supplier…</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
@@ -84,131 +113,113 @@ export default function ReceiveSupplierBillRedesign() {
               onChange={(e) => setFiles(Array.from(e.target.files || []))}
             />
           </label>
-          <Button tone="primary" onClick={read} disabled={!files.length || reading}>
-            {reading ? "Reading…" : "Read bill"}
+          <Button tone="primary" onClick={read} disabled={!files.length || !!busy}>
+            {busy || "Read bill"}
           </Button>
         </div>
         {error ? <p className="mt-3 text-sm text-(--ui-danger-fg)">{error}</p> : null}
       </SectionCard>
 
       {result ? (
-        <>
-          <SectionCard className="mb-4 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {result.layout_label ? <Badge>{result.layout_label}</Badge> : <Badge tone="warning">Layout not recognised</Badge>}
-              {result.bill_number ? <span className="text-sm">Bill <b>{result.bill_number}</b></span> : null}
-              {result.bill_date ? <span className="text-sm">dated <b>{result.bill_date}</b></span> : null}
-              <span className="text-sm text-(--ui-text-muted)">
-                {result.files.length} file{result.files.length === 1 ? "" : "s"}
-              </span>
+        <SectionCard className="mb-4 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {result.layout_label ? <Badge>{result.layout_label}</Badge> : <Badge tone="warning">Layout not recognised</Badge>}
+            <span className="text-sm text-(--ui-text-muted)">
+              {result.files.length} file{result.files.length === 1 ? "" : "s"} · {result.lines.length} lines read ·{" "}
+              {result.lines.filter((l) => l.check === "ok").length} with qty × rate = amount
+            </span>
+          </div>
+          {result.supplier_suggestion ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span>This looks like a bill from <b>{result.supplier_suggestion.name}</b>.</span>
+              <Button size="sm" onClick={() => chooseSupplier(String(result.supplier_suggestion.id))}>Use this supplier</Button>
             </div>
-
-            {result.supplier_suggestion ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                <span>This looks like a bill from <b>{result.supplier_suggestion.name}</b>.</span>
-                <Button size="sm" onClick={() => setSupplierId(String(result.supplier_suggestion.id))}>
-                  Use this supplier
-                </Button>
-              </div>
-            ) : null}
-            {result.layout_warning ? <p className="mt-2 text-sm text-(--ui-warning-fg)">{result.layout_warning}</p> : null}
-            {result.files.filter((f) => f.already).map((f) => (
-              <p key={f.sha256} className="mt-2 text-sm text-(--ui-danger-fg)">
-                {f.file_name} is already on bill {f.already.bill_number || `#${f.already.bill_id}`} of {f.already.supplier_name} ({f.already.status}): the same file can't be saved twice.
-              </p>
-            ))}
-            {result.needs_photo_reader ? (
-              <p className="mt-2 text-sm text-(--ui-warning-fg)">
-                A photo or a scanned PDF can't be read by position: the photo reader comes in a later step.
-              </p>
-            ) : null}
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat label="Lines read" value={result.lines.length} />
-              <Stat label="Lines checked ✓" value={`${counts.ok} of ${result.lines.length}`} tone={counts.bad ? "danger" : "success"} />
-              <Stat label="Pieces" value={counts.pieces.toLocaleString()} />
-              <Stat
-                label="Lines add up to"
-                value={fmt(result.lines_total)}
-                note={printedForLines != null ? `Bill says ${fmt(printedForLines)}` : "No total found on the bill"}
-                tone={result.total_matches === false ? "danger" : result.total_matches ? "success" : undefined}
-              />
-            </div>
-            {result.printed?.prev_balance != null ? (
-              <p className="mt-3 text-sm text-(--ui-text-muted)">
-                Printed on the bill: previous balance {fmt(result.printed.prev_balance)}
-                {result.printed.total_balance != null ? ` · new balance ${fmt(result.printed.total_balance)}` : ""}
-                {result.printed.due_date ? ` · due ${result.printed.due_date}` : ""}
-              </p>
-            ) : null}
-            {result.printed?.discount ? (
-              <p className="mt-1 text-sm text-(--ui-text-muted)">
-                Bill discount {fmt(result.printed.discount)}{result.printed.discount_pct ? ` (${result.printed.discount_pct} %)` : ""} · total {fmt(result.printed.total)}
-              </p>
-            ) : null}
-            {result.warnings.length ? (
-              <ul className="mt-2 list-disc pl-5 text-sm text-(--ui-warning-fg)">
-                {result.warnings.map((w) => <li key={w}>{w}</li>)}
-              </ul>
-            ) : null}
-            {supplierId ? <p className="mt-2 text-xs text-(--ui-text-muted)">Supplier: {supplierName(supplierId)}</p> : null}
-          </SectionCard>
-
-          {result.lines.length ? (
-            <SectionCard className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-(--ui-muted-surface) text-left text-xs uppercase text-(--ui-text-muted)">
-                  <tr>
-                    <th className="px-3 py-2">S.No</th>
-                    <th className="px-3 py-2">Page</th>
-                    <th className="px-3 py-2">Supplier code</th>
-                    <th className="px-3 py-2">Description</th>
-                    <th className="px-3 py-2 text-right">Qty</th>
-                    <th className="px-3 py-2 text-right">Rate</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2">Check</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.lines.map((l) => (
-                    <tr key={`${l.file_index}-${l.page}-${l.line_no}`} className="border-t border-(--ui-border)">
-                      <td className="px-3 py-1.5 tabular-nums">{l.line_no}</td>
-                      <td className="px-3 py-1.5 tabular-nums text-(--ui-text-muted)">{result.files.length > 1 ? `${l.file_index + 1}·` : ""}{l.page}</td>
-                      <td className="px-3 py-1.5 font-mono text-xs">{l.supplier_code}</td>
-                      <td className="px-3 py-1.5">
-                        {l.description}
-                        {l.packing && l.packing.ctn ? (
-                          <span className="ml-2 text-xs text-(--ui-text-muted)">{l.packing.ctn} ctn × {l.packing.pkg}</span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{l.qty}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{l.rate?.toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{l.amount?.toLocaleString()}</td>
-                      <td className="px-3 py-1.5">
-                        <Badge tone={CHECK[l.check]?.tone}>{CHECK[l.check]?.label || l.check}</Badge>
-                        {l.check === "mismatch" ? (
-                          <span className="ml-1 text-xs text-(--ui-text-muted)">should be {l.expected_amount?.toLocaleString()}</span>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </SectionCard>
           ) : null}
+          {result.layout_warning && !result.supplier_suggestion ? <p className="mt-2 text-sm text-(--ui-warning-fg)">{result.layout_warning}</p> : null}
+          {result.layout_warning && result.supplier_suggestion && String(result.supplier_suggestion.id) !== supplierId ? (
+            <p className="mt-2 text-sm text-(--ui-warning-fg)">{result.layout_warning}</p>
+          ) : null}
+          {result.files.filter((f) => f.already).map((f) => (
+            <p key={f.sha256} className="mt-2 text-sm text-(--ui-danger-fg)">
+              {f.file_name} is already on bill {f.already.bill_number || `#${f.already.bill_id}`} of {f.already.supplier_name} ({f.already.status}): the same file can't be saved twice.
+            </p>
+          ))}
+          {result.needs_photo_reader ? (
+            <p className="mt-2 text-sm text-(--ui-warning-fg)">A photo or a scanned PDF can't be read by position: the photo reader comes in a later step.</p>
+          ) : null}
+          {result.warnings.length ? (
+            <ul className="mt-2 list-disc pl-5 text-sm text-(--ui-warning-fg)">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+          ) : null}
+          {result.printed?.prev_balance != null ? (
+            <p className="mt-2 text-sm text-(--ui-text-muted)">
+              Printed on the bill: previous balance {fmt(result.printed.prev_balance)}
+              {result.printed.total_balance != null ? ` · new balance ${fmt(result.printed.total_balance)}` : ""}
+              {result.printed.due_date ? ` · due ${result.printed.due_date}` : ""}
+            </p>
+          ) : null}
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+              Bill number
+              <Input className="mt-1" value={header.bill_number} onChange={(e) => setHeader((h) => ({ ...h, bill_number: e.target.value }))} />
+            </label>
+            <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+              Bill date
+              <Input className="mt-1" type="date" value={header.bill_date} onChange={(e) => setHeader((h) => ({ ...h, bill_date: e.target.value }))} />
+            </label>
+            <label className="block text-xs font-semibold uppercase text-(--ui-text-muted)">
+              Total written on the bill
+              <Input className="mt-1" type="number" value={header.written_total} onChange={(e) => setHeader((h) => ({ ...h, written_total: e.target.value }))} />
+            </label>
+            <div className="rounded-(--ui-radius-sm) border border-(--ui-border) px-3 py-2">
+              <div className="text-xs uppercase text-(--ui-text-muted)">Lines add up to</div>
+              <div className={`text-lg font-bold tabular-nums ${summary.total_matches ? "text-(--ui-success-fg)" : summary.total_matches === false ? "text-(--ui-danger-fg)" : ""}`}>
+                {fmt(summary.lines_total)}
+              </div>
+              {summary.difference ? <div className="text-xs text-(--ui-danger-fg)">Difference {fmt(summary.difference)}</div> : null}
+            </div>
+          </div>
+          {billDiscount ? (
+            <p className="mt-2 text-sm text-(--ui-text-muted)">
+              Bill discount {fmt(billDiscount)} spread over the lines by value (cost per piece already less it).
+            </p>
+          ) : null}
+          {summary.total_matches === false ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={header.differs} onChange={(e) => setHeader((h) => ({ ...h, differs: e.target.checked }))} />
+                Supplier&apos;s total is different
+              </label>
+              {header.differs ? (
+                <Input className="max-w-md" placeholder="Why? (e.g. they added it up wrong)" aria-label="Why the total is different"
+                  value={header.differs_note} onChange={(e) => setHeader((h) => ({ ...h, differs_note: e.target.value }))} />
+              ) : null}
+            </div>
+          ) : null}
+        </SectionCard>
+      ) : null}
+
+      {result && !supplierId && result.lines.length ? (
+        <SectionCard className="mb-4 p-4 text-sm">Choose the supplier to match the lines to your toys.</SectionCard>
+      ) : null}
+
+      {lines.length ? (
+        <>
+          <CheckLines lines={lines} onChange={setLines} billDiscountRatio={discountRatio} multiFile={result?.files.length > 1} />
+          <SectionCard className="mt-4 flex flex-wrap items-center gap-3 p-4">
+            <span className="text-sm">
+              {summary.ready} of {lines.length} lines ready
+              {summary.new_toys ? ` · ${summary.new_toys} new toys` : ""}
+              {summary.returns ? ` · ${summary.returns} sent back` : ""}
+              {!totalOk ? " · the total doesn't match yet" : ""}
+            </span>
+            <div className="flex-1" />
+            <Button tone="primary" disabled title="Save comes in the next step">
+              Save bill {allReady && totalOk ? "(next step)" : ""}
+            </Button>
+          </SectionCard>
         </>
       ) : null}
     </PageShell>
-  );
-}
-
-function Stat({ label, value, note, tone }) {
-  const color = tone === "danger" ? "text-(--ui-danger-fg)" : tone === "success" ? "text-(--ui-success-fg)" : "text-(--ui-text)";
-  return (
-    <div className="rounded-(--ui-radius-sm) border border-(--ui-border) px-3 py-2">
-      <div className="text-xs uppercase text-(--ui-text-muted)">{label}</div>
-      <div className={`text-lg font-bold tabular-nums ${color}`}>{value}</div>
-      {note ? <div className="text-xs text-(--ui-text-muted)">{note}</div> : null}
-    </div>
   );
 }
