@@ -11,10 +11,17 @@
  *     (supplier_bills.layout), with the owner's three as the starting point,
  *     so a bill with no supplier name printed (Hafiz Nawaz, Toys and Toys)
  *     still suggests its supplier.
+ *
+ * Step (e): photos, and PDFs no layout reads (scans), go to the AI photo
+ * reader (services/bill-readers/photo-reader.js) — only when the screen asks
+ * (`use_ai=1`), because each reading costs money (about Rs 11 a photo). A
+ * per-shop daily cap on photos read is a cost safety stop.
  */
 const crypto = require("crypto");
 const path = require("path");
 const { readBillPdf } = require("../services/bill-readers");
+const { readBillPhotos, LAYOUT: PHOTO_LAYOUT } = require("../services/bill-readers/photo-reader");
+const logger = require("../services/logger");
 const { matchBillLines } = require("../services/supplier-bill-match");
 const { saveSupplierBill } = require("../services/supplier-bill-save");
 const { uploadToR2, r2 } = require("../utils/r2");
@@ -36,12 +43,16 @@ function billFileFilter(req, file, cb) {
   return cb(err);
 }
 
+// Shown before reading: what a photo costs on Sonnet 5.5 (owner's figure, 2026-10-02).
+const AI_ESTIMATE_RS_PER_FILE = 11;
+const aiUsage = new Map(); // `${shop}:${shop day}` -> files read
+
 const isPdf = (buf) => buf.length > 4 && buf.subarray(0, 5).toString("latin1") === "%PDF-";
 
 async function expectedLayoutFor(db, supplierId) {
   const { rows: [b] } = await db.query(
-    `SELECT layout FROM supplier_bills WHERE supplier_id = $1 AND layout IS NOT NULL AND status <> 'undone'
-      ORDER BY id DESC LIMIT 1`, [supplierId]);
+    `SELECT layout FROM supplier_bills WHERE supplier_id = $1 AND layout IS NOT NULL AND layout <> $2 AND status <> 'undone'
+      ORDER BY id DESC LIMIT 1`, [supplierId, PHOTO_LAYOUT]);
   if (b) return b.layout;
   const { rows: [s] } = await db.query("SELECT name FROM suppliers WHERE id = $1", [supplierId]);
   const name = String(s?.name || "").toUpperCase();
@@ -58,6 +69,22 @@ async function supplierForLayout(db, layoutKey) {
   if (!hint) return null;
   const { rows } = await db.query("SELECT id, name FROM suppliers WHERE name ILIKE $1 ORDER BY id LIMIT 2", [`%${hint}%`]);
   return rows.length === 1 ? rows[0] : null;
+}
+
+/** A supplier whose name looks like the one the AI read off the bill. */
+async function supplierForName(db, name) {
+  const read = String(name || "").trim();
+  if (!read) return null;
+  try {
+    const { rows: [s] } = await db.query(
+      `SELECT id, name FROM suppliers WHERE similarity(LOWER(name), LOWER($1)) > 0.3
+        ORDER BY similarity(LOWER(name), LOWER($1)) DESC, id LIMIT 1`, [read]);
+    return s || null;
+  } catch {
+    // pg_trgm not installed: a plain contains-match on the name as read.
+    const { rows } = await db.query("SELECT id, name FROM suppliers WHERE name ILIKE $1 ORDER BY id LIMIT 2", [`%${read}%`]);
+    return rows.length === 1 ? rows[0] : null;
+  }
 }
 
 /**
@@ -88,6 +115,11 @@ function checkFile(f) {
 
 module.exports = function mountSupplierBillRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
+  // The AI photo reader: a stand-in in tests; none when no key is set.
+  const photoReader = () => ("billPhotoReader" in deps
+    ? deps.billPhotoReader
+    : process.env.ANTHROPIC_API_KEY ? readBillPhotos : null);
+  const photoCap = () => Number(deps.billPhotoDailyCap ?? process.env.AI_BILL_PHOTO_DAILY_CAP ?? 100);
   const enqueueInventorySyncEvents = (changes) => {
     try {
       if (typeof deps.enqueueInventorySyncEvents === "function") deps.enqueueInventorySyncEvents(changes, {}, () => {});
@@ -186,6 +218,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         const files = req.files || [];
         if (!files.length) return res.status(400).json({ error: "Choose the bill's PDF or photo" });
         const supplierId = req.body?.supplier_id ? Number(req.body.supplier_id) : null;
+        const useAi = ["1", "true"].includes(String(req.body?.use_ai || ""));
 
         const out = [];
         for (const f of files) {
@@ -215,16 +248,46 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
           });
         }
 
+        // Step (e): files no PDF layout reads go to the AI, when asked.
+        const aiIdx = out.map((f, i) => (f.kind === "image" || (f.read && !f.read.layout) ? i : -1)).filter((i) => i >= 0);
+        let photo = null;
+        if (useAi && aiIdx.length) {
+          const reader = photoReader();
+          if (!reader) return res.status(503).json({ error: "The photo reader is not set up on this server (no AI key)" });
+          const today = tenantToday(req.company?.timezone || "Asia/Karachi");
+          const key = `${req.tenantId || req.tenantSlug || "default"}:${today}`;
+          const used = aiUsage.get(key) || 0;
+          if (used + aiIdx.length > photoCap()) {
+            return res.status(429).json({ error: `Daily limit of ${photoCap()} photos read by AI reached: try again tomorrow or type the bill in` });
+          }
+          aiUsage.set(key, used + aiIdx.length);
+          photo = await reader(aiIdx.map((i) => ({
+            buffer: files[i].buffer, mimetype: files[i].mimetype, file_name: files[i].originalname, file_index: i,
+          })));
+          logger.info({
+            component: "supplier-bill-photo", tenant: req.tenantSlug || null, files: aiIdx.length,
+            model: photo.ai?.model, input_tokens: photo.ai?.input_tokens, output_tokens: photo.ai?.output_tokens,
+            cost_usd: photo.ai?.cost_usd, cost_rs: photo.ai?.cost_rs,
+          }, "supplier bill read by AI");
+        }
+
         // The files of one bill read together, in the order given.
         const readable = out.filter((f) => f.read && f.read.layout);
-        const head = readable[0]?.read || null;
+        const parts = readable.map((f) => ({ first: out.indexOf(f), read: f.read }));
+        if (photo) parts.push({ first: aiIdx[0], last: aiIdx[aiIdx.length - 1], read: photo });
+        parts.sort((a, b) => a.first - b.first);
+        const head = parts[0]?.read || null;
         const lines = [];
         out.forEach((f, i) => {
           for (const l of f.read?.lines || []) lines.push({ ...l, file_index: i });
         });
+        if (photo) lines.push(...photo.lines);
+        lines.sort((a, b) => a.file_index - b.file_index);
         const linesTotal = Math.round(lines.reduce((s, l) => s + (l.amount || 0), 0) * 100) / 100;
-        const printed = readable.length ? readable[readable.length - 1].read.printed : {};
-        const printedLines = printed.subtotal ?? printed.total;
+        const lastPart = parts.reduce((a, p) => (!a || (p.last ?? p.first) > (a.last ?? a.first) ? p : a), null);
+        const printed = lastPart ? lastPart.read.printed : {};
+        const anyLineDiscount = lines.some((l) => Number(l.discount_pct) > 0);
+        const printedLines = printed.subtotal ?? (anyLineDiscount || printed.discount ? null : printed.total);
         const layouts = [...new Set(readable.map((f) => f.read.layout))];
 
         let supplierSuggestion = null;
@@ -241,20 +304,31 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         if (layouts.length === 1) {
           const s = await supplierForLayout(db, layouts[0]);
           if (s && s.id !== supplierId) supplierSuggestion = s;
+        } else if (!layouts.length && photo?.supplier_name_read) {
+          const s = await supplierForName(db, photo.supplier_name_read);
+          if (s && s.id !== supplierId) supplierSuggestion = s;
         }
 
         res.json({
           files: out,
-          layout: layouts[0] || null,
+          layout: layouts[0] || (photo ? PHOTO_LAYOUT : null),
           layout_label: head?.layout_label || null,
+          supplier_name_read: photo?.supplier_name_read || null,
           bill_number: head?.bill_number || null,
           bill_date: head?.bill_date || null,
           printed,
           lines,
           lines_total: linesTotal,
           total_matches: printedLines == null ? null : Math.abs(printedLines - linesTotal) <= 1,
-          warnings: out.flatMap((f) => (f.read?.warnings || []).map((w) => `${f.file_name}: ${w}`)),
-          needs_photo_reader: out.some((f) => f.kind === "image" || (f.read && !f.read.layout)),
+          warnings: [
+            ...out.flatMap((f, i) => (photo && aiIdx.includes(i) ? [] : (f.read?.warnings || []).map((w) => `${f.file_name}: ${w}`))),
+            ...(photo?.warnings || []),
+          ],
+          needs_photo_reader: aiIdx.length > 0 && !photo,
+          ai_ready: !!photoReader(),
+          ai_files: aiIdx.length,
+          ai_estimate_rs: aiIdx.length * AI_ESTIMATE_RS_PER_FILE,
+          ai: photo?.ai || null,
           supplier_suggestion: supplierSuggestion,
           expected_layout: expectedLayout,
           layout_warning: layoutWarning,

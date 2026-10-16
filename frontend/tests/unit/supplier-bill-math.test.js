@@ -154,3 +154,25 @@ describe("step (d): prices and what is saved", () => {
     expect(savePayload({ supplierId: 1, outletId: 1, header: {}, result: {}, lines: [l], ...ctx }).lines[0].toys[0]).toEqual({ product_id: 1, qty: 2, new_price: 1100 });
   });
 });
+
+// F9 (e): photo bills come back from the AI with the line discount, the
+// printed barcode and the paper marks (owner 2026-10-16: flag only).
+describe("lineFromRead for a photo bill", () => {
+  it("keeps the line discount the reader found", () => {
+    const l = lineFromRead(read({ discount_pct: 5 }));
+    expect(l.discount_pct).toBe(5);
+    expect(unitCost(l)).toBe(152);
+  });
+  it("a printed barcode fills a new toy's maker's barcode", () => {
+    expect(lineFromRead(read({ barcode: "8859335200140" })).new_toy.barcode).toBe("8859335200140");
+  });
+  it("struck / circled / hard to read comes through for the screen", () => {
+    const l = lineFromRead(read({ paper_mark: "struck", unsure: true, note: "barcode smudged" }));
+    expect(l).toMatchObject({ paper_mark: "struck", unsure: true, read_note: "barcode smudged" });
+    expect(lineFromRead(read()).paper_mark).toBeNull();
+  });
+  it("the bill total takes each line's discount off (A2Z: 1,920 less 5 % = 1,824)", () => {
+    const s = billSummary([lineFromRead(read({ discount_pct: 5 }))], "1824", 0);
+    expect(s.total_matches).toBe(true);
+  });
+});

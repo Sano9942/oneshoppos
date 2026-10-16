@@ -106,9 +106,10 @@ export default function ReceiveSupplierBillRedesign() {
     }
   };
 
-  const read = async () => {
+  // F9 (e): useAi = read photos / scans with the AI (costs money, so only on request).
+  const read = async (useAi = false) => {
     if (!files.length) return;
-    setBusy("Reading…");
+    setBusy(useAi ? "Reading with AI…" : "Reading…");
     setError("");
     setSaved(null);
     setResult(null);
@@ -117,6 +118,7 @@ export default function ReceiveSupplierBillRedesign() {
       const fd = new FormData();
       for (const f of files) fd.append("files", f);
       if (supplierId) fd.append("supplier_id", supplierId);
+      if (useAi) fd.append("use_ai", "1");
       const res = await api.upload("/api/supplier-bills/read", fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not read the bill");
@@ -210,7 +212,7 @@ export default function ReceiveSupplierBillRedesign() {
               onChange={(e) => setFiles(Array.from(e.target.files || []))}
             />
           </label>
-          <Button tone="primary" onClick={read} disabled={!files.length || !!busy}>
+          <Button tone="primary" onClick={() => read()} disabled={!files.length || !!busy}>
             {busy || "Read bill"}
           </Button>
         </div>
@@ -278,8 +280,22 @@ export default function ReceiveSupplierBillRedesign() {
               {f.file_name} is already on bill {f.already.bill_number || `#${f.already.bill_id}`} of {f.already.supplier_name} ({f.already.status}): the same file can't be saved twice.
             </p>
           ))}
-          {result.needs_photo_reader ? (
-            <p className="mt-2 text-sm text-(--ui-warning-fg)">A photo or a scanned PDF can't be read by position: the photo reader comes in a later step.</p>
+          {result.needs_photo_reader && result.ai_ready ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span>{result.ai_files === 1 ? "This file is" : `${result.ai_files} files are`} a photo or a scanned PDF: the AI can read {result.ai_files === 1 ? "it" : "them"}.</span>
+              <Button tone="primary" onClick={() => read(true)} disabled={!!busy}>
+                Read with AI · about Rs {Number(result.ai_estimate_rs || 0).toLocaleString()}
+              </Button>
+            </div>
+          ) : null}
+          {result.needs_photo_reader && !result.ai_ready ? (
+            <p className="mt-2 text-sm text-(--ui-warning-fg)">The photo reader isn't set up on this server: type the bill in.</p>
+          ) : null}
+          {result.ai ? (
+            <p className="mt-2 text-sm text-(--ui-text-muted)">
+              Read by AI · Rs {Number(result.ai.cost_rs || 0).toLocaleString()} · check every line against the paper
+              {result.supplier_name_read ? <> · Bill says: <b>{result.supplier_name_read}</b></> : null}
+            </p>
           ) : null}
           {result.warnings.length ? (
             <ul className="mt-2 list-disc pl-5 text-sm text-(--ui-warning-fg)">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>

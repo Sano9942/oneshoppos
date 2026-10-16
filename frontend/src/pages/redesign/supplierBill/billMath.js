@@ -33,9 +33,14 @@ export function lineFromRead(read, match = { matches: [], chosen: [] }) {
     received,
     rate: Number(read.rate) || 0,
     amount: Number(read.amount) || 0,
-    discount_pct: 0,
+    // F9 (e): a photo bill's reader finds the line discount itself.
+    discount_pct: Number(read.discount_pct) || 0,
     split_into: split,
     read_check: read.check,
+    // Owner 2026-10-16: struck / circled on the paper is only flagged.
+    paper_mark: read.paper_mark || null,
+    unsure: !!read.unsure,
+    read_note: read.note || null,
     toys: chosen.map((m) => ({ ...m, qty: chosen.length === 1 ? pieces : 0 })),
     suggestions: (match.matches || []).filter((m) => !(match.chosen || []).includes(m.product_id)),
     is_new: false,
@@ -49,7 +54,7 @@ export function lineFromRead(read, match = { matches: [], chosen: [] }) {
       price: "",
       rule: "",
       code: "",
-      barcode: "",
+      barcode: read.barcode || "",
     },
     is_return: received < 0,
   };

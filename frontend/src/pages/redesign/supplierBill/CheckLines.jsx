@@ -78,10 +78,15 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
                     <div className="font-mono text-xs">{l.supplier_code}</div>
                     <div>{l.description}</div>
                     {l.is_return ? <Badge tone="warning">Sent back</Badge> : null}
+                    {l.paper_mark === "struck" ? <Badge tone="warning">Struck through on the paper</Badge> : null}
+                    {l.paper_mark === "circled" ? <Badge tone="warning">Circled on the paper</Badge> : null}
+                    {l.unsure || l.read_note ? (
+                      <div className="text-xs text-(--ui-warning-fg)">Hard to read{l.read_note ? `: ${l.read_note}` : ""}</div>
+                    ) : null}
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">
                     {l.billed}
-                    <div className="text-xs text-(--ui-text-muted)">× {Number(l.rate).toLocaleString()}</div>
+                    <div className="text-xs text-(--ui-text-muted)">× {Number(l.rate).toLocaleString()}{Number(l.discount_pct) ? ` − ${Number(l.discount_pct)}%` : ""}</div>
                   </td>
                   <td className="px-2 py-2">
                     <Input
