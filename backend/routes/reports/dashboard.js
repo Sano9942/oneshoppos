@@ -34,6 +34,17 @@ module.exports = function (app, deps) {
               THEN (si.quantity * si.price_at_sale) / (1 + (t.rate / 100.0))
               ELSE (si.quantity * si.price_at_sale) / (1 + (COALESCE(p.gst, 0) / 100.0)) END`;
 
+  // One Toy Store D65: money figures count only what was actually paid, the
+  // Day report's rule. The part of an exchange bill paid with the returned
+  // toys ("Return Credit") is not new money; GREATEST keeps a pre-D56 bill
+  // (credit saved as the discount, total 0) at 0.
+  const MONEY_PAID = `GREATEST(s.total_amount - COALESCE((SELECT SUM(rcp.amount) FROM sale_payments rcp
+                 WHERE rcp.sale_id = s.id AND rcp.payment_method = 'Return Credit'), 0), 0)`;
+  // ...and refunds count only money handed back: an exchange for another toy
+  // gives back nothing (D56 credit_applied; pre-D56 rows are 'Return Credit').
+  const MONEY_BACK = `CASE WHEN r.refund_method = 'Return Credit' THEN 0
+                 ELSE r.total_refund - COALESCE(r.credit_applied, 0) END`;
+
   function buildOutletClause(col, ids, startIdx) {
     if (!ids.length) return { clause: "", values: [] };
     if (ids.length === 1)
@@ -99,6 +110,7 @@ module.exports = function (app, deps) {
           ROUND(SUM(COALESCE(sp.amount, s.total_amount))::numeric, 2) AS total
         FROM sales s LEFT JOIN sale_payments sp ON s.id = sp.sale_id
         WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${zOutlet.clause}
+          AND (sp.payment_method IS NULL OR sp.payment_method <> 'Return Credit')
         GROUP BY COALESCE(sp.payment_method, s.payment_method, 'Unknown') ORDER BY total DESC`,
         [todayStart, todayEnd, ...zOutlet.values])).rows;
       const totalRevenueToday = zReport.reduce((sum, row) => sum + Number(row.total || 0), 0);
@@ -208,7 +220,7 @@ module.exports = function (app, deps) {
       const yrOutlet = buildOutletClause("r.outlet_id", outletIds, yrIdx + 2);
       const yesterdayData = (await db.query(`
         WITH yd_sales AS (
-          SELECT ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
+          SELECT ROUND(COALESCE(SUM(${MONEY_PAID}), 0)::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
           FROM sales s WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${ysOutlet.clause}
         ),
         yd_profit AS (
@@ -234,8 +246,8 @@ module.exports = function (app, deps) {
           ) b
         ),
         yd_refunds AS (
-          SELECT ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0)::numeric, 2) AS refund_value
-          FROM returns r LEFT JOIN return_items ri ON ri.return_id = r.id
+          SELECT ROUND(COALESCE(SUM(${MONEY_BACK}), 0)::numeric, 2) AS refund_value
+          FROM returns r
           WHERE r.timestamp >= $${yrIdx} AND r.timestamp < $${yrIdx + 1} ${yrOutlet.clause}
         )
         SELECT * FROM yd_sales, yd_profit, yd_discount, yd_refunds`,
@@ -257,7 +269,7 @@ module.exports = function (app, deps) {
       const rtOutlet = buildOutletClause("r.outlet_id", outletIds, rtIdx + 2);
       const monthAndRefunds = (await db.query(`
         WITH ms AS (
-          SELECT ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS month_sales
+          SELECT ROUND(COALESCE(SUM(${MONEY_PAID}), 0)::numeric, 2) AS month_sales
           FROM sales s WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${msOutlet.clause}
         ),
         mp AS (
@@ -266,9 +278,9 @@ module.exports = function (app, deps) {
           WHERE grn.received_at >= $${mpIdx} AND grn.received_at < $${mpIdx + 1} ${mpOutlet.clause}
         ),
         rt AS (
-          SELECT COUNT(DISTINCT r.id) AS refund_count,
-            ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0)::numeric, 2) AS refund_value
-          FROM returns r LEFT JOIN return_items ri ON ri.return_id = r.id
+          SELECT COUNT(*) FILTER (WHERE ${MONEY_BACK} > 0) AS refund_count,
+            ROUND(COALESCE(SUM(${MONEY_BACK}), 0)::numeric, 2) AS refund_value
+          FROM returns r
           WHERE r.timestamp >= $${rtIdx} AND r.timestamp < $${rtIdx + 1} ${rtOutlet.clause}
         )
         SELECT * FROM ms, mp, rt`,
@@ -284,7 +296,7 @@ module.exports = function (app, deps) {
 
       // ─── Query 7: Sales by outlet (no outlet filter — always all outlets) ───
       const salesByOutlet = (await db.query(
-        `SELECT o.name, ROUND(SUM(s.total_amount)::numeric, 2) AS total
+        `SELECT o.name, ROUND(SUM(${MONEY_PAID})::numeric, 2) AS total
          FROM sales s JOIN outlets o ON s.outlet_id = o.id
          WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2
          GROUP BY o.name ORDER BY total DESC`, [todayStart, todayEnd])).rows;
@@ -334,7 +346,7 @@ module.exports = function (app, deps) {
       const hsOutlet = buildOutletClause("s.outlet_id", outletIds, 3);
       const hourlySales = (await db.query(
         `SELECT LPAD(EXTRACT(HOUR FROM s.timestamp AT TIME ZONE '${tz}')::text, 2, '0') || ':00' AS hour,
-          ROUND(SUM(s.total_amount)::numeric, 2) AS total, COUNT(s.id) AS orders
+          ROUND(SUM(${MONEY_PAID})::numeric, 2) AS total, COUNT(s.id) AS orders
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 AND s.timestamp < $2 ${hsOutlet.clause}
          GROUP BY EXTRACT(HOUR FROM s.timestamp AT TIME ZONE '${tz}') ORDER BY hour ASC`,
         [todayStart, todayEnd, ...hsOutlet.values])).rows;
@@ -342,7 +354,7 @@ module.exports = function (app, deps) {
       // ─── Query 10: Monthly trend ───
       const mtOutlet = buildOutletClause("s.outlet_id", outletIds, 2);
       const monthlyTrend = (await db.query(
-        `SELECT TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month, ROUND(SUM(s.total_amount)::numeric, 2) AS total
+        `SELECT TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') AS month, ROUND(SUM(${MONEY_PAID})::numeric, 2) AS total
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 ${mtOutlet.clause}
          GROUP BY TO_CHAR(s.timestamp AT TIME ZONE '${tz}', 'YYYY-MM') ORDER BY month ASC`,
         [sixMonthsAgoStart, ...mtOutlet.values])).rows;
@@ -388,7 +400,7 @@ module.exports = function (app, deps) {
       const stOutlet = buildOutletClause("s.outlet_id", outletIds, 2);
       const salesTrend = (await db.query(
         `SELECT to_char((s.timestamp AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
-                ROUND(SUM(s.total_amount)::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
+                ROUND(SUM(${MONEY_PAID})::numeric, 2) AS revenue, COUNT(s.id) AS sale_count
          FROM sales s WHERE s.voided = false AND s.timestamp >= $1 ${stOutlet.clause}
          GROUP BY (s.timestamp AT TIME ZONE '${tz}')::date ORDER BY day ASC`,
         [sixDaysAgoStart, ...stOutlet.values])).rows;
@@ -405,7 +417,7 @@ module.exports = function (app, deps) {
         WITH date_series AS (
           SELECT to_char(d, 'YYYY-MM-DD') AS day FROM generate_series($1::date, $2::date, '1 day'::interval) d),
         sales_daily AS (SELECT to_char((s.timestamp AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
-          ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS sales_total
+          ROUND(COALESCE(SUM(${MONEY_PAID}), 0)::numeric, 2) AS sales_total
           FROM sales s WHERE s.voided = false AND s.timestamp >= $3 ${spcSalesOutlet.clause}
           GROUP BY (s.timestamp AT TIME ZONE '${tz}')::date),
         purchase_daily AS (SELECT to_char((grn.received_at AT TIME ZONE '${tz}')::date, 'YYYY-MM-DD') AS day,
@@ -507,7 +519,7 @@ module.exports = function (app, deps) {
       // upstream via `outletClause` wrapping — reuse the existing clause shape.
       const staffOfDayClause = buildOutletClause("s.outlet_id", outletIds, 3);
       const { rows: staffOfDayRows } = await db.query(
-        `SELECT e.id, e.name, COUNT(s.id)::int AS sale_count, COALESCE(SUM(s.total_amount),0) AS total
+        `SELECT e.id, e.name, COUNT(s.id)::int AS sale_count, COALESCE(SUM(${MONEY_PAID}),0) AS total
            FROM sales s
            JOIN employees e ON e.id = s.employee_id
           WHERE s.timestamp >= $1 AND s.timestamp < $2 AND COALESCE(s.voided, false) = false
