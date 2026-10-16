@@ -11,12 +11,14 @@
 // (f) drafts: "Save as draft" keeps the check screen and the files and changes
 //     nothing (no stock, no supplier money); Drafts lists them with who started
 //     them; Open carries on, Save bill finishes the same bill.
+// (f) Bills saved today, each with Undo (the whole bill: stock, cost, price,
+//     money back) while nothing from it has gone out; later = correct it.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
-import { Badge, Button, ConfirmDialog, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
+import { Badge, Button, ConfirmDialog, Input, Modal, ModalFooter, PageShell, SectionCard, Select } from "../../ui/primitives";
 import CheckLines from "./supplierBill/CheckLines";
 import { billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
 import { brandChoices } from "./supplierBill/priceRules";
@@ -74,6 +76,12 @@ export default function ReceiveSupplierBillRedesign() {
   const [draftId, setDraftId] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [throwAway, setThrowAway] = useState(null);
+  // Step (f): today's bills and Undo.
+  const [todays, setTodays] = useState([]);
+  const [undoing, setUndoing] = useState(null);
+  const [undoReason, setUndoReason] = useState("");
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoError, setUndoError] = useState("");
   const [result, setResult] = useState(null);
   const [lines, setLines] = useState([]);
   const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
@@ -96,11 +104,36 @@ export default function ReceiveSupplierBillRedesign() {
       .catch(() => {});
     api.get("/api/brands").then((d) => setBrands(brandChoices(d.brands || []))).catch(() => setBrands(brandChoices([])));
     loadDrafts();
+    loadTodays();
   }, []);
 
   function loadDrafts() {
     api.get("/api/supplier-bills/drafts").then((d) => setDrafts(d.drafts || [])).catch(() => {});
   }
+  function loadTodays() {
+    api.get("/api/supplier-bills/today").then((d) => setTodays(d.bills || [])).catch(() => {});
+  }
+
+  const askUndo = (b) => {
+    setUndoing(b);
+    setUndoReason("");
+    setUndoError("");
+  };
+  const doUndo = async () => {
+    setUndoBusy(true);
+    setUndoError("");
+    try {
+      const d = await api.post(`/api/supplier-bills/${undoing.id}/undo`, { reason: undoReason });
+      success(`Bill ${undoing.bill_number || ""} undone${d.paid_kept ? `: ${fmt(d.paid_kept)} paid stays on the supplier's account` : ""}`);
+      if (saved && saved.id === undoing.id) setSaved(null);
+      setUndoing(null);
+      loadTodays();
+    } catch (e) {
+      setUndoError(e.body?.error || e.message || "Could not undo the bill");
+    } finally {
+      setUndoBusy(false);
+    }
+  };
 
   const match = async (sid, readResult) => {
     if (!sid || !readResult?.lines?.length) {
@@ -231,6 +264,7 @@ export default function ReceiveSupplierBillRedesign() {
       setFileKey((k) => k + 1);
       if (draftId) loadDrafts();
       setDraftId(null);
+      loadTodays();
     } catch (e) {
       setError(e.body?.error || e.message || "Could not save the bill");
     } finally {
@@ -339,6 +373,43 @@ export default function ReceiveSupplierBillRedesign() {
         </div>
         {error ? <p className="mt-3 text-sm text-(--ui-danger-fg)">{error}</p> : null}
       </SectionCard>
+
+      {todays.length ? (
+        <SectionCard className="mb-4 p-4">
+          <h2 className="mb-2 text-sm font-semibold">Bills saved today ({todays.filter((b) => b.status === "saved").length})</h2>
+          <table className="w-full text-sm" data-testid="f9-today">
+            <thead className="text-left text-xs uppercase text-(--ui-text-muted)">
+              <tr>
+                <th className="py-1 pr-3">Supplier</th><th className="py-1 pr-3">Bill</th><th className="py-1 pr-3 text-right">Amount</th>
+                <th className="py-1 pr-3">Lines</th><th className="py-1 pr-3">Saved</th><th className="py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {todays.map((b) => (
+                <tr key={b.id} className="border-t border-(--ui-border)">
+                  <td className="py-1 pr-3">{b.supplier_name}</td>
+                  <td className="py-1 pr-3">{b.bill_number || "(no number)"}{b.bill_date ? ` · ${b.bill_date}` : ""}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums">{fmt(Number(b.amount) || 0)}</td>
+                  <td className="py-1 pr-3 tabular-nums">{b.lines}</td>
+                  <td className="py-1 pr-3">
+                    {new Date(b.saved_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                    {b.saved_by_name ? ` · ${b.saved_by_name}` : ""}
+                  </td>
+                  <td className="py-1 text-right">
+                    {b.status === "undone" ? (
+                      <span className="text-(--ui-text-muted)">
+                        <Badge tone="warning">Undone</Badge> {b.undone_by_name ? `by ${b.undone_by_name}: ` : ""}{b.undo_reason}
+                      </span>
+                    ) : (
+                      <Button size="sm" onClick={() => askUndo(b)} disabled={!!busy}>Undo</Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      ) : null}
 
       {drafts.length ? (
         <SectionCard className="mb-4 p-4">
@@ -606,6 +677,23 @@ export default function ReceiveSupplierBillRedesign() {
         onConfirm={() => save(true)}
         onCancel={() => setAskSameNumber(false)}
       />
+      <Modal open={!!undoing} onClose={undoBusy ? undefined : () => setUndoing(null)} title={undoing ? `Undo ${undoing.supplier_name} bill ${undoing.bill_number || ""}?` : ""} size="sm">
+        <p className="text-sm text-(--ui-text-muted)">
+          Everything from this bill goes back: its pieces come out of stock (pieces sent back come in again), cost and selling
+          prices go back, and the bill comes off the supplier&apos;s account. New toys made by it are removed. Money already paid
+          on the spot stays on the supplier&apos;s account as a payment. Only today, and only while none of its pieces has been sold.
+          Then you can upload it again.
+        </p>
+        <label className="mt-3 block text-xs font-semibold uppercase text-(--ui-text-muted)">
+          Why?
+          <Input className="mt-1" value={undoReason} onChange={(e) => setUndoReason(e.target.value)} placeholder="e.g. wrong supplier, pieces typed wrong" aria-label="Why undo" />
+        </label>
+        {undoError ? <p className="mt-2 text-sm text-(--ui-danger-fg)">{undoError}</p> : null}
+        <ModalFooter>
+          <Button onClick={() => setUndoing(null)} disabled={undoBusy}>Keep the bill</Button>
+          <Button tone="danger" onClick={doUndo} disabled={undoBusy || !undoReason.trim()}>{undoBusy ? "Undoing…" : "Undo the whole bill"}</Button>
+        </ModalFooter>
+      </Modal>
       <ConfirmDialog
         open={!!throwAway}
         title="Throw this draft away?"

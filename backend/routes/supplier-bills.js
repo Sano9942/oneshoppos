@@ -25,6 +25,8 @@ const logger = require("../services/logger");
 const { matchBillLines } = require("../services/supplier-bill-match");
 const { saveSupplierBill, earlierBillsWithNumber } = require("../services/supplier-bill-save");
 const drafts = require("../services/supplier-bill-drafts");
+const { undoSupplierBill, billsOfDay } = require("../services/supplier-bill-undo");
+const { actorOf } = require("../services/product-history");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -236,13 +238,36 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       }
       const files = await uniqueNewFiles(req.files, Number(payload.draft_id) || 0);
       const stored = await storeFiles(files, req.tenantSlug);
-      const draft = await db.transaction((client) => drafts.saveDraft(client, payload, stored, { employeeId: req.employee?.id || null }));
+      const draft = await db.transaction((client) => drafts.saveDraft(client, payload, stored, { employeeId: actorOf(req) }));
       res.status(payload.draft_id ? 200 : 201).json({ draft });
     } catch (err) {
       if (err.code === "23505" && /supplier_bill_files/.test(err.constraint || err.message)) {
         return res.status(409).json({ error: "That file is already on another bill" });
       }
       res.status(err.statusCode || 500).json({ error: err.message, ...(err.bill_id ? { bill_id: err.bill_id } : {}) });
+    }
+  });
+
+  // Step (f): today's bills, and Undo the whole bill (same day, nothing gone out since).
+  app.get("/api/supplier-bills/today", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "Asia/Karachi";
+      res.json({ bills: await billsOfDay(db, tenantToday(tz), tz) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app.post("/api/supplier-bills/:id/undo", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "Asia/Karachi";
+      const ctx = { employeeId: actorOf(req), today: tenantToday(tz), tz, reason: req.body?.reason };
+      const result = await db.transaction((client) => undoSupplierBill(client, req.params.id, ctx));
+      enqueueInventorySyncEvents(result.stockChanges.map((c) => ({
+        ...c, reason: "supplier_bill_undo", reference_type: "supplier_bill", reference_id: result.bill.id,
+      })));
+      res.json({ bill: result.bill, paid_kept: result.paidKept, new_toys_removed: result.newToysRemoved });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -269,7 +294,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       }
       const stored = await storeFiles(files, req.tenantSlug);
       const ctx = {
-        employeeId: req.employee?.id || null,
+        employeeId: actorOf(req),
         employeeName: req.employee?.name || null,
         today: tenantToday(req.company?.timezone || "Asia/Karachi"),
       };

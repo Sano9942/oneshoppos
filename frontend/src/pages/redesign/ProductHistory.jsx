@@ -18,6 +18,7 @@ const KIND_LABELS = {
   void: "Sale voided",
   return: "Return",
   delivery: "Delivery",
+  bill_undone: "Supplier bill undone",
   adjustment: "Adjustment",
   transfer: "Transfer",
   count: "Stock count",

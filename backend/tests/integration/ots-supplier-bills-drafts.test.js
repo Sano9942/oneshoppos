@@ -87,8 +87,6 @@ describe("saving a draft", () => {
 
   it("is listed with the supplier, the bill and who started it", async () => {
     const me = (await one("SELECT name FROM employees WHERE id = $1", [ADMIN_ID])).name;
-    // The test app carries no signed-in employee (req.employee), so set who started it here.
-    await db.query("UPDATE supplier_bills SET created_by = $1 WHERE id = $2", [ADMIN_ID, draftId]);
     const r = await admin().get("/api/supplier-bills/drafts");
     expect(r.status).toBe(200);
     const d = r.body.drafts.find((x) => x.id === draftId);
@@ -136,8 +134,9 @@ describe("finishing a draft", () => {
   it("the same bill becomes saved, the screen state cleared", async () => {
     expect(res.status).toBe(201);
     expect(res.body.bill).toMatchObject({ id: draftId, status: "saved" });
-    const b = await one("SELECT draft_state, saved_at FROM supplier_bills WHERE id = $1", [draftId]);
+    const b = await one("SELECT draft_state, saved_by, saved_at FROM supplier_bills WHERE id = $1", [draftId]);
     expect(b.draft_state).toBeNull();
+    expect(b.saved_by).toBe(ADMIN_ID);
     expect(b.saved_at).toBeTruthy();
   });
 
