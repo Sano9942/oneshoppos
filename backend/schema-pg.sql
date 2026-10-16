@@ -6357,6 +6357,7 @@ CREATE TABLE IF NOT EXISTS supplier_bills (
   supplier_payment_id INTEGER REFERENCES supplier_payments(id),
   till_payout_id INTEGER REFERENCES till_payouts(id),
   note TEXT,
+  draft_state JSONB,
   created_by INTEGER REFERENCES employees(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

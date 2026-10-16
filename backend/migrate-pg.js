@@ -10314,6 +10314,19 @@ const MIGRATIONS = [
       await client.query(SUPPLIER_BILLS_DDL);
     },
   },
+  {
+    version: 155,
+    description:
+      "One Toy Store pilot F9 (f): supplier bill drafts. supplier_bills.draft_state JSONB keeps the check screen as it was (lines, toys chosen, new toys, totals, paid now) while status = 'draft'; cleared when the bill is saved. A draft changes nothing. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'supplier_bills'`
+      );
+      if (!rows[0].n) return;
+      await client.query("ALTER TABLE supplier_bills ADD COLUMN IF NOT EXISTS draft_state JSONB");
+    },
+  },
 ];
 
 /**

@@ -148,11 +148,13 @@ async function saveSupplierBill(client, payload, files, ctx) {
   const missingToy = productIds.find((id) => !prod.has(id));
   if (missingToy) throw fail(400, `Toy #${missingToy} not found`);
 
+  // Step (f): finishing a draft saves that same row; its files stay on it.
+  const draftId = Number(p.draft_id) || 0;
   for (const f of files) {
     const { rows: [dup] } = await client.query(
       `SELECT b.id, b.bill_number, s.name AS supplier_name FROM supplier_bill_files sf
          JOIN supplier_bills b ON b.id = sf.bill_id JOIN suppliers s ON s.id = b.supplier_id
-        WHERE sf.sha256 = $1 AND sf.active LIMIT 1`, [f.sha256]);
+        WHERE sf.sha256 = $1 AND sf.active AND b.id <> $2 LIMIT 1`, [f.sha256, draftId]);
     if (dup) throw fail(409, `${f.file_name} is already on bill ${dup.bill_number || `#${dup.id}`} of ${dup.supplier_name}`, { bill_id: dup.id });
   }
 
@@ -161,18 +163,30 @@ async function saveSupplierBill(client, payload, files, ctx) {
   const refNo = `${sup.name} bill ${billNo || "(no number)"}`;
   const linesTotal = r2(plan.planned.reduce((a, x) => a + num(x.src.amount), 0));
 
-  const { rows: [bill] } = await client.query(
-    `INSERT INTO supplier_bills (supplier_id, outlet_id, bill_number, bill_date, status, layout, lines_total, supplier_total,
-                                 total_differs, total_note, account_amount, printed_prev_balance, note,
-                                 created_by, saved_by, saved_at)
-     VALUES ($1,$2,$3,$4,'saved',$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,NOW()) RETURNING *`,
-    [sup.id, outlet.id, billNo, billDate, p.layout || null, linesTotal, plan.written,
-      !plan.matches, plan.matches ? null : String(p.total_note || "").trim(), plan.matches ? null : plan.accountNet,
-      p.printed_prev_balance == null ? null : num(p.printed_prev_balance), p.note || null, ctx.employeeId || null],
-  );
+  const billValues = [sup.id, outlet.id, billNo, billDate, p.layout || null, linesTotal, plan.written,
+    !plan.matches, plan.matches ? null : String(p.total_note || "").trim(), plan.matches ? null : plan.accountNet,
+    p.printed_prev_balance == null ? null : num(p.printed_prev_balance), p.note || null, ctx.employeeId || null];
+  let bill;
+  if (draftId) {
+    ({ rows: [bill] } = await client.query(
+      `UPDATE supplier_bills SET supplier_id = $1, outlet_id = $2, bill_number = $3, bill_date = $4, status = 'saved', layout = $5,
+              lines_total = $6, supplier_total = $7, total_differs = $8, total_note = $9, account_amount = $10,
+              printed_prev_balance = $11, note = $12, saved_by = $13, saved_at = NOW(), draft_state = NULL, updated_at = NOW()
+        WHERE id = $14 AND status = 'draft' RETURNING *`, [...billValues, draftId]));
+    if (!bill) throw fail(409, "This draft was already saved or thrown away");
+  } else {
+    ({ rows: [bill] } = await client.query(
+      `INSERT INTO supplier_bills (supplier_id, outlet_id, bill_number, bill_date, status, layout, lines_total, supplier_total,
+                                   total_differs, total_note, account_amount, printed_prev_balance, note,
+                                   created_by, saved_by, saved_at)
+       VALUES ($1,$2,$3,$4,'saved',$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,NOW()) RETURNING *`, billValues));
+  }
 
-  const fileIds = [];
-  for (const [i, f] of files.entries()) {
+  const { rows: kept } = await client.query(
+    "SELECT id FROM supplier_bill_files WHERE bill_id = $1 AND active ORDER BY sort_order, id", [bill.id]);
+  const fileIds = kept.map((r) => r.id);
+  for (const [j, f] of files.entries()) {
+    const i = kept.length + j;
     const { rows: [fr] } = await client.query(
       `INSERT INTO supplier_bill_files (bill_id, file_name, content_type, size_bytes, sha256, storage_key, page_count, sort_order, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,

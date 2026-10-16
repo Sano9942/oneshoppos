@@ -24,6 +24,7 @@ const { readBillPhotos, LAYOUT: PHOTO_LAYOUT } = require("../services/bill-reade
 const logger = require("../services/logger");
 const { matchBillLines } = require("../services/supplier-bill-match");
 const { saveSupplierBill, earlierBillsWithNumber } = require("../services/supplier-bill-save");
+const drafts = require("../services/supplier-bill-drafts");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -151,7 +152,8 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
   });
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 15 * 1024 * 1024, files: 10 },
+    // fieldSize: a draft carries the whole check screen (hundreds of lines).
+    limits: { fileSize: 15 * 1024 * 1024, files: 10, fieldSize: 8 * 1024 * 1024 },
     fileFilter: billFileFilter,
   });
   // Multer finishes outside the shop's async context (see routes/import.js
@@ -165,6 +167,85 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
     });
   };
 
+  // The bill's files: checked, one of each, and refused when the very same
+  // file is already on another live bill (a draft's own files are its own).
+  async function uniqueNewFiles(reqFiles, ownBillId) {
+    const files = [];
+    for (const f of reqFiles || []) {
+      const sha256 = checkFile(f);
+      if (files.some((x) => x.sha256 === sha256)) continue;
+      files.push({ f, sha256 });
+    }
+    for (const { f, sha256 } of files) {
+      const { rows: [dup] } = await db.query(
+        `SELECT b.id, b.bill_number, b.status, s.name AS supplier_name FROM supplier_bill_files sf
+           JOIN supplier_bills b ON b.id = sf.bill_id JOIN suppliers s ON s.id = b.supplier_id
+          WHERE sf.sha256 = $1 AND sf.active AND b.id <> $2 LIMIT 1`, [sha256, ownBillId]);
+      if (dup) {
+        throw Object.assign(new Error(
+          `${f.originalname} is already on ${dup.status === "draft" ? "the draft of " : ""}bill ${dup.bill_number || `#${dup.id}`} of ${dup.supplier_name}`),
+        { statusCode: 409, bill_id: dup.id });
+      }
+    }
+    return files;
+  }
+  const storeFiles = async (files, tenantSlug) => {
+    const stored = [];
+    for (const { f, sha256 } of files) {
+      stored.push({
+        file_name: f.originalname, content_type: f.mimetype, size_bytes: f.size, sha256,
+        storage_key: await storeBillFile(f, sha256, tenantSlug),
+      });
+    }
+    return stored;
+  };
+
+  // Step (f): drafts (services/supplier-bill-drafts.js). A draft changes nothing.
+  app.get("/api/supplier-bills/drafts", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      res.json({ drafts: await drafts.listDrafts(db) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app.get("/api/supplier-bills/drafts/:id", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const draft = await drafts.getDraft(db, req.params.id);
+      if (!draft) return res.status(404).json({ error: "No such draft (already saved or thrown away)" });
+      res.json({ draft });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app.delete("/api/supplier-bills/drafts/:id", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      if (!(await drafts.deleteDraft(db, req.params.id))) return res.status(404).json({ error: "No such draft (already saved or thrown away)" });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  // multipart: payload (JSON: draft_id?, supplier_id, outlet_id, bill_number, bill_date, state) + new files.
+  app.post("/api/supplier-bills/drafts", requirePerm("receive_supplier_bills"), uploadFiles, async (req, res) => {
+    try {
+      let payload;
+      try {
+        payload = JSON.parse(req.body?.payload || "{}");
+      } catch {
+        return res.status(400).json({ error: "payload must be JSON" });
+      }
+      const files = await uniqueNewFiles(req.files, Number(payload.draft_id) || 0);
+      const stored = await storeFiles(files, req.tenantSlug);
+      const draft = await db.transaction((client) => drafts.saveDraft(client, payload, stored, { employeeId: req.employee?.id || null }));
+      res.status(payload.draft_id ? 200 : 201).json({ draft });
+    } catch (err) {
+      if (err.code === "23505" && /supplier_bill_files/.test(err.constraint || err.message)) {
+        return res.status(409).json({ error: "That file is already on another bill" });
+      }
+      res.status(err.statusCode || 500).json({ error: err.message, ...(err.bill_id ? { bill_id: err.bill_id } : {}) });
+    }
+  });
+
   // Step (c2): save a checked bill (services/supplier-bill-save.js).
   // multipart: payload (JSON) + the bill's files.
   app.post("/api/supplier-bills", requirePerm("receive_supplier_bills"), uploadFiles, async (req, res) => {
@@ -175,24 +256,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       } catch {
         return res.status(400).json({ error: "payload must be JSON" });
       }
-      const files = [];
-      for (const f of req.files || []) {
-        const sha256 = checkFile(f);
-        if (files.some((x) => x.sha256 === sha256)) continue;
-        files.push({ f, sha256 });
-      }
-      // Refuse a file already on a live bill before storing anything.
-      for (const { f, sha256 } of files) {
-        const { rows: [dup] } = await db.query(
-          `SELECT b.id, b.bill_number, s.name AS supplier_name FROM supplier_bill_files sf
-             JOIN supplier_bills b ON b.id = sf.bill_id JOIN suppliers s ON s.id = b.supplier_id
-            WHERE sf.sha256 = $1 AND sf.active LIMIT 1`, [sha256]);
-        if (dup) {
-          return res.status(409).json({
-            error: `${f.originalname} is already on bill ${dup.bill_number || `#${dup.id}`} of ${dup.supplier_name}`, bill_id: dup.id,
-          });
-        }
-      }
+      const files = await uniqueNewFiles(req.files, Number(payload.draft_id) || 0);
       // Same bill number again: ask before storing anything (checked again in the save).
       if (!payload.same_number_ok) {
         const earlier = await earlierBillsWithNumber(db, Number(payload.supplier_id) || 0, payload.bill_number);
@@ -203,13 +267,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
           });
         }
       }
-      const stored = [];
-      for (const { f, sha256 } of files) {
-        stored.push({
-          file_name: f.originalname, content_type: f.mimetype, size_bytes: f.size, sha256,
-          storage_key: await storeBillFile(f, sha256, req.tenantSlug),
-        });
-      }
+      const stored = await storeFiles(files, req.tenantSlug);
       const ctx = {
         employeeId: req.employee?.id || null,
         employeeName: req.employee?.name || null,

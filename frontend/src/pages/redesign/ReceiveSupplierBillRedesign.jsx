@@ -8,6 +8,9 @@
 //     the files kept, Paid now (cash from the till, cheque, bank transfer).
 // (d) new toys (code from 31000, category, Brand / Non-brand, price rules) and
 //     after saving the list of toys that need a new price tag.
+// (f) drafts: "Save as draft" keeps the check screen and the files and changes
+//     nothing (no stock, no supplier money); Drafts lists them with who started
+//     them; Open carries on, Save bill finishes the same bill.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
@@ -67,6 +70,10 @@ export default function ReceiveSupplierBillRedesign() {
   // Step (f): earlier saved bills of this supplier with the same bill number.
   const [sameNumber, setSameNumber] = useState([]);
   const [askSameNumber, setAskSameNumber] = useState(false);
+  // Step (f): drafts.
+  const [draftId, setDraftId] = useState(null);
+  const [drafts, setDrafts] = useState([]);
+  const [throwAway, setThrowAway] = useState(null);
   const [result, setResult] = useState(null);
   const [lines, setLines] = useState([]);
   const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
@@ -88,7 +95,12 @@ export default function ReceiveSupplierBillRedesign() {
         .sort((a, b) => String(a.path_label || a.name).localeCompare(String(b.path_label || b.name)))))
       .catch(() => {});
     api.get("/api/brands").then((d) => setBrands(brandChoices(d.brands || []))).catch(() => setBrands(brandChoices([])));
+    loadDrafts();
   }, []);
+
+  function loadDrafts() {
+    api.get("/api/supplier-bills/drafts").then((d) => setDrafts(d.drafts || [])).catch(() => {});
+  }
 
   const match = async (sid, readResult) => {
     if (!sid || !readResult?.lines?.length) {
@@ -117,6 +129,7 @@ export default function ReceiveSupplierBillRedesign() {
     setSaved(null);
     setResult(null);
     setLines([]);
+    setDraftId(null); // new files = a new bill
     try {
       const fd = new FormData();
       for (const f of files) fd.append("files", f);
@@ -194,8 +207,10 @@ export default function ReceiveSupplierBillRedesign() {
       fd.append("payload", JSON.stringify({
         ...savePayload({ supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio: discountRatio }),
         same_number_ok: !!sameNumberOk,
+        draft_id: draftId || undefined,
       }));
-      for (const f of files) fd.append("files", f);
+      // A draft's files are already kept with it.
+      if (!draftId) for (const f of files) fd.append("files", f);
       const res = await api.upload("/api/supplier-bills", fd);
       const data = await res.json();
       if (res.status === 409 && data.code === "SAME_BILL_NUMBER") {
@@ -214,10 +229,81 @@ export default function ReceiveSupplierBillRedesign() {
       setLines([]);
       setFiles([]);
       setFileKey((k) => k + 1);
+      if (draftId) loadDrafts();
+      setDraftId(null);
     } catch (e) {
       setError(e.body?.error || e.message || "Could not save the bill");
     } finally {
       setBusy("");
+    }
+  };
+
+  // Step (f): keep the check screen as a draft. Changes nothing until Save bill.
+  const saveDraft = async () => {
+    setBusy("Saving draft…");
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("payload", JSON.stringify({
+        draft_id: draftId || undefined,
+        supplier_id: Number(supplierId),
+        outlet_id: Number(outletId) || null,
+        bill_number: header.bill_number,
+        bill_date: header.bill_date,
+        state: { header, result, lines, paidNow },
+      }));
+      if (!draftId) for (const f of files) fd.append("files", f);
+      const res = await api.upload("/api/supplier-bills/drafts", fd);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save the draft");
+      setDraftId(data.draft.id);
+      success("Draft saved: nothing changes until you press Save bill");
+      loadDrafts();
+    } catch (e) {
+      setError(e.body?.error || e.message || "Could not save the draft");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const openDraft = async (id) => {
+    setBusy("Opening draft…");
+    setError("");
+    try {
+      const { draft } = await api.get(`/api/supplier-bills/drafts/${id}`);
+      const st = draft.state || {};
+      setSaved(null);
+      setFiles([]);
+      setFileKey((k) => k + 1);
+      setSupplierId(String(draft.supplier_id));
+      if (draft.outlet_id) setOutletId(String(draft.outlet_id));
+      setResult(st.result
+        ? { ...st.result, files: draft.files.map((f) => ({ ...f, kind: f.content_type === "application/pdf" ? "pdf" : "image", already: null })) }
+        : null);
+      setLines(st.lines || []);
+      setHeader({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "", ...(st.header || {}) });
+      setPaidNow(st.paidNow || { method: "", amount: "", reference: "" });
+      setDraftId(draft.id);
+    } catch (e) {
+      setError(e.body?.error || e.message || "Could not open the draft");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const discardDraft = async () => {
+    const d = throwAway;
+    setThrowAway(null);
+    try {
+      await api.del(`/api/supplier-bills/drafts/${d.id}`);
+      if (d.id === draftId) {
+        setDraftId(null);
+        setResult(null);
+        setLines([]);
+      }
+      loadDrafts();
+    } catch (e) {
+      setError(e.body?.error || e.message || "Could not throw the draft away");
     }
   };
 
@@ -253,6 +339,40 @@ export default function ReceiveSupplierBillRedesign() {
         </div>
         {error ? <p className="mt-3 text-sm text-(--ui-danger-fg)">{error}</p> : null}
       </SectionCard>
+
+      {drafts.length ? (
+        <SectionCard className="mb-4 p-4">
+          <h2 className="mb-2 text-sm font-semibold">Drafts ({drafts.length}): not saved yet, nothing changed</h2>
+          <table className="w-full text-sm" data-testid="f9-drafts">
+            <thead className="text-left text-xs uppercase text-(--ui-text-muted)">
+              <tr>
+                <th className="py-1 pr-3">Supplier</th><th className="py-1 pr-3">Bill</th><th className="py-1 pr-3">Lines</th>
+                <th className="py-1 pr-3">Started by</th><th className="py-1 pr-3">Last changed</th><th className="py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {drafts.map((d) => (
+                <tr key={d.id} className="border-t border-(--ui-border)">
+                  <td className="py-1 pr-3">{d.supplier_name}</td>
+                  <td className="py-1 pr-3">
+                    {d.bill_number || "(no number)"}{d.bill_date ? ` · ${d.bill_date}` : ""}
+                    {d.id === draftId ? <> <Badge>Open now</Badge></> : null}
+                  </td>
+                  <td className="py-1 pr-3 tabular-nums">{d.lines} · {d.files} file{d.files === 1 ? "" : "s"}</td>
+                  <td className="py-1 pr-3">{d.started_by_name || "—"}</td>
+                  <td className="py-1 pr-3">
+                    {new Date(d.updated_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                  <td className="whitespace-nowrap py-1 text-right">
+                    <Button size="sm" onClick={() => openDraft(d.id)} disabled={!!busy}>Open</Button>{" "}
+                    <Button size="sm" tone="danger" onClick={() => setThrowAway(d)} disabled={!!busy}>Throw away</Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      ) : null}
 
       {saved ? (
         <SectionCard className="mb-4 p-4 text-sm">
@@ -294,6 +414,7 @@ export default function ReceiveSupplierBillRedesign() {
       {result ? (
         <SectionCard className="mb-4 p-4">
           <div className="flex flex-wrap items-center gap-2">
+            {draftId ? <Badge tone="warning">Draft</Badge> : null}
             {result.layout_label ? <Badge>{result.layout_label}</Badge> : <Badge tone="warning">Layout not recognised</Badge>}
             <span className="text-sm text-(--ui-text-muted)">
               {result.files.length} file{result.files.length === 1 ? "" : "s"} · {result.lines.length} lines read ·{" "}
@@ -466,6 +587,9 @@ export default function ReceiveSupplierBillRedesign() {
               {summary.new_toys ? " · new toys get the next shop codes from 31000 on Save" : ""}
             </span>
             <div className="flex-1" />
+            <Button disabled={!supplierId || !!busy} onClick={saveDraft}>
+              {busy === "Saving draft…" ? "Saving draft…" : "Save as draft"}
+            </Button>
             <Button tone="primary" disabled={!canSave} onClick={() => save(false)}>
               {busy === "Saving…" ? "Saving…" : "Save bill"}
             </Button>
@@ -481,6 +605,18 @@ export default function ReceiveSupplierBillRedesign() {
         cancelLabel="Don't save"
         onConfirm={() => save(true)}
         onCancel={() => setAskSameNumber(false)}
+      />
+      <ConfirmDialog
+        open={!!throwAway}
+        title="Throw this draft away?"
+        body={throwAway
+          ? `${throwAway.supplier_name} bill ${throwAway.bill_number || "(no number)"}: the checked lines and its files are removed. Nothing else changes.`
+          : ""}
+        confirmLabel="Throw away"
+        cancelLabel="Keep it"
+        destructive
+        onConfirm={discardDraft}
+        onCancel={() => setThrowAway(null)}
       />
     </PageShell>
   );

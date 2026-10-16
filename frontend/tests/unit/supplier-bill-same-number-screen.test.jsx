@@ -3,8 +3,11 @@
 // as a different bill (suppliers reuse "Bill No 01" on different dates).
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { configure, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
+// The whole frontend suite runs in parallel: allow slow renders.
+configure({ asyncUtilTimeout: 5000 });
 
 const LINE = { line_no: 1, page: 1, file_index: 0, supplier_code: "BL-1", description: "BALL", qty: 3, rate: 100, amount: 300, discount_pct: 0, check: "ok" };
 const READ = { files: [{ file_name: "bill.pdf", kind: "pdf", sha256: "b".repeat(64), already: null }], layout: "hafiz_bill_no", layout_label: "Bill No", bill_number: "Bill No 01", bill_date: "2026-10-09", printed: { total: 300 }, lines: [LINE], lines_total: 300, total_matches: true, warnings: [], supplier_suggestion: null, expected_layout: null, layout_warning: null, needs_photo_reader: false };
@@ -50,7 +53,7 @@ async function readBill() {
   await screen.findByRole("button", { name: "Save bill" });
 }
 
-describe("Receive supplier bill: same bill number twice", () => {
+describe("Receive supplier bill: same bill number twice", { timeout: 20000 }, () => {
   it("warns with the earlier bill as soon as supplier and number are known", async () => {
     await readBill();
     const alert = await screen.findByRole("alert", {}, { timeout: 2000 });

@@ -14,7 +14,8 @@
  *                           Remembers "split into N" (a pack of 6 sold by the
  *                           piece). Text match, so 07556 and 7556 differ.
  *   supplier_bills          the bill: draft → saved (stock + money) → undone.
- *                           A draft changes nothing.
+ *                           A draft changes nothing; draft_state keeps the
+ *                           check screen as it was (step f), cleared on save.
  *   supplier_bill_line_toys which toy(s) a line's pieces went to (assorted)
  *   supplier_bill_lines     the bill's own S.No, page / file, billed vs received
  *                           qty, line discount, split, cost after discounts,
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS supplier_bills (
   supplier_payment_id INTEGER REFERENCES supplier_payments(id),
   till_payout_id INTEGER REFERENCES till_payouts(id),
   note TEXT,
+  draft_state JSONB,
   created_by INTEGER REFERENCES employees(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
