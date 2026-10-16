@@ -261,6 +261,9 @@ function BillDetail({ bill, fmt, onCorrected }) {
                       {Number(t.extra_qty) > 0 ? ` (${qty(t.extra_qty)} extra)` : ""}
                     </span>
                   ))}
+                  {Number(l.matched_qty) > 0 ? (
+                    <span className="block text-xs text-(--ui-text-muted)">{qty(l.matched_qty)} pcs were extras already in the shop</span>
+                  ) : null}
                   {l.is_new_product ? <Badge>New toy</Badge> : null}
                 </td>
               </tr>

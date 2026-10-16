@@ -10,6 +10,10 @@
  *                     minus lines (goods sent back) → a supplier return (−);
  *                     extra pieces kept → stock now, "waiting for supplier's
  *                     bill" (no money: the supplier sends a bill for them)
+ *   waiting matched   (f) 6/6: a line of that later bill names the waiting
+ *                     extras it bills (line.waiting = [{ id, qty }] pieces);
+ *                     its received count includes them, so stock goes up only
+ *                     by the pieces arriving now; the rows become Billed
  *   bill total        = Σ values − bill discount; must equal the total written
  *                     on the bill unless "supplier's total is different" is
  *                     ticked with a note (then account_amount, the owner's choice)
@@ -47,7 +51,15 @@ function planBill(p) {
     if (l.is_new) throw fail(400, `${label}: the new toy wasn't created`); // saveSupplierBill creates them first
     const toys = (Array.isArray(l.toys) ? l.toys : []).map((t) => ({ product_id: Number(t.product_id), qty: num(t.qty) }));
     if (!toys.length || toys.some((t) => !t.product_id)) throw fail(400, `${label}: which toy is it?`);
-    const pieces = received * split;
+    // (f) 6/6: waiting extras this line bills: already in stock, counted as received.
+    const waiting = (Array.isArray(l.waiting) ? l.waiting : [])
+      .map((w) => ({ id: Number(w.id), qty: num(w.qty) })).filter((w) => w.id && w.qty);
+    if (waiting.some((w) => !(w.qty > 0))) throw fail(400, `${label}: matched pieces must be more than 0`);
+    const matched = waiting.reduce((a, w) => a + w.qty, 0);
+    if (matched && (billed < 0 || matched > Math.max(0, Math.min(received, billed)) * split + 1e-6)) {
+      throw fail(400, `${label}: ${matched} pieces matched to waiting extras, more than billed and received`);
+    }
+    const pieces = received * split - matched;
     const shared = toys.reduce((a, t) => a + t.qty, 0);
     if (Math.abs(shared - pieces) > 1e-6) throw fail(400, `${label}: ${shared} of ${pieces} pieces shared out between the toys`);
     if (billed < 0 || received < 0) {
@@ -59,7 +71,7 @@ function planBill(p) {
     const unitValue = billed ? values[i] / billed : num(l.rate) * (1 - pct / 100); // per billed unit, after the line discount
     const unitCost = r4((unitValue * (1 - share)) / split);
     // Extra pieces beyond the bill: the last pieces in toy order.
-    let billedPieces = Math.max(0, Math.min(received, billed)) * split;
+    let billedPieces = Math.max(0, Math.max(0, Math.min(received, billed)) * split - matched);
     const withExtra = toys.map((t) => {
       if (t.qty <= 0) return { ...t, billed_qty: t.qty, extra_qty: 0 };
       const b = Math.min(t.qty, billedPieces);
@@ -69,7 +81,7 @@ function planBill(p) {
     const missing = billed > 0 && received < billed ? billed - received : 0;
     return {
       src: l, label, billed, received, split, pct, value: values[i], unitCost,
-      toys: withExtra,
+      toys: withExtra, waiting,
       notReceivedValue: r2(missing * unitValue * (1 - share)),
       isReturn: billed < 0,
     };
@@ -147,6 +159,7 @@ async function saveSupplierBill(client, payload, files, ctx) {
   const prod = new Map(prods.map((x) => [x.id, x]));
   const missingToy = productIds.find((id) => !prod.has(id));
   if (missingToy) throw fail(400, `Toy #${missingToy} not found`);
+  const waitingRows = await lockWaiting(client, plan, sup.id);
 
   // Step (f): finishing a draft saves that same row; its files stay on it.
   const draftId = Number(p.draft_id) || 0;
@@ -257,6 +270,25 @@ async function saveSupplierBill(client, payload, files, ctx) {
           [sup.id, t.product_id, t.extra_qty, x.unitCost, bill.id, grn.id, `Extra on ${refNo}, ${x.label.toLowerCase()}`, ctx.employeeId || null]);
       }
     }
+    // (f) 6/6: the waiting extras this line bills become Billed (a row billed
+    // in part is split: the rest keeps waiting).
+    for (const w of x.waiting) {
+      const row = waitingRows.get(w.id);
+      if (w.qty >= Number(row.qty) - 1e-9) {
+        await client.query(
+          `UPDATE supplier_waiting_items SET status = 'billed', matched_bill_id = $1, matched_line_id = $2, matched_by = $3, matched_at = NOW()
+            WHERE id = $4`, [bill.id, ln.id, ctx.employeeId || null, w.id]);
+      } else {
+        await client.query("UPDATE supplier_waiting_items SET qty = qty - $1 WHERE id = $2", [w.qty, w.id]);
+        await client.query(
+          `INSERT INTO supplier_waiting_items (supplier_id, product_id, qty, unit_cost, received_bill_id, grn_id, status,
+                                              matched_bill_id, matched_line_id, matched_by, matched_at, note, created_by, created_at)
+           SELECT supplier_id, product_id, $1, unit_cost, received_bill_id, grn_id, 'billed', $2, $3, $4, NOW(), note, created_by, created_at
+             FROM supplier_waiting_items WHERE id = $5`, [w.qty, bill.id, ln.id, ctx.employeeId || null, w.id]);
+      }
+      // The latest bill sets the cost, as for pieces arriving now.
+      await client.query("UPDATE products SET cost_price = $1 WHERE id = $2", [r2(x.unitCost), row.product_id]);
+    }
     // Learn the supplier's code for every toy on the line.
     const code = String(x.src.supplier_code || "").trim();
     if (code) {
@@ -349,6 +381,33 @@ async function saveSupplierBill(client, payload, files, ctx) {
       pn ? String(pn.reference || "").trim() || null : null, bill.id]);
   for (const x of sentBack) for (const t of x.toys) stockChanges.push({ product_id: t.product_id, outlet_id: outlet.id, delta: t.qty });
   return { bill: saved, stockChanges, plan, labels };
+}
+
+/**
+ * (f) 6/6: lock and check the waiting extras the lines bill: still waiting,
+ * this supplier's, a toy on that line, and not more pieces than are waiting.
+ */
+async function lockWaiting(client, plan, supplierId) {
+  const ids = [...new Set(plan.planned.flatMap((x) => x.waiting.map((w) => w.id)))];
+  const rows = new Map();
+  if (!ids.length) return rows;
+  const { rows: found } = await client.query(
+    "SELECT * FROM supplier_waiting_items WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE", [ids]);
+  for (const r of found) rows.set(r.id, r);
+  const used = new Map();
+  for (const x of plan.planned) {
+    const toyIds = new Set(x.toys.map((t) => t.product_id));
+    for (const w of x.waiting) {
+      const r = rows.get(w.id);
+      if (!r || r.supplier_id !== supplierId) throw fail(400, `${x.label}: those extra pieces are not waiting for this supplier's bill`);
+      if (r.status !== "waiting") throw fail(409, `${x.label}: those extra pieces were already ${r.status === "free" ? "marked free" : "billed"}`);
+      if (!toyIds.has(r.product_id)) throw fail(400, `${x.label}: the extra pieces are a different toy`);
+      const total = (used.get(w.id) || 0) + w.qty;
+      if (total > Number(r.qty) + 1e-9) throw fail(400, `${x.label}: only ${Number(r.qty)} extra pieces are waiting`);
+      used.set(w.id, total);
+    }
+  }
+  return rows;
 }
 
 /** The new selling price the check screen gave a toy on this line, if any. */

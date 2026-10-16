@@ -14,7 +14,8 @@
  *                  really left, so it stays as a payment on account
  *   the rest       delivery note, extra pieces waiting, codes learned from this
  *                  bill, new toys made by it (removed; shop code + barcode free
- *                  again), files (can be uploaded again)
+ *                  again), files (can be uploaded again); extras from earlier
+ *                  bills that this bill billed go back to waiting
  * The bill row stays, status 'undone' with who / when / why; History tags the
  * reversing changes "bill_undone".
  */
@@ -66,7 +67,7 @@ async function undoSupplierBill(client, billId, ctx) {
   }
   const { rows: [matched] } = await client.query(
     "SELECT 1 FROM supplier_waiting_items WHERE received_bill_id = $1 AND status <> 'waiting' LIMIT 1", [bill.id]);
-  if (matched) throw fail(409, "Extra pieces from this bill were already matched to a later bill: correct the bill instead");
+  if (matched) throw fail(409, "Extra pieces from this bill were already billed on a later bill or marked free: correct the bill instead");
 
   // 1. Stock back.
   const stockChanges = [];
@@ -113,6 +114,10 @@ async function undoSupplierBill(client, billId, ctx) {
   }
   await client.query("DELETE FROM supplier_account_entries WHERE supplier_bill_id = $1", [bill.id]);
   await client.query("DELETE FROM supplier_waiting_items WHERE received_bill_id = $1", [bill.id]);
+  // (f) 6/6: extras from earlier bills that this bill billed wait again.
+  await client.query(
+    `UPDATE supplier_waiting_items SET status = 'waiting', matched_bill_id = NULL, matched_line_id = NULL, matched_by = NULL, matched_at = NULL
+      WHERE matched_bill_id = $1 AND status = 'billed'`, [bill.id]);
   await client.query(
     "UPDATE supplier_bills SET grn_id = NULL, supplier_invoice_id = NULL, supplier_return_id = NULL WHERE id = $1", [bill.id]);
   if (bill.supplier_invoice_id) await client.query("DELETE FROM supplier_invoices WHERE id = $1", [bill.supplier_invoice_id]);

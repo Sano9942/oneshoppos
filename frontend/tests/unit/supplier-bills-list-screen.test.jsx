@@ -15,7 +15,7 @@ const BILL = {
   ...BILLS[0], outlet_name: "Packages Mall", paid_now_reference: "CHQ 7 Meezan",
   files: [{ id: 1, file_name: "M100.pdf", content_type: "application/pdf", storage_key: "https://api.sanopos.com/r2/supplier-bills/ots/abc.pdf?exp=1&sig=x" }],
   lines: [{ id: 11, line_no: "4", page: 1, supplier_code: "B0444", description: "CAPTAIN AMERICA SHIELD", billed_qty: "2", received_qty: "1", rate: "995", discount_pct: "0", amount: "1990", split_into: 1, unit_cost: "995", is_new_product: false,
-    toys: [{ product_id: 3, name: "Shield", sku: "2703", qty: "1", extra_qty: "0" }] }],
+    matched_qty: "2", toys: [{ product_id: 3, name: "Shield", sku: "2703", qty: "1", extra_qty: "0" }] }],
   entries: [{ id: 2, kind: "not_received", amount: "-995", entry_date: "2026-10-05", note: "Line 4: 1 of 2 not received" }],
 };
 
@@ -57,6 +57,7 @@ describe("Supplier bills", { timeout: 20000 }, () => {
     const lines = await screen.findByTestId("supplier-bill-lines");
     expect(within(lines).getByText("CAPTAIN AMERICA SHIELD")).toBeTruthy();
     expect(within(lines).getByText(/Shield · 1/)).toBeTruthy();
+    expect(within(lines).getByText("2 pcs were extras already in the shop")).toBeTruthy();
     const link = screen.getByRole("link", { name: "M100.pdf" });
     expect(link.getAttribute("href")).toBe(BILL.files[0].storage_key);
     expect(screen.getByText(/Not received Rs -995/)).toBeTruthy();

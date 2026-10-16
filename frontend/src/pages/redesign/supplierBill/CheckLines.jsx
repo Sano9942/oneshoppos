@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, FilterPill, Input, Select } from "../../../ui/primitives";
 import ItemSearchBox from "../../../ui/ItemSearchBox";
-import { lineStatus, newToyPrice, suggestedPrice, unitCost } from "./billMath";
+import { lineStatus, newToyPrice, piecesNow, suggestedPrice, unitCost } from "./billMath";
 import { RULES } from "./priceRules";
 
 const STATUS = {
@@ -33,7 +33,7 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
   const pickFilter = (k) => setShow({ k, keys: k === "all" ? null : new Set(lines.filter((l) => lineStatus(l) === k).map((l) => l.key)) });
 
   const set = (key, fn) => onChange(lines.map((l) => (l.key === key ? fn({ ...l, toys: l.toys.map((t) => ({ ...t })) }) : l)));
-  const pieces = (l) => (Number(l.received) || 0) * Math.max(1, Number(l.split_into) || 1);
+  const pieces = (l) => piecesNow(l);
   const reshare = (l) => {
     if (l.toys.length === 1) l.toys[0].qty = pieces(l);
     return l;
@@ -96,6 +96,7 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
                       value={l.received}
                       onChange={(e) => set(l.key, (x) => reshare({ ...x, received: e.target.value === "" ? "" : Number(e.target.value) }))}
                     />
+                    <WaitingOffer line={l} set={(fn) => set(l.key, fn)} />
                     {Number(l.received) !== Number(l.billed) ? (
                       <div className="mt-1 text-xs text-(--ui-warning-fg)">
                         {Number(l.received) < Number(l.billed) ? `${l.billed - l.received} not received` : `${l.received - l.billed} extra`}
@@ -136,6 +137,26 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// F9 (f) 6/6: extra pieces of this toy already in the shop, waiting for this
+// supplier's bill: pre-ticked "These are those pieces" (not stock again).
+function WaitingOffer({ line, set }) {
+  const offer = line.waiting_offer || [];
+  if (!offer.length) return null;
+  const total = offer.reduce((a, w) => a + w.qty, 0);
+  const bills = [...new Set(offer.map((w) => `${w.bill_number || "(no number)"}${w.bill_date ? ` (${w.bill_date})` : ""}`))].join(", ");
+  return (
+    <div className="mt-1 max-w-56 text-xs" data-testid={`waiting-offer-${line.line_no}`}>
+      <div className="text-(--ui-text-muted)">{total} pcs already in the shop: extras from bill {bills}</div>
+      <label className="flex items-center gap-1">
+        <input type="checkbox" checked={!line.waiting_off} aria-label={`These are those pieces, line ${line.line_no}`}
+          onChange={(e) => set((x) => ({ ...x, waiting_off: !e.target.checked }))} />
+        These are those pieces
+      </label>
+      {!line.waiting_off ? <div className="text-(--ui-text-muted)">{Math.max(0, piecesNow(line))} pcs arrive now</div> : null}
     </div>
   );
 }

@@ -55,6 +55,7 @@ async function getBill(db, id) {
   const { rows: lines } = await db.query(
     `SELECT l.id, l.sort_order, l.line_no, l.page, l.file_id, l.supplier_code, l.description, l.billed_qty, l.received_qty,
             l.rate, l.discount_pct, l.amount, l.split_into, l.unit_cost, l.sale_price, l.is_new_product, l.note,
+            (SELECT COALESCE(SUM(w.qty), 0) FROM supplier_waiting_items w WHERE w.matched_line_id = l.id AND w.status = 'billed') AS matched_qty,
             COALESCE(json_agg(json_build_object('product_id', lt.product_id, 'name', p.name, 'sku', p.sku, 'qty', lt.qty,
                                                 'extra_qty', lt.extra_qty, 'unit_cost', lt.unit_cost, 'previous_cost', lt.previous_cost)
                               ORDER BY lt.id) FILTER (WHERE lt.id IS NOT NULL), '[]') AS toys

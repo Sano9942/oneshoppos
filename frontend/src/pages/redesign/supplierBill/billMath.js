@@ -60,6 +60,48 @@ export function lineFromRead(read, match = { matches: [], chosen: [] }) {
   };
 }
 
+/** Pieces of a line coming into stock now: received × split, less waiting extras it bills. */
+export function piecesNow(line) {
+  return (Number(line.received) || 0) * Math.max(1, Number(line.split_into) || 1) - (Number(line.waiting_matched) || 0);
+}
+
+/**
+ * F9 (f) 6/6: offer each line the extra pieces of its toy(s) still waiting for
+ * this supplier's bill (oldest first, never more than the line's billed and
+ * received pieces, each waiting piece offered once). Pre-ticked: the owner
+ * unticks (waiting_off) when the line is different pieces. A ticked offer
+ * counts as received but not as stock now; a line with one toy is re-shared.
+ */
+export function applyWaiting(lines, waiting = []) {
+  const used = new Map();
+  return lines.map((l) => {
+    const base = { ...l, waiting_offer: [], waiting_matched: 0 };
+    if (l.is_return || l.is_new || !l.toys?.length || !waiting.length) {
+      return l.waiting_offer?.length || l.waiting_matched ? reshareOne(base) : l;
+    }
+    const split = Math.max(1, Number(l.split_into) || 1);
+    let left = Math.max(0, Math.min(Number(l.billed) || 0, Number(l.received) || 0)) * split;
+    const offer = [];
+    for (const t of l.toys) {
+      for (const w of waiting) {
+        if (left <= 0) break;
+        if (w.product_id !== t.product_id) continue;
+        const take = Math.min(Number(w.qty) - (used.get(w.id) || 0), left);
+        if (take <= 0) continue;
+        offer.push({ id: w.id, product_id: w.product_id, qty: take, bill_number: w.bill_number, bill_date: w.bill_date });
+        left -= take;
+        if (!l.waiting_off) used.set(w.id, (used.get(w.id) || 0) + take);
+      }
+    }
+    const matched = l.waiting_off ? 0 : offer.reduce((a, w) => a + w.qty, 0);
+    return reshareOne({ ...base, waiting_offer: offer, waiting_matched: matched });
+  });
+}
+function reshareOne(l) {
+  if (l.toys?.length === 1 && !l.is_new) return { ...l, toys: [{ ...l.toys[0], qty: Math.max(0, piecesNow(l)) }] };
+  return l;
+}
+
 /** ready | pick (no toy) | confirm (a suggestion to say yes to) | split (share the pieces out) | newtoy (fill in the new toy) */
 export function lineStatus(line) {
   if (line.is_new) {
@@ -68,7 +110,7 @@ export function lineStatus(line) {
     return String(t.name || "").trim() && t.category_id && brandOk ? "ready" : "newtoy";
   }
   if (!line.toys.length) return line.suggestions.length ? "confirm" : "pick";
-  const pieces = (Number(line.received) || 0) * Math.max(1, Number(line.split_into) || 1);
+  const pieces = piecesNow(line);
   const shared = line.toys.reduce((s, t) => s + (Number(t.qty) || 0), 0);
   return shared === pieces ? "ready" : "split";
 }
@@ -151,6 +193,8 @@ export function savePayload({ supplierId, outletId, header, result, lines, paidN
       discount_pct: Number(l.discount_pct) || 0,
       amount: l.amount,
       split_into: Number(l.split_into) || 1,
+      // (f) 6/6: waiting extras this line bills (already in stock).
+      waiting: !l.is_new && !l.waiting_off ? (l.waiting_offer || []).map((w) => ({ id: w.id, qty: w.qty })) : [],
       is_new: !!l.is_new,
       new_toy: l.is_new ? {
         name: String(l.new_toy.name || "").trim(),

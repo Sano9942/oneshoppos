@@ -28,8 +28,8 @@ const KINDS = ["pieces", "rate", "money", "toy"];
 const fmt = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
 /** Which pieces of the new quantities are billed and which are extra (toy order, as on save). */
-function shareExtra(toys, received, billed, split) {
-  let billedPieces = Math.max(0, Math.min(received, billed)) * split;
+function shareExtra(toys, received, billed, split, matched = 0) {
+  let billedPieces = Math.max(0, Math.max(0, Math.min(received, billed)) * split - matched);
   return toys.map((t) => {
     const b = Math.min(t.qty, billedPieces);
     billedPieces -= b;
@@ -94,7 +94,11 @@ async function correctPieces(client, bill, body, ctx, refNo) {
   if (received === oldReceived) throw fail(400, `Line ${line.line_no} already says ${fmt(received)} received`);
   const billed = Number(line.billed_qty);
   const split = Number(line.split_into) || 1;
-  const pieces = received * split;
+  // (f) 6/6: waiting extras this line billed are counted as received, not stock now.
+  const { rows: [{ m }] } = await client.query(
+    "SELECT COALESCE(SUM(qty), 0)::float AS m FROM supplier_waiting_items WHERE matched_line_id = $1 AND status = 'billed'", [line.id]);
+  const pieces = received * split - m;
+  if (pieces < 0) throw fail(400, `${fmt(m)} pieces of this line were extras already in the shop: received can't be less than that`);
 
   let wanted;
   if (Array.isArray(body.toys) && body.toys.length) {
@@ -114,7 +118,7 @@ async function correctPieces(client, bill, body, ctx, refNo) {
   if (Math.abs(shared - pieces) > 1e-6) throw fail(400, `${fmt(shared)} of ${fmt(pieces)} pieces shared out between the toys: say which toy`);
 
   const before = { received_qty: oldReceived, toys: toyState(toys) };
-  const next = shareExtra(wanted.map((t) => ({ ...t, qty: t.newQty })), received, billed, split);
+  const next = shareExtra(wanted.map((t) => ({ ...t, qty: t.newQty })), received, billed, split, m);
   const stockChanges = [];
   for (const t of next) {
     const old = toys.find((x) => x.id === t.id);

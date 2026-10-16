@@ -29,6 +29,7 @@ const { undoSupplierBill, billsOfDay } = require("../services/supplier-bill-undo
 const { actorOf } = require("../services/product-history");
 const { listBills, getBill } = require("../services/supplier-bill-list");
 const { correctSupplierBill } = require("../services/supplier-bill-corrections");
+const { waitingItems, markFree } = require("../services/supplier-bill-waiting");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -268,6 +269,24 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         ...c, reason: "supplier_bill_undo", reference_type: "supplier_bill", reference_id: result.bill.id,
       })));
       res.json({ bill: result.bill, paid_kept: result.paidKept, new_toys_removed: result.newToysRemoved });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // Step (f) 6/6: extra pieces waiting for the supplier's bill, and "No bill coming (free)".
+  app.get("/api/supplier-bills/waiting", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "Asia/Karachi";
+      res.json({ items: await waitingItems(db, { supplierId: req.query.supplier_id, today: tenantToday(tz), tz }) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app.post("/api/supplier-bills/waiting/:id/free", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const item = await db.transaction((client) => markFree(client, req.params.id, req.body?.note, { employeeId: actorOf(req) }));
+      res.json({ item });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

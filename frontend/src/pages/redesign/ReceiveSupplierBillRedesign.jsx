@@ -13,6 +13,9 @@
 //     them; Open carries on, Save bill finishes the same bill.
 // (f) Bills saved today, each with Undo (the whole bill: stock, cost, price,
 //     money back) while nothing from it has gone out; later = correct it.
+// (f) Waiting for supplier's bill: extra pieces kept on earlier bills; a line
+//     of this supplier's bill for the same toy offers them, pre-ticked "These
+//     are those pieces" (counted as received, not stock again).
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
@@ -20,7 +23,8 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { Badge, Button, ConfirmDialog, Input, Modal, ModalFooter, PageShell, SectionCard, Select } from "../../ui/primitives";
 import CheckLines from "./supplierBill/CheckLines";
-import { billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
+import WaitingList from "./supplierBill/WaitingList";
+import { applyWaiting, billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
 import { brandChoices } from "./supplierBill/priceRules";
 
 // The labels list on its own page, for the 5-digit price-tag machine.
@@ -83,7 +87,11 @@ export default function ReceiveSupplierBillRedesign() {
   const [undoBusy, setUndoBusy] = useState(false);
   const [undoError, setUndoError] = useState("");
   const [result, setResult] = useState(null);
-  const [lines, setLines] = useState([]);
+  const [rawLines, setLines] = useState([]);
+  // Step (f) 6/6: extras waiting for a supplier's bill; this supplier's are offered on its lines.
+  const [waiting, setWaiting] = useState([]);
+  const supplierWaiting = useMemo(() => waiting.filter((w) => String(w.supplier_id) === String(supplierId)), [waiting, supplierId]);
+  const lines = useMemo(() => applyWaiting(rawLines, supplierWaiting), [rawLines, supplierWaiting]);
   const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
 
   useEffect(() => {
@@ -105,10 +113,14 @@ export default function ReceiveSupplierBillRedesign() {
     api.get("/api/brands").then((d) => setBrands(brandChoices(d.brands || []))).catch(() => setBrands(brandChoices([])));
     loadDrafts();
     loadTodays();
+    loadWaiting();
   }, []);
 
   function loadDrafts() {
     api.get("/api/supplier-bills/drafts").then((d) => setDrafts(d.drafts || [])).catch(() => {});
+  }
+  function loadWaiting() {
+    api.get("/api/supplier-bills/waiting").then((d) => setWaiting(d.items || [])).catch(() => {});
   }
   function loadTodays() {
     api.get("/api/supplier-bills/today").then((d) => setTodays(d.bills || [])).catch(() => {});
@@ -128,6 +140,7 @@ export default function ReceiveSupplierBillRedesign() {
       if (saved && saved.id === undoing.id) setSaved(null);
       setUndoing(null);
       loadTodays();
+      loadWaiting();
     } catch (e) {
       setUndoError(e.body?.error || e.message || "Could not undo the bill");
     } finally {
@@ -265,6 +278,7 @@ export default function ReceiveSupplierBillRedesign() {
       if (draftId) loadDrafts();
       setDraftId(null);
       loadTodays();
+      loadWaiting();
     } catch (e) {
       setError(e.body?.error || e.message || "Could not save the bill");
     } finally {
@@ -410,6 +424,8 @@ export default function ReceiveSupplierBillRedesign() {
           </table>
         </SectionCard>
       ) : null}
+
+      <WaitingList items={waiting} onChanged={loadWaiting} disabled={!!busy} />
 
       {drafts.length ? (
         <SectionCard className="mb-4 p-4">
