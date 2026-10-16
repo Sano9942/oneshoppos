@@ -16,6 +16,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import ItemPickField from "../../ui/ItemPickField";
 import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
 import { downloadCsv } from "../../utils/csvExport";
 
@@ -141,7 +142,9 @@ export default function PromotionsRedesign() {
   const [formError, setFormError] = useState("");
 
   const [quoteItems, setQuoteItems] = useState([]);
-  const [quoteProductId, setQuoteProductId] = useState("");
+  // F5: toys are picked through the till's search box, not a list of every item.
+  const [quoteProduct, setQuoteProduct] = useState(null);
+  const [formToy, setFormToy] = useState(null);
   const [quoteQty, setQuoteQty] = useState("1");
   const [quoteResult, setQuoteResult] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -214,12 +217,16 @@ export default function PromotionsRedesign() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY);
+    setFormToy(null);
     setFormError("");
     setModalOpen(true);
   };
 
   const openEdit = (row) => {
     setEditing(row);
+    setFormToy(row.product_id
+      ? products.find((p) => String(p.id) === String(row.product_id)) || { id: row.product_id, name: row.product_name || `Item #${row.product_id}` }
+      : null);
     setForm({
       name: row.name || "",
       type: row.type || "percent",
@@ -355,7 +362,7 @@ export default function PromotionsRedesign() {
   };
 
   const addQuoteItem = () => {
-    const product = products.find((p) => String(p.id) === String(quoteProductId));
+    const product = quoteProduct;
     const qty = Math.max(1, Number(quoteQty || 1));
     if (!product) return;
     setQuoteItems((prev) => {
@@ -377,6 +384,7 @@ export default function PromotionsRedesign() {
       ];
     });
     setQuoteQty("1");
+    setQuoteProduct(null);
   };
 
   const removeQuoteItem = (productId) => {
@@ -557,21 +565,14 @@ export default function PromotionsRedesign() {
         <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-[1fr_360px]">
           <div>
             <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_110px_110px]">
-              <Select value={quoteProductId} onChange={(e) => setQuoteProductId(e.target.value)}>
-                <option value="">Select product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
+              <ItemPickField value={quoteProduct} onChange={setQuoteProduct} />
               <Input
                 type="number"
                 min="1"
                 value={quoteQty}
                 onChange={(e) => setQuoteQty(e.target.value)}
               />
-              <Button tone="primary" onClick={addQuoteItem} disabled={!quoteProductId}>
+              <Button tone="primary" onClick={addQuoteItem} disabled={!quoteProduct}>
                 Add
               </Button>
             </div>
@@ -882,17 +883,13 @@ export default function PromotionsRedesign() {
               {form.applies_to === "product" ? (
                 <div>
                   <label className="mb-1 block text-xs text-(--ui-text-muted)">Product</label>
-                  <Select
-                    value={form.product_id}
-                    onChange={(e) => setForm((prev) => ({ ...prev, product_id: e.target.value }))}
-                  >
-                    <option value="">Select product</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <ItemPickField
+                    value={formToy}
+                    onChange={(p) => {
+                      setFormToy(p);
+                      setForm((prev) => ({ ...prev, product_id: p ? String(p.id) : "" }));
+                    }}
+                  />
                 </div>
               ) : null}
 

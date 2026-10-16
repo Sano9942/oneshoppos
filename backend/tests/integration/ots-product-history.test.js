@@ -316,6 +316,16 @@ describe("who and why: the main writers tag their changes", () => {
     expect(await lastMove()).toMatchObject({ kind: "adjustment", employee_id: ADMIN_ID, note: "Damaged" });
   });
 
+  it("F5: an adjustment's own note is kept and shows in History after the reason", async () => {
+    const r = await admin().post("/api/adjustments").send({
+      product_id: pid, outlet_id: 1, quantity_change: -1, reason: "Damaged", notes: "  found broken in the box ",
+    });
+    expect(r.status).toBe(200);
+    expect(await lastMove()).toMatchObject({ kind: "adjustment", note: "Damaged: found broken in the box" });
+    const list = await admin().get("/api/adjustments");
+    expect(list.body.find((a) => a.product_id === pid && a.notes)).toMatchObject({ reason: "Damaged", notes: "found broken in the box" });
+  });
+
   it("transfer: both branches tagged 'transfer'", async () => {
     const r = await admin().post("/api/transfers").send({ product_id: pid, from_outlet_id: 1, to_outlet_id: 2, quantity: 2 });
     expect(r.status).toBe(200);

@@ -13,6 +13,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import ItemPickField from "../../ui/ItemPickField";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -23,7 +24,6 @@ export default function TransfersRedesign() {
   const { employee, hasPerm } = useAuth();
   const isAdmin = hasPerm("all_access");
   const [rows, setRows] = useState([]);
-  const [products, setProducts] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +38,8 @@ export default function TransfersRedesign() {
     quantity: "",
     note: "",
   });
+  // F5: the toy picked through the till's search box (form.product_id = its id).
+  const [pickedToy, setPickedToy] = useState(null);
   const [saving, setSaving] = useState(false);
   // 2-G.1 follow-up: load variants on product change so admin can target a
   // specific SKU instead of moving the product-level rollup blindly.
@@ -58,13 +60,11 @@ export default function TransfersRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [trData, pData, oData] = await Promise.all([
+      const [trData, oData] = await Promise.all([
         api.get("/api/transfers"),
-        api.get("/api/products"),
         api.get("/api/outlets"),
       ]);
       setRows(trData.transfers || []);
-      setProducts(pData.products || []);
       setOutlets(oData.outlets || []);
     } catch (e) {
       setError(e.message || "Failed to load transfers");
@@ -97,12 +97,22 @@ export default function TransfersRedesign() {
       quantity: "",
       note: "",
     });
+    setPickedToy(null);
     setProductVariants([]);
     setModalOpen(true);
   };
 
+  const pickToy = (p) => {
+    setPickedToy(p);
+    setForm((prev) => ({ ...prev, product_id: p ? String(p.id) : "", variant_id: "" }));
+  };
+
   const save = async (e) => {
     e.preventDefault();
+    if (!form.product_id) {
+      setError("Pick a toy first.");
+      return;
+    }
     if (form.from_outlet_id === form.to_outlet_id) {
       setError("Source and destination outlets must be different.");
       return;
@@ -212,10 +222,7 @@ export default function TransfersRedesign() {
         size="md"
       >
         <form className="space-y-2" onSubmit={save}>
-          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value, variant_id: "" }))}>
-            <option value="">Select product</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
-          </Select>
+          <ItemPickField value={pickedToy} onChange={pickToy} showStock autoFocus />
           {productVariants.length > 0 && (
             <Select value={form.variant_id} onChange={(e) => setForm((p) => ({ ...p, variant_id: e.target.value }))}>
               <option value="">Product-level (all variants)</option>
@@ -239,6 +246,7 @@ export default function TransfersRedesign() {
           </Select>
           <Input required type="number" min="1" placeholder="Quantity" value={form.quantity} onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))} />
           <Input placeholder="Note" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} />
+          {error ? <p className="text-sm text-(--ui-danger-fg)">{error}</p> : null}
           <ModalFooter>
             <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
             <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>

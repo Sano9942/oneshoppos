@@ -13,6 +13,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import ItemPickField from "../../ui/ItemPickField";
 import { useAuth } from "../../auth/AuthProvider";
 import { readContext } from "../../auth/authStore";
 
@@ -31,7 +32,6 @@ export default function StockAdjustmentsRedesign() {
     ? String(_ctx.active_outlet_id)
     : null;
   const [rows, setRows] = useState([]);
-  const [products, setProducts] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -45,7 +45,11 @@ export default function StockAdjustmentsRedesign() {
     outlet_id: "",
     quantity_change: "",
     reason: "Damaged",
+    notes: "",
   });
+  // F5: the toy picked through the till's search box (form.product_id = its id).
+  const [pickedToy, setPickedToy] = useState(null);
+  const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   // 2-G.1 follow-up: pull variants when a product with variants is picked.
   const [productVariants, setProductVariants] = useState([]);
@@ -65,13 +69,11 @@ export default function StockAdjustmentsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [adjData, prodData, outData] = await Promise.all([
+      const [adjData, outData] = await Promise.all([
         api.get("/api/adjustments"),
-        api.get("/api/products"),
         api.get("/api/outlets"),
       ]);
       setRows(Array.isArray(adjData) ? adjData : []);
-      setProducts(prodData.products || []);
       const outList = outData.outlets || [];
       setOutlets(outList);
       if (!form.outlet_id && outList.length) {
@@ -109,15 +111,27 @@ export default function StockAdjustmentsRedesign() {
       outlet_id: preferred ? ctxOutletId : outlets[0] ? String(outlets[0].id) : "",
       quantity_change: "",
       reason: "Damaged",
+      notes: "",
     });
+    setPickedToy(null);
+    setFormError("");
     setProductVariants([]);
     setModalOpen(true);
   };
 
+  const pickToy = (p) => {
+    setPickedToy(p);
+    setForm((prev) => ({ ...prev, product_id: p ? String(p.id) : "", variant_id: "" }));
+  };
+
   const save = async (e) => {
     e.preventDefault();
+    if (!form.product_id) {
+      setFormError("Pick a toy first.");
+      return;
+    }
     setSaving(true);
-    setError("");
+    setFormError("");
     try {
       await api.post("/api/adjustments", {
         product_id: Number(form.product_id),
@@ -126,11 +140,12 @@ export default function StockAdjustmentsRedesign() {
         employee_id: employee?.id || null,
         quantity_change: Number(form.quantity_change),
         reason: form.reason,
+        notes: form.notes.trim() || null,
       });
       setModalOpen(false);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to create adjustment");
+      setFormError(e2.message || "Failed to create adjustment");
     } finally {
       setSaving(false);
     }
@@ -153,7 +168,7 @@ export default function StockAdjustmentsRedesign() {
       subtitle="auditable shrink/gain adjustments per outlet."
       right={
         <div className="flex gap-2">
-          <Button onClick={() => downloadCsv(["date","product","outlet","reason","quantity","employee"], visibleRows.map(r => [r.created_at, r.product_name||"", r.outlet_name||"", r.reason||"", r.quantity||0, r.employee_name||""]), "stock_adjustments")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button onClick={() => downloadCsv(["date","product","outlet","reason","note","quantity","employee"], visibleRows.map(r => [r.timestamp, r.product_name||"", r.outlet_name||"", r.reason||"", r.notes||"", r.quantity_change||0, r.employee_name||""]), "stock_adjustments")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
           <Button tone="primary" onClick={openCreate}>
             <Plus size={14} className="mr-1 inline" />
             New Adjustment
@@ -204,7 +219,10 @@ export default function StockAdjustmentsRedesign() {
                     </p>
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name}</td>
-                  <td className="px-3 py-2"><Badge>{r.reason}</Badge></td>
+                  <td className="px-3 py-2">
+                    <Badge>{r.reason}</Badge>
+                    {r.notes ? <div className="mt-0.5 text-xs text-(--ui-text-muted)">{r.notes}</div> : null}
+                  </td>
                   <td className={`px-3 py-2 text-right font-semibold ${Number(r.quantity_change || 0) >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}`}>
                     {Number(r.quantity_change || 0) > 0 ? "+" : ""}{r.quantity_change}
                   </td>
@@ -232,12 +250,7 @@ export default function StockAdjustmentsRedesign() {
         size="md"
       >
         <form className="space-y-2" onSubmit={save}>
-          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value, variant_id: "" }))}>
-            <option value="">Select product</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>
-            ))}
-          </Select>
+          <ItemPickField value={pickedToy} onChange={pickToy} showStock autoFocus />
           {productVariants.length > 0 && (
             <Select value={form.variant_id} onChange={(e) => setForm((p) => ({ ...p, variant_id: e.target.value }))}>
               <option value="">Product-level (all variants)</option>
@@ -259,6 +272,8 @@ export default function StockAdjustmentsRedesign() {
           <Select value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}>
             {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
           </Select>
+          <Input aria-label="Note" placeholder="Note (optional), e.g. found broken in the box" maxLength={300} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
+          {formError ? <p className="text-sm text-(--ui-danger-fg)">{formError}</p> : null}
           <ModalFooter>
             <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
             <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>

@@ -307,6 +307,9 @@ module.exports = function registerInventoryRoutes(app, deps) {
   app.post("/api/adjustments", requirePerm("manage_inventory"), validate(CreateAdjustmentSchema), async (req, res) => {
     const { product_id, variant_id, outlet_id, employee_id, quantity_change, reason } =
       req.body;
+    // F5: the adjustment's own note ("found broken in the box"), kept with it
+    // and shown in the toy's History after the reason.
+    const notes = String(req.body.notes ?? "").trim().slice(0, 300) || null;
 
     if (!product_id || !outlet_id || quantity_change === undefined || !reason) {
       return res
@@ -326,9 +329,9 @@ module.exports = function registerInventoryRoutes(app, deps) {
       await db.transaction(async (client) => {
         // Insert adjustment record (with optional variant_id)
         const { rows } = await client.query(
-          `INSERT INTO stock_adjustments (product_id, variant_id, outlet_id, employee_id, quantity_change, reason)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-          [product_id, variant_id || null, outlet_id, employee_id || null, quantity_change, reason],
+          `INSERT INTO stock_adjustments (product_id, variant_id, outlet_id, employee_id, quantity_change, reason, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+          [product_id, variant_id || null, outlet_id, employee_id || null, quantity_change, reason, notes],
         );
         adjustmentId = rows[0].id;
 
@@ -375,7 +378,8 @@ module.exports = function registerInventoryRoutes(app, deps) {
         });
         await productHistory.tagChanges(client, {
           kind: "adjustment", refType: "adjustment", refId: adjustmentId,
-          employeeId: productHistory.actorOf(req) ?? (employee_id || null), note: reason,
+          employeeId: productHistory.actorOf(req) ?? (employee_id || null),
+          note: notes ? `${reason}: ${notes}` : reason,
         });
       });
 
