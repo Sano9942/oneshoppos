@@ -13,7 +13,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
-import { Badge, Button, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
+import { Badge, Button, ConfirmDialog, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
 import CheckLines from "./supplierBill/CheckLines";
 import { billSummary, lineFromRead, savePayload } from "./supplierBill/billMath";
 import { brandChoices } from "./supplierBill/priceRules";
@@ -64,6 +64,9 @@ export default function ReceiveSupplierBillRedesign() {
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  // Step (f): earlier saved bills of this supplier with the same bill number.
+  const [sameNumber, setSameNumber] = useState([]);
+  const [askSameNumber, setAskSameNumber] = useState(false);
   const [result, setResult] = useState(null);
   const [lines, setLines] = useState([]);
   const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
@@ -158,17 +161,48 @@ export default function ReceiveSupplierBillRedesign() {
   const canSave = allReady && totalOk && outletId && supplierId && !busy;
   const supplierName = suppliers.find((x) => String(x.id) === String(supplierId))?.name || "";
 
-  const save = async () => {
+  // Same supplier + same bill number already saved → warn (owner B: allowed,
+  // a supplier reuses "Bill No 01" on different dates).
+  const billNo = header.bill_number.trim();
+  useEffect(() => {
+    if (!supplierId || !billNo) {
+      setSameNumber([]);
+      return undefined;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      api.get(`/api/supplier-bills/same-number?supplier_id=${encodeURIComponent(supplierId)}&bill_number=${encodeURIComponent(billNo)}`)
+        .then((d) => { if (live) setSameNumber(d.bills || []); })
+        .catch(() => { if (live) setSameNumber([]); });
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [supplierId, billNo]);
+
+  const save = async (sameNumberOk = false) => {
+    if (sameNumber.length && !sameNumberOk) {
+      setAskSameNumber(true);
+      return;
+    }
+    setAskSameNumber(false);
     setBusy("Saving…");
     setError("");
     try {
       const fd = new FormData();
-      fd.append("payload", JSON.stringify(savePayload({
-        supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio: discountRatio,
-      })));
+      fd.append("payload", JSON.stringify({
+        ...savePayload({ supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio: discountRatio }),
+        same_number_ok: !!sameNumberOk,
+      }));
       for (const f of files) fd.append("files", f);
       const res = await api.upload("/api/supplier-bills", fd);
       const data = await res.json();
+      if (res.status === 409 && data.code === "SAME_BILL_NUMBER") {
+        setSameNumber(data.bills || []);
+        setAskSameNumber(true);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Could not save the bill");
       const pieces = lines.reduce((a, l) => a + (l.is_new
         ? (Number(l.received) || 0) * Math.max(1, Number(l.split_into) || 1)
@@ -176,6 +210,7 @@ export default function ReceiveSupplierBillRedesign() {
       setSaved({ ...data.bill, pieces, supplier: supplierName, labels: data.labels || [] });
       success(`Bill ${data.bill.bill_number || ""} saved`);
       setResult(null);
+      setSameNumber([]);
       setLines([]);
       setFiles([]);
       setFileKey((k) => k + 1);
@@ -329,6 +364,15 @@ export default function ReceiveSupplierBillRedesign() {
               {summary.difference ? <div className="text-xs text-(--ui-danger-fg)">Difference {fmt(summary.difference)}</div> : null}
             </div>
           </div>
+          {sameNumber.length ? (
+            <div className="mt-3 rounded-(--ui-radius-sm) border border-(--ui-border) px-3 py-2 text-sm text-(--ui-warning-fg)" role="alert">
+              <b>{supplierName} bill {billNo} is already saved</b>
+              <ul className="mt-1 list-disc pl-5">
+                {sameNumber.map((b) => <li key={b.id}>{earlierBillText(b, fmt)}</li>)}
+              </ul>
+              <p className="mt-1">If this is a different bill with the same number, you can still save it. If it is the same bill, don&apos;t save it again.</p>
+            </div>
+          ) : null}
           {billDiscount ? (
             <p className="mt-2 text-sm text-(--ui-text-muted)">
               Bill discount {fmt(billDiscount)} spread over the lines by value (cost per piece already less it).
@@ -422,13 +466,31 @@ export default function ReceiveSupplierBillRedesign() {
               {summary.new_toys ? " · new toys get the next shop codes from 31000 on Save" : ""}
             </span>
             <div className="flex-1" />
-            <Button tone="primary" disabled={!canSave} onClick={save}>
+            <Button tone="primary" disabled={!canSave} onClick={() => save(false)}>
               {busy === "Saving…" ? "Saving…" : "Save bill"}
             </Button>
             </div>
           </SectionCard>
         </>
       ) : null}
+      <ConfirmDialog
+        open={askSameNumber}
+        title={`Bill ${billNo} is already saved`}
+        body={`${supplierName} bill ${billNo} was saved before: ${sameNumber.map((b) => earlierBillText(b, fmt)).join("; ")}. Save this one too only if it is a different bill.`}
+        confirmLabel="It's a different bill, save it"
+        cancelLabel="Don't save"
+        onConfirm={() => save(true)}
+        onCancel={() => setAskSameNumber(false)}
+      />
     </PageShell>
   );
+}
+
+/** "dated 1 Oct 2026 · Rs 300 · 1 line · saved by Hassan" */
+function earlierBillText(b, fmt) {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(b.bill_date || "")
+    ? new Date(`${b.bill_date}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "no date";
+  return [`dated ${d}`, fmt(Number(b.amount) || 0), `${b.lines} line${b.lines === 1 ? "" : "s"}`, b.saved_by_name ? `saved by ${b.saved_by_name}` : null]
+    .filter(Boolean).join(" · ");
 }

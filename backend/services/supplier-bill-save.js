@@ -98,6 +98,24 @@ function planBill(p) {
   return { planned, billDiscount, billTotal, written, matches, accountNet, invoiceAmount, returnValue, share };
 }
 
+/**
+ * Step (f): this supplier's live bills already carrying this bill number
+ * (spaces and case ignored). Owner (B): warn and show them, allow continuing,
+ * since a supplier reuses "Bill No 01" on different dates.
+ */
+async function earlierBillsWithNumber(client, supplierId, billNumber) {
+  const no = String(billNumber || "").trim();
+  if (!supplierId || !no) return [];
+  const { rows } = await client.query(
+    `SELECT b.id, b.bill_number, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date, b.saved_at,
+            e.name AS saved_by_name, COALESCE(b.account_amount, b.supplier_total, b.lines_total) AS amount,
+            (SELECT COUNT(*)::int FROM supplier_bill_lines l WHERE l.bill_id = b.id) AS lines
+       FROM supplier_bills b LEFT JOIN employees e ON e.id = b.saved_by
+      WHERE b.supplier_id = $1 AND b.status = 'saved' AND LOWER(btrim(b.bill_number)) = LOWER($2)
+      ORDER BY b.id`, [supplierId, no]);
+  return rows;
+}
+
 async function addDays(client, dateStr, days) {
   const { rows: [r] } = await client.query("SELECT to_char($1::date + $2::int, 'YYYY-MM-DD') AS d", [dateStr, days]);
   return r.d;
@@ -111,6 +129,13 @@ async function saveSupplierBill(client, payload, files, ctx) {
   if (!Array.isArray(payload.lines) || !payload.lines.length) throw fail(400, "The bill has no lines");
   const { rows: [sup] } = await client.query("SELECT id, name, payment_terms, credit_days FROM suppliers WHERE id = $1", [Number(payload.supplier_id) || 0]);
   if (!sup) throw fail(400, "Choose the supplier");
+  if (!payload.same_number_ok) {
+    const earlier = await earlierBillsWithNumber(client, sup.id, payload.bill_number);
+    if (earlier.length) {
+      throw fail(409, `${sup.name} bill ${String(payload.bill_number).trim()} is already saved: is this a different bill?`,
+        { code: "SAME_BILL_NUMBER", bills: earlier });
+    }
+  }
   // Step (d): new toys first (code, category, brand, price), then the bill as usual.
   const fresh = await createNewToys(client, payload.lines, sup.id);
   const p = { ...payload, lines: fresh.lines };
@@ -320,4 +345,4 @@ function newPriceOf(x, productId) {
   return v;
 }
 
-module.exports = { planBill, saveSupplierBill };
+module.exports = { planBill, saveSupplierBill, earlierBillsWithNumber };

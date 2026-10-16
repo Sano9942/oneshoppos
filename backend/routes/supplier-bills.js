@@ -23,7 +23,7 @@ const { readBillPdf } = require("../services/bill-readers");
 const { readBillPhotos, LAYOUT: PHOTO_LAYOUT } = require("../services/bill-readers/photo-reader");
 const logger = require("../services/logger");
 const { matchBillLines } = require("../services/supplier-bill-match");
-const { saveSupplierBill } = require("../services/supplier-bill-save");
+const { saveSupplierBill, earlierBillsWithNumber } = require("../services/supplier-bill-save");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -140,6 +140,15 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+  // Step (f): earlier live bills of this supplier with this bill number, so the
+  // check screen can warn before the owner checks every line.
+  app.get("/api/supplier-bills/same-number", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      res.json({ bills: await earlierBillsWithNumber(db, Number(req.query.supplier_id) || 0, req.query.bill_number) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 15 * 1024 * 1024, files: 10 },
@@ -184,6 +193,16 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
           });
         }
       }
+      // Same bill number again: ask before storing anything (checked again in the save).
+      if (!payload.same_number_ok) {
+        const earlier = await earlierBillsWithNumber(db, Number(payload.supplier_id) || 0, payload.bill_number);
+        if (earlier.length) {
+          return res.status(409).json({
+            error: `Bill ${String(payload.bill_number).trim()} of this supplier is already saved: is this a different bill?`,
+            code: "SAME_BILL_NUMBER", bills: earlier,
+          });
+        }
+      }
       const stored = [];
       for (const { f, sha256 } of files) {
         stored.push({
@@ -205,7 +224,11 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       if (err.code === "23505" && /supplier_bill_files/.test(err.constraint || err.message)) {
         return res.status(409).json({ error: "That file is already on another bill" });
       }
-      res.status(err.statusCode || 500).json({ error: err.message, ...(err.bill_id ? { bill_id: err.bill_id } : {}) });
+      res.status(err.statusCode || 500).json({
+        error: err.message,
+        ...(err.bill_id ? { bill_id: err.bill_id } : {}),
+        ...(err.code === "SAME_BILL_NUMBER" ? { code: err.code, bills: err.bills } : {}),
+      });
     }
   });
 
