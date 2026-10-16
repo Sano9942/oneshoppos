@@ -15,6 +15,8 @@ import {
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
 import { fmtUtcDateTime } from "../../utils/dates";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthProvider";
 import PaySupplierModal from "./PaySupplierModal";
 
 const TYPE_LABELS = {
@@ -237,6 +239,10 @@ export default function SuppliersRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [ledgerSupplier, setLedgerSupplier] = useState(null);
+  // F9 (f): a supplier's bills and their files.
+  const navigate = useNavigate();
+  const { hasPerm } = useAuth();
+  const canSeeBills = hasPerm("receive_supplier_bills");
   const [paySupplier, setPaySupplier] = useState(null);
 
   const load = async () => {
@@ -456,6 +462,7 @@ export default function SuppliersRedesign() {
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" tone="primary" onClick={() => setLedgerSupplier(row)}>Ledger</Button>
+                        {canSeeBills ? <Button size="sm" onClick={() => navigate(`/supplier-bills?supplier_id=${row.id}`)}>Bills</Button> : null}
                         <Button size="sm" onClick={() => setPaySupplier(row)}>Pay</Button>
                         <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
                         <Button size="sm" tone="danger" onClick={() => remove(row)}>

@@ -128,6 +128,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Suppliers", path: "/suppliers", icon: Truck, requiredPerm: "manage_orders" },
       { name: "Receive supplier bill", path: "/supplier-bills/new", icon: FileText, requiredPerm: "receive_supplier_bills" },
+      { name: "Supplier bills", path: "/supplier-bills", icon: FileText, requiredPerm: "receive_supplier_bills" },
       { name: "Purchase Orders", path: "/purchase-orders", icon: History, requiredPerm: "manage_orders" },
       { name: "Supplier Returns", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
       { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },

@@ -4,6 +4,7 @@
 // Supplier Ledger tab read `amount` / `payment` / type "purchase", which the
 // server never sends (it sends debit / credit / invoice | payment | ...), so
 // every line showed "—" and was labelled "Payment".
+import { MemoryRouter } from "react-router-dom";
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
@@ -62,7 +63,7 @@ async function paySupplier(dialogTitle) {
 describe("Suppliers page", () => {
   it("pays a supplier on account from its row", async () => {
     const { default: SuppliersRedesign } = await import("../../src/pages/redesign/SuppliersRedesign");
-    render(<SuppliersRedesign />);
+    render(<MemoryRouter><SuppliersRedesign /></MemoryRouter>);
     const row = (await screen.findByText("TOYS AND TOYS LAHORE")).closest("tr");
     fireEvent.click(within(row).getByRole("button", { name: "Pay" }));
     await paySupplier("Pay TOYS AND TOYS LAHORE");
@@ -73,14 +74,14 @@ describe("Suppliers page", () => {
 
   it("an advance (paid ahead) shows as an advance, not 'Clear'", async () => {
     const { default: SuppliersRedesign } = await import("../../src/pages/redesign/SuppliersRedesign");
-    render(<SuppliersRedesign />);
+    render(<MemoryRouter><SuppliersRedesign /></MemoryRouter>);
     const row = (await screen.findByText("BABY LAND LAHORE")).closest("tr");
     expect(within(row).getByText(/Rs 500 advance/)).toBeTruthy();
   });
 
   it("the supplier form sends the opening balance", async () => {
     const { default: SuppliersRedesign } = await import("../../src/pages/redesign/SuppliersRedesign");
-    render(<SuppliersRedesign />);
+    render(<MemoryRouter><SuppliersRedesign /></MemoryRouter>);
     const row = (await screen.findByText("TOYS AND TOYS LAHORE")).closest("tr");
     fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit Supplier" });

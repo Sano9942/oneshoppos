@@ -10,6 +10,7 @@ import RouteLoading from "./RouteLoading";
 const AdministratorRoute = lazy(() => import("../pages/AdministratorRoute"));
 const ApprovalsRedesign = lazy(() => import("../pages/redesign/ApprovalsRedesign"));
 const ReceiveSupplierBillRedesign = lazy(() => import("../pages/redesign/ReceiveSupplierBillRedesign"));
+const SupplierBillsRedesign = lazy(() => import("../pages/redesign/SupplierBillsRedesign"));
 const AttendanceRedesign = lazy(() => import("../pages/redesign/AttendanceRedesign"));
 const SalariesRedesign = lazy(() => import("../pages/redesign/SalariesRedesign"));
 const AttributeSetsRoute = lazy(() => import("../pages/AttributeSetsRoute"));
@@ -190,6 +191,7 @@ export const appRoutes = [
     <Route path="/purchase-orders" element={perm("manage_orders", <PurchaseOrdersRoute />)} />
     <Route path="/supplier-payables" element={perm("manage_orders", <SupplierPayablesRoute />)} />
     <Route path="/approvals" element={perm("manage_orders", <ApprovalsRedesign />)} />
+    <Route path="/supplier-bills" element={perm("receive_supplier_bills", <SupplierBillsRedesign />)} />
     <Route path="/supplier-bills/new" element={perm("receive_supplier_bills", <ReceiveSupplierBillRedesign />)} />
     <Route path="/returned-stock" element={perm("manage_orders", <ReturnedStockRoute />)} />
     <Route path="/employees" element={perm("all_access", <EmployeesRoute />)} />

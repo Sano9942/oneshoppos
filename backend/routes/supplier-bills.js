@@ -27,6 +27,7 @@ const { saveSupplierBill, earlierBillsWithNumber } = require("../services/suppli
 const drafts = require("../services/supplier-bill-drafts");
 const { undoSupplierBill, billsOfDay } = require("../services/supplier-bill-undo");
 const { actorOf } = require("../services/product-history");
+const { listBills, getBill } = require("../services/supplier-bill-list");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -268,6 +269,26 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
       res.json({ bill: result.bill, paid_kept: result.paidKept, new_toys_removed: result.newToysRemoved });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // Step (f): the bills list and one bill (lines, files, account entries).
+  app.get("/api/supplier-bills", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      res.json(await listBills(db, req.query));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  // Registered after /today, /drafts and /same-number: only a numeric id lands here.
+  app.get("/api/supplier-bills/:id", requirePerm("receive_supplier_bills"), async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    try {
+      const bill = await getBill(db, req.params.id);
+      if (!bill) return res.status(404).json({ error: "No such bill" });
+      res.json({ bill });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 
