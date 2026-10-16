@@ -6466,3 +6466,20 @@ CREATE TABLE IF NOT EXISTS supplier_waiting_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_waiting_items_open ON supplier_waiting_items(supplier_id) WHERE status = 'waiting';
+
+-- One Toy Store pilot F9 (v156): corrections to a saved supplier bill.
+-- Same statements as services/supplier-bills.js SUPPLIER_BILL_CORRECTIONS_DDL.
+CREATE TABLE IF NOT EXISTS supplier_bill_corrections (
+  id SERIAL PRIMARY KEY,
+  bill_id INTEGER NOT NULL REFERENCES supplier_bills(id) ON DELETE CASCADE,
+  line_id INTEGER REFERENCES supplier_bill_lines(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('pieces','rate','money','toy')),
+  note TEXT NOT NULL CHECK (btrim(note) <> ''),
+  before JSONB,
+  after JSONB,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  account_entry_id INTEGER REFERENCES supplier_account_entries(id),
+  employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_bill_corrections_bill ON supplier_bill_corrections(bill_id, id);

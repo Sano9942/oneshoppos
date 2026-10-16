@@ -43,6 +43,8 @@ async function undoSupplierBill(client, billId, ctx) {
   if (bill.saved_day !== ctx.today) {
     throw fail(409, `A bill can be undone only on the day it was saved (${bill.saved_day_label}): correct the bill instead`);
   }
+  const { rows: [corrected] } = await client.query("SELECT 1 FROM supplier_bill_corrections WHERE bill_id = $1 LIMIT 1", [bill.id]);
+  if (corrected) throw fail(409, "This bill was corrected after saving, so it can't be undone: correct it again instead");
   const refNo = `${bill.supplier_name} bill ${bill.bill_number || "(no number)"}`;
 
   const { rows: toys } = await client.query(

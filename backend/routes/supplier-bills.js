@@ -28,6 +28,7 @@ const drafts = require("../services/supplier-bill-drafts");
 const { undoSupplierBill, billsOfDay } = require("../services/supplier-bill-undo");
 const { actorOf } = require("../services/product-history");
 const { listBills, getBill } = require("../services/supplier-bill-list");
+const { correctSupplierBill } = require("../services/supplier-bill-corrections");
 const { uploadToR2, r2 } = require("../utils/r2");
 const { tenantToday } = require("../utils/tz");
 const fs = require("fs");
@@ -267,6 +268,20 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         ...c, reason: "supplier_bill_undo", reference_type: "supplier_bill", reference_id: result.bill.id,
       })));
       res.json({ bill: result.bill, paid_kept: result.paidKept, new_toys_removed: result.newToysRemoved });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // Step (f) 5/6: correct a saved bill (pieces received / rate / money / toy), a note always.
+  app.post("/api/supplier-bills/:id/corrections", requirePerm("receive_supplier_bills"), async (req, res) => {
+    try {
+      const ctx = { employeeId: actorOf(req), today: tenantToday(req.company?.timezone || "Asia/Karachi") };
+      const result = await db.transaction((client) => correctSupplierBill(client, req.params.id, req.body || {}, ctx));
+      enqueueInventorySyncEvents(result.stockChanges.map((c) => ({
+        ...c, reason: "supplier_bill_correction", reference_type: "supplier_bill", reference_id: result.bill.id,
+      })));
+      res.json({ correction: result.correction, bill: await getBill(db, result.bill.id) });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

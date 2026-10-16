@@ -2,12 +2,15 @@
 // saved it and its files (PDFs, photos), one supplier at a time from the
 // Suppliers page (?supplier_id=) or all of them. A bill opens with its lines
 // as the supplier wrote them, the toys they went to, and its account entries.
+// A saved bill is corrected from here (Correct this bill, step (f) 5/6).
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { Badge, Button, Drawer, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
 import { billFileHref } from "./supplierBill/billFiles";
+import CorrectBill from "./supplierBill/CorrectBill";
+import { CORRECTION_LABELS, correctionWords } from "./supplierBill/correctionText";
 
 const PAGE = 50;
 const ENTRY_LABELS = { not_received: "Not received", discount: "Discount", correction: "Correction" };
@@ -154,19 +157,40 @@ export default function SupplierBillsRedesign() {
         title={open?.id ? `${open.supplier_name} bill ${open.bill_number || "(no number)"}` : "Supplier bill"}>
         {open?.loading ? <p className="text-sm">Opening…</p> : null}
         {open?.error ? <p className="text-sm text-(--ui-danger-fg)">{open.error}</p> : null}
-        {open?.id ? <BillDetail bill={open} fmt={fmt} /> : null}
+        {open?.id ? <BillDetail bill={open} fmt={fmt} onCorrected={(b) => { setOpen(b); load(offset); }} /> : null}
       </Drawer>
     </PageShell>
   );
 }
 
-function BillDetail({ bill, fmt }) {
+function BillDetail({ bill, fmt, onCorrected }) {
+  const [correcting, setCorrecting] = useState(false);
+  const [done, setDone] = useState("");
+  const corrections = bill.corrections || [];
+  const correctedLines = new Set(corrections.map((c) => c.line_id).filter(Boolean));
+  const correctionsTotal = Math.round(corrections.reduce((t, c) => t + Number(c.amount || 0), 0) * 100) / 100;
   return (
     <div className="space-y-4 text-sm">
+      {bill.status === "saved" ? (
+        correcting ? (
+          <CorrectBill bill={bill} fmt={fmt} onCancel={() => setCorrecting(false)}
+            onDone={(b) => { setCorrecting(false); setDone("Correction saved"); onCorrected(b); }} />
+        ) : (
+          <div className="flex items-center justify-end gap-3">
+            {done ? <span className="text-(--ui-success-fg)">{done}</span> : null}
+            <Button onClick={() => { setDone(""); setCorrecting(true); }}>Correct this bill</Button>
+          </div>
+        )
+      ) : null}
       <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
         <div><span className="text-(--ui-text-muted)">Bill date:</span> {bill.bill_date || "—"}</div>
         <div><span className="text-(--ui-text-muted)">Goods went to:</span> {bill.outlet_name || "—"}</div>
         <div><span className="text-(--ui-text-muted)">On the supplier&apos;s account:</span> <b>{fmt(Number(bill.amount) || 0)}</b></div>
+        {correctionsTotal ? (
+          <div className="sm:col-span-2" data-testid="corrections-total">
+            <span className="text-(--ui-text-muted)">Corrections on the account:</span> {correctionsTotal > 0 ? "+" : "−"}{fmt(Math.abs(correctionsTotal))}
+          </div>
+        ) : null}
         <div><span className="text-(--ui-text-muted)">Saved:</span> {when(bill.saved_at)}{bill.saved_by_name ? ` by ${bill.saved_by_name}` : ""}</div>
         {bill.total_differs ? <div className="sm:col-span-2 text-(--ui-warning-fg)">Supplier&apos;s total was different: {bill.total_note}</div> : null}
         {bill.paid_now_method ? (
@@ -213,7 +237,10 @@ function BillDetail({ bill, fmt }) {
           <tbody>
             {bill.lines.map((l) => (
               <tr key={l.id} className="border-t border-(--ui-border) align-top">
-                <td className="py-1 pr-2">{l.line_no}{l.page ? <span className="block text-xs text-(--ui-text-muted)">p{l.page}</span> : null}</td>
+                <td className="py-1 pr-2">
+                  {l.line_no}{l.page ? <span className="block text-xs text-(--ui-text-muted)">p{l.page}</span> : null}
+                  {correctedLines.has(l.id) ? <Badge tone="warning">Corrected</Badge> : null}
+                </td>
                 <td className="py-1 pr-2">
                   {l.supplier_code ? <span className="block font-mono text-xs">{l.supplier_code}</span> : null}
                   {l.description}
@@ -241,6 +268,22 @@ function BillDetail({ bill, fmt }) {
           </tbody>
         </table>
       </div>
+
+      {corrections.length ? (
+        <div>
+          <h3 className="mb-1 font-semibold">Corrections ({corrections.length})</h3>
+          <ul className="list-disc pl-5" data-testid="supplier-bill-corrections">
+            {corrections.map((c) => (
+              <li key={c.id}>
+                <b>{CORRECTION_LABELS[c.kind] || c.kind}</b>{c.line_no ? `, line ${c.line_no}` : ""}: {correctionWords(c)}
+                {Number(c.amount) ? ` · we owe ${fmt(Math.abs(Number(c.amount)))} ${Number(c.amount) > 0 ? "more" : "less"}` : ""}
+                {" · "}{c.note}
+                <span className="text-(--ui-text-muted)"> · {when(c.created_at)}{c.employee_name ? ` by ${c.employee_name}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {bill.entries.length ? (
         <div>

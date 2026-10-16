@@ -4,6 +4,8 @@
  * supplier's page"; "every bill shows who saved it"). Saved and undone bills;
  * drafts have their own list (services/supplier-bill-drafts.js).
  */
+const { correctionsOf } = require("./supplier-bill-corrections");
+
 const BILL_COLUMNS = `
   b.id, b.supplier_id, s.name AS supplier_name, b.outlet_id, b.bill_number, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
   b.status, COALESCE(b.account_amount, b.supplier_total, b.lines_total) AS amount, b.lines_total, b.supplier_total,
@@ -65,7 +67,7 @@ async function getBill(db, id) {
   const { rows: entries } = await db.query(
     `SELECT id, kind, amount, to_char(entry_date, 'YYYY-MM-DD') AS entry_date, note, voided, created_at
        FROM supplier_account_entries WHERE supplier_bill_id = $1 ORDER BY id`, [bill.id]);
-  return { ...bill, lines, files, entries };
+  return { ...bill, lines, files, entries, corrections: await correctionsOf(db, bill.id) };
 }
 
 module.exports = { listBills, getBill };

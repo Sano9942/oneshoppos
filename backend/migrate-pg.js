@@ -10327,6 +10327,21 @@ const MIGRATIONS = [
       await client.query("ALTER TABLE supplier_bills ADD COLUMN IF NOT EXISTS draft_state JSONB");
     },
   },
+  {
+    version: 156,
+    description:
+      "One Toy Store pilot F9 (f): corrections to a saved supplier bill. supplier_bill_corrections = one row per correction (pieces received / wrong rate / money only / wrong toy) with a required note, the line before and after, and the change in what we owe (its supplier_account_entries 'correction' row). The bill's line carries the corrected figures; History tags the stock and cost changes 'bill_corrected'. DDL shared with schema-pg.sql via services/supplier-bills.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema()
+           AND table_name IN ('supplier_bills', 'supplier_bill_lines', 'supplier_account_entries', 'employees')`
+      );
+      if (rows[0].n < 4) return;
+      const { SUPPLIER_BILL_CORRECTIONS_DDL } = require("./services/supplier-bills");
+      await client.query(SUPPLIER_BILL_CORRECTIONS_DDL);
+    },
+  },
 ];
 
 /**
