@@ -270,6 +270,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 - **Problem:** the product box is a plain list of all 10,044 items (`StockAdjustmentsRedesign.jsx:235`, `TransfersRedesign.jsx:216`, Promotions); scanning or typing a code does nothing.
 - **Build:** the same search box the till uses (name, code, barcode, scanner), and a free-text note on adjustments.
 - **Test:** scan `027084120134` → MATTLE HW DINKEY selected; type `2703` → FLYING DISC BALL.
+- 🛠️ **Built locally 2026-10-16, not deployed** (see PROGRESS "▶ F5 + D65"): `ui/ItemPickField.jsx` on all four pickers; adjustment Note saved and shown in History.
 
 ### F9: Receive a supplier bill without a purchase order (owner, 2026-09-30) 🔴 for R5
 
