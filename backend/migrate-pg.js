@@ -10342,6 +10342,20 @@ const MIGRATIONS = [
       await client.query(SUPPLIER_BILL_CORRECTIONS_DDL);
     },
   },
+  {
+    version: 158,
+    description:
+      "One Toy Store pilot D64 (every shop, owner 2026-10-19): sale bill numbers INV-yymmdd-001 on the shop date the bill was rung, the count restarting each day. invoice_day_sequences = one row per shop day with its last count; bills numbered before keep their INV-yyyy-nnnnn numbers and invoice_sequences is left as it is. DDL shared with schema-pg.sql via services/invoice-number.js. Tenant-only; guarded on sales existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'sales'`
+      );
+      if (rows[0].n < 1) return;
+      const { INVOICE_DAY_SEQUENCES_DDL } = require("./services/invoice-number");
+      await client.query(INVOICE_DAY_SEQUENCES_DDL);
+    },
+  },
 ];
 
 /**

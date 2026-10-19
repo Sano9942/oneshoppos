@@ -161,7 +161,7 @@ export default function POSPaidOutModal({ open, onClose, shift, onSaved }) {
         )}
 
         {kind === "late_discount" && (
-          <Input value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="Bill number, e.g. INV-2026-00046" aria-label="Bill number" />
+          <Input value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="Bill number, e.g. INV-261019-001" aria-label="Bill number" />
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">

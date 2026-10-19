@@ -35,6 +35,7 @@ const crypto = require("crypto");
 const kitEngine = require("./kit-engine");
 const { resolveTaxSnapshot } = require("./tax-snapshot");
 const inbox = require("./online-inbox");
+const { saleInvoiceNumber } = require("./invoice-number");
 const { decryptSecret } = require("./crypto");
 const logger = require("./logger").child({ component: "aggregator-orders" });
 
@@ -273,20 +274,13 @@ async function ingestOrder(db, { normalized, rawPayload, outletId }) {
 }
 
 /**
- * Next tenant invoice number. Mirrors routes/sales.js:generateInvoiceNumber so
- * an aggregator sale gets the same INV-YYYY-NNNNN sequence a POS sale would —
- * needed for the FBR invoice payload.
+ * Next tenant invoice number — the same INV-yymmdd-001 daily count a POS sale
+ * gets (D64, services/invoice-number.js); needed for the FBR invoice payload.
+ * An aggregator sale is booked now, so today in the shop's timezone.
  */
 async function generateInvoiceNumber(client) {
-  const year = new Date().getFullYear();
-  await client.query(
-    "INSERT INTO invoice_sequences (year, last_seq) VALUES ($1, 1) ON CONFLICT(year) DO UPDATE SET last_seq = invoice_sequences.last_seq + 1",
-    [year]
-  );
-  const { rows: [row] } = await client.query(
-    "SELECT last_seq FROM invoice_sequences WHERE year = $1", [year]
-  );
-  return `INV-${year}-${String(row.last_seq).padStart(5, "0")}`;
+  const { rows: [cp] } = await client.query("SELECT timezone FROM company_profile LIMIT 1");
+  return saleInvoiceNumber(client, { soldAt: new Date(), timezone: cp?.timezone });
 }
 
 /**

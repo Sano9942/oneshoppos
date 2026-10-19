@@ -8,6 +8,7 @@ const { verifyManagerPin } = require("../services/manager-pin");
 const kitEngine = require("../services/kit-engine");
 const batchStock = require("../services/batch-stock");
 const productHistory = require("../services/product-history");
+const { saleInvoiceNumber } = require("../services/invoice-number");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -17,24 +18,13 @@ module.exports = function registerSalesRoutes(app, deps) {
 
   // --- HELPERS (inlined because these functions live in other route modules) ---
 
-  async function generateInvoiceNumber(client) {
-    const year = new Date().getFullYear();
-    await client.query(
-      "INSERT INTO invoice_sequences (year, last_seq) VALUES ($1, 1) ON CONFLICT(year) DO UPDATE SET last_seq = invoice_sequences.last_seq + 1",
-      [year]
-    );
-    const { rows: [row] } = await client.query(
-      "SELECT last_seq FROM invoice_sequences WHERE year = $1",
-      [year]
-    );
-    const seq = String(row.last_seq).padStart(5, "0");
-    return `INV-${year}-${seq}`;
-  }
-
-  async function assignInvoiceNumberToSale(saleId, retriesLeft) {
+  // D64: INV-yymmdd-001 on the shop date the bill was rung (sales.timestamp,
+  // which is offline_sold_at for an offline bill). services/invoice-number.js.
+  async function assignInvoiceNumberToSale(saleId, retriesLeft, timezone) {
     try {
       const invoiceNumber = await db.transaction(async (client) => {
-        const invNum = await generateInvoiceNumber(client);
+        const { rows: [sale] } = await client.query("SELECT timestamp FROM sales WHERE id = $1", [saleId]);
+        const invNum = await saleInvoiceNumber(client, { soldAt: sale?.timestamp, timezone });
         const { rowCount } = await client.query(
           "UPDATE sales SET invoice_number = $1 WHERE id = $2 AND invoice_number IS NULL",
           [invNum, saleId]
@@ -50,7 +40,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       });
       return invoiceNumber;
     } catch (err) {
-      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1);
+      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, timezone);
       throw err;
     }
   }
@@ -2811,7 +2801,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       notifyLowStockForSale(cartItems, outlet_id);
 
       try {
-        const invoiceNumber = await assignInvoiceNumberToSale(saleId, 1);
+        const invoiceNumber = await assignInvoiceNumberToSale(saleId, 1, req.company?.timezone);
 
         // FBR Digital Invoicing — enqueue if enabled
         try {

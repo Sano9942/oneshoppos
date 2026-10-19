@@ -282,7 +282,7 @@ describe("POST /api/sales — Checkout", () => {
       .send(basicSale({ cartItems: [{ id: 4, quantity: 1, price: 50, cost_price: 30 }] }));
 
     expect(res.status).toBe(200);
-    expect(res.body.invoiceNumber).toMatch(/^INV-\d{4}-\d{5}$/);
+    expect(res.body.invoiceNumber).toMatch(/^INV-\d{6}-\d{3,}$/); // D64: INV-yymmdd-001
   });
 
   // --- Bug-finding tests ---

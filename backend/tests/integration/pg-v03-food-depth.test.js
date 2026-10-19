@@ -342,7 +342,7 @@ describe("V03 — delivery-aggregator order injection (Postgres)", () => {
         const { rows: [sale] } = await db.query(
           `SELECT invoice_number, fbr_status FROM sales WHERE id = $1`, [result.sale_id]
         );
-        expect(sale.invoice_number).toMatch(/^INV-\d{4}-\d{5}$/);
+        expect(sale.invoice_number).toMatch(/^INV-\d{6}-\d{3,}$/); // D64: INV-yymmdd-001
         // An fbr_invoices row was enqueued for this sale (full DI posting is
         // validated against the FBR sandbox separately, per V03-decisions.md).
         const { rows: [{ n }] } = await db.query(

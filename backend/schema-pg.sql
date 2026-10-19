@@ -706,6 +706,13 @@ CREATE TABLE IF NOT EXISTS invoice_sequences (
   last_seq INTEGER NOT NULL DEFAULT 0
 );
 
+-- D64: sale bill numbers INV-yymmdd-001, one count per shop day (migration v158).
+-- Same statement as services/invoice-number.js INVOICE_DAY_SEQUENCES_DDL.
+CREATE TABLE IF NOT EXISTS invoice_day_sequences (
+  day DATE PRIMARY KEY,
+  last_seq INTEGER NOT NULL DEFAULT 0
+);
+
 -- ── Product Reviews ──────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS product_reviews (

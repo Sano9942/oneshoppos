@@ -600,7 +600,7 @@ export default function POSReturnExchangeModal() {
               <div className="flex gap-2">
                 <input
                   className="flex-1 border border-(--ui-border-strong) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--ui-focus)"
-                  placeholder="Enter invoice number (e.g. INV-2026-00042)"
+                  placeholder="Enter invoice number (e.g. INV-261019-001)"
                   value={invoiceSearch}
                   onChange={(e) => setInvoiceSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && searchInvoice()}

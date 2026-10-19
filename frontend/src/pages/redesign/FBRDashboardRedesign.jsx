@@ -181,7 +181,7 @@ export default function FBRDashboardRedesign() {
             <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">Search Invoice #</label>
             <Input
               type="text"
-              placeholder="e.g. INV-0042"
+              placeholder="e.g. INV-261019-001"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
