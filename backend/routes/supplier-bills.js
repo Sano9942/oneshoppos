@@ -415,7 +415,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         let photo = null;
         if (useAi && aiIdx.length) {
           const reader = photoReader();
-          if (!reader) return res.status(503).json({ error: "Photo reading is not switched on yet on this server" });
+          if (!reader) return res.status(503).json({ error: "Photo reading is not set up on this server (switched off until it is tried)" });
           const today = tenantToday(req.company?.timezone || "Asia/Karachi");
           const key = `${req.tenantId || req.tenantSlug || "default"}:${today}`;
           const used = aiUsage.get(key) || 0;
