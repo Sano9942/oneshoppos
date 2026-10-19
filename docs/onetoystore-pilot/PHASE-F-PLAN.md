@@ -333,7 +333,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 ### F6: Voided sales visible in Sales History (D47) 🟡
 
-- `GET /api/sales` always hides voided sales (`routes/sales.js:168`); make it follow the page's All / Voided tabs.
+- `GET /api/sales` always hides voided sales (`routes/sales.js:168`); make it follow the page's All / Voided tabs. **2026-10-19: built LOCALLY** (v161): tabs filter on the server, Voided counter from the server, reason + who/when voided (see PROGRESS top).
 
 ### F7: Card payments on prod stop hitting the sandbox gateway (D46) 🟡
 

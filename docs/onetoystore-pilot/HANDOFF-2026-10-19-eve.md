@@ -1,7 +1,7 @@
 # Hand-off 2026-10-19 (evening)
 
 ## Done this tab (all LOCAL on `onetoystore-golive`, nothing pushed or deployed)
-Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos_dev` is at **v159**.
+Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos_dev` is at **v161**.
 
 | Commit | What |
 |---|---|
@@ -10,7 +10,8 @@ Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos
 | `6b71f2a4` + `86b538e3` | **D59** transfer overpaid, change from the drawer (owner: "on the bill"). Online amount box takes what was sent; backend keeps the transfer whole and books the change as a **Cash minus line**; receipt/reprint show it as Change. No migration. Shown locally: 2,650 bill, JazzCash 2,780 → Change Due 130 → saved JazzCash 2,780 + Cash −130 → reprint "Change 130". |
 | `6c326f25` | **G2 saved end-of-day stock value**, migration **v160**: saved at every Close Shift + nightly 23:59 backup (needs `STOCK_VALUE_NIGHTLY_WORKER_ENABLED=1`), totals only, "Stock at close" on the day slip, Reports → Stock Value → Saved by day. See PROGRESS top. |
 | `0711c3f2` | **G4** dashboard "This month" row (margin % today + month, month sale, month purchase) + Top 50 Items (30d) card, top 10 + Show all. No migration. See PROGRESS top. |
-| (next commit) | **Needs a Category** fix-it page: Catalog → Needs a Category (`/needs-category`), `GET /api/products/needs-category` + `/count`, saves via the existing bulk-category; sold toys first, then in stock; picker per row, tick many, supplier suggestion; dashboard line "N toys need a category". Live: 694 toys, 302 in stock, 8 sold. No migration. See PROGRESS top. |
+| (next commit) | **F6** voided bills in Sales History (D47), migration **v161** (`sales.voided_by`, `voided_at`): All / Completed / Voided filter on the server (`status=`), Voided counter from the server, reason + who/when on the row and in the detail. No status = voided hidden as before (dashboard, till reprint, return search). See PROGRESS top. |
+| `e8300dac` | **Needs a Category** fix-it page: Catalog → Needs a Category (`/needs-category`), `GET /api/products/needs-category` + `/count`, saves via the existing bulk-category; sold toys first, then in stock; picker per row, tick many, supplier suggestion; dashboard line "N toys need a category". Live: 694 toys, 302 in stock, 8 sold. No migration. See PROGRESS top. |
 | `55583b7b` | **G5** dashboard card "Sale vs Purchase (7 days)": table per day + 7-day total, Sale = money taken (like Month sale), Purchase = supplier bills × cost (like Month purchase), finance roles only. Screen only: the server series (Query 13) already existed. No migration. See PROGRESS top. |
 | `dd9a5d7d` | **G3** dashboard card "Sales by Supplier (30d)": top 10 + Others + No supplier, item price less returns, % of all sales. No migration. See PROGRESS top. |
 | `d5f48f63` | **G1 Stock Value** (owner: one table + "Group by"). `GET /api/reports/stock-value-summary?group_by=supplier\|category\|subcategory\|brand`; Reports → Inventory → **Stock Value**. Category = top level, Sub-category = toy's own (parent shown). Shown locally. |
@@ -18,7 +19,7 @@ Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos
 Details, tests and live-data checks: PROGRESS top "▶ 2026-10-19 afternoon" paragraph and defect rows **D59**, **D64**.
 
 ## Deploy notes (when the owner says)
-- Migration order: **v157 = held clock-in photo**, v158 = D64, v159 = entry_date, v160 = G2. The runner only applies versions **above** the current one. If D64/v159 go live **without** clock-in, first renumber the clock-in migration **above the highest deployed** (as was done for F9), or it will never run.
+- Migration order: **v157 = held clock-in photo**, v158 = D64, v159 = entry_date, v160 = G2, v161 = F6 (who/when voided). The runner only applies versions **above** the current one. If D64/v159 go live **without** clock-in, first renumber the clock-in migration **above the highest deployed** (as was done for F9), or it will never run.
 - D64 changes the numbers on every new bill → deploy on a morning **before opening** (agreed). Health 10/10 before calling it live.
 - D59 changes the till screen; check a real Online bill after deploy.
 - G2: the nightly backup only runs with `STOCK_VALUE_NIGHTLY_WORKER_ENABLED=1` on Railway — ask the owner before setting it. After the first real Close Shift, check one `stock_value_days` row against Stock Value → Now.
@@ -36,5 +37,5 @@ SanoPOS not used at the counter since 2 Oct; dual-run not restarted; live shift 
 ## Next, in owner's order (ask one question at a time)
 1. ~~**G2**~~ built locally (see above).
 2. ~~**G3**~~ ~~**G4**~~ ~~**G5**~~ ~~**Needs a Category**~~ built locally.
-3. **F6–F8** (see PHASE-F-PLAN).
+3. ~~**F6**~~ built locally. **F7** (sandbox gateway setting, owner's OK) → **F8** (email receipt header) (see PHASE-F-PLAN).
 4. Still waiting on the owner: restart dual-run (iPOS export → catch-up, close shift 5), F9 (e) real-photo trial (AI key), clock-in photo (device + PINs).

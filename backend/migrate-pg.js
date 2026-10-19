@@ -10383,6 +10383,20 @@ const MIGRATIONS = [
       await client.query(STOCK_VALUE_DAYS_DDL);
     },
   },
+  {
+    version: 161,
+    description:
+      "One Toy Store pilot F6 (owner 2026-10-19): sales.voided_by + sales.voided_at = who voided a bill and when, saved by PUT /api/sales/:id/void and shown in Sales History. Bills voided before this keep NULL (only the reason was kept). Same columns in schema-pg.sql. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('sales', 'employees')`
+      );
+      if (rows[0].n < 2) return;
+      await client.query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_by INTEGER REFERENCES employees(id) ON DELETE SET NULL");
+      await client.query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ");
+    },
+  },
 ];
 
 /**

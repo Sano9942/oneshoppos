@@ -6308,6 +6308,10 @@ CREATE TABLE IF NOT EXISTS staff_salaries (
 -- One Toy Store pilot F3b part 2 (v150): staff toys at the till. The salaried
 -- staff member a bill was sold to at cost (see services/staff-pay.js).
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS staff_employee_id INTEGER REFERENCES employees(id);
+-- One Toy Store F6 (migration v161): who voided a bill and when. NULL on
+-- bills voided before v161 (only the reason was kept then).
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_by INTEGER REFERENCES employees(id) ON DELETE SET NULL;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_sales_staff_employee ON sales(staff_employee_id) WHERE staff_employee_id IS NOT NULL;
 
 -- One Toy Store pilot F9 (v154): receive a supplier bill without a PO. Extra

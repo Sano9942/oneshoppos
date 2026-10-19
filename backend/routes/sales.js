@@ -153,10 +153,24 @@ module.exports = function registerSalesRoutes(app, deps) {
         date_from = "",
         date_to = "",
         outlet_id = "",
+        status = "",
       } = req.query;
       const offset = (parseInt(page) - 1) * parseInt(limit);
 
-      let conditions = ["(s.voided IS NULL OR s.voided = false)"];
+      // F6 (One Toy Store, D47): Sales History's tabs send status=all |
+      // completed | voided. No status (dashboard Recent Sales, till reprint
+      // list, return search) keeps voided bills out, as before.
+      const STATUS_WHERE = {
+        "": "(s.voided IS NULL OR s.voided = false)",
+        completed: "(s.voided IS NULL OR s.voided = false)",
+        voided: "s.voided = true",
+        all: null,
+      };
+      if (!Object.prototype.hasOwnProperty.call(STATUS_WHERE, status)) {
+        return res.status(400).json({ error: "status must be all, completed or voided" });
+      }
+
+      let conditions = [];
       let params = [];
       let paramIdx = 1;
 
@@ -195,21 +209,29 @@ module.exports = function registerSalesRoutes(app, deps) {
         params.push(outletIdNum);
       }
 
-      const where = conditions.join(" AND ");
+      // Search / dates / branch first; the status filter goes on top, so the
+      // voided counter (voided bills under the same search and dates) can be
+      // counted without it.
+      const filterWhere = conditions.length ? conditions.join(" AND ") : "TRUE";
+      const where = STATUS_WHERE[status] ? `${filterWhere} AND ${STATUS_WHERE[status]}` : filterWhere;
 
-      const countQuery = `SELECT COUNT(*) as total FROM sales s
+      const countQuery = `SELECT COUNT(*) FILTER (WHERE ${where}) as total,
+             COUNT(*) FILTER (WHERE s.voided = true) AS voided_count
+      FROM sales s
       LEFT JOIN outlets o ON s.outlet_id = o.id
       LEFT JOIN employees e ON s.employee_id = e.id
       LEFT JOIN customers c ON s.customer_id = c.id
-      WHERE ${where}`;
+      WHERE ${filterWhere}`;
 
       const { rows: [countRow] } = await db.query(countQuery, params);
       const total = Number(countRow?.total || 0);
+      const voidedCount = Number(countRow?.voided_count || 0);
 
       const listParams = [...params, parseInt(limit), offset];
 
       const listQuery = `
       SELECT s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
+             s.voided_at, vb.name as voided_by_name,
              COALESCE(s.discount_amount, 0) as discount_amount, s.discount_type,
              s.invoice_number, s.outlet_id, s.fbr_status,
              o.name as outlet_name, e.name as employee_name,
@@ -221,9 +243,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       LEFT JOIN employees e ON s.employee_id = e.id
       LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN employees st ON st.id = s.staff_employee_id
+      LEFT JOIN employees vb ON vb.id = s.voided_by
       LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${where}
       GROUP BY s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
+               s.voided_at, vb.name,
                s.discount_amount, s.discount_type, s.invoice_number, s.outlet_id, s.fbr_status,
                o.name, e.name, c.name, c.email, st.name
       ORDER BY s.timestamp DESC
@@ -233,6 +257,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       res.json({
         sales: rows,
         total,
+        voided_count: voidedCount,
         pages: Math.ceil(total / parseInt(limit)),
         page: parseInt(page),
       });
@@ -288,10 +313,11 @@ module.exports = function registerSalesRoutes(app, deps) {
 
     try {
       const { rows: [sale] } = await db.query(
-        `SELECT s.*, o.name as outlet_name, e.name as employee_name
+        `SELECT s.*, o.name as outlet_name, e.name as employee_name, vb.name as voided_by_name
        FROM sales s
        LEFT JOIN outlets o ON s.outlet_id = o.id
        LEFT JOIN employees e ON s.employee_id = e.id
+       LEFT JOIN employees vb ON vb.id = s.voided_by
        WHERE s.id = $1`,
         [id]
       );
@@ -374,8 +400,9 @@ module.exports = function registerSalesRoutes(app, deps) {
           // updates zero rows another void already claimed it, so abort (409)
           // before touching stock.
           const { rowCount: claimed } = await client.query(
-            "UPDATE sales SET voided = true, void_reason = $1 WHERE id = $2 AND (voided IS NULL OR voided = false)",
-            [void_reason, id]
+            `UPDATE sales SET voided = true, void_reason = $1, voided_by = $3, voided_at = NOW()
+              WHERE id = $2 AND (voided IS NULL OR voided = false)`,
+            [void_reason, id, productHistory.actorOf(req)]
           );
           if (!claimed) {
             throw Object.assign(new Error("Sale is already voided"), {

@@ -25,6 +25,11 @@ import POSEmailReceiptModal from "./pos/POSEmailReceiptModal";
 import VoidCompModal from "./pos/restaurant/VoidCompModal";
 
 const formatDate = fmtUtcDateTime;
+// F6: who voided a bill and when (saved since v161; older voids have neither).
+const voidWho = (r) =>
+  r.voided_by_name || r.voided_at
+    ? [r.voided_by_name ? `by ${r.voided_by_name}` : null, r.voided_at ? formatDate(r.voided_at) : null].filter(Boolean).join(" · ")
+    : "who/when not recorded";
 
 // The number printed on the receipt; "#id" only for sales that never got one.
 const billNo = (sale) => sale.invoice_number || `#${sale.id}`;
@@ -90,6 +95,8 @@ export default function SalesHistoryRedesign() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
+  // F6: voided bills under the current dates / search, counted by the server.
+  const [voidedCount, setVoidedCount] = useState(0);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -118,10 +125,14 @@ export default function SalesHistoryRedesign() {
           search,
           date_from: dateFrom,
           date_to: dateTo,
+          // F6 (D47): the tabs filter on the server — without a status the
+          // list leaves voided bills out (other screens rely on that).
+          status: activeTab,
         });
         const data = await api.get(`/api/sales?${qs.toString()}`);
         setRows(data.sales || []);
         setTotal(Number(data.total || 0));
+        setVoidedCount(Number(data.voided_count || 0));
         setPages(Math.max(1, Number(data.pages || 1)));
         setPage(Number(data.page || nextPage));
       } catch (e) {
@@ -130,7 +141,7 @@ export default function SalesHistoryRedesign() {
         setLoading(false);
       }
     },
-    [page, search, dateFrom, dateTo],
+    [page, search, dateFrom, dateTo, activeTab],
   );
 
   const loadAdjustments = useCallback(async (saleId) => {
@@ -180,14 +191,12 @@ export default function SalesHistoryRedesign() {
 
   const visibleRows = useMemo(() => {
     let filtered = rows;
-    if (activeTab === "completed") filtered = filtered.filter((r) => Number(r.voided || 0) === 0);
-    else if (activeTab === "voided") filtered = filtered.filter((r) => Number(r.voided || 0) === 1);
     // F2: "Online" = every Online choice; a single choice matches exactly.
     if (paymentMethod === ONLINE_PREFIX) filtered = filtered.filter((r) => isOnlineMethod(r.payment_method));
     else if (paymentMethod) filtered = filtered.filter((r) => r.payment_method === paymentMethod);
     if (employeeId) filtered = filtered.filter((r) => String(r.employee_id) === String(employeeId));
     return filtered;
-  }, [rows, activeTab, paymentMethod, employeeId]);
+  }, [rows, paymentMethod, employeeId]);
 
   const handleVoid = async () => {
     if (!selected || !detail) return;
@@ -303,7 +312,7 @@ export default function SalesHistoryRedesign() {
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Transactions</p><p className="text-2xl font-semibold text-(--ui-text)">{total}</p></SectionCard>
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible Rows</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Voided</p><p className="text-2xl font-semibold text-(--ui-danger-fg)">{rows.filter((r) => Number(r.voided || 0) === 1).length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Voided</p><p data-testid="voided-count" className="text-2xl font-semibold text-(--ui-danger-fg)">{voidedCount}</p></SectionCard>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -395,6 +404,12 @@ export default function SalesHistoryRedesign() {
                         <Badge tone={Number(r.voided || 0) ? "danger" : "success"}>
                           {Number(r.voided || 0) ? "voided" : "active"}
                         </Badge>
+                        {Number(r.voided || 0) ? (
+                          <div className="mt-1 max-w-[220px] text-xs text-(--ui-text-muted)">
+                            {r.void_reason ? <div className="truncate" title={r.void_reason}>{r.void_reason}</div> : null}
+                            <div>{voidWho(r)}</div>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {r.fbr_status === "posted" ? (
@@ -455,6 +470,18 @@ export default function SalesHistoryRedesign() {
 
                 return (
                   <>
+                    {Number(detail.sale.voided || 0) ? (
+                      <div data-testid="void-details" className="rounded-(--ui-radius-sm) bg-(--ui-danger-bg) p-2 text-sm text-(--ui-danger-fg)">
+                        <p className="font-semibold">
+                          {detail.sale.voided_by_name ? `Voided by ${detail.sale.voided_by_name}` : "Voided"}
+                          {detail.sale.voided_at ? ` · ${formatDate(detail.sale.voided_at)}` : ""}
+                        </p>
+                        {detail.sale.void_reason ? <p>Reason: {detail.sale.void_reason}</p> : null}
+                        {!detail.sale.voided_by_name && !detail.sale.voided_at ? (
+                          <p className="text-xs">Who and when not recorded (voided before this was saved)</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="grid grid-cols-2 gap-2">
                       <SectionCard className="p-2 text-center">
                         <p className="text-xs text-(--ui-text-muted)">Total</p>
