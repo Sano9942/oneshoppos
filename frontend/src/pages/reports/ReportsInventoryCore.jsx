@@ -8,6 +8,7 @@ import {
   CardShell,
 } from "./ReportShared";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { FilterPill } from "../../ui/primitives";
 
 // --- Tab: Sales & Stock -------------------------------------------------------
 export function SalesStockTab({ filters }) {
@@ -508,6 +509,113 @@ export function OnHandTab({ filters }) {
               </td>
             </tr>
           ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+// --- Tab: Stock Value (One Toy Store G1) --------------------------------------
+// Stock value in one table, grouped by Supplier / Category / Sub-category /
+// Brand, like iPOS's PSP summaries (owner, 2026-10-19).
+const STOCK_VALUE_GROUPS = [
+  { id: "supplier", label: "Supplier" },
+  { id: "category", label: "Category" },
+  { id: "subcategory", label: "Sub-category" },
+  { id: "brand", label: "Brand" },
+];
+
+export function StockValueTab({ filters }) {
+  const { fmt } = useCurrency();
+  const [groupBy, setGroupBy] = useState("supplier");
+  const [data, setData] = useState({ rows: [], totals: null });
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({ group_by: groupBy });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+      const d = await api.get(`/api/reports/stock-value-summary?${p}`);
+      setData({ rows: d.rows || [], totals: d.totals || null });
+    } catch {
+      setData({ rows: [], totals: null });
+    } finally {
+      setLoading(false);
+    }
+  }, [groupBy, filters.outletIds]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const label = STOCK_VALUE_GROUPS.find((g) => g.id === groupBy)?.label || "Name";
+  const { rows, totals } = data;
+  const units = (n) => Number(n || 0).toLocaleString();
+
+  return (
+    <div className="space-y-4" data-testid="stock-value">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
+        <span className="text-xs font-semibold text-(--ui-text-muted)">Group by</span>
+        {STOCK_VALUE_GROUPS.map((g) => (
+          <FilterPill key={g.id} label={g.label} active={groupBy === g.id} onClick={() => setGroupBy(g.id)} />
+        ))}
+      </div>
+
+      <CardShell
+        title={`Stock value by ${label.toLowerCase()}`}
+        subtitle={totals ? `${units(totals.toys)} toys in stock • ${units(totals.units)} units • at cost ${fmt(totals.cost_value)} • at sale price ${fmt(totals.retail_value)}` : ""}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                `stock_value_by_${groupBy}.csv`,
+                [
+                  { header: label, key: "name" },
+                  ...(groupBy === "subcategory" ? [{ header: "Category", key: "parent" }] : []),
+                  { header: "Toys", key: "toys" },
+                  { header: "Units", key: "units" },
+                  { header: "Value at cost", key: "cost_value" },
+                  { header: "Value at sale price", key: "retail_value" },
+                  { header: "Margin %", key: "margin_pct" },
+                  { header: "Share of cost %", key: "share_pct" },
+                ],
+                totals ? [...rows, { name: "Total", parent: "", ...totals, share_pct: 100 }] : rows,
+              )
+            }
+          />
+        }
+      >
+        <TableShell
+          cols={[label, "Toys", "Units", "Value at cost", "Value at sale price", "Margin", "Share of cost"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r) => (
+            <tr key={`${r.parent || ""}-${r.name}`} className="hover:bg-(--ui-muted-surface)">
+              <td className="px-4 py-3">
+                <div className="text-sm font-semibold text-(--ui-text)">{r.name}</div>
+                {r.parent && <div className="text-[11px] text-(--ui-text-muted)">{r.parent}</div>}
+              </td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{units(r.toys)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{units(r.units)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{fmt(r.cost_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{fmt(r.retail_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.margin_pct}%</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.share_pct}%</td>
+            </tr>
+          ))}
+          {totals && (
+            <tr data-testid="stock-value-total" className="bg-(--ui-muted-surface) font-bold">
+              <td className="px-4 py-3 text-sm text-(--ui-text)">Total</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{units(totals.toys)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{units(totals.units)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{fmt(totals.cost_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{fmt(totals.retail_value)}</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">{totals.margin_pct}%</td>
+              <td className="px-4 py-3 text-sm text-(--ui-text)">100%</td>
+            </tr>
+          )}
         </TableShell>
       </CardShell>
     </div>

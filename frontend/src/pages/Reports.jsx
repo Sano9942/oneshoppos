@@ -76,6 +76,7 @@ import {
   BrandWiseTab,
   MerchandisingWorkspaceTab,
   OnHandTab,
+  StockValueTab,
   ReplenishmentTab,
   PricingMarginTab,
   DeadStockTab,
@@ -471,6 +472,7 @@ const GROUPS = [
       { id: "sales-stock", label: "Sales & Stock", icon: Package },
       { id: "inventory-dump", label: "Inventory Dump", icon: Archive },
       { id: "on-hand", label: "On Hand", icon: Layers },
+      { id: "stock-value", label: "Stock Value", icon: Layers },
       { id: "product-spec", label: "Product Spec", icon: Package },
       { id: "history-cost", label: "History Cost", icon: Receipt },
       { id: "history-sale", label: "History Sale", icon: FileText },
@@ -626,6 +628,7 @@ const TAB_PERMS = {
   "sales-stock": "view_inventory_reports",
   "inventory-dump": "view_inventory_reports",
   "on-hand": "view_inventory_reports",
+  "stock-value": "view_inventory_reports",
   "product-spec": "view_inventory_reports",
   "history-cost": "view_inventory_reports",
   "history-sale": "view_inventory_reports",
@@ -787,6 +790,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <ProductAuditTab filters={filters} />;
     case "on-hand":
       return <OnHandTab filters={filters} />;
+    case "stock-value":
+      return <StockValueTab filters={filters} />;
     case "inventory-loss":
       return <InventoryLossTab filters={filters} />;
     case "wastage":

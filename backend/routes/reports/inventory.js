@@ -414,6 +414,84 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
+  // One Toy Store G1: stock value grouped by supplier / category (top level) /
+  // sub-category (the toy's own category) / brand, like iPOS's PSP summaries.
+  // A toy counts when its units in the chosen branches are not zero.
+  const STOCK_VALUE_GROUPS = {
+    supplier: { name: "COALESCE(sup.name, 'No supplier')", parent: "NULL" },
+    brand: { name: "COALESCE(b.name, 'No brand')", parent: "NULL" },
+    category: { name: "COALESCE(root.name, 'No category')", parent: "NULL" },
+    subcategory: { name: "COALESCE(c.name, 'No category')", parent: "par.name" },
+  };
+  const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const pct = (part, whole) => (Number(whole) ? round2((Number(part) * 100) / Number(whole)) : 0);
+
+  app.get("/api/reports/stock-value-summary", invView, async (req, res) => {
+    try {
+      const group = STOCK_VALUE_GROUPS[String(req.query.group_by || "")];
+      if (!group) return res.status(400).json({ error: "group_by must be supplier, category, subcategory or brand" });
+      const where = [];
+      const params = [];
+      applyOutletFilter(where, params, req.query.outlet_id);
+      const { text: whereText, values } = helpers.pgWhere(where, params);
+      const { rows } = await db.query(
+        `WITH RECURSIVE tree AS (
+           SELECT id, id AS root_id FROM categories WHERE parent_id IS NULL
+           UNION ALL
+           SELECT ch.id, t.root_id FROM categories ch JOIN tree t ON ch.parent_id = t.id
+         ),
+         stock AS (
+           SELECT os.product_id, SUM(os.quantity) AS q
+             FROM outlet_stock os
+             ${where.length ? "WHERE " + whereText : ""}
+            GROUP BY os.product_id
+           HAVING SUM(os.quantity) <> 0
+         )
+         SELECT ${group.name} AS name, ${group.parent} AS parent,
+                COUNT(*)::int AS toys, SUM(s.q) AS units,
+                SUM(s.q * COALESCE(p.cost_price, 0)) AS cost_value,
+                SUM(s.q * COALESCE(p.price, 0)) AS retail_value
+           FROM stock s
+           JOIN products p ON p.id = s.product_id
+           LEFT JOIN suppliers sup ON sup.id = p.supplier_id
+           LEFT JOIN brands b ON b.id = p.brand_id
+           LEFT JOIN categories c ON c.id = p.category_id
+           LEFT JOIN categories par ON par.id = c.parent_id
+           LEFT JOIN tree t ON t.id = p.category_id
+           LEFT JOIN categories root ON root.id = t.root_id
+          GROUP BY 1, 2
+          ORDER BY cost_value DESC, name`,
+        values
+      );
+      const totals = rows.reduce(
+        (t, r) => ({
+          toys: t.toys + Number(r.toys),
+          units: round2(t.units + Number(r.units)),
+          cost_value: round2(t.cost_value + Number(r.cost_value)),
+          retail_value: round2(t.retail_value + Number(r.retail_value)),
+        }),
+        { toys: 0, units: 0, cost_value: 0, retail_value: 0 }
+      );
+      totals.margin_pct = pct(totals.retail_value - totals.cost_value, totals.retail_value);
+      res.json({
+        group_by: req.query.group_by,
+        rows: rows.map((r) => ({
+          name: r.name,
+          parent: r.parent,
+          toys: Number(r.toys),
+          units: round2(r.units),
+          cost_value: round2(r.cost_value),
+          retail_value: round2(r.retail_value),
+          margin_pct: pct(Number(r.retail_value) - Number(r.cost_value), r.retail_value),
+          share_pct: pct(r.cost_value, totals.cost_value),
+        })),
+        totals,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Inventory Loss: stock adjustments with negative quantity
   app.get("/api/reports/inventory-loss", invView, async (req, res) => {
     try {
