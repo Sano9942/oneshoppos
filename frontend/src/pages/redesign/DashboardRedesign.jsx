@@ -8,6 +8,7 @@ import { PageShell, SectionCard, Skeleton } from "../../ui/primitives";
 
 import { DashboardOpsReadiness } from "../dashboard/DashboardOpsReadiness";
 import { DashboardKPICards } from "../dashboard/DashboardKPICards";
+import { DashboardMonthRow, DashboardTopItems } from "../dashboard/DashboardMonth";
 import { DashboardQuickActions } from "../dashboard/DashboardQuickActions";
 import { DashboardExceptions } from "../dashboard/DashboardExceptions";
 import { DashboardOutletRanking } from "../dashboard/DashboardOutletRanking";
@@ -218,6 +219,14 @@ export default function DashboardRedesign() {
         <DashboardKPICards data={data} isCashier={!canFinancial} onNavigate={onNavigate} />
       </div>
 
+      {/* G4 (One Toy Store): margin % today + month, month sale, month purchase.
+          Outside the KPI grid so it still shows before the day's first sale. */}
+      {canSales && (
+        <div className="mb-4">
+          <DashboardMonthRow data={data} canFinancial={canFinancial} />
+        </div>
+      )}
+
       {/* Tier 0.5 — wholesale A/R cards (mode-gated) */}
       {showWholesaleCards && (
         <div className="mb-4">
@@ -267,6 +276,13 @@ export default function DashboardRedesign() {
       {canSales && (
         <div className="mb-4">
           <DashboardTopProducts data={data} />
+        </div>
+      )}
+
+      {/* G4: top 50 toys of the last 30 days by sale amount — sales-class */}
+      {canSales && (
+        <div className="mb-4">
+          <DashboardTopItems data={data} canFinancial={canFinancial} />
         </div>
       )}
 

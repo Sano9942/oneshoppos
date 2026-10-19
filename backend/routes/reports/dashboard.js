@@ -203,6 +203,13 @@ module.exports = function (app, deps) {
       const monthTotalCost = Number(profitMetrics.month_total_cost || 0);
       const monthGrossMargin = Number((monthTaxExclusive - monthTotalCost - Number(profitMetrics.month_discount || 0)
         - monthReturns.profit_back_ex_tax).toFixed(2));
+      // G4 (One Toy Store): margin % = gross profit ÷ sale (owner 2026-10-19),
+      // the sale on the same base: ex tax, less bill discounts, less returns.
+      const marginPct = (profit, base) => (base > 0 ? Number(((profit / base) * 100).toFixed(2)) : null);
+      const todayMarginPct = marginPct(todayGrossProfit,
+        taxExclusive - Number(profitMetrics.discount || 0) - todayReturns.refunds_ex_tax);
+      const monthMarginPct = marginPct(monthGrossMargin,
+        monthTaxExclusive - Number(profitMetrics.month_discount || 0) - monthReturns.refunds_ex_tax);
 
       // ─── Query 4: Expenses today ───
       const expOutlet = buildOutletClause("outlet_id", outletIds, 2);
@@ -340,6 +347,52 @@ module.exports = function (app, deps) {
         ...row,
         contribution_pct: categoryContributionTotal > 0 ? Number(((Number(row.revenue || 0) / categoryContributionTotal) * 100).toFixed(2)) : 0,
       }));
+
+      // ─── G4 (One Toy Store): top 50 toys, last 30 days, by sale amount ───
+      // Item price rung up less returns (like G3); margin % per toy on the
+      // ex-tax amount against cost at sale (returns give back their cost),
+      // before bill discounts, which aren't split across a bill's toys.
+      const t5Sale = buildOutletClause("s.outlet_id", outletIds, 2);
+      const t5Ret = buildOutletClause("r.outlet_id", outletIds, 2);
+      const topItemRows = (await db.query(
+        `WITH moves AS (
+           SELECT si.product_id, si.quantity AS units, si.quantity * si.price_at_sale AS amount,
+                  ${EX_TAX_LINE} AS amount_ex_tax,
+                  si.quantity * COALESCE(si.cost_price_at_sale, 0) AS cost
+             FROM sale_items si JOIN sales s ON s.id = si.sale_id JOIN products p ON p.id = si.product_id
+             LEFT JOIN taxes t ON t.id = p.tax_id
+            WHERE s.voided = false AND s.timestamp >= $1 ${t5Sale.clause}
+           UNION ALL
+           SELECT ri.product_id, -ri.quantity, -(ri.quantity * ri.refund_price),
+                  -(ri.quantity * ri.refund_price) / (1 + (CASE WHEN t.id IS NOT NULL THEN t.rate ELSE COALESCE(p.gst, 0) END) / 100.0),
+                  -(ri.quantity * COALESCE(
+                     (SELECT AVG(si.cost_price_at_sale) FROM sale_items si
+                       WHERE si.sale_id = r.original_sale_id AND si.product_id = ri.product_id),
+                     p.cost_price, 0))
+             FROM return_items ri JOIN returns r ON r.id = ri.return_id JOIN products p ON p.id = ri.product_id
+             LEFT JOIN taxes t ON t.id = p.tax_id
+            WHERE r.timestamp >= $1 ${t5Ret.clause}
+         )
+         SELECT m.product_id, p.name, p.barcode, SUM(m.units) AS units,
+                ROUND(SUM(m.amount)::numeric, 2) AS amount,
+                SUM(m.amount_ex_tax) AS amount_ex_tax, SUM(m.cost) AS cost
+           FROM moves m JOIN products p ON p.id = m.product_id
+          GROUP BY m.product_id, p.name, p.barcode
+         HAVING SUM(m.amount) > 0
+          ORDER BY amount DESC, p.name ASC
+          LIMIT 50`,
+        [twentyNineDaysAgoStart, ...t5Sale.values])).rows;
+      const topItems30d = topItemRows.map((r) => {
+        const exTax = Number(r.amount_ex_tax || 0);
+        return {
+          product_id: r.product_id,
+          name: r.name,
+          barcode: r.barcode,
+          units: Number(r.units),
+          amount: Number(r.amount),
+          margin_pct: exTax > 0 ? Number((((exTax - Number(r.cost || 0)) / exTax) * 100).toFixed(2)) : null,
+        };
+      });
 
       // ─── G3 (One Toy Store): sales by supplier, last 30 days ───
       // Owner 2026-10-19: item price rung up less toys returned in the period,
@@ -813,6 +866,8 @@ module.exports = function (app, deps) {
             : salePurchaseComparison.map(({ day, sales_total }) => ({ day, sales_total })),
           categoryContribution,
           supplierContribution,
+          // Margin per toy is financial-class (cost), like the profit figures.
+          topItems30d: canFinancial ? topItems30d : topItems30d.map(({ margin_pct, ...r }) => r),
           operationalReadiness,
           salesByOutlet,
           topProducts,
@@ -827,6 +882,8 @@ module.exports = function (app, deps) {
           yesterdayProfit,
           monthPurchases,
           monthGrossMargin,
+          todayMarginPct,
+          monthMarginPct,
           todayProfit,
           todayGrossProfit: Number(todayGrossProfit.toFixed(2)),
           todayExpenses,

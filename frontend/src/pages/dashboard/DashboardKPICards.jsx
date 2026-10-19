@@ -84,7 +84,6 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
   const monthTarget = data?.targets?.monthly_sales_target ?? 0;
   const monthSales = data?.monthSales ?? 0;
   const todayExpenses = data?.todayExpenses ?? 0;
-  const monthGrossMargin = data?.monthGrossMargin ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -140,8 +139,9 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
         </SectionCard>
       </div>
 
-      {/* Secondary KPI row — expenses + monthly margin */}
-      {(todayExpenses > 0 || monthGrossMargin !== 0) && (
+      {/* Secondary KPI row — expenses (the month's gross margin moved to the
+          G4 "This month" row, DashboardMonth.jsx, with its margin %) */}
+      {todayExpenses > 0 && (
         <div className="grid grid-cols-2 gap-4">
           <SecondaryKPICard
             label="Expenses Today"
@@ -149,13 +149,6 @@ export function DashboardKPICards({ data, isCashier, onNavigate }) {
             fmt={fmt}
             colorClass="text-(--ui-danger-fg)"
             onClick={() => onNavigate?.("/reports?tab=finance&date=today")}
-          />
-          <SecondaryKPICard
-            label="Month Gross Margin"
-            value={monthGrossMargin}
-            fmt={fmt}
-            colorClass={monthGrossMargin >= 0 ? "text-(--ui-success-fg)" : "text-(--ui-danger-fg)"}
-            onClick={() => onNavigate?.("/reports?tab=finance")}
           />
         </div>
       )}
