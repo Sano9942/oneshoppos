@@ -99,8 +99,13 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     ? Math.max(0, slip.balanceDue)
     : (slip.total || 0);
 
+  // D59: a saved Cash minus line is change handed out of the drawer (a
+  // transfer overpaid); a reprint shows it as Change, like the till receipt.
+  const isCashBack = (p) => p.method === "Cash" && Number(p.amount) < 0;
+  const cashBack = (slip.payments || []).filter(isCashBack)
+    .reduce((s, p) => s - Number(p.amount), 0);
   const payments = (slip.payments || []).filter(
-    (p) => p.method !== "Return Credit",
+    (p) => p.method !== "Return Credit" && !isCashBack(p),
   );
 
   // Header: first line is the shop name (printed big), the rest are address /
@@ -167,7 +172,7 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     totalValue,
     payments,
     refundToCustomer: slip.refundNote ? Math.abs(slip.balanceDue || 0) : null,
-    change: Number(slip.change || 0),
+    change: round2(Number(slip.change || 0) + cashBack),
 
     // Footer
     orderNote: slip.orderNote || null,

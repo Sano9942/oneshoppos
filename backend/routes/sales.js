@@ -1624,6 +1624,18 @@ module.exports = function registerSalesRoutes(app, deps) {
           (p) => !(String(p.method || "").toLowerCase() === "cash" && Number(p.amount) <= 0),
         );
         if (finalPayments.length === 1) mainPaymentMethod = finalPayments[0].method;
+        // D59: change still owed after the cash lines, on a bill the customer
+        // overpaid by transfer, was handed out of the drawer. Keep the transfer
+        // whole (it matches the phone statement) and book the change as a
+        // negative Cash line, so the lines add up to the bill and the drawer
+        // expects that much less. The bill stays an Online bill.
+        const onlineTendered = finalPayments
+          .filter((p) => String(p.method || "").startsWith("Online"))
+          .reduce((s, p) => s + Number(p.amount || 0), 0);
+        if (changeDue > 0.009 && onlineTendered >= changeDue) {
+          if (finalPayments.length === 1) mainPaymentMethod = finalPayments[0].method;
+          finalPayments.push({ method: "Cash", amount: -changeDue });
+        }
       }
     }
 

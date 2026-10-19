@@ -28,7 +28,7 @@ import {
   useOnlinePaymentOptions,
 } from "../../../utils/onlinePayments";
 import { CUT_FROM_SALARY } from "./hooks/useStaffPurchase";
-import { NOTE_BUTTONS, addNote, startAmount } from "./tenderAmount";
+import { NOTE_BUTTONS, addNote, onlineTender, startAmount } from "./tenderAmount";
 
 export default function POSCheckoutModal() {
   const {
@@ -974,8 +974,9 @@ export default function POSCheckoutModal() {
                   setOnlineError("Tap how the customer paid first");
                   return;
                 }
-                // A transfer has no change: never book more than is due.
-                const amt = Math.min(Number(paymentAmount), remaining);
+                // D59: book what the customer sent; any extra is Change Due
+                // from the drawer (saved as a Cash minus line).
+                const amt = onlineTender(paymentAmount);
                 if (!amt || amt <= 0) return;
                 addPayment(null, { method: onlineMethodName(onlineChoice), amount: amt });
                 return;

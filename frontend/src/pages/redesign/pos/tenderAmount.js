@@ -10,6 +10,14 @@ export function startAmount(method, remaining) {
   return due > 0 ? due.toFixed(2) : "";
 }
 
+// D59 (owner, 2026-10-19): an Online amount is what the customer actually
+// sent, even above what is due; the difference is change from the drawer
+// (the till shows Change Due, the bill books it as a Cash minus line).
+export function onlineTender(typed) {
+  const amt = Number(typed);
+  return Number.isFinite(amt) && amt > 0 ? amt : 0;
+}
+
 export function addNote(current, note) {
   const now = Number(current);
   return ((Number.isFinite(now) ? now : 0) + note).toFixed(2);
