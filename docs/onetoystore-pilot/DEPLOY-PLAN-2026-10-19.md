@@ -1,6 +1,6 @@
 # Deploy plan: F5 + D65 + F9 (a–f) to the live shop
 
-Written 2026-10-19. **Decided (owner): photo reading OFF at deploy.** Done: step 1 (`91c7f3f3` renumber, photo switch commit after it).
+Written 2026-10-19. **✅ DEPLOYED 14:26 PKT the same day (`f6a290d6`, prod v156); see PROGRESS top.** **Decided (owner): photo reading OFF at deploy.** Done: step 1 (`91c7f3f3` renumber, photo switch commit after it).
 
 ## What is live vs. what goes
 
