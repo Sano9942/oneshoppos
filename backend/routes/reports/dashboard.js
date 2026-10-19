@@ -341,6 +341,46 @@ module.exports = function (app, deps) {
         contribution_pct: categoryContributionTotal > 0 ? Number(((Number(row.revenue || 0) / categoryContributionTotal) * 100).toFixed(2)) : 0,
       }));
 
+      // ─── G3 (One Toy Store): sales by supplier, last 30 days ───
+      // Owner 2026-10-19: item price rung up less toys returned in the period,
+      // voids left out; top 10, then "Others", then "No supplier"; each % a
+      // share of all sales so the lines add up to 100.
+      const scSale = buildOutletClause("s.outlet_id", outletIds, 2);
+      const scRet = buildOutletClause("r.outlet_id", outletIds, 2);
+      const supplierRows = (await db.query(
+        `WITH moves AS (
+           SELECT p.supplier_id, si.quantity * si.price_at_sale AS amount
+             FROM sale_items si JOIN sales s ON s.id = si.sale_id JOIN products p ON p.id = si.product_id
+            WHERE s.voided = false AND s.timestamp >= $1 ${scSale.clause}
+           UNION ALL
+           SELECT p.supplier_id, -(ri.quantity * ri.refund_price)
+             FROM return_items ri JOIN returns r ON r.id = ri.return_id JOIN products p ON p.id = ri.product_id
+            WHERE r.timestamp >= $1 ${scRet.clause}
+         )
+         SELECT m.supplier_id, sup.name AS supplier, ROUND(SUM(m.amount)::numeric, 2) AS revenue
+           FROM moves m LEFT JOIN suppliers sup ON sup.id = m.supplier_id
+          GROUP BY m.supplier_id, sup.name
+         HAVING SUM(m.amount) <> 0
+          ORDER BY revenue DESC, sup.name ASC`,
+        [twentyNineDaysAgoStart, ...scSale.values])).rows;
+      const supplierContribution = (() => {
+        const named = supplierRows.filter((r) => r.supplier_id !== null);
+        const none = supplierRows.find((r) => r.supplier_id === null);
+        const lines = named.slice(0, 10).map((r) => ({ supplier: r.supplier, revenue: Number(r.revenue) }));
+        const rest = named.slice(10);
+        if (rest.length) lines.push({ supplier: "Others", revenue: rest.reduce((t, r) => t + Number(r.revenue), 0) });
+        if (none) lines.push({ supplier: "No supplier", revenue: Number(none.revenue) });
+        const total = lines.reduce((t, r) => t + r.revenue, 0);
+        return {
+          total: Number(total.toFixed(2)),
+          rows: lines.map((r) => ({
+            ...r,
+            revenue: Number(r.revenue.toFixed(2)),
+            contribution_pct: total > 0 ? Number(((r.revenue / total) * 100).toFixed(2)) : 0,
+          })),
+        };
+      })();
+
       // ─── Query 9: Hourly sales ───
       // D54: hour/month in the shop's timezone, not the DB session's (UTC on prod).
       const hsOutlet = buildOutletClause("s.outlet_id", outletIds, 3);
@@ -772,6 +812,7 @@ module.exports = function (app, deps) {
             ? salePurchaseComparison
             : salePurchaseComparison.map(({ day, sales_total }) => ({ day, sales_total })),
           categoryContribution,
+          supplierContribution,
           operationalReadiness,
           salesByOutlet,
           topProducts,
