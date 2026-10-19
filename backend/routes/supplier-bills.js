@@ -20,7 +20,7 @@
 const crypto = require("crypto");
 const path = require("path");
 const { readBillPdf } = require("../services/bill-readers");
-const { readBillPhotos, LAYOUT: PHOTO_LAYOUT } = require("../services/bill-readers/photo-reader");
+const { readBillPhotos, photoReaderOn, LAYOUT: PHOTO_LAYOUT } = require("../services/bill-readers/photo-reader");
 const logger = require("../services/logger");
 const { matchBillLines } = require("../services/supplier-bill-match");
 const { saveSupplierBill, earlierBillsWithNumber } = require("../services/supplier-bill-save");
@@ -121,10 +121,11 @@ function checkFile(f) {
 
 module.exports = function mountSupplierBillRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
-  // The AI photo reader: a stand-in in tests; none when no key is set.
+  // The AI photo reader: a stand-in in tests; none unless switched on
+  // (SUPPLIER_BILL_PHOTO_READER=1 and an AI key, see photoReaderOn).
   const photoReader = () => ("billPhotoReader" in deps
     ? deps.billPhotoReader
-    : process.env.ANTHROPIC_API_KEY ? readBillPhotos : null);
+    : photoReaderOn() ? readBillPhotos : null);
   const photoCap = () => Number(deps.billPhotoDailyCap ?? process.env.AI_BILL_PHOTO_DAILY_CAP ?? 100);
   const enqueueInventorySyncEvents = (changes) => {
     try {
@@ -414,7 +415,7 @@ module.exports = function mountSupplierBillRoutes(app, deps) {
         let photo = null;
         if (useAi && aiIdx.length) {
           const reader = photoReader();
-          if (!reader) return res.status(503).json({ error: "The photo reader is not set up on this server (no AI key)" });
+          if (!reader) return res.status(503).json({ error: "Photo reading is not switched on yet on this server" });
           const today = tenantToday(req.company?.timezone || "Asia/Karachi");
           const key = `${req.tenantId || req.tenantSlug || "default"}:${today}`;
           const used = aiUsage.get(key) || 0;

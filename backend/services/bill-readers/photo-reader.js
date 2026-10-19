@@ -159,6 +159,13 @@ function normaliseRead(raw, fileCount, fileIndexes = null) {
   };
 }
 
+// Owner 2026-10-19: off until a real-photo trial. The AI key alone is not
+// enough (the live server has one for other features); the switch
+// SUPPLIER_BILL_PHOTO_READER=1 turns photo reading on.
+function photoReaderOn(env = process.env) {
+  return !!env.ANTHROPIC_API_KEY && env.SUPPLIER_BILL_PHOTO_READER === "1";
+}
+
 function getClient() {
   const Anthropic = require("@anthropic-ai/sdk");
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -219,4 +226,4 @@ async function readBillPhotos(files, deps = {}) {
   return result;
 }
 
-module.exports = { readBillPhotos, normaliseRead, costOf, PHOTO_MODEL, BILL_SCHEMA, LAYOUT };
+module.exports = { readBillPhotos, photoReaderOn, normaliseRead, costOf, PHOTO_MODEL, BILL_SCHEMA, LAYOUT };

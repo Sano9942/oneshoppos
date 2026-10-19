@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { readBillPhotos, PHOTO_MODEL, normaliseRead, costOf } = require("../../services/bill-readers/photo-reader");
+const { readBillPhotos, PHOTO_MODEL, normaliseRead, costOf, photoReaderOn } = require("../../services/bill-readers/photo-reader");
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const PDF = Buffer.from("%PDF-1.4 scanned");
@@ -173,5 +173,25 @@ describe("cost and stops", () => {
   it("cut off mid-answer: a clear error", async () => {
     await expect(readBillPhotos(files, { client: fakeClient('{"lines": [', { stop_reason: "max_tokens" }) }))
       .rejects.toThrow(/too long/);
+  });
+});
+
+// Owner 2026-10-19: deploy with photo reading OFF; it goes on only after a
+// real-photo trial, by setting SUPPLIER_BILL_PHOTO_READER=1. An AI key alone
+// (Railway already has one for other features) must not switch it on.
+describe("photoReaderOn: off unless switched on", () => {
+  it("a key alone leaves it off", () => {
+    expect(photoReaderOn({ ANTHROPIC_API_KEY: "k" })).toBe(false);
+  });
+  it("on with the switch and a key", () => {
+    expect(photoReaderOn({ ANTHROPIC_API_KEY: "k", SUPPLIER_BILL_PHOTO_READER: "1" })).toBe(true);
+  });
+  it("the switch without a key stays off", () => {
+    expect(photoReaderOn({ SUPPLIER_BILL_PHOTO_READER: "1" })).toBe(false);
+  });
+  it("any value but 1 is off", () => {
+    for (const v of ["0", "", "true", "yes"]) {
+      expect(photoReaderOn({ ANTHROPIC_API_KEY: "k", SUPPLIER_BILL_PHOTO_READER: v })).toBe(false);
+    }
   });
 });

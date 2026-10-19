@@ -97,6 +97,20 @@ describe("POST /api/supplier-bills/read", () => {
     expect(res.body.files[0].kind).toBe("image");
   });
 
+  it("an AI key alone does not switch the photo reader on (owner 2026-10-19: off until a real-photo trial)", async () => {
+    const before = { key: process.env.ANTHROPIC_API_KEY, sw: process.env.SUPPLIER_BILL_PHOTO_READER };
+    process.env.ANTHROPIC_API_KEY = "test-key-not-used";
+    delete process.env.SUPPLIER_BILL_PHOTO_READER;
+    try {
+      const res = await read(makePdf(HAFIZ_BILL));
+      expect(res.status).toBe(200);
+      expect(res.body.ai_ready).toBe(false);
+    } finally {
+      if (before.key === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = before.key;
+      if (before.sw !== undefined) process.env.SUPPLIER_BILL_PHOTO_READER = before.sw;
+    }
+  });
+
   it("refuses a file that isn't a PDF or image, or pretends to be one", async () => {
     const bad = await admin().post("/api/supplier-bills/read").attach("files", Buffer.from("hello"), { filename: "x.txt", contentType: "text/plain" });
     expect(bad.status).toBe(400);
