@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS supplier_account_entries (
   supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
   kind TEXT NOT NULL CHECK (kind IN ('not_received','discount','correction')),
   amount NUMERIC(12,2) NOT NULL CHECK (amount <> 0 AND (kind = 'correction' OR amount < 0)),
-  entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  entry_date DATE NOT NULL,  -- always the shop date from the writer (tenantToday); no DB-day default
   supplier_bill_id INTEGER REFERENCES supplier_bills(id),
   note TEXT,
   employee_id INTEGER REFERENCES employees(id),

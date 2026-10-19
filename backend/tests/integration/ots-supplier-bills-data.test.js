@@ -180,16 +180,22 @@ describe("supplier account: Not received, Discount, Correction", () => {
 
   it("Not received and Discount must lower the balance (negative); Correction either way", async () => {
     await expect(db.query(
-      "INSERT INTO supplier_account_entries (supplier_id, kind, amount) VALUES ($1, 'not_received', 450)", [sup])).rejects.toThrow();
+      "INSERT INTO supplier_account_entries (supplier_id, kind, amount, entry_date) VALUES ($1, 'not_received', 450, '2026-10-19')", [sup])).rejects.toThrow();
     await expect(db.query(
-      "INSERT INTO supplier_account_entries (supplier_id, kind, amount) VALUES ($1, 'discount', 0)", [sup])).rejects.toThrow();
+      "INSERT INTO supplier_account_entries (supplier_id, kind, amount, entry_date) VALUES ($1, 'discount', 0, '2026-10-19')", [sup])).rejects.toThrow();
     await expect(db.query(
-      "INSERT INTO supplier_account_entries (supplier_id, kind, amount) VALUES ($1, 'credit', -1)", [sup])).rejects.toThrow();
+      "INSERT INTO supplier_account_entries (supplier_id, kind, amount, entry_date) VALUES ($1, 'credit', -1, '2026-10-19')", [sup])).rejects.toThrow();
     await db.query(
-      `INSERT INTO supplier_account_entries (supplier_id, kind, amount, note) VALUES
-         ($1, 'not_received', -450, '3 cars not in the carton'),
-         ($1, 'discount', -300, '3 % on 6 months'),
-         ($1, 'correction', 100, 'rate typed wrong')`, [sup]);
+      `INSERT INTO supplier_account_entries (supplier_id, kind, amount, note, entry_date) VALUES
+         ($1, 'not_received', -450, '3 cars not in the carton', '2026-10-19'),
+         ($1, 'discount', -300, '3 % on 6 months', '2026-10-19'),
+         ($1, 'correction', 100, 'rate typed wrong', '2026-10-19')`, [sup]);
+  });
+
+  it("an entry without its shop date is refused (no DB-day default, v159)", async () => {
+    await expect(db.query(
+      "INSERT INTO supplier_account_entries (supplier_id, kind, amount) VALUES ($1, 'discount', -5)", [sup]))
+      .rejects.toThrow(/entry_date/);
   });
 
   it("what we owe = opening + bills − payments − returns + these entries", async () => {
@@ -198,7 +204,7 @@ describe("supplier account: Not received, Discount, Correction", () => {
 
   it("a voided entry no longer counts", async () => {
     const e = await one(
-      "INSERT INTO supplier_account_entries (supplier_id, kind, amount) VALUES ($1, 'discount', -1000) RETURNING id", [sup]);
+      "INSERT INTO supplier_account_entries (supplier_id, kind, amount, entry_date) VALUES ($1, 'discount', -1000, '2026-10-19') RETURNING id", [sup]);
     expect(Number((await aging()).total_due)).toBe(13350);
     await db.query("UPDATE supplier_account_entries SET voided = true WHERE id = $1", [e.id]);
     expect(Number((await aging()).total_due)).toBe(14350);

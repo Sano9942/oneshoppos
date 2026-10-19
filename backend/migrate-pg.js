@@ -10356,6 +10356,19 @@ const MIGRATIONS = [
       await client.query(INVOICE_DAY_SEQUENCES_DDL);
     },
   },
+  {
+    version: 159,
+    description:
+      "One Toy Store pilot: supplier_account_entries.entry_date loses its DEFAULT CURRENT_DATE (the DB's UTC day, wrong for a bill saved after 19:00 UTC = midnight PKT). Both writers (supplier-bill-save, supplier-bill-corrections) already pass the shop date; with no default a future writer that forgets fails loudly instead of booking the wrong day. Live had 0 rows when this was written. Tenant-only; guarded on the table existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'supplier_account_entries'`
+      );
+      if (rows[0].n < 1) return;
+      await client.query("ALTER TABLE supplier_account_entries ALTER COLUMN entry_date DROP DEFAULT");
+    },
+  },
 ];
 
 /**
