@@ -60,3 +60,11 @@ PDF bills (Hafiz Nawaz, Baby Land, Toys and Toys) don't use the AI either way.
 ## Rollback
 
 Redeploy the previous Railway deployment and roll Vercel back to the previous production deployment. The new tables and columns can stay, because the old code ignores them.
+
+## Status 2026-10-19 afternoon (steps 1–3 done; nothing pushed)
+
+- Branch: `91c7f3f3` clock-in photo → v157; `35abc921` + `5add30a9` photo reading off unless `SUPPLIER_BILL_PHOTO_READER=1` (5 tests failed first).
+- Deploy tree `D:\newprojects\oneshoppos-deploy`, branch **`deploy-2026-10-19`** = origin/main `54d43a45` + F5, D65, F9 (a–f), catch-up tool, docs and the switch. One expected conflict in migrate-pg / schema-pg, resolved by dropping the photo parts. `git diff deploy-2026-10-19 onetoystore-golive` = exactly the 13 clock-in photo files.
+- Upgrade check: a throwaway schema built from origin/main schema-pg.sql at v152 → migrate → **154, 155, 156**, all 9 F9 tables plus the 2 GRN columns, no `attendance_presses`; a second run is a no-op.
+- Backend 21 files, **333/333** (the one first failure was my wording change, fixed in `5add30a9`). Frontend unit **544/544** (`f5-find-toy-by-code` timed out once at 5.25 s while everything else ran, then 7/7 alone; the 55 "failed" files are Playwright/smoke specs Vitest can't load). Lint ratchet: only the known POSReturnExchangeModal. `vite build` OK.
+- **Left:** steps 4–8 tonight after closing, with the owner's OK to push (fast-forward main to `deploy-2026-10-19`). Remove the deploy tree afterwards (`rmdir` the 3 node_modules junctions first).
