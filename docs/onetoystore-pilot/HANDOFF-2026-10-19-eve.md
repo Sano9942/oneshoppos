@@ -9,7 +9,8 @@ Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos
 | `22bc7df6` | **entry_date fix**, migration **v159**: `supplier_account_entries.entry_date` lost its `DEFAULT CURRENT_DATE` (UTC day). Both writers already pass the shop date; live had 0 rows. Fixes the `tz-date-boundary-guard` unit failure. |
 | `6b71f2a4` + `86b538e3` | **D59** transfer overpaid, change from the drawer (owner: "on the bill"). Online amount box takes what was sent; backend keeps the transfer whole and books the change as a **Cash minus line**; receipt/reprint show it as Change. No migration. Shown locally: 2,650 bill, JazzCash 2,780 → Change Due 130 → saved JazzCash 2,780 + Cash −130 → reprint "Change 130". |
 | `6c326f25` | **G2 saved end-of-day stock value**, migration **v160**: saved at every Close Shift + nightly 23:59 backup (needs `STOCK_VALUE_NIGHTLY_WORKER_ENABLED=1`), totals only, "Stock at close" on the day slip, Reports → Stock Value → Saved by day. See PROGRESS top. |
-| (next commit) | **G4** dashboard "This month" row (margin % today + month, month sale, month purchase) + Top 50 Items (30d) card, top 10 + Show all. No migration. See PROGRESS top. |
+| `0711c3f2` | **G4** dashboard "This month" row (margin % today + month, month sale, month purchase) + Top 50 Items (30d) card, top 10 + Show all. No migration. See PROGRESS top. |
+| (next commit) | **G5** dashboard card "Sale vs Purchase (7 days)": table per day + 7-day total, Sale = money taken (like Month sale), Purchase = supplier bills × cost (like Month purchase), finance roles only. Screen only: the server series (Query 13) already existed. No migration. See PROGRESS top. |
 | `dd9a5d7d` | **G3** dashboard card "Sales by Supplier (30d)": top 10 + Others + No supplier, item price less returns, % of all sales. No migration. See PROGRESS top. |
 | `d5f48f63` | **G1 Stock Value** (owner: one table + "Group by"). `GET /api/reports/stock-value-summary?group_by=supplier\|category\|subcategory\|brand`; Reports → Inventory → **Stock Value**. Category = top level, Sub-category = toy's own (parent shown). Shown locally. |
 
@@ -33,6 +34,6 @@ SanoPOS not used at the counter since 2 Oct; dual-run not restarted; live shift 
 
 ## Next, in owner's order (ask one question at a time)
 1. ~~**G2**~~ built locally (see above).
-2. ~~**G3**~~ ~~**G4**~~ built locally. **G5** dashboard: daily sale vs purchase (server already computes a 7-day series, "Query 13", no screen shows it). Also list the toys sold under "Needs a Category".
+2. ~~**G3**~~ ~~**G4**~~ ~~**G5**~~ built locally. Next: list the toys sold under "Needs a Category".
 3. **F6–F8** (see PHASE-F-PLAN).
 4. Still waiting on the owner: restart dual-run (iPOS export → catch-up, close shift 5), F9 (e) real-photo trial (AI key), clock-in photo (device + PINs).

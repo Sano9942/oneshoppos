@@ -9,6 +9,7 @@ import { PageShell, SectionCard, Skeleton } from "../../ui/primitives";
 import { DashboardOpsReadiness } from "../dashboard/DashboardOpsReadiness";
 import { DashboardKPICards } from "../dashboard/DashboardKPICards";
 import { DashboardMonthRow, DashboardTopItems } from "../dashboard/DashboardMonth";
+import { DashboardSalePurchase } from "../dashboard/DashboardSalePurchase";
 import { DashboardQuickActions } from "../dashboard/DashboardQuickActions";
 import { DashboardExceptions } from "../dashboard/DashboardExceptions";
 import { DashboardOutletRanking } from "../dashboard/DashboardOutletRanking";
@@ -224,6 +225,13 @@ export default function DashboardRedesign() {
       {canSales && (
         <div className="mb-4">
           <DashboardMonthRow data={data} canFinancial={canFinancial} />
+        </div>
+      )}
+
+      {/* G5 (One Toy Store): daily sale vs purchase, last 7 days — finance-class */}
+      {canFinancial && (
+        <div className="mb-4">
+          <DashboardSalePurchase data={data} canFinancial={canFinancial} />
         </div>
       )}
 
