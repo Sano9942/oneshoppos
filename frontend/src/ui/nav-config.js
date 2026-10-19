@@ -103,6 +103,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Products", path: "/inventory", icon: Package, requiredPerm: "manage_inventory" },
       { name: "Categories", path: "/categories", icon: Tags, requiredPerm: "manage_inventory" },
+      { name: "Needs a Category", path: "/needs-category", icon: Tags, requiredPerm: "manage_inventory" },
       { name: "Brands", path: "/brands", icon: Tag, requiredPerm: "manage_inventory" },
       { name: "Attribute Sets", path: "/attribute-sets", icon: Layers, requiredPerm: "manage_inventory" },
       { name: "Promotions", path: "/promotions", icon: Percent, requiredPerm: "manage_inventory" },

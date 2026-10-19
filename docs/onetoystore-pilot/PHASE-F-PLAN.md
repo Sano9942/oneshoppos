@@ -354,7 +354,7 @@ Owner checks regularly: sale by payment type; **hourly sale** (day / month / mon
 - **G3** dashboard: sales contribution **by supplier** (Reports → Merchandising has it; not on the dashboard). **2026-10-19: built LOCALLY**: last 30 days, top 10 + Others + No supplier, less returns (see PROGRESS top).
 - **G4** dashboard: **gross margin %** today and month (shows month GM amount only), **month sale and month purchase** totals, **top 50 items (30 days)** (shows top 5). **2026-10-19: built LOCALLY**: margin ÷ sale, top 50 by amount, top 10 + Show all (see PROGRESS top).
 - **G5** dashboard: **daily sale vs purchase** (server computes a 7-day series, Query 13, no screen shows it). **2026-10-19: built LOCALLY**: card "Sale vs Purchase (7 days)", table + 7-day total, same bases as Month sale / Month purchase, finance roles only (see PROGRESS top).
-- Seen: "Needs a Category" = 23% of 30-day sales (Rs 15,770): sold items imported without a category. List them for the owner.
+- Seen: "Needs a Category" = 23% of 30-day sales (Rs 15,770): sold items imported without a category. List them for the owner. **2026-10-19: built LOCALLY**: Catalog → Needs a Category fix-it page (sold, then in stock; picker per row, tick many, supplier suggestion) + dashboard line (see PROGRESS top).
 
 ### Smaller, when passing
 

@@ -10,6 +10,7 @@ import { DashboardOpsReadiness } from "../dashboard/DashboardOpsReadiness";
 import { DashboardKPICards } from "../dashboard/DashboardKPICards";
 import { DashboardMonthRow, DashboardTopItems } from "../dashboard/DashboardMonth";
 import { DashboardSalePurchase } from "../dashboard/DashboardSalePurchase";
+import { DashboardNeedsCategory } from "../dashboard/DashboardNeedsCategory";
 import { DashboardQuickActions } from "../dashboard/DashboardQuickActions";
 import { DashboardExceptions } from "../dashboard/DashboardExceptions";
 import { DashboardOutletRanking } from "../dashboard/DashboardOutletRanking";
@@ -232,6 +233,13 @@ export default function DashboardRedesign() {
       {canFinancial && (
         <div className="mb-4">
           <DashboardSalePurchase data={data} canFinancial={canFinancial} />
+        </div>
+      )}
+
+      {/* One Toy Store: toys still in "Needs a Category" — same permission as the page */}
+      {hasPerm("manage_inventory") && (
+        <div className="mb-4">
+          <DashboardNeedsCategory />
         </div>
       )}
 

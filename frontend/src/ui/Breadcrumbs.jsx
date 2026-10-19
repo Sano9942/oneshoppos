@@ -15,6 +15,7 @@ const LABELS = {
   "cod-settlements": "COD Settlements",
   products: "Products",
   categories: "Categories",
+  "needs-category": "Needs a Category",
   brands: "Brands",
   taxes: "Taxes",
   "attribute-sets": "Attribute Sets",

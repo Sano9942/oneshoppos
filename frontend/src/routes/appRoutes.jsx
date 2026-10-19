@@ -11,6 +11,7 @@ const AdministratorRoute = lazy(() => import("../pages/AdministratorRoute"));
 const ApprovalsRedesign = lazy(() => import("../pages/redesign/ApprovalsRedesign"));
 const ReceiveSupplierBillRedesign = lazy(() => import("../pages/redesign/ReceiveSupplierBillRedesign"));
 const SupplierBillsRedesign = lazy(() => import("../pages/redesign/SupplierBillsRedesign"));
+const NeedsCategoryRedesign = lazy(() => import("../pages/redesign/NeedsCategoryRedesign"));
 const AttendanceRedesign = lazy(() => import("../pages/redesign/AttendanceRedesign"));
 const SalariesRedesign = lazy(() => import("../pages/redesign/SalariesRedesign"));
 const AttributeSetsRoute = lazy(() => import("../pages/AttributeSetsRoute"));
@@ -184,6 +185,7 @@ export const appRoutes = [
     <Route path="/expenses" element={perm("manage_inventory", <ExpensesRoute />)} />
     <Route path="/accounting" element={perm("view_financial_reports", <AccountingRoute />)} />
     <Route path="/categories" element={perm("manage_inventory", <CategoriesRoute />)} />
+    <Route path="/needs-category" element={perm("manage_inventory", <NeedsCategoryRedesign />)} />
     <Route path="/taxes" element={perm("manage_inventory", <TaxesRoute />)} />
     <Route path="/brands" element={perm("manage_inventory", <BrandsRoute />)} />
     <Route path="/barcode-templates" element={perm("manage_inventory", <BarcodeTemplatesRedesign />)} />

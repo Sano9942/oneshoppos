@@ -6,6 +6,7 @@ const {
 const kitEngine = require("../services/kit-engine");
 const stockLedger = require("../services/stock-ledger");
 const productHistory = require("../services/product-history");
+const { listNeedsCategory, countNeedsCategory } = require("../services/needs-category");
 const { decodeEmbeddedBarcode } = require("../services/embedded-barcode");
 
 module.exports = function registerProductRoutes(app, deps) {
@@ -428,6 +429,24 @@ module.exports = function registerProductRoutes(app, deps) {
   // `version` is a hash of the catalogue: a counter whose copy is current sends
   // it back as ?version= (or If-None-Match) and gets a 304. It is in the body
   // because a browser can't read the ETag header from the API's other origin.
+  // One Toy Store: toys in "Needs a Category" (or none), to fix. Saving is
+  // POST /api/products/bulk-category. NOTE: must be registered BEFORE /:id.
+  app.get("/api/products/needs-category", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      res.json(await listNeedsCategory(db, { all: req.query.all === "1" }));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/products/needs-category/count", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      res.json({ count: await countNeedsCategory(db) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // NOTE: must be registered BEFORE /:id.
   app.get("/api/products/catalogue", requireAnyPerm(["view_sales_reports", "view_inventory_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
