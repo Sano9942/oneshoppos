@@ -9,6 +9,8 @@ module.exports = function (app, deps) {
   const { getFeatureFlagsMap } = require("../middleware/feature-flags");
   const { verifyManagerPin } = require("../services/manager-pin");
   const { drawerTotals, buildDayReport } = require("../services/day-report");
+  const { saveShiftStockValue } = require("../services/stock-value");
+  const logger = require("../services/logger").child({ component: "shifts" });
 
   async function storeShiftDenominations(client, shiftId, stage, denominations = []) {
     const rows = Array.isArray(denominations)
@@ -185,6 +187,16 @@ module.exports = function (app, deps) {
         await storeShiftDenominations(fakeClient, id, "closing", denominations);
       }
 
+      // G2: the branch's stock value at the close, for the day slip and the
+      // by-date list. A failure never blocks the close; the nightly save
+      // fills that day instead.
+      let stockValue = null;
+      try {
+        stockValue = await saveShiftStockValue(db, { shift, closedAt });
+      } catch (err) {
+        logger.error({ err, shiftId: shift.id }, "Saving the stock value at Close Shift failed");
+      }
+
       if (typeof createNotification === "function") {
         createNotification("shift_close", "Shift Closed", `Shift #${id} closed. Variance: ${Number(variance || 0).toFixed(2)}`, "/cash-management");
       }
@@ -201,6 +213,7 @@ module.exports = function (app, deps) {
         closing_cash,
         variance,
         variance_reason: variance_reason || null,
+        stock_value: stockValue,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

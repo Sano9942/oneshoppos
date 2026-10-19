@@ -93,6 +93,30 @@ describe("Close Shift result box (F4)", () => {
     apiMock.post.mockReset();
   });
 
+  // G2: the stock value saved at Close Shift (iPOS: total stock at cost at close).
+  const STOCK = { toys: 4436, units: 51230, cost_value: 13104512.5, retail_value: 31912040, live: false };
+
+  it("prints the stock value saved at the close", () => {
+    const t = slipText({ ...SHIFT3, stock_value: STOCK });
+    expect(t).toContain("Stock at close");
+    expect(t).toContain("Toys in stock4,436");
+    expect(t).toContain("Units51,230");
+    expect(t).toContain("At cost13,104,512.50");
+    expect(t).toContain("At sale price31,912,040.00");
+  });
+
+  it("a check copy prints the stock right now", () => {
+    const t = slipText({ ...SHIFT3, is_check_copy: true, stock_value: { ...STOCK, live: true } });
+    expect(t).toContain("Stock now");
+    expect(t).not.toContain("Stock at close");
+  });
+
+  it("a shift closed before the stock value was saved prints no stock block", () => {
+    const t = slipText({ ...SHIFT3, stock_value: null });
+    expect(t).not.toContain("Stock at close");
+    expect(t).not.toContain("Toys in stock");
+  });
+
   it("stays on screen after the shift closes and offers Print day report", async () => {
     const setCloseShiftOpen = vi.fn();
     Object.assign(pos, {

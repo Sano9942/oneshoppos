@@ -45,6 +45,7 @@ module.exports = function registerSystemRoutes(app, deps) {
     expiry_alert: "expiry-alert-daily",
     retail_digest: "retail-weekly-digest",
     shift_auto_close: "shift-auto-close",
+    stock_value_nightly: "stock-value-nightly",
     subscription_grace: "subscription-grace-check",
     subscription_dunning: "subscription-dunning-check",
     attendance_auto_close: "attendance-auto-close",
@@ -93,6 +94,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const retailDigestStatus = global.__retailDigestWorkerStatus || null;
       // Bucket F — hourly force-close of stale open shifts.
       const shiftAutoCloseStatus = global.__shiftAutoCloseWorkerStatus || null;
+      // One Toy Store G2 — hourly at :59, nightly stock value at 23:59 shop time.
+      const stockValueNightlyStatus = global.__stockValueNightlyWorkerStatus || null;
       // Customer subscription grace transitions (hourly).
       const subscriptionGraceStatus = global.__subscriptionGraceWorkerStatus || null;
       // Customer subscription dunning retries (hourly).
@@ -232,6 +235,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         expiry_alert: workerInfo("expiry_alert", expiryAlertStatus, 24 * 60 * 60 * 1000),
         retail_digest: workerInfo("retail_digest", retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
         shift_auto_close: workerInfo("shift_auto_close", shiftAutoCloseStatus, 60 * 60 * 1000),
+        stock_value_nightly: workerInfo("stock_value_nightly", stockValueNightlyStatus, 60 * 60 * 1000),
         subscription_grace: workerInfo("subscription_grace", subscriptionGraceStatus, 60 * 60 * 1000),
         subscription_dunning: workerInfo("subscription_dunning", subscriptionDunningStatus, 60 * 60 * 1000),
         attendance_auto_close: workerInfo("attendance_auto_close", attendanceAutoCloseStatus, 24 * 60 * 60 * 1000),

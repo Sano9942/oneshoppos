@@ -362,6 +362,7 @@ function startAll(deps) {
     ["expiry_alert", "EXPIRY_ALERT_WORKER_ENABLED"],
     ["retail_digest", "RETAIL_DIGEST_WORKER_ENABLED"],
     ["shift_auto_close", "SHIFT_AUTO_CLOSE_WORKER_ENABLED"],
+    ["stock_value_nightly", "STOCK_VALUE_NIGHTLY_WORKER_ENABLED"],
     ["attendance_auto_close", "ATTENDANCE_AUTO_CLOSE_WORKER_ENABLED"],
     ["course_release", "COURSE_RELEASE_WORKER_ENABLED"],
     ["kds_snapshot", "KDS_SNAPSHOT_WORKER_ENABLED"],
@@ -553,6 +554,15 @@ function startAll(deps) {
           await tryRegister("shift-auto-close", async () => {
             const { registerShiftAutoCloseWorker } = require("../workers/shift-auto-close-worker-boss");
             await registerShiftAutoCloseWorker(boss, pool);
+          });
+        }
+
+        // One Toy Store pilot G2: hourly at :59, saves the stock value at
+        // 23:59 shop time for each branch that closed no shift that day.
+        if (String(process.env.STOCK_VALUE_NIGHTLY_WORKER_ENABLED || "0") === "1") {
+          await tryRegister("stock-value-nightly", async () => {
+            const { registerStockValueNightlyWorker } = require("../workers/stock-value-nightly-worker-boss");
+            await registerStockValueNightlyWorker(boss, pool);
           });
         }
 

@@ -10369,6 +10369,20 @@ const MIGRATIONS = [
       await client.query("ALTER TABLE supplier_account_entries ALTER COLUMN entry_date DROP DEFAULT");
     },
   },
+  {
+    version: 160,
+    description:
+      "One Toy Store pilot G2 (owner 2026-10-19): stock_value_days = the branch's stock value (toys in stock, units, value at cost, value at sale price; the G1 Stock Value totals) saved at every Close Shift, dated the shop day of the close, and nightly at 23:59 shop time for a branch that closed no shift that day. Printed on the day slip; listed by date in Reports. DDL shared with schema-pg.sql via services/stock-value.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('outlets', 'cash_shifts', 'outlet_stock')`
+      );
+      if (rows[0].n < 3) return;
+      const { STOCK_VALUE_DAYS_DDL } = require("./services/stock-value");
+      await client.query(STOCK_VALUE_DAYS_DDL);
+    },
+  },
 ];
 
 /**

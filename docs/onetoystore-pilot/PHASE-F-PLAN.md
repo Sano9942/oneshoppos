@@ -350,7 +350,7 @@ Owner checks regularly: sale by payment type; **hourly sale** (day / month / mon
 - ✅ Sale by payment type: dashboard "Payment Methods", Reports → Payment Summary.
 - 🔴 **D54** hourly sales in UTC (dashboard + Sales Heatmap). **Owner agreed 2026-09-30: fix right after F1** (uses it daily).
 - **G1** stock-value **summary table** by supplier / category / brand / sub-category (cost + sale price + units), like iPOS PSP "Supplier / Category / Brand / Sub-Cat Summary". Today: Reports → On Hand gives totals for **one** filter at a time.
-- **G2** **saved end-of-day stock value**: store units / cost / retail at every Close Shift; print on the day slip (F4); list by date. Today: dashboard shows the live figure only.
+- **G2** **saved end-of-day stock value**: store units / cost / retail at every Close Shift; print on the day slip (F4); list by date. Today: dashboard shows the live figure only. **2026-10-19: built LOCALLY (v160)**: Close Shift + nightly 23:59 backup, totals only (see PROGRESS top).
 - **G3** dashboard: sales contribution **by supplier** (Reports → Merchandising has it; not on the dashboard).
 - **G4** dashboard: **gross margin %** today and month (shows month GM amount only), **month sale and month purchase** totals, **top 50 items (30 days)** (shows top 5).
 - **G5** dashboard: **daily sale vs purchase** (server computes a 7-day series, Query 13, no screen shows it).

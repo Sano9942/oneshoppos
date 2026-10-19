@@ -150,6 +150,18 @@ export function buildDayReportHtml(r, opts = {}) {
     add(el("div", "Count the drawer and compare.", "c small"));
   }
 
+  // G2: the stock value saved at the close (a check copy: the stock now).
+  // Shifts closed before G2 have none.
+  const sv = r.stock_value;
+  if (sv) {
+    hr();
+    add(el("div", sv.live ? "Stock now" : "Stock at close", "label"));
+    row("Toys in stock", Number(sv.toys || 0).toLocaleString("en-US"));
+    row("Units", Number(sv.units || 0).toLocaleString("en-US"));
+    row("At cost", amt(sv.cost_value), "bold");
+    row("At sale price", amt(sv.retail_value));
+  }
+
   if (opts.onPrint) {
     opts.onPrint(frame);
   } else {

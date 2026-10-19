@@ -525,7 +525,127 @@ const STOCK_VALUE_GROUPS = [
   { id: "brand", label: "Brand" },
 ];
 
+// G2: "Now" = the grouped table above; "Saved by day" = the figure saved at
+// each Close Shift, else nightly at 23:59 (owner, 2026-10-19).
 export function StockValueTab({ filters }) {
+  const [view, setView] = useState("now");
+  return (
+    <div className="space-y-4" data-testid="stock-value">
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterPill label="Now" active={view === "now"} onClick={() => setView("now")} />
+        <FilterPill label="Saved by day" active={view === "days"} onClick={() => setView("days")} />
+      </div>
+      {view === "now" ? <StockValueNow filters={filters} /> : <StockValueDays filters={filters} />}
+    </div>
+  );
+}
+
+const SAVED_HOW = { close_shift: "At Close Shift", nightly: "Automatic (no shift closed)" };
+// "2026-10-19" → "19 Oct 2026", read as a calendar day (no timezone shift).
+function dayLabel(day) {
+  const [y, m, d] = String(day).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+  });
+}
+
+function StockValueDays({ filters }) {
+  const { fmt } = useCurrency();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const p = new URLSearchParams();
+      if (filters.dateFrom) p.set("date_from", filters.dateFrom);
+      if (filters.dateTo) p.set("date_to", filters.dateTo);
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+      const q = p.toString();
+      const d = await api.get(`/api/reports/stock-value-days${q ? `?${q}` : ""}`);
+      setRows(d.rows || []);
+    } catch {
+      setRows([]);
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const units = (n) => Number(n || 0).toLocaleString("en-US");
+  const showBranch = new Set(rows.map((r) => r.outlet_id)).size > 1;
+
+  return (
+    <CardShell
+      title="Stock value saved by day"
+      subtitle="Saved at each Close Shift; a day with no Close Shift is saved automatically at 23:59."
+      action={
+        <ExportButton
+          onClick={() =>
+            exportCSV(
+              "stock_value_by_day.csv",
+              [
+                { header: "Day", key: "day" },
+                { header: "Branch", key: "outlet_name" },
+                { header: "Saved", key: "saved" },
+                { header: "Toys", key: "toys" },
+                { header: "Units", key: "units" },
+                { header: "Value at cost", key: "cost_value" },
+                { header: "Value at sale price", key: "retail_value" },
+              ],
+              rows.map((r) => ({ ...r, saved: SAVED_HOW[r.source] || r.source })),
+            )
+          }
+        />
+      }
+    >
+      <div data-testid="stock-value-days">
+        {!loading && failed ? (
+          <div className="px-4 py-6 text-sm text-(--ui-danger-fg)">
+            Could not load the saved days. Check the connection and try again.
+          </div>
+        ) : !loading && !rows.length ? (
+          <div className="px-4 py-6 text-sm text-(--ui-text-muted)">
+            Nothing saved yet. The first figure is saved at the next Close Shift.
+          </div>
+        ) : (
+          <TableShell
+            cols={["Day", ...(showBranch ? ["Branch"] : []), "Saved", "Toys", "Units", "Value at cost", "Value at sale price"]}
+            loading={loading}
+            empty={false}
+          >
+            {rows.map((r) => (
+              <tr key={`${r.outlet_id}-${r.day}`} data-testid="stock-value-day" className="hover:bg-(--ui-muted-surface)">
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{dayLabel(r.day)}</td>
+                {showBranch && <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{r.outlet_name}</td>}
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">
+                  {SAVED_HOW[r.source] || r.source}
+                  {r.taken_at && (
+                    <span className="ml-1 text-[11px]">
+                      {new Date(r.taken_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-(--ui-text-muted)">{units(r.toys)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text)">{units(r.units)}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-(--ui-text)">{fmt(r.cost_value)}</td>
+                <td className="px-4 py-3 text-sm text-(--ui-text)">{fmt(r.retail_value)}</td>
+              </tr>
+            ))}
+          </TableShell>
+        )}
+      </div>
+    </CardShell>
+  );
+}
+
+function StockValueNow({ filters }) {
   const { fmt } = useCurrency();
   const [groupBy, setGroupBy] = useState("supplier");
   const [data, setData] = useState({ rows: [], totals: null });
@@ -554,7 +674,7 @@ export function StockValueTab({ filters }) {
   const units = (n) => Number(n || 0).toLocaleString();
 
   return (
-    <div className="space-y-4" data-testid="stock-value">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-(--ui-border) bg-(--ui-surface) p-3">
         <span className="text-xs font-semibold text-(--ui-text-muted)">Group by</span>
         {STOCK_VALUE_GROUPS.map((g) => (

@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd, isValidTz } = require("../../utils/tz");
+const { listStockValueDays } = require("../../services/stock-value");
 
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature, requirePerm } = deps;
@@ -487,6 +488,25 @@ module.exports = function (app, deps, helpers) {
         })),
         totals,
       });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // One Toy Store pilot G2: the stock value saved at each day's end (Close
+  // Shift, else nightly at 23:59), newest day first, one row per branch.
+  app.get("/api/reports/stock-value-days", invView, async (req, res) => {
+    try {
+      const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+      const { date_from, date_to } = req.query;
+      if ((date_from && !isDay(date_from)) || (date_to && !isDay(date_to))) {
+        return res.status(400).json({ error: "date_from / date_to must be YYYY-MM-DD" });
+      }
+      const outletIds = req.query.outlet_id
+        ? String(req.query.outlet_id).split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0)
+        : [];
+      const rows = await listStockValueDays(db, { dateFrom: date_from, dateTo: date_to, outletIds });
+      res.json({ rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

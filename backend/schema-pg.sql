@@ -6490,3 +6490,22 @@ CREATE TABLE IF NOT EXISTS supplier_bill_corrections (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_bill_corrections_bill ON supplier_bill_corrections(bill_id, id);
+
+-- One Toy Store pilot G2 (v160): the stock value saved at each Close Shift and,
+-- for a branch that closed no shift that day, nightly at 23:59 shop time.
+-- Same statements as services/stock-value.js STOCK_VALUE_DAYS_DDL.
+CREATE TABLE IF NOT EXISTS stock_value_days (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  day DATE NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('close_shift', 'nightly')),
+  shift_id INTEGER REFERENCES cash_shifts(id),
+  taken_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  toys INTEGER NOT NULL,
+  units NUMERIC(14,3) NOT NULL,
+  cost_value NUMERIC(14,2) NOT NULL,
+  retail_value NUMERIC(14,2) NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_value_days_shift ON stock_value_days(shift_id) WHERE shift_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_value_days_nightly ON stock_value_days(outlet_id, day) WHERE source = 'nightly';
+CREATE INDEX IF NOT EXISTS idx_stock_value_days_day ON stock_value_days(day DESC, outlet_id);

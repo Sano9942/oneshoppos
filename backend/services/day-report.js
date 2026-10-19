@@ -22,6 +22,7 @@
 
 const { paidOutForShift, KINDS: PAYOUT_KINDS } = require("./till-payouts");
 const { paidInForShift, KINDS: PAYIN_KINDS } = require("./till-payins");
+const { shiftStockValue, stockValueTotals } = require("./stock-value");
 
 const RETURN_CREDIT = "Return Credit";
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -182,6 +183,12 @@ async function buildDayReport(db, shiftId) {
     "SELECT COALESCE(NULLIF(trading_name, ''), company_name) AS shop_name FROM company_profile WHERE id = 1",
   );
 
+  // G2: a closed shift prints the stock value saved at its close (none for
+  // shifts closed before G2); a check copy prints the stock right now.
+  const stockValue = isOpen
+    ? { ...(await stockValueTotals(db, shift.outlet_id)), taken_at: until, live: true }
+    : await shiftStockValue(db, shift.id);
+
   const n = (v) => (v === null || v === undefined ? null : Number(v));
   return {
     shop_name: cp?.shop_name || "",
@@ -221,6 +228,7 @@ async function buildDayReport(db, shiftId) {
       variance_reason: shift.variance_reason || null,
       notes: denoms.map((d) => ({ denomination: d.denomination, count: Number(d.count) })),
     },
+    stock_value: stockValue,
   };
 }
 
