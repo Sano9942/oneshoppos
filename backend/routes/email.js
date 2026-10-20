@@ -181,7 +181,8 @@ module.exports = function emailRoutes(app, deps) {
         payments || [],
         template,
         req.company?.currency_symbol || "$",
-        portalUrl
+        portalUrl,
+        req.company?.timezone
       );
 
       const transport = makeTransport(cfg);
@@ -258,7 +259,8 @@ module.exports = function emailRoutes(app, deps) {
         payments || [],
         template,
         currencySymbol,
-        portalUrl
+        portalUrl,
+        req.company?.timezone
       );
 
       const subject = `Receipt #${sale.invoice_number || sale.id} from ${storeName}`;

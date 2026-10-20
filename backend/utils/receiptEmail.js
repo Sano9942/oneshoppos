@@ -30,9 +30,46 @@ function formatPaymentMethodLabel(method) {
     .join(" ");
 }
 
-function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$", portalUrl = null) {
-  const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
-  const footerText = template?.footer_text || "Thank you for your purchase!";
+// F8: every shop-typed value (template text, toy names, people) is escaped.
+function esc(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Same rule as the printed slip (frontend/src/utils/receipt.js splitLines):
+// one line per typed line, blank lines dropped.
+function splitLines(text) {
+  return String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+// F8: short date in the shop's time zone, e.g. "19 Oct 2026, 2:33 PM".
+function fmtShopDate(value, timeZone) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const opts = { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true };
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: timeZone || undefined }).formatToParts(d);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-GB", opts).formatToParts(d);
+  }
+  const get = (t) => parts.find((p) => p.type === t)?.value || "";
+  return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+}
+
+function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$", portalUrl = null, timeZone = null) {
+  // Header like the printed slip: first line is the shop name (big), the rest
+  // are address / phone lines. Footer: one line per typed line.
+  const headerAll = splitLines(template?.header_text);
+  const storeName = headerAll[0] || sale.outlet_name || "SanoPOS";
+  const headerLines = headerAll.slice(1);
+  const footerLines = splitLines(template?.footer_text);
+  if (footerLines.length === 0) footerLines.push("Thank you for your purchase!");
 
   // Bucket F: per-template toggles. Undefined/null defaults to TRUE
   // (preserve legacy behavior for tenants without designer v2 data).
@@ -66,8 +103,8 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
           : "";
         return `
       <tr>
-        <td style="padding:4px 0;border-bottom:1px solid #eee;">${seatChip}${i.product_name || "Item"}</td>
-        <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:center;">${i.quantity}</td>
+        <td style="padding:4px 0;border-bottom:1px solid #eee;">${seatChip}${esc(i.product_name || "Item")}</td>
+        <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:center;">${esc(i.quantity)}</td>
         <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:right;">${fmt(i.price_at_sale)}</td>
         <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:right;">${fmt(Number(i.price_at_sale) * Number(i.quantity))}</td>
       </tr>`;
@@ -79,7 +116,7 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
     .map(
       (p) => `
       <tr>
-        <td style="padding:2px 0;color:#555;">${formatPaymentMethodLabel(p.payment_method)}</td>
+        <td style="padding:2px 0;color:#555;">${esc(formatPaymentMethodLabel(p.payment_method))}</td>
         <td style="padding:2px 0;text-align:right;">${fmt(p.amount)}</td>
       </tr>`
     )
@@ -95,9 +132,9 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
 
         <!-- Header -->
         <tr><td style="text-align:center;padding-bottom:16px;border-bottom:2px solid #222;">
-          ${logoUrl ? `<div style="margin-bottom:8px;"><img src="${logoUrl}" alt="" style="max-width:200px;max-height:60px;" /></div>` : ""}
-          <div style="font-size:20px;font-weight:bold;">${storeName}</div>
-          ${sale.outlet_name ? `<div style="font-size:12px;color:#666;margin-top:4px;">${sale.outlet_name}</div>` : ""}
+          ${logoUrl ? `<div style="margin-bottom:8px;"><img src="${esc(logoUrl)}" alt="" style="max-width:200px;max-height:60px;" /></div>` : ""}
+          <div style="font-size:20px;font-weight:bold;letter-spacing:1px;">${esc(storeName)}</div>
+          ${headerLines.map((line) => `<div style="font-size:12px;color:#444;margin-top:2px;">${esc(line)}</div>`).join("")}
         </td></tr>
 
         <!-- Meta -->
@@ -105,14 +142,14 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
           <table width="100%">
             <tr>
               <td style="color:#555;">Invoice #</td>
-              <td style="text-align:right;font-weight:bold;">${sale.invoice_number || sale.id}</td>
+              <td style="text-align:right;font-weight:bold;">${esc(sale.invoice_number || sale.id)}</td>
             </tr>
             <tr>
               <td style="color:#555;">Date</td>
-              <td style="text-align:right;">${sale.timestamp || ""}</td>
+              <td style="text-align:right;">${esc(fmtShopDate(sale.timestamp, timeZone))}</td>
             </tr>
-            ${sale.employee_name ? `<tr><td style="color:#555;">Served by</td><td style="text-align:right;">${sale.employee_name}</td></tr>` : ""}
-            ${sale.customer_name ? `<tr><td style="color:#555;">Customer</td><td style="text-align:right;">${sale.customer_name}</td></tr>` : ""}
+            ${sale.employee_name ? `<tr><td style="color:#555;">Served by</td><td style="text-align:right;">${esc(sale.employee_name)}</td></tr>` : ""}
+            ${sale.customer_name ? `<tr><td style="color:#555;">Customer</td><td style="text-align:right;">${esc(sale.customer_name)}</td></tr>` : ""}
           </table>
         </td></tr>
 
@@ -150,22 +187,22 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
         ${showFbr && sale.fbr_irn ? `
         <tr><td style="padding:12px 0;border-top:1px solid #eee;font-size:13px;text-align:center;">
           <div style="color:#555;margin-bottom:4px;">FBR Ref</div>
-          <div style="font-family:monospace;font-size:12px;color:#111;">${sale.fbr_irn}</div>
+          <div style="font-family:monospace;font-size:12px;color:#111;">${esc(sale.fbr_irn)}</div>
           ${showQr && sale.fbr_qr_code && (String(sale.fbr_qr_code).startsWith("data:") || String(sale.fbr_qr_code).startsWith("http"))
-            ? `<div style="margin-top:8px;"><img src="${sale.fbr_qr_code}" alt="FBR QR" style="max-width:120px;max-height:120px;" /></div>`
+            ? `<div style="margin-top:8px;"><img src="${esc(sale.fbr_qr_code)}" alt="FBR QR" style="max-width:120px;max-height:120px;" /></div>`
             : ""}
         </td></tr>` : ""}
 
         ${portalUrl ? `
         <!-- Portal CTA -->
         <tr><td style="padding:16px 0;text-align:center;border-top:1px solid #eee;">
-          <a href="${portalUrl}" style="display:inline-block;padding:10px 24px;background:#4f46e5;color:#ffffff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600;">View your account</a>
+          <a href="${esc(portalUrl)}" style="display:inline-block;padding:10px 24px;background:#4f46e5;color:#ffffff;border-radius:6px;font-size:13px;text-decoration:none;font-weight:600;">View your account</a>
           <div style="margin-top:6px;font-size:11px;color:#888;">Track orders, view invoices &amp; manage your loyalty points</div>
         </td></tr>` : ""}
 
         <!-- Footer -->
-        <tr><td style="padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#888;">
-          ${footerText}
+        <tr><td style="padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#555;font-weight:bold;">
+          ${footerLines.map((line) => `<div>${esc(line)}</div>`).join("")}
         </td></tr>
 
       </table>

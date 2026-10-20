@@ -341,7 +341,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 ### F8: Email receipt header (D45 leftover) 🟡
 
-- The header lines run together and header/footer text isn't escaped in the email version. Match the printed slip.
+- The header lines run together and header/footer text isn't escaped in the email version. Match the printed slip. **2026-10-20: built LOCALLY** (header/footer lines like the slip, all text escaped, short shop-time date; see PROGRESS top).
 
 ### Reports the owner uses (from Q6, 2026-09-30)
 

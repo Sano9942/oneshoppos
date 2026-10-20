@@ -38,5 +38,5 @@ SanoPOS not used at the counter since 2 Oct; dual-run not restarted; live shift 
 ## Next, in owner's order (ask one question at a time)
 1. ~~**G2**~~ built locally (see above).
 2. ~~**G3**~~ ~~**G4**~~ ~~**G5**~~ ~~**Needs a Category**~~ built locally.
-3. ~~**F6**~~ built locally. ~~**F7**~~ decided 2026-10-20 (remove at next deploy) → **F8** (email receipt header) (see PHASE-F-PLAN).
+3. ~~**F6**~~ built locally. ~~**F7**~~ decided 2026-10-20 (remove at next deploy) → ~~**F8**~~ built locally 2026-10-20 (email receipt header/footer/escape/date, no migration) (email receipt header) (see PHASE-F-PLAN).
 4. Still waiting on the owner: restart dual-run (iPOS export → catch-up, close shift 5), F9 (e) real-photo trial (AI key), clock-in photo (device + PINs).
