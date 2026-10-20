@@ -601,6 +601,8 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- One Toy Store F9: receive a supplier bill without a PO ---
   require("./supplier-bills")(app, deps);
+  // --- One Toy Store F10: Settings → Price rules (the bill screen's suggested prices) ---
+  require("./price-rules")(app, deps);
 
   // --- V02 WHOLESALE: BACKORDER FULFILLMENT LOOP ---
   require("./backorders")(app, deps);

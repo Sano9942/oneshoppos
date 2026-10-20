@@ -202,7 +202,7 @@ async function register(db, monthStr, tz) {
   const { month, first, last, days } = parseMonth(monthStr);
   const staff = await staffList(db);
   const ids = staff.map((s) => s.id);
-  const [marks, clocks] = ids.length
+  const [marks, clocks, presses] = ids.length
     ? await Promise.all([
       db.query(
         `SELECT employee_id, EXTRACT(DAY FROM day)::int AS d, mark, reason
@@ -218,14 +218,29 @@ async function register(db, monthStr, tz) {
           GROUP BY 1, 2`,
         [ids, first, last, tz],
       ),
+      // F3b 3b: every kiosk press with its photo (NULL = no photo, shown red).
+      db.query(
+        `SELECT employee_id, EXTRACT(DAY FROM (pressed_at AT TIME ZONE $4)::date)::int AS d,
+                action, pressed_at AS at, photo_url
+           FROM attendance_presses
+          WHERE employee_id = ANY($1) AND (pressed_at AT TIME ZONE $4)::date BETWEEN $2 AND $3
+          ORDER BY pressed_at, id`,
+        [ids, first, last, tz],
+      ),
     ])
-    : [{ rows: [] }, { rows: [] }];
+    : [{ rows: [] }, { rows: [] }, { rows: [] }];
 
   const presentByDay = {};
   const out = staff.map((s) => {
     const cells = {};
     for (const c of clocks.rows.filter((r) => r.employee_id === s.id)) {
       cells[c.d] = { mark: "P", source: "clock", first_in: c.first_in, last_out: c.last_out };
+    }
+    let noPhoto = 0;
+    for (const p of presses.rows.filter((r) => r.employee_id === s.id)) {
+      const cell = cells[p.d] || (cells[p.d] = { mark: "P", source: "clock" });
+      (cell.presses || (cell.presses = [])).push({ action: p.action, at: p.at, photo_url: p.photo_url });
+      if (!p.photo_url) noPhoto += 1;
     }
     for (const m of marks.rows.filter((r) => r.employee_id === s.id)) {
       cells[m.d] = { ...(cells[m.d] || {}), mark: m.mark, source: "mark", reason: m.reason };
@@ -241,7 +256,7 @@ async function register(db, monthStr, tz) {
       } else if (c.mark === "A") a += 1;
       else if (c.mark === "S") sick += 1;
     }
-    return { ...s, marks: cells, p_days: p, a_days: a, s_days: sick, diff: s.allowance - a };
+    return { ...s, marks: cells, p_days: p, a_days: a, s_days: sick, diff: s.allowance - a, no_photo_presses: noPhoto };
   });
   return { month, days, staff: out, present_by_day: presentByDay };
 }

@@ -3,6 +3,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   const bcrypt = require("bcryptjs");
   const { validate } = require("../middleware/validate");
   const { isValidTz } = require("../utils/tz");
+  const kioskPhoto = require("../services/kiosk-photo");
 
   // Resolve the tenant's IANA timezone for local-day math. attendance timestamps
   // are timestamptz (absolute instants); `col::date` without a zone casts in the
@@ -44,7 +45,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   async function resolveEmployeeByPin(pin) {
     if (!pin) return null;
     const { rows } = await db.query(
-      "SELECT id, name, pin_hash, pin_code FROM employees WHERE pin_hash IS NOT NULL OR pin_code IS NOT NULL"
+      // A deleted employee's PIN no longer clocks in.
+      "SELECT id, name, pin_hash, pin_code FROM employees WHERE deleted_at IS NULL AND (pin_hash IS NOT NULL OR pin_code IS NOT NULL)"
     );
     for (const row of rows) {
       if (row.pin_hash) {
@@ -373,7 +375,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
 
   app.post("/api/attendance/pin-checkin", validate(PinCheckinSchema), async (req, res) => {
     try {
-      const { pin_code, outlet_id, latitude, longitude } = req.body || {};
+      const { pin_code, outlet_id, latitude, longitude, photo_base64 } = req.body || {};
 
       const emp = await resolveEmployeeByPin(pin_code);
       if (!emp) return res.status(401).json({ error: "Invalid PIN" });
@@ -483,10 +485,17 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         [attendanceId, emp.id, outlet_id]
       );
 
+      const photoUrl = await kioskPhoto.storePhoto(photo_base64, { tenantSlug: req.tenantSlug, employeeId: emp.id, log: req.log });
+      await kioskPhoto.recordPress(db, {
+        employeeId: emp.id, outletId: outlet_id, action: openSession ? "back" : "in",
+        sessionId: newSession.id, photoUrl, log: req.log,
+      });
+
       res.json({
         employee: { id: emp.id, name: emp.name },
         session: newSession,
         attendance_id: attendanceId,
+        photo_saved: Boolean(photoUrl),
         message: `Welcome${openSession ? " back" : ""}, ${emp.name}!`,
       });
     } catch (err) {
@@ -501,7 +510,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/attendance/pin-checkout", validate(PinCheckoutSchema), async (req, res) => {
     try {
-      const { pin_code, break_reason = null, outlet_id = null } = req.body || {};
+      const { pin_code, break_reason = null, outlet_id = null, photo_base64 } = req.body || {};
 
       const emp = await resolveEmployeeByPin(pin_code);
       if (!emp) return res.status(401).json({ error: "Invalid PIN" });
@@ -571,11 +580,18 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         );
       }
 
+      const photoUrl = await kioskPhoto.storePhoto(photo_base64, { tenantSlug: req.tenantSlug, employeeId: emp.id, log: req.log });
+      await kioskPhoto.recordPress(db, {
+        employeeId: emp.id, outletId: openWork.outlet_id, action: isEndOfDay ? "out" : "break",
+        sessionId: openWork.id, photoUrl, log: req.log,
+      });
+
       const msg = isEndOfDay
         ? `Goodbye, ${emp.name}! You worked ${fmtDuration(netHours)} today.`
         : `Break started (${break_reason}). You've worked ${fmtDuration(netHours)} today.`;
       res.json({
         employee: { id: emp.id, name: emp.name },
+        photo_saved: Boolean(photoUrl),
         net_work_hours_today: netHours,
         is_end_of_day: isEndOfDay,
         message: msg,

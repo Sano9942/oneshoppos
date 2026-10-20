@@ -145,6 +145,14 @@ app.use((err, req, res, next) => {
   }
   next(err);
 });
+// Kiosk photos without R2 (local dev only; services/kiosk-photo.js keeps none in
+// production without R2): the register page on the Vite port loads them cross-origin.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/uploads/attendance", (req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  });
+}
 // Single-tenant static file serving (fallback for MT mode when no tenant context)
 app.use("/uploads", express.static(UPLOADS_DIR));
 

@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { readContext, readTenantSlug } from "../../auth/authStore";
 import { parseLocalDate, fmtLocalTime } from "../../utils/dates";
+import { useKioskCamera } from "./kiosk/kioskCamera";
 
 const fmtDuration = (hours) => {
   if (!hours && hours !== 0) return "--";
@@ -79,6 +80,22 @@ function PinPad({ pin, error, loading, onDigit, onBackspace, onSubmit }) {
   );
 }
 
+// F3b 3b: live front-camera preview; the photo is snapped at the moment of the press.
+function CameraPreview({ videoRef, status }) {
+  if (status === "failed") {
+    return (
+      <div className="w-full rounded-xl border border-(--ui-danger-fg) bg-(--ui-danger-bg) text-(--ui-danger-fg) text-sm font-semibold px-3 py-2 text-center">
+        Camera not working: your press will be saved with no photo.
+      </div>
+    );
+  }
+  return (
+    <div className="w-40 h-32 rounded-xl overflow-hidden bg-(--ui-muted-surface) border border-(--ui-border) mx-auto">
+      <video ref={videoRef} autoPlay playsInline muted aria-label="Camera" className="w-full h-full object-cover -scale-x-100" />
+    </div>
+  );
+}
+
 function Clock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -113,6 +130,10 @@ export default function KioskRedesign() {
   const [todayStatus, setTodayStatus] = useState(null);
 
   const [confirm, setConfirm] = useState({ title: "", body: "", color: "emerald" });
+  const [photoSaved, setPhotoSaved] = useState(null);
+
+  // Camera is on only while a person is pressing (after their PIN is accepted).
+  const camera = useKioskCamera(view === "status" || view === "break_select");
 
   const urlOutletId = useMemo(() => {
     const v = searchParams.get("outlet");
@@ -154,6 +175,7 @@ export default function KioskRedesign() {
     setTodayStatus(null);
     setError("");
     setConfirm({ title: "", body: "", color: "emerald" });
+    setPhotoSaved(null);
   };
 
   const appendDigit = (d) => {
@@ -195,11 +217,16 @@ export default function KioskRedesign() {
     try {
       let data;
       try {
-        data = await api.post("/api/attendance/pin-checkin", { pin_code: pin, outlet_id: outlet.id });
+        data = await api.post("/api/attendance/pin-checkin", {
+          pin_code: pin,
+          outlet_id: outlet.id,
+          photo_base64: camera.snap(),
+        });
       } catch (err) {
         setError(err.body?.error || "Failed");
         return;
       }
+      setPhotoSaved(Boolean(data.photo_saved));
       const isReturn = todayStatus?.status === "on_break";
       if (isReturn) {
         const breakDuration = todayStatus.current_session
@@ -234,11 +261,13 @@ export default function KioskRedesign() {
           pin_code: pin,
           break_reason: breakReason,
           outlet_id: outlet?.id || null,
+          photo_base64: camera.snap(),
         });
       } catch (err) {
         setError(err.body?.error || "Failed");
         return;
       }
+      setPhotoSaved(Boolean(data.photo_saved));
       const reasonLabel = BREAK_REASONS.find((r) => r.key === breakReason)?.label || breakReason;
       setConfirm({
         title: `${reasonLabel} Break Started`,
@@ -262,11 +291,13 @@ export default function KioskRedesign() {
           pin_code: pin,
           break_reason: null,
           outlet_id: outlet?.id || null,
+          photo_base64: camera.snap(),
         });
       } catch (err) {
         setError(err.body?.error || "Failed");
         return;
       }
+      setPhotoSaved(Boolean(data.photo_saved));
       setConfirm({
         title: `Goodbye, ${employee.name}!`,
         body: data.message || `You worked ${fmtDuration(data.net_work_hours_today)} today.`,
@@ -337,8 +368,8 @@ export default function KioskRedesign() {
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
         <div className="w-full max-w-sm flex flex-col items-center gap-6">
           <div className="w-full bg-(--ui-surface) rounded-2xl p-6 text-center border border-(--ui-border)">
-            <div className="w-16 h-16 rounded-full bg-(--ui-muted-surface) text-(--ui-text) flex items-center justify-center text-3xl font-bold mx-auto mb-3">
-              {employee?.name?.[0]?.toUpperCase()}
+            <div className="mb-3">
+              <CameraPreview videoRef={camera.videoRef} status={camera.status} />
             </div>
             <h2 className="text-2xl font-bold text-(--ui-text)">{employee?.name}</h2>
 
@@ -438,6 +469,7 @@ export default function KioskRedesign() {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-(--ui-bg) text-(--ui-text) px-4">
         <div className="w-full max-w-sm flex flex-col items-center gap-4">
+          <CameraPreview videoRef={camera.videoRef} status={camera.status} />
           <h2 className="text-2xl font-bold text-(--ui-text) mb-2">Select Break Reason</h2>
           <div className="w-full grid grid-cols-2 gap-3">
             {BREAK_REASONS.map((r) => (
@@ -471,6 +503,8 @@ export default function KioskRedesign() {
       <div className="text-center">
         <p className={`text-5xl font-bold mb-4 ${titleColor}`}>{confirm.title}</p>
         {confirm.body && <p className="text-2xl text-(--ui-text-muted)">{confirm.body}</p>}
+        {photoSaved === true && <p className="text-(--ui-success-fg) mt-4 text-lg">Photo taken</p>}
+        {photoSaved === false && <p className="text-(--ui-danger-fg) mt-4 text-lg font-semibold">Saved with no photo</p>}
         <p className="text-(--ui-text-muted) mt-8 text-sm">Returning to kiosk in 5 seconds...</p>
       </div>
     </div>

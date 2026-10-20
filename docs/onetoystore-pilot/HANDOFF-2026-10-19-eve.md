@@ -1,5 +1,7 @@
 # Hand-off 2026-10-19 (evening)
 
+> **2026-10-20 14:32 PKT: everything below is DEPLOYED** (prod main `423fa959`, v161; clock-in photo held as **v162**). Railway: PAYMENT_GATEWAY=manual, photo reader ON with the AI key. See PROGRESS top.
+
 ## Done this tab (all LOCAL on `onetoystore-golive`, nothing pushed or deployed)
 Prod is unchanged: origin/main `f6a290d6`, migration **v156**. Local DB `sanopos_dev` is at **v161**.
 

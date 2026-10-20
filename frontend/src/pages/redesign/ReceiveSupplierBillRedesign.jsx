@@ -92,6 +92,8 @@ export default function ReceiveSupplierBillRedesign() {
   const [waiting, setWaiting] = useState([]);
   const supplierWaiting = useMemo(() => waiting.filter((w) => String(w.supplier_id) === String(supplierId)), [waiting, supplierId]);
   const lines = useMemo(() => applyWaiting(rawLines, supplierWaiting), [rawLines, supplierWaiting]);
+  // undefined = loading; null = didn't load (the defaults, with no supplier ticked, and a warning).
+  const [rules, setRules] = useState(undefined);
   const [header, setHeader] = useState({ bill_number: "", bill_date: "", written_total: "", differs: false, differs_note: "", account_amount: "" });
 
   useEffect(() => {
@@ -111,6 +113,8 @@ export default function ReceiveSupplierBillRedesign() {
         .sort((a, b) => String(a.path_label || a.name).localeCompare(String(b.path_label || b.name)))))
       .catch(() => {});
     api.get("/api/brands").then((d) => setBrands(brandChoices(d.brands || []))).catch(() => setBrands(brandChoices([])));
+    // F10: the shop's price rules (Settings → Price rules).
+    api.get("/api/price-rules").then((d) => setRules(d.rules)).catch(() => setRules(null));
     loadDrafts();
     loadTodays();
     loadWaiting();
@@ -251,7 +255,7 @@ export default function ReceiveSupplierBillRedesign() {
     try {
       const fd = new FormData();
       fd.append("payload", JSON.stringify({
-        ...savePayload({ supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio: discountRatio }),
+        ...savePayload({ supplierId, outletId, header, result, lines, paidNow, billDiscountRatio: discountRatio, rules: rules || undefined }),
         same_number_ok: !!sameNumberOk,
         draft_id: draftId || undefined,
       }));
@@ -622,12 +626,16 @@ export default function ReceiveSupplierBillRedesign() {
 
       {lines.length ? (
         <>
+          {rules === null ? (
+            <p className="mb-2 text-sm text-(--ui-warning-fg)">The shop's price rules didn't load, so suggested prices use the standard % with no supplier rules. Reload the page before saving new toys.</p>
+          ) : null}
           <CheckLines
             lines={lines}
             onChange={setLines}
             billDiscountRatio={discountRatio}
             multiFile={result?.files.length > 1}
-            supplierName={supplierName}
+            supplierId={supplierId}
+            rules={rules || undefined}
             categories={categories}
             brands={brands}
           />

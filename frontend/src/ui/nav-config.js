@@ -273,6 +273,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Outlets", path: "/outlets", icon: Building2, requiredPerm: "all_access" },
       { name: "Business Modules", path: "/settings/business-modules", icon: Blocks, requiredPerm: ["manage_business_modules", "manage_outlet_modules"] },
+      { name: "Price rules", path: "/settings/price-rules", icon: Percent, requiredPerm: "all_access" },
       { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "all_access", requiredFlag: "multi_company" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
       { name: "Integrations", path: "/settings/integrations", icon: Plug, requiredPerm: "manage_inventory" },

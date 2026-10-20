@@ -1,6 +1,7 @@
 module.exports = function registerEmployeeRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, requirePlanLimit } = deps;
   const bcrypt = require("bcryptjs");
+  const { pinTakenByOther, PIN_TAKEN } = require("../services/staff-pin");
   const { validate } = require("../middleware/validate");
   const { pinValidateLimiter } = require("../middleware/rate-limit");
   const { ValidatePinSchema, CreateEmployeeSchema, SetPasswordSchema, ChangePasswordSchema, ChangePinSchema } = require("../schemas/employees");
@@ -91,6 +92,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   app.post("/api/employees", requirePerm("all_access"), requirePlanLimit("employees"), validate(CreateEmployeeSchema), async (req, res) => {
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password, home_staff } = req.body;
     try {
+      // The kiosk finds the person by PIN alone: one PIN, one person.
+      if (pin_code && await pinTakenByOther(db, pin_code)) return res.status(409).json(PIN_TAKEN);
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
       const password_hash = password ? await bcrypt.hash(String(password), 10) : null;
       const { rows } = await db.query(
@@ -143,6 +146,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       let params = [name, role_id, salary_type, monthly_salary != null ? Number(monthly_salary) : null, hourly_rate != null ? Number(hourly_rate) : null, daily_rate != null ? Number(daily_rate) : null];
 
       if (pin_code !== undefined && pin_code !== "") {
+        if (await pinTakenByOther(db, pin_code, id)) return res.status(409).json(PIN_TAKEN);
         const pin_hash = await bcrypt.hash(String(pin_code), 10);
         query += `, pin_hash = $${paramIdx++}`;
         params.push(pin_hash);
@@ -461,6 +465,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         return res.status(401).json({ error: "Current PIN is incorrect" });
       }
 
+      if (await pinTakenByOther(db, new_pin, id)) return res.status(409).json(PIN_TAKEN);
       const pin_hash = await bcrypt.hash(String(new_pin), 10);
       await db.query(
         "UPDATE employees SET pin_hash = $1 WHERE id = $2",

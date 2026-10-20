@@ -171,14 +171,15 @@ export function billSummary(lines, writtenTotal, billDiscount = 0) {
 
 /**
  * A new toy's selling price: the shop's typed price, else the price rule
- * (priceRules.js) on its cost per piece. ctx: { supplierName, billDiscountRatio }.
+ * (priceRules.js) on its cost per piece. ctx: { supplierId, billDiscountRatio, rules }
+ * (rules = GET /api/price-rules; the defaults until it loads).
  */
 export function newToyPrice(line, ctx = {}) {
   const t = line.new_toy || {};
   const rule = priceRule({
-    cost: unitCost(line, ctx.billDiscountRatio), supplierName: ctx.supplierName, name: t.name,
+    cost: unitCost(line, ctx.billDiscountRatio), supplierId: ctx.supplierId, name: t.name,
     isBrand: !!t.is_brand, brandName: t.brand_name, rule: t.rule || undefined,
-  });
+  }, ctx.rules);
   const typed = Number(t.price);
   return typed > 0 ? { ...rule, price: typed, typed: true, rule_price: rule.price } : { ...rule, typed: false, rule_price: rule.price };
 }
@@ -191,12 +192,12 @@ export function newToyPrice(line, ctx = {}) {
 export function suggestedPrice(line, toy, ctx = {}) {
   const cost = unitCost(line, ctx.billDiscountRatio);
   if (!(cost > 0) || round2(cost) === round2(Number(toy.cost_price) || 0)) return null;
-  const r = priceRule({ cost, supplierName: ctx.supplierName, name: toy.name, isBrand: !!toy.brand_id, brandName: toy.brand_name });
+  const r = priceRule({ cost, supplierId: ctx.supplierId, name: toy.name, isBrand: !!toy.brand_id, brandId: toy.brand_id, brandName: toy.brand_name }, ctx.rules);
   return r.price === Number(toy.price) ? null : r;
 }
 
 /** What the save endpoint takes (POST /api/supplier-bills, field "payload"). */
-export function savePayload({ supplierId, outletId, header, result, lines, paidNow, supplierName, billDiscountRatio = 0 }) {
+export function savePayload({ supplierId, outletId, header, result, lines, paidNow, billDiscountRatio = 0, rules }) {
   return {
     supplier_id: Number(supplierId),
     outlet_id: Number(outletId),
@@ -230,7 +231,7 @@ export function savePayload({ supplierId, outletId, header, result, lines, paidN
         category_id: Number(l.new_toy.category_id) || null,
         is_brand: l.new_toy.is_brand,
         brand_name: l.new_toy.is_brand ? String(l.new_toy.brand_name || "").trim() : null,
-        price: newToyPrice(l, { supplierName, billDiscountRatio }).price,
+        price: newToyPrice(l, { supplierId: Number(supplierId), billDiscountRatio, rules }).price,
         code: String(l.new_toy.code || "").trim(),
         barcode: String(l.new_toy.barcode || "").trim(),
       } : undefined,

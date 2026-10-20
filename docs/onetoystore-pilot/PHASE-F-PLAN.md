@@ -343,6 +343,24 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 - The header lines run together and header/footer text isn't escaped in the email version. Match the printed slip. **2026-10-20: built LOCALLY** (header/footer lines like the slip, all text escaped, short shop-time date; see PROGRESS top).
 
+### F10: Price rules page under Settings (owner, 2026-10-20) — decided, not built
+
+Today the markup rules are written into the program (`frontend/src/pages/redesign/supplierBill/priceRules.js`), used only on the supplier bill check screen (new toy price; "rule … Use" when a bill changes a toy's cost). Owner's answers (one question at a time, all the recommended option):
+
+1. **A rule change only changes future suggestions on supplier bills.** Existing toys keep their prices; nothing is repriced.
+2. **Only Administrators** (all_access) can change the rules; staff keep seeing the suggestions and can pick another rule or type a price on a bill.
+3. **Edit inside the 5 rules, order fixed** (Big item → B.B Land & T&T list → Stuff & stationery → Brand → Non-brand): each %; brand / non-brand cost bands (add, remove, change); suppliers of each rule; the big-item and B.B Land & T&T item words; stationery brands. No new rule types.
+4. **Safety: all three.** Every % between 30 and 300; bands rising and not overlapping; a preview of sample costs (200, 800, 2,500, 12,000) old vs new before Save; a history of every save (who, when) with "Go back to this version".
+5. **One brand list = Catalog → Brands.** Add the website brands missing there once (show the owner the list first), drop the copy in the program; the rules page picks stationery brands from it.
+6. **Suppliers by tick box** from the Suppliers list, not name patterns. Start from what today's patterns match on the live shop; show the owner that list first.
+7. **Rounding is one setting: nearest 10 / 50 / 100**, starting at 10.
+
+Build after the check-screen Change/Correct deploy. Rules move into the database (a migration); the bill screen loads them from the server.
+
+**Before the data step (owner, 2026-10-20 evening, from the live shop read-only):** (a) **add all 52** website-menu brands missing from Catalog → Brands (live has 22; Fisher-Price / Burago count as the website's "Fisher Price" / "Bburago"; Deli, Pelikan, Yalong stay though not on the menu). (b) **Supplier ticks start exactly as today's patterns:** Big item = BABY LAND LAHORE (big words) + TOYS AND TOYS LAHORE (scooty words); B.B Land & T&T list = both; Stuff & stationery = AKBAR & CO, AL HASSAN, AMIR STATIONER, AQEEL, AZMAT, JAHANGIR BOOKS, RABIA BOOKS, REHMAN STUFF, SAAD, TOOBA (no "Zaki" / "Amir Birthday" supplier exists).
+
+**✅ BUILT LOCALLY 2026-10-20 (migration v163, not deployed).** `price_rule_versions` (every save a row: who, when, restored_from; newest = the rules; no row = the old sheet with ticks from the old name patterns, worked out on read). `GET /api/price-rules` (receive_supplier_bills), `PUT` + `GET …/history` + `POST …/history/:id/restore` (all_access). Page Setup → **Price rules** (`/settings/price-rules`, Administrators). Bill screen loads the rules (warns if they don't load); suppliers by id, stationery brands by id or name. Website brand list moved to `services/price-rules.js` `addWebsiteBrands` (the deploy data step); the bill screen's Brand list = Catalog → Brands only. **At deploy:** clock-in photo is still v162 and held → renumber it to v164 if F10 (v163) goes first.
+
 ### Reports the owner uses (from Q6, 2026-09-30)
 
 Owner checks regularly: sale by payment type; **hourly sale** (day / month / months); **stock at cost and sale price by supplier, category, brand, sub-category**; **total stock at cost at end of day** (read when closing iPOS). Checked against code + live dashboard 2026-09-30:

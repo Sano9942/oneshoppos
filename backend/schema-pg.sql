@@ -6314,6 +6314,20 @@ ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_by INTEGER REFERENCES employee
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_sales_staff_employee ON sales(staff_employee_id) WHERE staff_employee_id IS NOT NULL;
 
+-- One Toy Store pilot F3b part 3b (migration v162): one row per kiosk press (clock in,
+-- break, back, clock out) with the camera photo, NULL = no photo (camera
+-- failed; shown in red on the register). See services/kiosk-photo.js.
+CREATE TABLE IF NOT EXISTS attendance_presses (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  action TEXT NOT NULL CHECK (action IN ('in','break','back','out')),
+  session_id INTEGER REFERENCES attendance_sessions(id) ON DELETE SET NULL,
+  photo_url TEXT,
+  pressed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_attendance_presses_emp_time ON attendance_presses(employee_id, pressed_at);
+
 -- One Toy Store pilot F9 (v154): receive a supplier bill without a PO. Extra
 -- barcodes per toy, supplier codes per supplier per toy, supplier bills + lines +
 -- files, Not received / Discount / Correction on the supplier account, GRN with
@@ -6513,3 +6527,14 @@ CREATE TABLE IF NOT EXISTS stock_value_days (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_value_days_shift ON stock_value_days(shift_id) WHERE shift_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_value_days_nightly ON stock_value_days(outlet_id, day) WHERE source = 'nightly';
 CREATE INDEX IF NOT EXISTS idx_stock_value_days_day ON stock_value_days(day DESC, outlet_id);
+
+-- One Toy Store pilot F10 (v163): the shop's price rules for toys from a
+-- supplier bill (Settings → Price rules). Every save is a row; the newest is
+-- the rules. Same statements as services/price-rules.js PRICE_RULE_VERSIONS_DDL.
+CREATE TABLE IF NOT EXISTS price_rule_versions (
+  id SERIAL PRIMARY KEY,
+  config JSONB NOT NULL,
+  saved_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  restored_from INTEGER REFERENCES price_rule_versions(id) ON DELETE SET NULL
+);

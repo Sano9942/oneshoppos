@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, FilterPill, Input, Select } from "../../../ui/primitives";
 import ItemSearchBox from "../../../ui/ItemSearchBox";
 import { correctLine, lineStatus, newToyPrice, piecesNow, suggestedPrice, unitCost } from "./billMath";
-import { RULES } from "./priceRules";
+import { rulesList } from "./priceRules";
 
 const STATUS = {
   ready: { tone: "success", label: "Ready" },
@@ -19,8 +19,8 @@ const STATUS = {
 };
 const HOW = { supplier_code: "their code", barcode: "barcode", name_code: "code in name", similar: "similar name", picked: "picked" };
 
-export default function CheckLines({ lines, onChange, billDiscountRatio = 0, multiFile = false, supplierName = "", categories = [], brands = [] }) {
-  const ctx = { supplierName, billDiscountRatio };
+export default function CheckLines({ lines, onChange, billDiscountRatio = 0, multiFile = false, supplierId = null, rules, categories = [], brands = [] }) {
+  const ctx = { supplierId: supplierId ? Number(supplierId) : null, billDiscountRatio, rules };
   // A filter picks its rows when pressed; they stay while being edited (a row
   // that becomes ready doesn't jump away under the cursor).
   const [show, setShow] = useState({ k: "all", keys: null });
@@ -222,8 +222,8 @@ function NewToyPrice({ line, cost, ctx, set }) {
         value={line.new_toy.rule}
         onChange={(e) => nt({ rule: e.target.value })}
       >
-        <option value="">Rule: {RULES.find((x) => x.key === r.key).label}</option>
-        {RULES.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+        <option value="">Rule: {r.label}</option>
+        {rulesList(ctx.rules).map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
       </Select>
     </div>
   );

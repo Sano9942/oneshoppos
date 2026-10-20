@@ -11,6 +11,7 @@ const AdministratorRoute = lazy(() => import("../pages/AdministratorRoute"));
 const ApprovalsRedesign = lazy(() => import("../pages/redesign/ApprovalsRedesign"));
 const ReceiveSupplierBillRedesign = lazy(() => import("../pages/redesign/ReceiveSupplierBillRedesign"));
 const SupplierBillsRedesign = lazy(() => import("../pages/redesign/SupplierBillsRedesign"));
+const PriceRulesRedesign = lazy(() => import("../pages/redesign/PriceRulesRedesign"));
 const NeedsCategoryRedesign = lazy(() => import("../pages/redesign/NeedsCategoryRedesign"));
 const AttendanceRedesign = lazy(() => import("../pages/redesign/AttendanceRedesign"));
 const SalariesRedesign = lazy(() => import("../pages/redesign/SalariesRedesign"));
@@ -195,6 +196,7 @@ export const appRoutes = [
     <Route path="/approvals" element={perm("manage_orders", <ApprovalsRedesign />)} />
     <Route path="/supplier-bills" element={perm("receive_supplier_bills", <SupplierBillsRedesign />)} />
     <Route path="/supplier-bills/new" element={perm("receive_supplier_bills", <ReceiveSupplierBillRedesign />)} />
+    <Route path="/settings/price-rules" element={perm("all_access", <PriceRulesRedesign />)} />
     <Route path="/returned-stock" element={perm("manage_orders", <ReturnedStockRoute />)} />
     <Route path="/employees" element={perm("all_access", <EmployeesRoute />)} />
     <Route path="/outlets" element={perm("all_access", <OutletsRoute />)} />

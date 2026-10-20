@@ -2,6 +2,8 @@
 // paper register. A box shows P / A / S; a kiosk clock-in shows as P on its
 // own. Only the owner marks boxes, always with a reason, and every change is
 // kept (history per person). PHASE-F-PLAN F3b Q3b.1–Q3b.6.
+// F3b 3b: the kiosk photo of every press (in / break / back / out) under
+// "Clock-ins"; a press with no photo (camera failed) is red, counted per person.
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../../api";
 import { Badge, Button, Input, Modal, SectionCard } from "../../../ui/primitives";
@@ -12,6 +14,8 @@ import {
 } from "./staffPay";
 
 const REASONS = ["From paper register", "Forgot to clock in", "Sick", "Correction"];
+const ACTION_LABEL = { in: "Clock in", break: "Break", back: "Back from break", out: "Clock out" };
+const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const CELL_TONE = {
   P: "!text-(--ui-text)",
   A: "!bg-(--ui-danger-bg) !text-(--ui-danger-fg)",
@@ -27,6 +31,7 @@ export default function StaffRegister() {
   const [reason, setReason] = useState(REASONS[0]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState(null);
+  const [clockIns, setClockIns] = useState(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -132,6 +137,7 @@ export default function StaffRegister() {
                 <th className="px-2 py-2 text-center text-xs">S</th>
                 <th className="px-2 py-2 text-center text-xs">Allowed</th>
                 <th className="px-2 py-2 text-center text-xs">±</th>
+                <th className="px-2 py-2 text-center text-xs">No photo</th>
               </tr>
             </thead>
             <tbody>
@@ -146,12 +152,15 @@ export default function StaffRegister() {
                       <Button size="sm" tone="link" onClick={() => fillEmpty(s)} disabled={busy}>Empty → P</Button>
                       <span className="mx-1 text-(--ui-text-muted)">·</span>
                       <Button size="sm" tone="link" onClick={() => showHistory(s)}>History</Button>
+                      <span className="mx-1 text-(--ui-text-muted)">·</span>
+                      <Button size="sm" tone="link" aria-label={`Clock-ins ${s.name}`} onClick={() => setClockIns(s)}>Clock-ins</Button>
                     </div>
                   </td>
                   {days.map((d) => {
                     const c = s.marks[d];
+                    const noPhoto = Boolean(c?.presses?.some((p) => !p.photo_url));
                     const title = c
-                      ? `${dayOf(month, d)} · ${MARK_LABEL[c.mark]}${c.source === "clock" ? " (clock-in)" : ""}${c.reason ? ` · ${c.reason}` : ""}`
+                      ? `${dayOf(month, d)} · ${MARK_LABEL[c.mark]}${c.source === "clock" ? " (clock-in)" : ""}${c.reason ? ` · ${c.reason}` : ""}${noPhoto ? " · no photo" : ""}`
                       : dayOf(month, d);
                     return (
                       <td key={d} className="p-0 text-center">
@@ -163,7 +172,7 @@ export default function StaffRegister() {
                           aria-label={`${s.name} ${title}`}
                           disabled={busy}
                           onClick={() => markOne(s, d)}
-                          className={`!h-6 !w-6 !rounded-sm border border-(--ui-border) text-[11px] ${c ? CELL_TONE[c.mark] : ""} ${c?.source === "clock" ? "underline" : ""}`}
+                          className={`!h-6 !w-6 !rounded-sm border border-(--ui-border) text-[11px] ${c ? CELL_TONE[c.mark] : ""} ${c?.source === "clock" ? "underline" : ""} ${noPhoto ? "!border-2 !border-(--ui-danger-fg)" : ""}`}
                         >
                           {c?.mark || ""}
                         </Button>
@@ -176,12 +185,18 @@ export default function StaffRegister() {
                   <td className="px-2 text-center">
                     <Badge tone={s.diff < 0 ? "danger" : s.diff > 0 ? "success" : "default"}>{s.diff === 0 ? "ok" : signed(s.diff)}</Badge>
                   </td>
+                  <td
+                    data-testid={`no-photo-${s.id}`}
+                    className={`px-2 text-center ${s.no_photo_presses ? "font-bold text-(--ui-danger-fg)" : "text-(--ui-text-muted)"}`}
+                  >
+                    {s.no_photo_presses || 0}
+                  </td>
                 </tr>
               ))}
               <tr className="text-(--ui-text-muted)">
                 <td className="sticky left-0 bg-(--ui-surface) px-3 py-2 text-xs">Present</td>
                 {days.map((d) => <td key={d} className="text-center text-xs">{data.present_by_day[d] || ""}</td>)}
-                <td colSpan={4} />
+                <td colSpan={5} />
               </tr>
             </tbody>
           </table>
@@ -190,8 +205,13 @@ export default function StaffRegister() {
       )}
       <p className="text-xs text-(--ui-text-muted)">
         ± = allowed leave − A days (paid extra or cut at salary ÷ 30). S (sick) is not taken from the allowance.
-        Underlined P = a clock-in at the kiosk.
+        Underlined P = a clock-in at the kiosk. Red box / No photo = a kiosk press saved without a photo (camera failed):
+        see Clock-ins.
       </p>
+
+      <Modal open={!!clockIns} onClose={() => setClockIns(null)} title={`Clock-ins · ${clockIns?.name || ""} · ${monthLabel(month)}`} size="lg">
+        {clockIns && <ClockInList staff={clockIns} month={month} />}
+      </Modal>
 
       <Modal open={!!history} onClose={() => setHistory(null)} title={`Changes · ${history?.name || ""} · ${monthLabel(month)}`} size="lg">
         {history?.rows?.length ? (
@@ -208,5 +228,45 @@ export default function StaffRegister() {
         )}
       </Modal>
     </div>
+  );
+}
+
+function ClockInList({ staff, month }) {
+  const days = Object.entries(staff.marks)
+    .filter(([, c]) => c.presses?.length)
+    .sort(([a], [b]) => Number(a) - Number(b));
+  if (!days.length) return <p className="text-sm text-(--ui-text-muted)">No kiosk presses this month.</p>;
+  return (
+    <ul className="divide-y divide-(--ui-border) text-sm">
+      {days.map(([d, c]) => (
+        <li key={d} className="py-3">
+          <div className="mb-2 font-semibold text-(--ui-text)">{dayOf(month, d)}</div>
+          <div className="flex flex-wrap gap-3">
+            {c.presses.map((p) => {
+              const label = ACTION_LABEL[p.action] || p.action;
+              return (
+                <div key={`${p.action}-${p.at}`} className="w-28 text-center">
+                  {p.photo_url ? (
+                    <a href={p.photo_url} target="_blank" rel="noreferrer">
+                      <img
+                        src={p.photo_url}
+                        alt={`${staff.name} ${label.toLowerCase()} ${timeOf(p.at)}`}
+                        className="h-24 w-28 rounded-lg border border-(--ui-border) object-cover"
+                      />
+                    </a>
+                  ) : (
+                    <div className="flex h-24 w-28 items-center justify-center rounded-lg border-2 border-(--ui-danger-fg) bg-(--ui-danger-bg) font-semibold text-(--ui-danger-fg)">
+                      No photo
+                    </div>
+                  )}
+                  <div className="mt-1 text-xs text-(--ui-text)">{label}</div>
+                  <div className="text-xs text-(--ui-text-muted)">{timeOf(p.at)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

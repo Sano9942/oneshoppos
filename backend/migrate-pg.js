@@ -10397,6 +10397,34 @@ const MIGRATIONS = [
       await client.query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ");
     },
   },
+  {
+    version: 162,
+    description:
+      "One Toy Store pilot F3b part 3b (was v153, then v157 locally; renumbered to v162 because v158-v161 deployed first on 2026-10-20, so it still runs when it deploys later): attendance_presses = one row per kiosk press (in / break / back / out) with the camera photo URL (R2, signed on the way out), NULL = no photo (a failed camera never blocks the press; the register shows it in red). DDL shared with schema-pg.sql via services/kiosk-photo.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('attendance_sessions', 'employees', 'outlets')`
+      );
+      if (rows[0].n < 3) return;
+      const { PRESS_DDL } = require("./services/kiosk-photo");
+      await client.query(PRESS_DDL);
+    },
+  },
+  {
+    version: 163,
+    description:
+      "One Toy Store pilot F10 (owner 2026-10-20): price_rule_versions = the shop's price rules for toys from a supplier bill, edited on Settings → Price rules by Administrators. Every save is a row (who, when, and which version it went back to); the newest is the rules. No row = the rules as written into the program before, suppliers ticked from the old name patterns. A rule change only changes future suggestions; no toy is repriced. DDL shared with schema-pg.sql via services/price-rules.js. Tenant-only; guarded on the tables existing. Idempotent.",
+    up: async (client) => {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name IN ('employees', 'suppliers', 'brands')`
+      );
+      if (rows[0].n < 3) return;
+      const { PRICE_RULE_VERSIONS_DDL } = require("./services/price-rules");
+      await client.query(PRICE_RULE_VERSIONS_DDL);
+    },
+  },
 ];
 
 /**
