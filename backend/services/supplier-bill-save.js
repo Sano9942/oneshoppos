@@ -32,6 +32,16 @@ const r2 = (n) => Math.round(Number(n) * 100) / 100;
 const r4 = (n) => Math.round(Number(n) * 10000) / 10000;
 const num = (v) => (v === "" || v == null ? 0 : Number(v));
 
+/**
+ * F9 (e), owner 2026-10-20: a supplier who rounds each line to whole rupees is
+ * off by up to 50 paisa a line; that still matches (never Rs 5 or more), and
+ * the account then carries the figure on the paper. Same rule as the screen
+ * (frontend supplierBill/billMath.js roundingAllowance).
+ */
+function roundingAllowance(lineCount) {
+  return Math.min(0.5 * Math.max(1, Number(lineCount) || 0), 5);
+}
+
 /** Check the payload and work out every number. Pure (no database). */
 function planBill(p) {
   const lines = Array.isArray(p.lines) ? p.lines : [];
@@ -93,8 +103,9 @@ function planBill(p) {
   const invoiceComputed = r2(positive.reduce((a, x) => a + x.value * (1 - share), 0));
 
   const written = p.written_total === "" || p.written_total == null ? null : r2(num(p.written_total));
-  const matches = written != null && Math.abs(written - billTotal) < 0.5;
+  const matches = written != null && Math.abs(written - billTotal) < roundingAllowance(lines.length);
   let accountNet = billTotal;
+  if (matches && written !== billTotal) accountNet = written; // only the supplier's rounding
   if (!matches) {
     if (!p.total_differs) {
       throw fail(400, written == null
@@ -105,7 +116,7 @@ function planBill(p) {
     accountNet = p.account_amount === "" || p.account_amount == null ? (written ?? billTotal) : r2(num(p.account_amount));
   }
   // The invoice carries the bill; returns lower it separately, so the net is accountNet.
-  const invoiceAmount = matches ? invoiceComputed : r2(accountNet + returnValue);
+  const invoiceAmount = matches && written === billTotal ? invoiceComputed : r2(accountNet + returnValue);
 
   return { planned, billDiscount, billTotal, written, matches, accountNet, invoiceAmount, returnValue, share };
 }
@@ -418,4 +429,4 @@ function newPriceOf(x, productId) {
   return v;
 }
 
-module.exports = { planBill, saveSupplierBill, earlierBillsWithNumber };
+module.exports = { planBill, saveSupplierBill, earlierBillsWithNumber, roundingAllowance };

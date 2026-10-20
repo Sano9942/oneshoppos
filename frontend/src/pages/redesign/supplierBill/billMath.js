@@ -116,6 +116,16 @@ export function lineStatus(line) {
 }
 
 /**
+ * F9 (e), owner 2026-10-20: a supplier who rounds each line to whole rupees
+ * (A2Z: 48 lines less 5 %) is off by up to 50 paisa a line; that still counts
+ * as matching, but never a gap of Rs 5 or more. Same rule as the save
+ * (backend services/supplier-bill-save.js roundingAllowance).
+ */
+export function roundingAllowance(lineCount) {
+  return Math.min(0.5 * Math.max(1, Number(lineCount) || 0), 5);
+}
+
+/**
  * Counts by status + the bill's total against the total written on it.
  * Bill total = Σ line values (amount less the line discount) − bill discount,
  * the same rule as the save (backend services/supplier-bill-save.js).
@@ -136,7 +146,7 @@ export function billSummary(lines, writtenTotal, billDiscount = 0) {
     lines_total: linesTotal,
     bill_total: billTotal,
     difference,
-    total_matches: difference == null ? null : Math.abs(difference) < 0.5,
+    total_matches: difference == null ? null : Math.abs(difference) < roundingAllowance(lines.length),
   };
 }
 

@@ -569,7 +569,9 @@ export default function ReceiveSupplierBillRedesign() {
               <div className={`text-lg font-bold tabular-nums ${summary.total_matches ? "text-(--ui-success-fg)" : summary.total_matches === false ? "text-(--ui-danger-fg)" : ""}`}>
                 {fmt(summary.bill_total)}
               </div>
-              {summary.difference ? <div className="text-xs text-(--ui-danger-fg)">Difference {fmt(summary.difference)}</div> : null}
+              {summary.difference && summary.total_matches ? (
+                <div className="text-xs text-(--ui-text-muted)">Supplier&apos;s rounding {fmt(summary.difference)} · the bill&apos;s total goes on the account</div>
+              ) : summary.difference ? <div className="text-xs text-(--ui-danger-fg)">Difference {fmt(summary.difference)}</div> : null}
             </div>
           </div>
           {sameNumber.length ? (
