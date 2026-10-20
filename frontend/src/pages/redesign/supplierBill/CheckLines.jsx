@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, FilterPill, Input, Select } from "../../../ui/primitives";
 import ItemSearchBox from "../../../ui/ItemSearchBox";
-import { lineStatus, newToyPrice, piecesNow, suggestedPrice, unitCost } from "./billMath";
+import { correctLine, lineStatus, newToyPrice, piecesNow, suggestedPrice, unitCost } from "./billMath";
 import { RULES } from "./priceRules";
 
 const STATUS = {
@@ -86,7 +86,7 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">
                     {l.billed}
-                    <div className="text-xs text-(--ui-text-muted)">× {Number(l.rate).toLocaleString()}{Number(l.discount_pct) ? ` − ${Number(l.discount_pct)}%` : ""}</div>
+                    <LineFigures line={l} set={(fn) => set(l.key, fn)} />
                   </td>
                   <td className="px-2 py-2">
                     <Input
@@ -137,6 +137,42 @@ export default function CheckLines({ lines, onChange, billDiscountRatio = 0, mul
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Owner 2026-10-20: the rate and line discount as read; "Correct" opens them
+// to fix a misread figure (correctLine: amount = billed × rate).
+function LineFigures({ line, set }) {
+  const [open, setOpen] = useState(false);
+  const n = line.line_no;
+  const pct = (v) => (Number(v) ? ` − ${Number(v)}%` : "");
+  const fix = (patch) => set((x) => {
+    const c = correctLine(x, patch);
+    if (c.toys.length === 1 && !c.is_new) c.toys[0].qty = Math.max(0, piecesNow(c));
+    return c;
+  });
+  return (
+    <div className="text-xs text-(--ui-text-muted)">
+      {open ? (
+        <div className="flex items-center justify-end gap-1">
+          ×
+          <Input type="number" min="0" className="w-20! text-right" aria-label={`Rate, line ${n}`} value={line.rate}
+            onChange={(e) => fix({ rate: e.target.value })} />
+          −
+          <Input type="number" min="0" max="100" className="w-16! text-right" aria-label={`Discount %, line ${n}`} value={line.discount_pct}
+            onChange={(e) => fix({ discount_pct: e.target.value })} />
+          %
+        </div>
+      ) : (
+        <div>× {Number(line.rate).toLocaleString()}{pct(line.discount_pct)}</div>
+      )}
+      {line.corrected ? (
+        <div className="text-(--ui-warning-fg)">read as {Number(line.read_rate).toLocaleString()}{pct(line.read_discount_pct)}</div>
+      ) : null}
+      {!open ? (
+        <Button size="sm" tone="link" aria-label={`Correct rate or discount, line ${n}`} onClick={() => setOpen(true)}>Correct</Button>
+      ) : null}
     </div>
   );
 }
@@ -224,6 +260,8 @@ function ToyPrice({ line, toy, cost, ctx, set }) {
           <Button size="sm" tone="link" aria-label={`Use ${sug.price} for ${toy.name}`} onClick={() => setNew(sug.price)}>Use</Button>
         </div>
       ) : null}
+      {/* Owner 2026-10-20: any toy's price can be changed here, cost changed or not. */}
+      <Button size="sm" tone="link" aria-label={`Change the price of ${toy.name}`} onClick={() => setNew(String(Number(toy.price) || ""))}>Change</Button>
     </div>
   );
 }

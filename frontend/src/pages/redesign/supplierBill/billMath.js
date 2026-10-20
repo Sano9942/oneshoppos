@@ -16,6 +16,25 @@ export function unitCost(line, billDiscountRatio = 0) {
   return round2((rate * (1 - pct / 100) * (1 - (Number(billDiscountRatio) || 0))) / split);
 }
 
+/**
+ * Owner 2026-10-20: correct a misread rate or line discount %. A new rate
+ * makes the line amount billed × rate (what cost per piece and the bill total
+ * are worked out from, here and in the save), so the toy's cost and the
+ * supplier's account change together. The first read figures are kept to show.
+ */
+export function correctLine(line, { rate, discount_pct } = {}) {
+  const readRate = line.read_rate ?? (Number(line.rate) || 0);
+  const readPct = line.read_discount_pct ?? (Number(line.discount_pct) || 0);
+  const next = { ...line, read_rate: readRate, read_discount_pct: readPct };
+  if (rate !== undefined) {
+    next.rate = rate === "" ? "" : Number(rate);
+    next.amount = round2((Number(line.billed) || 0) * (Number(next.rate) || 0));
+  }
+  if (discount_pct !== undefined) next.discount_pct = discount_pct === "" ? "" : Number(discount_pct);
+  next.corrected = Number(next.rate) !== readRate || (Number(next.discount_pct) || 0) !== readPct;
+  return next;
+}
+
 /** A check-screen line from a read bill line + its match result. */
 export function lineFromRead(read, match = { matches: [], chosen: [] }) {
   const chosen = (match.matches || []).filter((m) => (match.chosen || []).includes(m.product_id));
