@@ -337,7 +337,7 @@ Staff (monthly salary, leave days allowed per month): Ishtiaq Shah 36,500 / 6 ·
 
 ### F7: Card payments on prod stop hitting the sandbox gateway (D46) 🟡
 
-- Prod has `PAYMENT_GATEWAY=sandbox`, so each Card line gets a fake `sandbox_inline_…` reference. Check what else reads that variable (subscription billing checkout), then change the Railway variable with the owner's OK. No code change expected.
+- Prod has `PAYMENT_GATEWAY=sandbox`, so each Card line gets a fake `sandbox_inline_…` reference. Check what else reads that variable (subscription billing checkout), then change the Railway variable with the owner's OK. No code change expected. **2026-10-20: checked; owner OK to remove `PAYMENT_GATEWAY` at the next deploy** (see PROGRESS top).
 
 ### F8: Email receipt header (D45 leftover) 🟡
 

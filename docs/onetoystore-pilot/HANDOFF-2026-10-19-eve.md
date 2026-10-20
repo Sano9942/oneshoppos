@@ -22,6 +22,7 @@ Details, tests and live-data checks: PROGRESS top "▶ 2026-10-19 afternoon" par
 - Migration order: **v157 = held clock-in photo**, v158 = D64, v159 = entry_date, v160 = G2, v161 = F6 (who/when voided). The runner only applies versions **above** the current one. If D64/v159 go live **without** clock-in, first renumber the clock-in migration **above the highest deployed** (as was done for F9), or it will never run.
 - D64 changes the numbers on every new bill → deploy on a morning **before opening** (agreed). Health 10/10 before calling it live.
 - D59 changes the till screen; check a real Online bill after deploy.
+- **F7 (owner OK 2026-10-20): delete `PAYMENT_GATEWAY` on Railway in the same deploy window** (one restart). After: one Card bill has `gateway_ref` NULL; Billing shows no Pay Now; `/api/sandbox/*` gone.
 - G2: the nightly backup only runs with `STOCK_VALUE_NIGHTLY_WORKER_ENABLED=1` on Railway — ask the owner before setting it. After the first real Close Shift, check one `stock_value_days` row against Stock Value → Now.
 
 ## State of the shop (unchanged from the afternoon)
@@ -37,5 +38,5 @@ SanoPOS not used at the counter since 2 Oct; dual-run not restarted; live shift 
 ## Next, in owner's order (ask one question at a time)
 1. ~~**G2**~~ built locally (see above).
 2. ~~**G3**~~ ~~**G4**~~ ~~**G5**~~ ~~**Needs a Category**~~ built locally.
-3. ~~**F6**~~ built locally. **F7** (sandbox gateway setting, owner's OK) → **F8** (email receipt header) (see PHASE-F-PLAN).
+3. ~~**F6**~~ built locally. ~~**F7**~~ decided 2026-10-20 (remove at next deploy) → **F8** (email receipt header) (see PHASE-F-PLAN).
 4. Still waiting on the owner: restart dual-run (iPOS export → catch-up, close shift 5), F9 (e) real-photo trial (AI key), clock-in photo (device + PINs).
