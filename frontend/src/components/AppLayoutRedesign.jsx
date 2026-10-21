@@ -14,7 +14,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { readTenantSlug } from "../auth/authStore";
-import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
+import { SHOPIFY_NAV_GROUPS, navItemVisible } from "../ui/nav-config";
+import useSalesChannelUsage from "../hooks/useSalesChannelUsage";
 import { Drawer } from "../ui/primitives";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
@@ -79,6 +80,9 @@ export default function AppLayoutRedesign() {
   const { employee, hasPerm, logout, authHeaders, company } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
   const { hasMode, labels } = usePreset();
+  // Only staff who can manage the catalogue can ask (the endpoint 403s otherwise).
+  const salesChannelUsage = useSalesChannelUsage(hasPerm(["manage_products", "manage_inventory"]));
+  const salesChannelsInUse = salesChannelUsage.in_use;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState(null);
@@ -123,15 +127,10 @@ export default function AppLayoutRedesign() {
         ...group,
         label: translateNavLabel(group.label),
         items: group.items
-          .filter(
-            (it) =>
-              (!it.requiredPerm || hasPerm(it.requiredPerm)) &&
-              (!it.requiredFlag || Boolean(flags[it.requiredFlag])) &&
-              (!it.requiredMode || hasMode(it.requiredMode)),
-          )
+          .filter((it) => navItemVisible(it, { hasPerm, flags, hasMode, usage: { sales_channels: salesChannelsInUse } }))
           .map((it) => ({ ...it, name: translateNavLabel(it.name) })),
       })).filter((g) => g.items.length),
-    [flags, hasPerm, hasMode, translateNavLabel],
+    [flags, hasPerm, hasMode, translateNavLabel, salesChannelsInUse],
   );
 
   const isItemActive = useCallback(

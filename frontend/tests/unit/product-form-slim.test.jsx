@@ -25,13 +25,20 @@ vi.mock("../../src/contexts/PresetContext", async (importOriginal) => ({
   usePreset: () => ({ labels: {}, hasMode: () => false, unit_vocabulary: null, enabled_modes: [], ...presetState }),
 }));
 
-// The live One Toy Store switches that matter here (read 2026-10-21).
-const OTS_FLAGS = { phase2g_inventory_intelligence: true, phase2g_variant_picker: true, ai_insights: true };
+// The live One Toy Store switches that matter here (GET /api/feature-flags,
+// 2026-10-21): marketplace_integrations + phase2_smart_collections are ON by
+// default even though nothing is connected / no collection exists.
+const OTS_FLAGS = {
+  phase2g_inventory_intelligence: true, phase2g_variant_picker: true, ai_insights: true,
+  marketplace_integrations: true, phase2_smart_collections: true,
+};
+const NOT_IN_USE = { marketplace_connected: false, published_products: 0, in_use: false };
 const CHANNELS = ["pos", "storefront", "shopify", "woocommerce", "daraz", "facebook", "instagram", "whatsapp"]
   .map((code, i) => ({ id: i + 1, code, name: code, type: "online_store", is_published: false }));
 
-let product, channels, reviews;
+let product, channels, reviews, usage;
 beforeEach(() => {
+  usage = NOT_IN_USE;
   vi.clearAllMocks();
   flagState.flags = OTS_FLAGS;
   presetState.pos_search_config = { show_barcode: true, show_sku: true };
@@ -47,6 +54,7 @@ beforeEach(() => {
     if (url === "/api/products/9/stock") return { stock: [{ outlet_id: 1, outlet_name: "Packages Mall", quantity: "1.000" }] };
     if (url === "/api/products/9/channels") return { channels };
     if (url === "/api/products/9/reviews") return reviews;
+    if (url === "/api/sales-channels/usage") return usage;
     return {};
   });
 });
@@ -68,14 +76,23 @@ describe("product page: only the sections the shop uses", () => {
       expect(screen.getByText(keep)).toBeTruthy();
     }
     expect(screen.getByTestId("product-history")).toBeTruthy();
-    // Inventory Intelligence is switched on for the shop (Reorder Alerts), so it stays.
+    // Inventory Intelligence is switched on for the shop (Reorder Alerts), so it stays;
+    // so do Product Type / Vendor / Tags while Catalog Automation (smart collections) is on.
     expect(screen.getByText("Inventory Intelligence")).toBeTruthy();
+    expect(screen.getByText("Vendor")).toBeTruthy();
     for (const gone of [
-      "Compare-at Price", "GST %", "Product Type & Recipe", "Variants", "Product Type", "Vendor", "Tags",
+      "Compare-at Price", "GST %", "Product Type & Recipe", "Variants",
       "Wholesale order rules", "Counter & lane", "Catalog visibility", "Sales Channels", "Reviews", "Write a Review",
     ]) {
       expect(screen.queryByText(gone), gone).toBeNull();
     }
+  });
+
+  it("Sales Channels and Compare-at come back once a marketplace is connected or a toy is published", async () => {
+    usage = { marketplace_connected: true, published_products: 0, in_use: true };
+    await renderEdit();
+    expect(await screen.findByText("Sales Channels")).toBeTruthy();
+    expect(screen.getByText("Compare-at Price")).toBeTruthy();
   });
 
   it("stock shows whole pieces, not 1.000", async () => {
@@ -110,7 +127,7 @@ describe("product page: only the sections the shop uses", () => {
 
 describe("productFormSections rules", () => {
   const base = {
-    flags: {}, preset: {}, isEdit: true, taxMode: "none", attributeSets: [], channels: [], reviews: [],
+    flags: {}, preset: {}, isEdit: true, taxMode: "none", attributeSets: [], channels: [], reviews: [], usage: null,
     form: { bom_type: "standard", has_variants: false, compare_at_price: "", gst: "", product_type: "", vendor: "", tags: "",
       lead_time_days_override: "", min_order_qty: "", order_increment: "", visibility: "all", plu_code: "", age_restricted: false },
   };
@@ -123,10 +140,19 @@ describe("productFormSections rules", () => {
     expect(s({ flags: { wholesale_field_sales: true } }).catalogVisibility).toBe(true);
     expect(s({ preset: { pos_search_config: { show_plu: true } } }).counterLane).toBe(true);
     expect(s({ taxMode: "exclusive" }).gst).toBe(true);
-    expect(s({ flags: { marketplace_integrations: true } }).compareAt).toBe(true);
-    expect(s({ flags: { marketplace_integrations: true } }).salesChannels).toBe(false); // no channels loaded
-    expect(s({ flags: { marketplace_integrations: true }, channels: [{ code: "pos" }] }).salesChannels).toBe(true);
     expect(s({ flags: { phase2_smart_collections: true } }).productTypeVendorTags).toBe(true);
+  });
+
+  it("sales channels / compare-at follow real use, not the default-on marketplace switch", () => {
+    const on = { flags: { marketplace_integrations: true }, channels: [{ code: "pos" }] };
+    expect(s(on).salesChannels).toBe(false);
+    expect(s(on).compareAt).toBe(false);
+    expect(s({ ...on, usage: { in_use: true, marketplace_connected: true } }).salesChannels).toBe(true);
+    expect(s({ ...on, usage: { in_use: true, marketplace_connected: false } }).compareAt).toBe(true);
+    expect(s({ usage: { in_use: true } }).salesChannels).toBe(false); // no channels loaded
+    expect(s({ channels: [{ code: "storefront", is_published: true }] }).salesChannels).toBe(true); // this toy is published
+    expect(s({ usage: { marketplace_connected: true } }).productTypeVendorTags).toBe(true);
+    expect(s({ flags: { marketplace_integrations: true } }).productTypeVendorTags).toBe(false);
   });
 
   it("variants: only on a new product when the shop has an attribute set, or a product that has them", () => {
@@ -142,10 +168,20 @@ describe("productFormSections rules", () => {
 });
 
 describe("menu: View Storefront", () => {
-  it("follows the same switch as the Sales Channels box", async () => {
+  it("follows real sales-channel use, like the Sales Channels box", async () => {
     const mod = await import("../../src/ui/nav-config");
     const groups = Object.values(mod).find((v) => Array.isArray(v) && v.some((g) => g?.items));
     const item = groups.flatMap((g) => g.items).find((i) => i.path === "__STOREFRONT__");
-    expect(item.requiredFlag).toBe("marketplace_integrations");
+    expect(item.requiredFlag).toBeUndefined();
+    expect(item.requiredUsage).toBe("sales_channels");
+  });
+
+  it("the menu shows an item with requiredUsage only when that use is on", async () => {
+    const { navItemVisible } = await import("../../src/ui/nav-config");
+    const item = { name: "View Storefront", requiredUsage: "sales_channels" };
+    const ctx = { hasPerm: () => true, flags: {}, hasMode: () => true };
+    expect(navItemVisible(item, { ...ctx, usage: { sales_channels: false } })).toBe(false);
+    expect(navItemVisible(item, { ...ctx, usage: { sales_channels: true } })).toBe(true);
+    expect(navItemVisible({ name: "Products" }, { ...ctx, usage: {} })).toBe(true);
   });
 });

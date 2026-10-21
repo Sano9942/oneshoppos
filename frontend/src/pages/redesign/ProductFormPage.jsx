@@ -13,6 +13,7 @@ import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBa
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 import ProductHistory from "./ProductHistory";
 import { productFormSections } from "./productFormSections";
+import useSalesChannelUsage from "../../hooks/useSalesChannelUsage";
 
 function cartesian(arrays) {
   return arrays.reduce(
@@ -93,6 +94,7 @@ export default function ProductFormPage() {
   // (tax_mode='none' — they cannot legally charge GST).
   const taxMode = company?.tax_mode || "none";
   const { flags } = useFeatureFlags(authHeaders);
+  const salesChannelUsage = useSalesChannelUsage();
   const preset = usePreset();
   const { fmt } = useCurrency();
   const unitOptions = preset.unit_vocabulary || DEFAULT_UNIT_VOCABULARY;
@@ -490,7 +492,7 @@ export default function ProductFormPage() {
     }).catch(() => {});
   }, [id, isEdit, outletPricingOn]);
 
-  const show = productFormSections({ flags, preset, form, isEdit, taxMode, attributeSets, channels, reviews });
+  const show = productFormSections({ flags, preset, form, isEdit, taxMode, attributeSets, channels, reviews, usage: salesChannelUsage });
 
   if (loading) {
     return (

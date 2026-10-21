@@ -2201,4 +2201,29 @@ module.exports = function registerProductRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // GET /api/sales-channels/usage — is the shop actually selling through any
+  // channel? (One Toy Store pilot 2026-10-21.) marketplace_integrations is on by
+  // default and, as an Integrations card, can't be switched off by the shop, so
+  // the product page's Sales Channels / Compare-at and the "View Storefront"
+  // link follow real use instead: an active marketplace / Shopify / WooCommerce
+  // connection, or any product published on any channel. Read-only.
+  app.get("/api/sales-channels/usage", requireAnyPerm(["manage_products", "manage_inventory"]), async (req, res) => {
+    try {
+      const { rows: [u] } = await db.query(
+        `SELECT
+           (EXISTS (SELECT 1 FROM integration_settings
+                     WHERE (category = 'marketplace' AND is_active = true) OR provider = 'woocommerce')
+            OR EXISTS (SELECT 1 FROM shopify_connections WHERE is_active = true)) AS marketplace_connected,
+           (SELECT COUNT(DISTINCT product_id)::int FROM channel_publications WHERE is_published = true) AS published_products`,
+      );
+      res.json({
+        marketplace_connected: u.marketplace_connected,
+        published_products: u.published_products,
+        in_use: u.marketplace_connected || u.published_products > 0,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 };

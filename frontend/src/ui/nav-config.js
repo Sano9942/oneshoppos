@@ -61,6 +61,15 @@ import {
   Blocks,
 } from "lucide-react";
 
+// One menu item's guards: permission, feature flag, mode, and requiredUsage
+// (a real-use signal, e.g. "sales_channels" from GET /api/sales-channels/usage).
+export function navItemVisible(it, { hasPerm, flags, hasMode, usage }) {
+  return (!it.requiredPerm || hasPerm(it.requiredPerm))
+    && (!it.requiredFlag || Boolean(flags[it.requiredFlag]))
+    && (!it.requiredMode || hasMode(it.requiredMode))
+    && (!it.requiredUsage || Boolean(usage?.[it.requiredUsage]));
+}
+
 export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Overview",
@@ -159,10 +168,10 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Online Store",
     items: [
-      // One Toy Store pilot 2026-10-21: an empty built-in web store link is
-      // only shown with the online-channels feature (same rule as the product
-      // page's Sales Channels box).
-      { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true, requiredFlag: "marketplace_integrations" },
+      // One Toy Store pilot 2026-10-21: no link to an empty built-in web store.
+      // Shown only when the shop really sells through a channel (same rule as
+      // the product page's Sales Channels box; see navItemVisible).
+      { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true, requiredUsage: "sales_channels" },
     ],
   },
   {
