@@ -159,7 +159,10 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Online Store",
     items: [
-      { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },
+      // One Toy Store pilot 2026-10-21: an empty built-in web store link is
+      // only shown with the online-channels feature (same rule as the product
+      // page's Sales Channels box).
+      { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true, requiredFlag: "marketplace_integrations" },
     ],
   },
   {

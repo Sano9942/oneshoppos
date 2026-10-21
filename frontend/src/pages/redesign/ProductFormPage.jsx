@@ -12,6 +12,7 @@ import { sortCategories, indentLabel } from "../../utils/categoryTree";
 import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye, Tag, Layers, Sparkles } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 import ProductHistory from "./ProductHistory";
+import { productFormSections } from "./productFormSections";
 
 function cartesian(arrays) {
   return arrays.reduce(
@@ -468,18 +469,28 @@ export default function ProductFormPage() {
         api.get(`/api/products/${id}/channels`).then((d) => {
           setChannels(d.channels || []);
         }).catch(() => {});
-        // Fetch outlet visibility
-        api.get(`/api/products/${id}/outlet-visibility`).then((d) => {
-          setOutletVisibility(d.visibility || []);
-        }).catch(() => {});
-        // Fetch per-outlet price overrides (auto-managed system price lists).
-        // 503 = phase2_outlet_pricing flag is off → silent.
-        api.get(`/api/products/${id}/outlet-prices`).then((d) => {
-          setOutletPrices(d.prices || []);
-        }).catch(() => {});
       }
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-branch visibility / prices: only asked for when the feature is on
+  // (the routes answer 403 otherwise, which showed as console errors).
+  const outletVisibilityOn = !!flags?.phase2_outlet_visibility;
+  const outletPricingOn = !!flags?.phase2_outlet_pricing;
+  useEffect(() => {
+    if (!isEdit || !outletVisibilityOn) return;
+    api.get(`/api/products/${id}/outlet-visibility`).then((d) => {
+      setOutletVisibility(d.visibility || []);
+    }).catch(() => {});
+  }, [id, isEdit, outletVisibilityOn]);
+  useEffect(() => {
+    if (!isEdit || !outletPricingOn) return;
+    api.get(`/api/products/${id}/outlet-prices`).then((d) => {
+      setOutletPrices(d.prices || []);
+    }).catch(() => {});
+  }, [id, isEdit, outletPricingOn]);
+
+  const show = productFormSections({ flags, preset, form, isEdit, taxMode, attributeSets, channels, reviews });
 
   if (loading) {
     return (
@@ -575,10 +586,13 @@ export default function ProductFormPage() {
                   <label className="text-xs font-medium text-(--ui-text-muted)">Cost Price</label>
                   <Input type="number" min="0" step="0.01" value={form.cost_price} onChange={(e) => upd("cost_price", e.target.value)} placeholder="0.00" />
                 </div>
+                {show.compareAt && (
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-(--ui-text-muted)">Compare-at Price</label>
                   <Input type="number" min="0" step="0.01" value={form.compare_at_price} onChange={(e) => upd("compare_at_price", e.target.value)} placeholder="0.00" />
                 </div>
+                )}
+                {show.gst && (
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-(--ui-text-muted)">GST %</label>
                   {/* P8 (3.14): tax-rule picker. Hidden for unregistered
@@ -619,11 +633,13 @@ export default function ProductFormPage() {
                     placeholder="0"
                   />
                 </div>
+                )}
               </div>
             </div>
           </SectionCard>
 
           {/* Product type & recipe (F01 kit/BOM) */}
+          {show.recipe && (
           <SectionCard>
             <div className="p-4 space-y-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Product Type & Recipe</p>
@@ -769,6 +785,7 @@ export default function ProductFormPage() {
               )}
             </div>
           </SectionCard>
+          )}
 
           {/* Inventory — only for simple products; variant stock handled in Task 5 */}
           {!form.has_variants && form.bom_type === "standard" && (
@@ -786,7 +803,7 @@ export default function ProductFormPage() {
                     {outletStock.map((os) => (
                       <div key={os.outlet_id} className="flex items-center justify-between text-sm py-1 border-b border-(--ui-border) last:border-0">
                         <span className="text-(--ui-text)">{os.outlet_name}</span>
-                        <span className="font-semibold text-(--ui-text)">{os.quantity} {form.unit || "pcs"}</span>
+                        <span className="font-semibold text-(--ui-text)">{Number(os.quantity)} {form.unit || "pcs"}</span>
                       </div>
                     ))}
                   </div>
@@ -853,6 +870,7 @@ export default function ProductFormPage() {
           )}
 
           {/* Variants */}
+          {show.variants && (
           <SectionCard>
             <div className="p-4 space-y-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Variants</p>
@@ -958,6 +976,7 @@ export default function ProductFormPage() {
               )}
             </div>
           </SectionCard>
+          )}
 
         </div>
 
@@ -976,8 +995,8 @@ export default function ProductFormPage() {
             </div>
           </SectionCard>
 
-          {/* Channels — edit mode only, only if channels exist */}
-          {isEdit && channels.length > 0 && (
+          {/* Channels — only the built-in web store reads these (see productFormSections) */}
+          {show.salesChannels && (
             <SectionCard>
               <div className="p-4 space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Sales Channels</p>
@@ -1048,6 +1067,8 @@ export default function ProductFormPage() {
                   {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Select>
               </div>
+              {show.productTypeVendorTags && (
+              <>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-(--ui-text-muted)">Product Type</label>
                 <Input value={form.product_type} onChange={(e) => upd("product_type", e.target.value)} placeholder="e.g. STEM Robotics Kit" />
@@ -1060,6 +1081,8 @@ export default function ProductFormPage() {
                 <label className="text-xs font-medium text-(--ui-text-muted)">Tags</label>
                 <Input value={form.tags} onChange={(e) => upd("tags", e.target.value)} placeholder="Comma-separated, e.g. Age 5+,STEM" />
               </div>
+              </>
+              )}
             </div>
           </SectionCard>
 
@@ -1094,6 +1117,7 @@ export default function ProductFormPage() {
           </SectionCard>
 
           {/* 2-G.8 Inventory Intelligence — per-product lead time & safety stock */}
+          {show.inventoryIntelligence && (
           <SectionCard>
             <div className="p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
@@ -1131,9 +1155,11 @@ export default function ProductFormPage() {
               </p>
             </div>
           </SectionCard>
+          )}
 
           {/* Tier 2.2 wholesale MOQ — enforced on customer portal and field-rep
               order capture only. POS bypasses (in-person cashier discretion). */}
+          {show.wholesale && (
           <SectionCard>
             <div className="p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
@@ -1172,6 +1198,7 @@ export default function ProductFormPage() {
               </p>
             </div>
           </SectionCard>
+          )}
 
           {/* F07 batch / expiry / lot tracking — opt-in per SKU. When on, GRN
               receive captures a batch number + expiry, and sales consume FEFO. */}
@@ -1217,6 +1244,7 @@ export default function ProductFormPage() {
           {/* V01 grocery — PLU rapid-entry code + age-restriction. PLU lets the
               cashier ring produce by a 4-5 digit code on the POS pad / omni
               input; age_restricted prompts a cashier-attest confirm at add. */}
+          {show.counterLane && (
           <SectionCard>
             <div className="p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
@@ -1247,10 +1275,12 @@ export default function ProductFormPage() {
               </label>
             </div>
           </SectionCard>
+          )}
 
           {/* Tier 2.11 — Catalog visibility. Controls who can see this SKU on
               the storefront, customer portal, and field-rep app. Admin
               listings, reports, POS, and manufacturer portal always show all. */}
+          {show.catalogVisibility && (
           <SectionCard>
             <div className="p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
@@ -1334,6 +1364,7 @@ export default function ProductFormPage() {
               )}
             </div>
           </SectionCard>
+          )}
 
           {/* Identifiers */}
           <SectionCard>
@@ -1373,8 +1404,8 @@ export default function ProductFormPage() {
         </div>
       )}
 
-      {/* Reviews section — edit mode only */}
-      {isEdit && (
+      {/* Reviews section — edit mode, and only where customers can review (built-in web store) */}
+      {show.reviews && (
         <SectionCard className="mt-6">
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
